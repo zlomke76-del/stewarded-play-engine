@@ -1,21 +1,35 @@
-// ------------------------------------------------------------
-// exportCanon.ts
-// ------------------------------------------------------------
-// Export confirmed narrative canon only
-// ------------------------------------------------------------
-
 import { SessionEvent } from "@/lib/session/SessionState";
 
 export function exportCanon(events: readonly SessionEvent[]): string {
-  return events
-    .filter((e) => e.type === "OUTCOME")
-    .map((e) => {
-      const description = e.payload?.description;
-      if (typeof description === "string") {
-        return `- ${description}`;
+  const lines: string[] = [];
+
+  let lastConfirmedChange: string | null = null;
+
+  for (const event of events) {
+    if (event.type === "CONFIRMED_CHANGE") {
+      lastConfirmedChange =
+        typeof event.payload.description === "string"
+          ? event.payload.description
+          : null;
+    }
+
+    if (event.type === "OUTCOME") {
+      const outcome =
+        typeof event.payload.description === "string"
+          ? event.payload.description
+          : "";
+
+      if (lastConfirmedChange) {
+        lines.push(
+          `• DM ruled on "${lastConfirmedChange}": ${outcome}`
+        );
+      } else {
+        lines.push(`• Outcome: ${outcome}`);
       }
-      return null;
-    })
-    .filter((v): v is string => Boolean(v))
-    .join("\n");
+
+      lastConfirmedChange = null;
+    }
+  }
+
+  return lines.join("\n");
 }
