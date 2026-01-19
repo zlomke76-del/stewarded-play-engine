@@ -1,7 +1,7 @@
 "use client";
 
 // ------------------------------------------------------------
-// Demo Page — Full Stewarded Flow (Polished)
+// Demo Page — Full Stewarded Flow (Polished + Share Link)
 // ------------------------------------------------------------
 
 import { useState } from "react";
@@ -22,15 +22,34 @@ import DMConfirmationPanel from "@/components/dm/DMConfirmationPanel";
 
 // ------------------------------------------------------------
 
+const SESSION_ID = "demo-session";
+
 export default function DemoPage() {
   const [state, setState] = useState<SessionState>(
-    createSession("demo-session")
+    createSession(SESSION_ID)
   );
 
   const [playerInput, setPlayerInput] = useState("");
   const [parsed, setParsed] = useState<any>(null);
   const [options, setOptions] = useState<Option[] | null>(null);
   const [narration, setNarration] = useState<string[]>([]);
+  const [copied, setCopied] = useState(false);
+
+  // ----------------------------------------------------------
+  // Share link
+  // ----------------------------------------------------------
+
+  const shareUrl =
+    typeof window !== "undefined"
+      ? `${window.location.origin}/demo?session=${SESSION_ID}`
+      : "";
+
+  function handleCopyLink() {
+    if (!shareUrl) return;
+    navigator.clipboard.writeText(shareUrl);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }
 
   // ----------------------------------------------------------
   // Player submits an action
@@ -43,7 +62,7 @@ export default function DemoPage() {
     const optionSet = generateOptions(parsedAction);
 
     setParsed(parsedAction);
-    setOptions([...optionSet.options]); // ensure mutable copy
+    setOptions([...optionSet.options]);
   }
 
   // ----------------------------------------------------------
@@ -62,19 +81,15 @@ export default function DemoPage() {
   }
 
   // ----------------------------------------------------------
-  // DM confirms change → record event → narrate
+  // DM confirms change → narrate
   // ----------------------------------------------------------
 
   function handleConfirm(changeId: string) {
     setState((prev) => {
       const confirmed = confirmChange(prev, changeId, "DM");
-
       const event: SessionEvent = confirmed.events.at(-1)!;
 
-      const rendered = renderNarration(event, {
-        tone: "neutral",
-      });
-
+      const rendered = renderNarration(event, { tone: "neutral" });
       setNarration((n) => [...n, rendered.text]);
 
       return confirmed;
@@ -99,9 +114,42 @@ export default function DemoPage() {
 
   return (
     <main style={{ padding: "32px", maxWidth: "960px" }}>
-      <h1 style={{ marginBottom: "24px" }}>
-        Stewarded Play — Full Flow Demo
-      </h1>
+      <h1>Stewarded Play — Full Flow Demo</h1>
+
+      {/* Share Link */}
+      <section style={sectionStyle}>
+        <h2>Invite Players</h2>
+        <p style={{ opacity: 0.7 }}>
+          Share this link so players can join the session.
+        </p>
+        <div style={{ display: "flex", gap: "8px" }}>
+          <input
+            readOnly
+            value={shareUrl}
+            style={{
+              flex: 1,
+              padding: "8px",
+              borderRadius: "4px",
+              border: "1px solid #555",
+              background: "#1e1e1e",
+              color: "#fff",
+            }}
+          />
+          <button
+            onClick={handleCopyLink}
+            style={{
+              padding: "8px 12px",
+              background: "#444",
+              color: "#fff",
+              border: "none",
+              borderRadius: "4px",
+              cursor: "pointer",
+            }}
+          >
+            {copied ? "Copied" : "Copy"}
+          </button>
+        </div>
+      </section>
 
       {/* Player Input */}
       <section style={sectionStyle}>
@@ -145,7 +193,6 @@ export default function DemoPage() {
               background: "#1e1e1e",
               padding: "12px",
               borderRadius: "6px",
-              overflowX: "auto",
             }}
           >
             {JSON.stringify(parsed, null, 2)}
@@ -157,18 +204,17 @@ export default function DemoPage() {
       {options && (
         <section style={sectionStyle}>
           <h2>Possible Options (No Ranking)</h2>
-          <ul style={{ paddingLeft: "20px" }}>
+          <ul>
             {options.map((opt) => (
-              <li key={opt.id} style={{ marginBottom: "8px" }}>
+              <li key={opt.id}>
                 <button
                   onClick={() => handleSelectOption(opt)}
                   style={{
                     padding: "6px 10px",
-                    borderRadius: "4px",
                     background: "#333",
                     color: "#fff",
                     border: "1px solid #555",
-                    cursor: "pointer",
+                    borderRadius: "4px",
                   }}
                 >
                   {opt.description}
@@ -203,26 +249,12 @@ export default function DemoPage() {
         ) : (
           <ul>
             {narration.map((line, i) => (
-              <li
-                key={i}
-                style={{
-                  marginBottom: "10px",
-                  animation: "fadeIn 0.3s ease",
-                }}
-              >
-                {line}
-              </li>
+              <li key={i}>{line}</li>
             ))}
           </ul>
         )}
 
-        <p
-          style={{
-            marginTop: "12px",
-            opacity: 0.5,
-            fontStyle: "italic",
-          }}
-        >
+        <p style={{ marginTop: "12px", opacity: 0.5 }}>
           Awaiting next player action…
         </p>
       </section>
