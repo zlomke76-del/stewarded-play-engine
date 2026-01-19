@@ -15,8 +15,6 @@
 import { useEffect, useState } from "react";
 import {
   createSession,
-  proposeChange,
-  confirmChange,
   recordEvent,
   SessionState,
 } from "@/lib/session/SessionState";
@@ -61,13 +59,10 @@ export default function DemoPage() {
     createSession("demo-session")
   );
 
-  // hydration guard
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
 
   const [dmMode, setDmMode] = useState<DMMode>("human");
-  const [autoConfirm, setAutoConfirm] = useState(false);
-
   const [campaignSeed, setCampaignSeed] = useState("");
   const [framing, setFraming] = useState<string | null>(null);
 
@@ -75,19 +70,19 @@ export default function DemoPage() {
   const [parsed, setParsed] = useState<any>(null);
   const [options, setOptions] = useState<Option[] | null>(null);
 
-  // one-shot guard for Solace auto-propose
-  const [autoProposed, setAutoProposed] = useState(false);
-
   const canonStarted = state.events.some((e) => e.type === "OUTCOME");
 
+  const proposals = state.events.filter(
+    (e) => e.type === "PROPOSED_CHANGE"
+  );
+
   // ----------------------------------------------------------
-  // Generate framing when Solace mode activates
+  // Generate framing
   // ----------------------------------------------------------
 
   useEffect(() => {
     if (dmMode !== "solace-neutral") return;
     if (canonStarted) return;
-
     setFraming(generateFraming(campaignSeed));
   }, [dmMode, campaignSeed, canonStarted]);
 
@@ -107,55 +102,29 @@ export default function DemoPage() {
     const optionSet = generateOptions(parsedAction);
 
     setParsed(parsedAction);
-    setOptions([...optionSet.options]);
-
-    // reset Solace auto-propose guard for new action
-    setAutoProposed(false);
+    setOptions(optionSet.options);
   }
 
   // ----------------------------------------------------------
-  // Select option → PROPOSE change (authority-safe)
+  // Select option → PROPOSED_CHANGE (event-based)
   // ----------------------------------------------------------
 
   function handleSelectOption(option: Option) {
-  setState((prev) =>
-    recordEvent(prev, {
-      id: crypto.randomUUID(),
-      timestamp: Date.now(),
-      actor: dmMode === "solace-neutral" ? "system" : "DM",
-      type: "PROPOSED_CHANGE",
-      payload: {
-        description: option.description,
-      },
-    })
-  );
-}
-
-
-  // ----------------------------------------------------------
-  // Solace Neutral DM — auto-propose (ONE-SHOT, NO LOOP)
-  // ----------------------------------------------------------
-
-  useEffect(() => {
-    if (dmMode !== "solace-neutral") return;
-    if (!options || options.length === 0) return;
-    if (autoProposed) return;
-
-    handleSelectOption(options[0]);
-    setAutoProposed(true);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dmMode, options, autoProposed]);
-
-  // ----------------------------------------------------------
-  // Confirm change (authority moment)
-  // ----------------------------------------------------------
-
-  function handleConfirm(changeId: string) {
-    setState((prev) => confirmChange(prev, changeId, "DM"));
+    setState((prev) =>
+      recordEvent(prev, {
+        id: crypto.randomUUID(),
+        timestamp: Date.now(),
+        actor: dmMode === "solace-neutral" ? "system" : "DM",
+        type: "PROPOSED_CHANGE",
+        payload: {
+          description: option.description,
+        },
+      })
+    );
   }
 
   // ----------------------------------------------------------
-  // Record OUTCOME → CANON (dice optional, stewarded)
+  // Record OUTCOME → CANON (dice optional)
   // ----------------------------------------------------------
 
   function handleOutcome(outcomeText: string, diceResult?: any) {
@@ -174,18 +143,6 @@ export default function DemoPage() {
       })
     );
   }
-
-  // ----------------------------------------------------------
-  // Optional auto-confirm
-  // ----------------------------------------------------------
-
-  useEffect(() => {
-    if (!autoConfirm) return;
-    if (state.pending.length !== 1) return;
-
-    handleConfirm(state.pending[0].id);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [autoConfirm, state.pending]);
 
   // ----------------------------------------------------------
   // Share / Export Canon
@@ -218,7 +175,6 @@ export default function DemoPage() {
         ]}
       />
 
-      {/* MODE CONTROLS */}
       <CardSection title="Facilitation Mode">
         <label>
           <input
@@ -237,46 +193,13 @@ export default function DemoPage() {
           />{" "}
           Solace (Neutral Facilitator)
         </label>
-
-        {dmMode === "solace-neutral" && (
-          <>
-            <br />
-            <label>
-              Campaign seed:{" "}
-              <input
-                value={campaignSeed}
-                onChange={(e) => setCampaignSeed(e.target.value)}
-                placeholder="Optional world hook"
-              />
-            </label>
-            <br />
-            <label>
-              <input
-                type="checkbox"
-                checked={autoConfirm}
-                onChange={(e) => setAutoConfirm(e.target.checked)}
-              />{" "}
-              Auto-confirm Solace proposals
-            </label>
-          </>
-        )}
       </CardSection>
 
-      {/* SESSION START / FRAMING */}
       <CardSection title="Session Start">
         {framing ? (
           <>
             <p className="muted">Facilitator framing (non-canonical):</p>
-            {dmMode === "human" && !canonStarted ? (
-              <textarea
-                rows={4}
-                value={framing}
-                onChange={(e) => setFraming(e.target.value)}
-              />
-            ) : (
-              <p>{framing}</p>
-            )}
-
+            <p>{framing}</p>
             {dmMode === "solace-neutral" && !canonStarted && (
               <button onClick={regenerateFraming}>
                 Regenerate framing
@@ -286,30 +209,23 @@ export default function DemoPage() {
         ) : (
           <p className="muted">No framing set.</p>
         )}
-        <p>
-          <strong>Describe your opening action.</strong>
-        </p>
       </CardSection>
 
-      {/* PLAYER ACTION */}
       <CardSection title="Player Action">
         <textarea
           rows={3}
           value={playerInput}
           onChange={(e) => setPlayerInput(e.target.value)}
-          placeholder="Describe what your character does…"
         />
         <button onClick={handlePlayerAction}>Submit Action</button>
       </CardSection>
 
-      {/* PARSED */}
       {parsed && (
         <CardSection title="Parsed Action (System)">
           <pre>{JSON.stringify(parsed, null, 2)}</pre>
         </CardSection>
       )}
 
-      {/* OPTIONS */}
       {mounted && options && (
         <CardSection title="Possible Options (No Ranking)">
           <ul>
@@ -324,23 +240,19 @@ export default function DemoPage() {
         </CardSection>
       )}
 
-      {/* PENDING PROPOSALS (VISIBILITY FIX) */}
-      {state.pending.length > 0 && (
-        <CardSection title="Pending Proposals">
-          <ul>
-            {state.pending.map((p) => (
-              <li key={p.id}>{p.description}</li>
-            ))}
-          </ul>
-        </CardSection>
+      {/* DM CONFIRMATION (EVENT-DRIVEN) */}
+      <DMConfirmationPanel state={state} />
+
+      {/* DICE ONLY APPEARS WHEN A PROPOSAL EXISTS */}
+      {proposals.length > 0 && (
+        <DiceOutcomePanel
+          state={state}
+          onSubmit={handleOutcome}
+        />
       )}
 
-      {/* AUTHORITY + OUTCOME */}
-      <DMConfirmationPanel state={state} onConfirm={handleConfirm} />
-      <DiceOutcomePanel onSubmit={handleOutcome} />
       <NextActionHint state={state} />
 
-      {/* CANON */}
       <CardSection title="Canon (Confirmed Narrative)" className="canon">
         {state.events.filter((e) => e.type === "OUTCOME").length === 0 ? (
           <p className="muted">No canon yet.</p>
@@ -350,9 +262,7 @@ export default function DemoPage() {
               .filter((e) => e.type === "OUTCOME")
               .map((event) => (
                 <li key={event.id}>
-                  {typeof event.payload.description === "string"
-                    ? event.payload.description
-                    : "(Unspecified outcome)"}
+                  {event.payload.description}
                 </li>
               ))}
           </ul>
