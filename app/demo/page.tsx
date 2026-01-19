@@ -166,22 +166,39 @@ export default function DemoPage() {
       <DiceOutcomePanel onSubmit={handleOutcome} />
       <NextActionHint state={state} />
 
-      {/* CANON — AUTHORITATIVE PROJECTION */}
+      {/* CANON — AUTHORITATIVE, CONTEXTUAL */}
       <CardSection title="Canon (Confirmed Narrative)" className="canon">
         {state.events.filter((e) => e.type === "OUTCOME").length === 0 ? (
           <p className="muted">No canon yet.</p>
         ) : (
           <ul>
-            {state.events
-              .filter((e) => e.type === "OUTCOME")
-              .map((event) => {
-                const text =
-                  typeof event.payload.description === "string"
-                    ? event.payload.description
-                    : "(Unspecified outcome)";
+            {state.events.map((event, index, all) => {
+              if (event.type !== "OUTCOME") return null;
 
-                return <li key={event.id}>{text}</li>;
-              })}
+              const outcome =
+                typeof event.payload.description === "string"
+                  ? event.payload.description
+                  : "(Unspecified outcome)";
+
+              // Find most recent confirmed change before this outcome
+              const prior = [...all.slice(0, index)]
+                .reverse()
+                .find((e) => e.type === "CONFIRMED_CHANGE");
+
+              const ruling =
+                prior &&
+                typeof prior.payload.description === "string"
+                  ? prior.payload.description
+                  : null;
+
+              return (
+                <li key={event.id}>
+                  {ruling
+                    ? `DM ruled on "${ruling}": ${outcome}`
+                    : outcome}
+                </li>
+              );
+            })}
           </ul>
         )}
       </CardSection>
