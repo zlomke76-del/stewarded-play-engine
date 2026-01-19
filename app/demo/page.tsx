@@ -18,10 +18,14 @@ import { parseAction } from "@/lib/parser/ActionParser";
 import { generateOptions, Option } from "@/lib/options/OptionGenerator";
 import { renderNarration } from "@/lib/narration/NarrationRenderer";
 
-// ✅ FIXED IMPORT PATHS
+// Components
 import DMConfirmationPanel from "@/components/dm/DMConfirmationPanel";
 import DiceOutcomePanel from "@/components/DiceOutcomePanel";
 import NextActionHint from "@/components/NextActionHint";
+
+// Layout
+import StewardedShell from "@/components/layout/StewardedShell";
+import CardSection from "@/components/layout/CardSection";
 
 // ------------------------------------------------------------
 
@@ -72,29 +76,29 @@ export default function DemoPage() {
     setState((prev) => confirmChange(prev, changeId, "DM"));
   }
 
-// ----------------------------------------------------------
-// Dice / Outcome entry → canon
-// ----------------------------------------------------------
+  // ----------------------------------------------------------
+  // Dice / Outcome entry → canon
+  // ----------------------------------------------------------
 
-function handleOutcome(outcomeText: string) {
-  setState((prev) => {
-    const next = recordEvent(prev, {
-      id: crypto.randomUUID(),
-      timestamp: Date.now(),
-      actor: "system",
-      type: "OUTCOME",
-      payload: {
-        description: outcomeText,
-      },
+  function handleOutcome(outcomeText: string) {
+    setState((prev) => {
+      const next = recordEvent(prev, {
+        id: crypto.randomUUID(),
+        timestamp: Date.now(),
+        actor: "system",
+        type: "OUTCOME",
+        payload: {
+          description: outcomeText,
+        },
+      });
+
+      const event: SessionEvent = next.events.at(-1)!;
+      const rendered = renderNarration(event, { tone: "neutral" });
+
+      setNarration((n) => [...n, rendered.text]);
+      return next;
     });
-
-    const event: SessionEvent = next.events.at(-1)!;
-    const rendered = renderNarration(event, { tone: "neutral" });
-
-    setNarration((n) => [...n, rendered.text]);
-    return next;
-  });
-}
+  }
 
   // ----------------------------------------------------------
   // Share link (read-only)
@@ -111,17 +115,11 @@ function handleOutcome(outcomeText: string) {
   // ----------------------------------------------------------
 
   return (
-    <main className="demo-shell">
-      <header className="demo-header">
-        <h1>Stewarded Play — Full Flow Demo</h1>
-        <button onClick={copyShareLink} className="share-btn">
-          🔗 Share Session
-        </button>
-      </header>
-
-      {/* Player Action */}
-      <section className="card">
-        <h2>Player Action</h2>
+    <StewardedShell
+      title="Stewarded Play — Full Flow Demo"
+      onShare={copyShareLink}
+    >
+      <CardSection title="Player Action">
         <textarea
           rows={3}
           value={playerInput}
@@ -129,20 +127,16 @@ function handleOutcome(outcomeText: string) {
           placeholder="Describe what your character does…"
         />
         <button onClick={handlePlayerAction}>Submit Action</button>
-      </section>
+      </CardSection>
 
-      {/* Parsed */}
       {parsed && (
-        <section className="card fade-in">
-          <h2>Parsed Action (System)</h2>
+        <CardSection title="Parsed Action (System)">
           <pre>{JSON.stringify(parsed, null, 2)}</pre>
-        </section>
+        </CardSection>
       )}
 
-      {/* Options */}
       {options && (
-        <section className="card fade-in">
-          <h2>Possible Options (No Ranking)</h2>
+        <CardSection title="Possible Options (No Ranking)">
           <ul>
             {options.map((opt) => (
               <li key={opt.id}>
@@ -152,21 +146,14 @@ function handleOutcome(outcomeText: string) {
               </li>
             ))}
           </ul>
-        </section>
+        </CardSection>
       )}
 
-      {/* DM Confirmation */}
       <DMConfirmationPanel state={state} onConfirm={handleConfirm} />
-
-      {/* Dice / Outcome */}
       <DiceOutcomePanel onSubmit={handleOutcome} />
-
-      {/* Next Action Hint */}
       <NextActionHint state={state} />
 
-      {/* Canon */}
-      <section className="card canon fade-in">
-        <h2>Canon (Confirmed Narrative)</h2>
+      <CardSection title="Canon (Confirmed Narrative)" className="canon">
         {narration.length === 0 ? (
           <p className="muted">No canon yet.</p>
         ) : (
@@ -176,7 +163,7 @@ function handleOutcome(outcomeText: string) {
             ))}
           </ul>
         )}
-      </section>
-    </main>
+      </CardSection>
+    </StewardedShell>
   );
 }
