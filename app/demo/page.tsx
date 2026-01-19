@@ -44,7 +44,9 @@ export default function DemoPage() {
     const optionSet = generateOptions(parsedAction);
 
     setParsed(parsedAction);
-    setOptions(optionSet.options);
+
+    // IMPORTANT: clone readonly options into mutable UI state
+    setOptions([...optionSet.options]);
   }
 
   // ----------------------------------------------------------
