@@ -21,7 +21,9 @@ import { renderNarration } from "@/lib/narration/NarrationRenderer";
 import DMConfirmationPanel from "@/components/dm/DMConfirmationPanel";
 import DiceOutcomePanel from "@/components/DiceOutcomePanel";
 import NextActionHint from "@/components/NextActionHint";
+
 import StewardedShell from "@/components/layout/StewardedShell";
+import CardSection from "@/components/layout/CardSection";
 
 // ------------------------------------------------------------
 
@@ -89,8 +91,7 @@ export default function ClassicFantasyPage() {
       title="Classic Fantasy — Stewarded Resolution"
       onShare={copyShareLink}
     >
-      <section className="card">
-        <h2>Command</h2>
+      <CardSection title="Command">
         <textarea
           rows={3}
           value={command}
@@ -98,18 +99,16 @@ export default function ClassicFantasyPage() {
           placeholder="Issue a command or declare an action…"
         />
         <button onClick={handleCommand}>Submit Command</button>
-      </section>
+      </CardSection>
 
       {parsed && (
-        <section className="card fade-in">
-          <h2>Command Classification (System)</h2>
+        <CardSection title="Command Classification (System)">
           <pre>{JSON.stringify(parsed, null, 2)}</pre>
-        </section>
+        </CardSection>
       )}
 
       {options && (
-        <section className="card fade-in">
-          <h2>Possible Resolution Paths</h2>
+        <CardSection title="Possible Resolution Paths">
           <ul>
             {options.map((opt) => (
               <li key={opt.id}>
@@ -119,15 +118,14 @@ export default function ClassicFantasyPage() {
               </li>
             ))}
           </ul>
-        </section>
+        </CardSection>
       )}
 
       <DMConfirmationPanel state={state} onConfirm={handleConfirm} />
       <DiceOutcomePanel onSubmit={handleOutcome} />
       <NextActionHint state={state} />
 
-      <section className="card canon fade-in">
-        <h2>Chronicle (Confirmed World State)</h2>
+      <CardSection title="Chronicle (Confirmed World State)" className="canon">
         {chronicle.length === 0 ? (
           <p className="muted">No confirmed resolutions yet.</p>
         ) : (
@@ -137,7 +135,7 @@ export default function ClassicFantasyPage() {
             ))}
           </ul>
         )}
-      </section>
+      </CardSection>
 
       <footer className="disclaimer">
         <p>
