@@ -91,7 +91,7 @@ export default function DemoPage() {
   return (
     <StewardedShell>
       <ModeHeader
-        title="Stewarded Play — Full Flow Demo"
+        title="Stewarded Play — Full Flow"
         onShare={copyShareLink}
         roles={[
           { label: "Player", description: "Declares intent" },
