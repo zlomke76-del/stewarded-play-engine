@@ -1,29 +1,30 @@
 "use client";
 
 // ------------------------------------------------------------
-// Demo Page — Stewarded Play (Solace Neutral DM Enabled)
+// Stewarded Play — Full Flow (Governed Resolution Engine)
 // ------------------------------------------------------------
 //
 // Invariants:
-// - Solace may FRAME and PROPOSE, never decide
-// - Canon only written via OUTCOME
-// - Framing is non-canonical and excluded from export
-// - Dice are evidence, not authority
-// - Human explicitly records outcome
-// - Hydration-safe interactive rendering
+// - Solace may DRAFT, never decide
+// - Dice advise, never authorize
+// - Canon written ONLY by Arbiter
+// - Draft is editable before record
+// - All authority actions are visible
 // ------------------------------------------------------------
 
 import { useEffect, useState } from "react";
 import {
   createSession,
+  confirmChange,
   recordEvent,
   SessionState,
 } from "@/lib/session/SessionState";
 
 import { parseAction } from "@/lib/parser/ActionParser";
 import { generateOptions, Option } from "@/lib/options/OptionGenerator";
+import { exportCanon } from "@/lib/export/exportCanon";
 
-import DiceOutcomePanel from "@/components/DiceOutcomePanel";
+import DMConfirmationPanel from "@/components/dm/DMConfirmationPanel";
 import NextActionHint from "@/components/NextActionHint";
 
 import StewardedShell from "@/components/layout/StewardedShell";
@@ -31,76 +32,60 @@ import ModeHeader from "@/components/layout/ModeHeader";
 import CardSection from "@/components/layout/CardSection";
 import Disclaimer from "@/components/layout/Disclaimer";
 
-import { exportCanon } from "@/lib/export/exportCanon";
-
 // ------------------------------------------------------------
-// Types
+// Authority + Dice Types
 // ------------------------------------------------------------
 
-type DMMode = "human" | "solace-neutral";
+type Role = "player" | "arbiter";
+type DiceMode = "d20" | "2d6";
 
-// ------------------------------------------------------------
-// Framing helpers (neutral, deterministic)
-// ------------------------------------------------------------
-
-function generateFraming(seed: string): string {
-  return (
-    `You arrive at the edge of a small settlement as dusk settles in. ` +
-    `Lantern light flickers through misty air. ` +
-    (seed ? `Rumors speak of ${seed}. ` : "") +
-    `Nothing has happened yet. The world waits.`
-  );
+function difficultyFor(kind: Option["kind"]) {
+  switch (kind) {
+    case "safe":
+      return { dc: 0, reason: "safe action" };
+    case "environmental":
+      return { dc: 6, reason: "environmental uncertainty" };
+    case "risky":
+      return { dc: 10, reason: "risky action" };
+    case "contested":
+      return { dc: 14, reason: "contested action" };
+    default:
+      return { dc: 10, reason: "default risk" };
+  }
 }
 
-function generateDraftOutcome(option: Option): string {
+function rollDice(mode: DiceMode) {
+  if (mode === "d20") {
+    return Math.ceil(Math.random() * 20);
+  }
   return (
-    `Following the chosen path (“${option.description}”), ` +
-    `the interaction unfolds naturally. Information is exchanged, ` +
-    `revealing some details while leaving others unresolved.`
+    Math.ceil(Math.random() * 6) + Math.ceil(Math.random() * 6)
   );
 }
 
 // ------------------------------------------------------------
 
 export default function DemoPage() {
+  const role: Role = "arbiter"; // later from auth/session
+
   const [state, setState] = useState<SessionState>(
     createSession("demo-session")
   );
-
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => setMounted(true), []);
-
-  const [dmMode, setDmMode] = useState<DMMode>("human");
-  const [campaignSeed, setCampaignSeed] = useState("");
-  const [framing, setFraming] = useState<string | null>(null);
 
   const [playerInput, setPlayerInput] = useState("");
   const [parsed, setParsed] = useState<any>(null);
   const [options, setOptions] = useState<Option[] | null>(null);
 
-  // NEW: selected resolution + drafted outcome
   const [selectedOption, setSelectedOption] = useState<Option | null>(null);
-  const [draftOutcome, setDraftOutcome] = useState<string>("");
 
-  const canonStarted = state.events.some((e) => e.type === "OUTCOME");
+  const [draftOutcome, setDraftOutcome] = useState("");
+  const [diceMode, setDiceMode] = useState<DiceMode>("d20");
+  const [diceResult, setDiceResult] = useState<number | null>(null);
 
-  // ----------------------------------------------------------
-  // Generate framing (Solace-only, non-canonical)
-  // ----------------------------------------------------------
-
-  useEffect(() => {
-    if (dmMode !== "solace-neutral") return;
-    if (canonStarted) return;
-    setFraming(generateFraming(campaignSeed));
-  }, [dmMode, campaignSeed, canonStarted]);
-
-  function regenerateFraming() {
-    if (canonStarted) return;
-    setFraming(generateFraming(campaignSeed));
-  }
+  const [audit, setAudit] = useState<string[]>([]);
 
   // ----------------------------------------------------------
-  // Player submits an action
+  // Player action
   // ----------------------------------------------------------
 
   function handlePlayerAction() {
@@ -111,137 +96,86 @@ export default function DemoPage() {
 
     setParsed(parsedAction);
     setOptions([...optionSet.options]);
-
-    // reset downstream state
     setSelectedOption(null);
     setDraftOutcome("");
+    setDiceResult(null);
+    setAudit([]);
   }
 
   // ----------------------------------------------------------
-  // Option selected → Solace frames outcome (NO CANON)
+  // Solace auto-draft (non-authoritative)
   // ----------------------------------------------------------
 
   function handleSelectOption(option: Option) {
     setSelectedOption(option);
-    setDraftOutcome(generateDraftOutcome(option));
+
+    setDraftOutcome(
+      `The action resolves as expected. ${option.description}.`
+    );
+
+    setAudit(["Drafted by Solace"]);
   }
 
   // ----------------------------------------------------------
-  // Record OUTCOME → CANON (human authority)
+  // Dice roll (advisory)
   // ----------------------------------------------------------
 
-  function handleRecordOutcome(diceResult?: any) {
+  function handleRollDice() {
+    const roll = rollDice(diceMode);
+    setDiceResult(roll);
+    setAudit((a) => [...a, `Dice rolled (${diceMode}): ${roll}`]);
+  }
+
+  // ----------------------------------------------------------
+  // Record canon (arbiter only)
+  // ----------------------------------------------------------
+
+  function handleRecordOutcome() {
     if (!draftOutcome.trim()) return;
 
     setState((prev) =>
       recordEvent(prev, {
         id: crypto.randomUUID(),
         timestamp: Date.now(),
-        actor: "DM",
+        actor: "arbiter",
         type: "OUTCOME",
         payload: {
           description: draftOutcome,
-          dice: diceResult ?? null,
-          basedOn: selectedOption?.description ?? null,
+          dice: diceResult,
         },
       })
     );
 
-    // clear resolution state
-    setSelectedOption(null);
-    setDraftOutcome("");
-    setOptions(null);
-    setParsed(null);
-    setPlayerInput("");
-  }
-
-  // ----------------------------------------------------------
-  // Share / Export Canon
-  // ----------------------------------------------------------
-
-  function shareCanon() {
-    const canon = exportCanon(state.events);
-    navigator.clipboard.writeText(canon);
-    alert("Canon copied to clipboard.");
+    setAudit((a) => [...a, "Recorded by Arbiter"]);
   }
 
   // ----------------------------------------------------------
   // UI
   // ----------------------------------------------------------
 
+  const difficulty =
+    selectedOption && difficultyFor(selectedOption.kind);
+
   return (
     <StewardedShell>
       <ModeHeader
         title="Stewarded Play — Full Flow"
-        onShare={shareCanon}
+        onShare={() =>
+          navigator.clipboard.writeText(
+            exportCanon(state.events)
+          )
+        }
         roles={[
           { label: "Player", description: "Declares intent" },
-          {
-            label: dmMode === "human" ? "DM" : "Solace (Neutral)",
-            description:
-              dmMode === "human"
-                ? "Records outcomes"
-                : "Frames scenes and drafts neutral outcomes",
-          },
+          { label: "Arbiter", description: "Confirms outcomes" },
         ]}
       />
-
-      <CardSection title="Facilitation Mode">
-        <label>
-          <input
-            type="radio"
-            checked={dmMode === "human"}
-            onChange={() => setDmMode("human")}
-          />{" "}
-          Human DM
-        </label>
-        <br />
-        <label>
-          <input
-            type="radio"
-            checked={dmMode === "solace-neutral"}
-            onChange={() => setDmMode("solace-neutral")}
-          />{" "}
-          Solace (Neutral Facilitator)
-        </label>
-
-        {dmMode === "solace-neutral" && (
-          <>
-            <br />
-            <label>
-              Campaign seed:{" "}
-              <input
-                value={campaignSeed}
-                onChange={(e) => setCampaignSeed(e.target.value)}
-                placeholder="Optional world hook"
-              />
-            </label>
-          </>
-        )}
-      </CardSection>
-
-      <CardSection title="Session Start">
-        {framing ? (
-          <>
-            <p className="muted">Facilitator framing (non-canonical):</p>
-            <p>{framing}</p>
-            {dmMode === "solace-neutral" && !canonStarted && (
-              <button onClick={regenerateFraming}>
-                Regenerate framing
-              </button>
-            )}
-          </>
-        ) : (
-          <p className="muted">No framing set.</p>
-        )}
-      </CardSection>
 
       <CardSection title="Player Action">
         <textarea
           rows={3}
           value={playerInput}
           onChange={(e) => setPlayerInput(e.target.value)}
-          placeholder="Describe what your character does…"
         />
         <button onClick={handlePlayerAction}>Submit Action</button>
       </CardSection>
@@ -252,8 +186,8 @@ export default function DemoPage() {
         </CardSection>
       )}
 
-      {mounted && options && (
-        <CardSection title="Possible Options (No Ranking)">
+      {options && (
+        <CardSection title="Possible Options">
           <ul>
             {options.map((opt) => (
               <li key={opt.id}>
@@ -266,49 +200,64 @@ export default function DemoPage() {
         </CardSection>
       )}
 
-      {/* DICE + OUTCOME — ONLY AFTER OPTION SELECTED */}
-      {selectedOption && (
-        <CardSection title="Outcome (DM / Arbiter)">
-          <p className="muted">
-            Drafted by Solace (editable, non-canonical):
-          </p>
+      {selectedOption && role === "arbiter" && (
+        <CardSection title="Resolution Draft">
+          {difficulty && (
+            <p className="muted">
+              🎲 Difficulty {difficulty.dc} — {difficulty.reason}
+            </p>
+          )}
+
+          <label>
+            Dice system:{" "}
+            <select
+              value={diceMode}
+              onChange={(e) =>
+                setDiceMode(e.target.value as DiceMode)
+              }
+            >
+              <option value="d20">d20</option>
+              <option value="2d6">2d6</option>
+            </select>
+          </label>
+
+          <button onClick={handleRollDice}>Roll Dice</button>
+
+          {diceResult !== null && (
+            <p>Result: {diceResult}</p>
+          )}
+
           <textarea
             rows={4}
             value={draftOutcome}
-            onChange={(e) => setDraftOutcome(e.target.value)}
+            onChange={(e) => {
+              setDraftOutcome(e.target.value);
+              if (!audit.includes("Edited by Arbiter")) {
+                setAudit((a) => [...a, "Edited by Arbiter"]);
+              }
+            }}
           />
 
-          <DiceOutcomePanel
-            onSubmit={(dice) => handleRecordOutcome(dice)}
-          />
-
-          <button
-            style={{ marginTop: "12px" }}
-            onClick={() => handleRecordOutcome()}
-          >
+          <button onClick={handleRecordOutcome}>
             Record Outcome
           </button>
+
+          <p className="muted">
+            {audit.join(" · ")}
+          </p>
         </CardSection>
       )}
 
       <NextActionHint state={state} />
 
       <CardSection title="Canon (Confirmed Narrative)" className="canon">
-        {state.events.filter((e) => e.type === "OUTCOME").length === 0 ? (
-          <p className="muted">No canon yet.</p>
-        ) : (
-          <ul>
-            {state.events
-              .filter((e) => e.type === "OUTCOME")
-              .map((event) => (
-                <li key={event.id}>
-                  {typeof event.payload.description === "string"
-                    ? event.payload.description
-                    : "(Unspecified outcome)"}
-                </li>
-              ))}
-          </ul>
-        )}
+        {state.events
+          .filter((e) => e.type === "OUTCOME")
+          .map((e) => (
+            <p key={e.id}>
+              {String(e.payload.description)}
+            </p>
+          ))}
       </CardSection>
 
       <Disclaimer />
