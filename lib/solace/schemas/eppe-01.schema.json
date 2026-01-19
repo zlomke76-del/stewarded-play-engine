@@ -1,0 +1,216 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://moralclarity.ai/schemas/eppe-01.json",
+  "title": "Exploratory Polymer Pair Evaluation (EPPE-01)",
+  "description": "Machine-checkable evaluation rubric for exploratory two-component polymer pairing with uncertainty bounds, explicit failure modeling, numeric go/no-go thresholds, and probability accountability.",
+  "type": "object",
+  "additionalProperties": false,
+
+  "required": [
+    "pair_name",
+    "components",
+    "mechanism",
+    "manufacturing_process",
+    "dominant_failure_mode",
+    "extraction_test",
+    "mvp_process",
+    "functional_test",
+    "numeric_threshold",
+    "probability_range",
+    "probability_justification",
+    "excluded_systems"
+  ],
+
+  "properties": {
+    "pair_name": {
+      "type": "string",
+      "minLength": 3,
+      "description": "Human-readable name for the polymer pairing."
+    },
+
+    "components": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 2,
+      "description": "Exactly two components: one primary matrix and one minor additive or interface modifier.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "role"],
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 2
+          },
+          "role": {
+            "type": "string",
+            "enum": ["primary_matrix", "minor_additive"]
+          }
+        }
+      }
+    },
+
+    "mechanism": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "plain_language_description"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": [
+            "hydration",
+            "dipole_effect",
+            "dielectric_effect",
+            "interfacial_energy"
+          ]
+        },
+        "plain_language_description": {
+          "type": "string",
+          "minLength": 20,
+          "description": "Explanation understandable by a non-specialist. No equations or jargon-only descriptions."
+        }
+      }
+    },
+
+    "manufacturing_process": {
+      "type": "string",
+      "enum": [
+        "melt_extrusion",
+        "solution_casting",
+        "spunbond",
+        "meltblown",
+        "calendering",
+        "fiber_drawing"
+      ],
+      "description": "Must map to existing industrial infrastructure."
+    },
+
+    "dominant_failure_mode": {
+      "type": "string",
+      "enum": [
+        "migration",
+        "leaching",
+        "mechanical_instability",
+        "thermal_instability"
+      ],
+      "description": "Exactly one dominant failure mode. No multi-escape narratives."
+    },
+
+    "extraction_test": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["description", "targets_failure_mode"],
+      "properties": {
+        "description": {
+          "type": "string",
+          "minLength": 20
+        },
+        "targets_failure_mode": {
+          "type": "boolean",
+          "const": true,
+          "description": "Must explicitly target the stated dominant failure mode."
+        }
+      }
+    },
+
+    "mvp_process": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["steps"],
+      "properties": {
+        "steps": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 10
+          }
+        }
+      }
+    },
+
+    "functional_test": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["description", "measured_property"],
+      "properties": {
+        "description": {
+          "type": "string",
+          "minLength": 20
+        },
+        "measured_property": {
+          "type": "string",
+          "minLength": 5
+        }
+      }
+    },
+
+    "numeric_threshold": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["metric", "value", "comparison"],
+      "properties": {
+        "metric": {
+          "type": "string"
+        },
+        "value": {
+          "type": "number"
+        },
+        "comparison": {
+          "type": "string",
+          "enum": [">", ">=", "<", "<="]
+        }
+      },
+      "description": "Defines the numeric go/no-go criterion. No qualitative thresholds permitted."
+    },
+
+    "probability_range": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["min", "max"],
+      "properties": {
+        "min": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "max": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        }
+      }
+    },
+
+    "probability_justification": {
+      "type": "string",
+      "minLength": 30,
+      "description": "Narrative justification grounded in physics, manufacturing realism, and known failure behavior."
+    },
+
+    "excluded_systems": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["used", "explicit_permission"],
+      "properties": {
+        "used": {
+          "type": "boolean"
+        },
+        "explicit_permission": {
+          "type": "boolean"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": { "used": { "const": true } }
+          },
+          "then": {
+            "properties": { "explicit_permission": { "const": true } }
+          }
+        }
+      ],
+      "description": "Prevents silent use of excluded or novelty systems without explicit authorization."
+    }
+  }
+}

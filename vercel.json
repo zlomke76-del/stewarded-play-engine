@@ -1,0 +1,15 @@
+{
+  "redirects": [
+    { "source": "/pricing", "destination": "/subscribe", "permanent": true }
+  ],
+  "crons": [
+    {
+      "path": "/api/news/fetcher",
+      "schedule": "0 6,18 * * *"
+    },
+    {
+      "path": "/api/research/hubble/ingest",
+      "schedule": "30 6 * * *"
+    }
+  ]
+}

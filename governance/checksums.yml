@@ -1,0 +1,51 @@
+
+---
+
+# **File 2: `governance/checksums.yml`**
+
+```yaml
+# Moral Clarity AI • Ratified Document Checksums
+# Do not edit checksum fields by hand.
+# Use the official hashing process prior to ratification.
+
+documents:
+ - file: docs/user_experience_canon_v1.md
+  version: 1.0.0
+  checksum: A0FAB71BC7242A02590CAE12068582306E7599207E60186DE72807A5D509419D
+  approved_by:
+    - Timothy Zlomke
+    - Model Steward: Moral Clarity Model
+  issued: 2025-10-14
+
+ - file: docs/ux_canon_implementation_checklist_v1.md
+  version: 1.0.0
+  checksum: 2D5E20159C3E130CA4C4A7AF146D49B0205482F33C79DCFFAAD062E246BB4381
+  approved_by:
+    - Timothy Zlomke
+    - Model Steward: Moral Clarity Model
+  issued: 2025-10-14
+
+ - file: core/mode_router_spec_v1.md
+  version: 1.0.0
+  checksum: 7F1D56242D5A23F6EE52A0C018B99B0A54DABB6F53F0C38CFE60CA43AF832D6
+  approved_by:
+    - Timothy Zlomke
+    - Model Steward: Moral Clarity Model
+  issued: 2026-01-01
+
+  - file: governance/version_control.md
+  version: 1.0.0
+  checksum: 5CEDA678DB0A4ECEE9D77E53B685BCE15BACCFC23CBD4CD611746538BC6D4DC0
+  approved_by:
+    - Timothy Zlomke
+    - Model Steward: Moral Clarity Model
+  issued: 2026-01-01
+
+  - file: docs/INDEX.md
+  version: 1.0.0
+  checksum: C2EB583230249BF9AB4F97DE57FF92ACB4593B3B8AC6412B37A439C54CCB0611
+  approved_by:
+    - Timothy Zlomke
+    - Model Steward: Moral Clarity Model
+  issued: 2025-10-14
+

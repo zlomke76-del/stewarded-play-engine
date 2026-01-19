@@ -1,0 +1,13 @@
+{
+  "canonVersion": "1.0.0",
+  "requiredSections": ["Summary", "Canon Alignment", "Checklists", "Risk & Rollback"],
+  "requiredFields": ["Canon version", "Canon tags", "Affected mode(s)", "Evidence links"],
+  "tags": ["Minimalism","Clarity","YesAnd","HumanFirst","Memory","Modes","Reflex","Structure","Aesthetic","Ethics","A11y","Perf","Recovery","Telemetry"],
+  "limits": {
+    "responseMaxWords": 160,
+    "readingGradeMax": 8,
+    "uiMaxPrimaryActions": 1,
+    "perfFcpMsMax": 1800,
+    "perfTtiMsMax": 3000
+  }
+}

@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="480" height="480" viewBox="0 0 480 480" fill="none">
+      <style>
+        .s { stroke: #7aa2ff; stroke-width:8; stroke-linecap:round; stroke-linejoin:round; }
+        
+      </style>
+      <path class="s" d="M 96.0 268.8 A 144.0 144.0 0 0 1 384.0 268.8" />
+      <path class="s" d="M 240.0 19.200000000000017 L 240.0 259.2" />
+      <path class="s" d="M 148.8 76.80000000000001 L 331.2 76.80000000000001" />
+      <path class="s" d="M 104.64000000000001 219.84 L 96.0 268.8 L 146.39999999999998 261.6" />
+      <path class="s" d="M 375.36 219.84 L 384.0 268.8 L 333.6 261.6" />
+      <path class="s"  d="M 134.4 211.2 L 240.0 0.0 L 345.6 211.2 Z" />
+      
+    </svg>

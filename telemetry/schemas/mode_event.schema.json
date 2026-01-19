@@ -1,0 +1,16 @@
+{
+  "$id": "moral-clarity/mode-event",
+  "type": "object",
+  "required": ["event","to","confidence","ts","version"],
+  "properties": {
+    "event": { "const": "mode_transition" },
+    "from": { "enum": [null, "Neutral","Guidance","Ministry"] },
+    "to":   { "enum": ["Neutral","Guidance","Ministry"] },
+    "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+    "context_id": { "type": ["string","null"] },
+    "signals": { "type": "object", "additionalProperties": true },
+    "version": { "type": "string" },
+    "ts": { "type": "string", "format": "date-time" }
+  }
+}
+

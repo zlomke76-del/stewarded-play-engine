@@ -1,0 +1,93 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "HubbleObservationEvent",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "event_id",
+    "timestamp_utc",
+    "instrument_mode",
+    "exposure_time",
+    "target_ra",
+    "target_dec",
+    "data_quality_flags",
+    "payload_ref",
+    "calibration_version",
+    "source_provenance"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "enum": ["v1"]
+    },
+    "event_id": {
+      "type": "string",
+      "description": "Globally unique, immutable observation ID (e.g., MAST obsid)"
+    },
+    "timestamp_utc": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "instrument_mode": {
+      "type": "string",
+      "description": "e.g., WFC3-imaging, STIS-spectroscopy"
+    },
+    "exposure_time": {
+      "type": "number",
+      "minimum": 0
+    },
+    "target_ra": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 360
+    },
+    "target_dec": {
+      "type": "number",
+      "minimum": -90,
+      "maximum": 90
+    },
+    "data_quality_flags": {
+      "type": "array",
+      "items": { "type": "number" }
+    },
+    "payload_ref": {
+      "type": "string",
+      "description": "Public URL or object reference to calibrated science product"
+    },
+    "calibration_version": {
+      "type": "string"
+    },
+    "source_provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "origin",
+        "dataset_id",
+        "citation",
+        "license",
+        "retrieved_at_utc"
+      ],
+      "properties": {
+        "origin": {
+          "type": "string",
+          "enum": ["NASA-STScI", "MAST"]
+        },
+        "dataset_id": {
+          "type": "string"
+        },
+        "citation": {
+          "type": "string"
+        },
+        "license": {
+          "type": "string",
+          "enum": ["NASA-open", "public-domain"]
+        },
+        "retrieved_at_utc": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    }
+  }
+}

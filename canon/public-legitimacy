@@ -1,0 +1,239 @@
+// canon/public-legitimacy/page.tsx
+// Moral Clarity AI — Public Legitimacy Enforcement Series
+// Canonical root: all legitimacy gates inherit from this page
+
+import type { Metadata } from "next";
+
+export const metadata: Metadata = {
+  title:
+    "Public Legitimacy Enforcement Series | Moral Clarity AI",
+  description:
+    "A civilization-scale enforcement framework requiring all public authority to remain continuously observable, fully auditable, and instantly revocable. Refusal is self-invalidating.",
+  openGraph: {
+    title: "Public Legitimacy Enforcement Series",
+    description:
+      "No authority survives without continuous observability, auditability, and revocability.",
+    url: "https://moralclarity.ai/public-legitimacy",
+    siteName: "Moral Clarity AI",
+    type: "article",
+  },
+  robots: {
+    index: true,
+    follow: true,
+  },
+};
+
+export default function PublicLegitimacySeriesPage() {
+  return (
+    <main className="mx-auto max-w-3xl px-6 py-20">
+      <article className="prose prose-neutral dark:prose-invert max-w-none">
+        <header className="mb-12">
+          <p className="text-sm uppercase tracking-widest text-muted-foreground">
+            Enforcement Series · Canonical Root
+          </p>
+
+          <h1 className="mt-4">
+            Public Legitimacy Enforcement Series
+          </h1>
+
+          <p className="lead">
+            <strong>
+              Public authority is legitimate only while it remains continuously
+              observable, fully auditable, and instantly revocable.
+            </strong>
+          </p>
+        </header>
+
+        <hr />
+
+        <h2>What This Series Is</h2>
+
+        <p>
+          This series establishes a permanent enforcement standard for public
+          legitimacy.
+        </p>
+
+        <p>
+          It does not propose reforms, incentives, or transparency initiatives.
+          It defines a gate.
+        </p>
+
+        <p>
+          Any system, institution, or claim that cannot survive continuous
+          public inspection loses authority by definition.
+        </p>
+
+        <hr />
+
+        <h2>The Legitimacy Test (Permanent)</h2>
+
+        <p>
+          A public claim, decision, or system is legitimate <strong>only if</strong>
+          all three conditions are satisfied at all times:
+        </p>
+
+        <ul>
+          <li>
+            <strong>Continuous observability</strong> — real-world state and
+            change are visible in real time
+          </li>
+          <li>
+            <strong>Full auditability</strong> — every action and transformation
+            is reconstructible by external parties
+          </li>
+          <li>
+            <strong>Immediate revocability</strong> — any claim loses authority
+            instantly upon error or failed contact with reality
+          </li>
+        </ul>
+
+        <p>
+          Any aspect failing even one condition is not partially legitimate.
+          It is illegitimate.
+        </p>
+
+        <hr />
+
+        <h2>Enforcement Principle</h2>
+
+        <p>
+          This standard is enforced at the interface layer.
+        </p>
+
+        <p>
+          No claim may be displayed, summarized, or acted upon unless its full
+          provenance, audit chain, and revocation criteria are visible to any
+          observer.
+        </p>
+
+        <p>
+          There are no operator overrides, no silent corrections, and no private
+          exceptions.
+        </p>
+
+        <p>
+          Rollback without trace is impossible without destroying the interface
+          itself.
+        </p>
+
+        <hr />
+
+        <h2>Why Enforcement Comes First</h2>
+
+        <p>
+          Most institutional failure is not caused by lack of intelligence or
+          effort.
+        </p>
+
+        <p>
+          It is caused by the ability to hide drift, defer accountability, and
+          preserve authority after reality has diverged.
+        </p>
+
+        <p>
+          This series removes that ability.
+        </p>
+
+        <p>
+          Meaning, trust, and coordination emerge only after legitimacy is
+          enforced—not before.
+        </p>
+
+        <hr />
+
+        <h2>Series Deployment Order</h2>
+
+        <p>
+          Enforcement begins where authority is least defensible without truth:
+        </p>
+
+        <ol>
+          <li>
+            <strong>Budget</strong> — public money as reference reality
+          </li>
+          <li>
+            Energy — generation, storage, loss, and delivery claims
+          </li>
+          <li>
+            Health — outcomes, capacity, and risk declarations
+          </li>
+          <li>
+            Infrastructure — condition, exposure, and maintenance truth
+          </li>
+          <li>
+            Defense — scope, readiness, and authorization boundaries
+          </li>
+        </ol>
+
+        <p>
+          No later domain may operate under a lower legitimacy bar than an
+          earlier one.
+        </p>
+
+        <hr />
+
+        <h2>Refusal Clause (Non-Negotiable)</h2>
+
+        <p>
+          Refusal to deploy or maintain this standard is not neutral.
+        </p>
+
+        <p>
+          It is a public admission of illegitimacy.
+        </p>
+
+        <p>
+          Any institution claiming authority while resisting observability,
+          auditability, or revocability is declaring:
+        </p>
+
+        <blockquote>
+          Our authority cannot withstand public contact with reality.
+        </blockquote>
+
+        <p>
+          That declaration remains visible until corrected.
+        </p>
+
+        <hr />
+
+        <h2>What This Series Does Not Do</h2>
+
+        <ul>
+          <li>It does not choose policies</li>
+          <li>It does not optimize outcomes</li>
+          <li>It does not predict success</li>
+        </ul>
+
+        <p>
+          It determines whether claims are allowed to stand.
+        </p>
+
+        <hr />
+
+        <h2>Canonical Statement</h2>
+
+        <p>
+          A civilization-scale capacity for epistemic emancipation—defined by
+          continuous observability of truth, auditability of learning, and
+          revocability of all claims on contact with reality—is the foundation
+          for meaningful futures.
+        </p>
+
+        <p>
+          Nothing else confers durable legitimacy, agency, or resilience.
+        </p>
+
+        <p>
+          Everything proceeds or collapses on this basis alone.
+        </p>
+
+        <hr />
+
+        <p className="text-sm text-muted-foreground">
+          Canonical Root · Public Legitimacy Enforcement Series · Moral Clarity AI
+        </p>
+      </article>
+    </main>
+  );
+}

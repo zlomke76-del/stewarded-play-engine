@@ -1,0 +1,14 @@
+<!-- /public/journey/icon_car.svg -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+     stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+  <!-- body -->
+  <path d="M3 14.5 L5.8 10.5 C6.3 9.8 7.1 9.4 7.9 9.4 H13.4
+           C14.1 9.4 14.8 9.7 15.2 10.2 L17.8 13.5 H20
+           C21.1 13.5 22 14.4 22 15.5 V16.5
+           C22 17.3 21.3 18 20.5 18 H19" />
+  <!-- wheels -->
+  <circle cx="8" cy="18" r="1.8" />
+  <circle cx="16.5" cy="18" r="1.8" />
+  <!-- windows / roof -->
+  <path d="M7.6 10.5 H12.8 C13.5 10.5 14 11 14.3 11.5 L15.2 13" />
+</svg>

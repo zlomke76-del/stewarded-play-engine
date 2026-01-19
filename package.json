@@ -1,0 +1,56 @@
+{
+  "name": "mcai-bridge",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "update-files": "git ls-files > all-files.txt"
+  },
+  "dependencies": {
+    "@mozilla/readability": "^0.6.0",
+    "@supabase/ssr": "^0.7.0",
+    "@supabase/supabase-js": "^2.78.0",
+    "@vercel/speed-insights": "^1.2.0",
+    "ajv": "^8.17.1",
+    "ajv-formats": "^3.0.1",
+    "chokidar": "^5.0.0",
+    "framer-motion": "^12.24.7",
+    "highlight.js": "^11.11.1",
+    "jsdom": "^27.1.0",
+    "lucide-react": "^0.546.0",
+    "mammoth": "^1.11.0",
+    "next": "16.1.1",
+    "openai": "^4.57.0",
+    "pdf-parse": "^1.1.1",
+    "pdfjs-dist": "^5.4.394",
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
+    "react-markdown": "^10.1.0",
+    "react-pdf": "^10.2.0",
+    "recharts": "^3.4.1",
+    "remark-gfm": "^4.0.1",
+    "resend": "^6.6.0",
+    "stripe": "^19.1.0",
+    "tesseract.js": "^6.0.1",
+    "twilio": "^5.11.1",
+    "xlsx": "^0.18.5",
+    "zod": "^3.23.8",
+    "zustand": "^5.0.8"
+  },
+  "overrides": {
+    "react": "18.3.1",
+    "react-dom": "18.3.1"
+  },
+  "devDependencies": {
+    "@types/chokidar": "^1.7.5",
+    "@types/express": "^5.0.3",
+    "@types/node": "^20.12.12",
+    "@types/react": "^18.2.66",
+    "autoprefixer": "^10.4.21",
+    "husky": "^9.1.7",
+    "postcss": "^8.5.6",
+    "tailwindcss": "^4.1.16",
+    "typescript": "^5.4.5"
+  }
+}
