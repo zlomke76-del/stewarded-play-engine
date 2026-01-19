@@ -118,15 +118,19 @@ export default function DemoPage() {
   // ----------------------------------------------------------
 
   function handleSelectOption(option: Option) {
-    setState((prev) =>
-      proposeChange(prev, {
-        id: crypto.randomUUID(),
+  setState((prev) =>
+    recordEvent(prev, {
+      id: crypto.randomUUID(),
+      timestamp: Date.now(),
+      actor: dmMode === "solace-neutral" ? "system" : "DM",
+      type: "PROPOSED_CHANGE",
+      payload: {
         description: option.description,
-        proposedBy: dmMode === "solace-neutral" ? "system" : "DM",
-        createdAt: Date.now(),
-      })
-    );
-  }
+      },
+    })
+  );
+}
+
 
   // ----------------------------------------------------------
   // Solace Neutral DM — auto-propose (ONE-SHOT, NO LOOP)
