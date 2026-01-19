@@ -3,14 +3,10 @@
 // ------------------------------------------------------------
 // DMConfirmationPanel.tsx
 // ------------------------------------------------------------
-// Stewarded Play Engine
-//
 // Purpose:
 // - Display pending session changes
 // - Require explicit human confirmation
 // - Prevent silent or automatic state mutation
-//
-// This UI is intentionally plain and authoritative.
 // ------------------------------------------------------------
 
 import React from "react";
@@ -21,8 +17,6 @@ import {
 
 type Props = {
   state: SessionState;
-
-  /** Called when the DM confirms a change */
   onConfirm: (changeId: string) => void;
 };
 
@@ -37,9 +31,9 @@ export default function DMConfirmationPanel({
       style={{
         border: "2px solid #c00",
         padding: "16px",
-        borderRadius: "6px",
-        background: _attachBackground(),
-        color: "#111827", // ← ASSERT TEXT COLOR (critical)
+        borderRadius: "8px",
+        background: "linear-gradient(180deg, #ffffff, #f4f4f4)",
+        color: "#111",
         maxWidth: "480px",
       }}
     >
@@ -48,11 +42,11 @@ export default function DMConfirmationPanel({
       </h2>
 
       {pending.length === 0 ? (
-        <p style={{ color: "#4b5563" }}>
+        <p style={{ opacity: 0.7 }}>
           No pending changes.
         </p>
       ) : (
-        <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
+        <ul style={{ listStyle: "none", padding: 0 }}>
           {pending.map((change) => (
             <PendingItem
               key={change.id}
@@ -66,9 +60,7 @@ export default function DMConfirmationPanel({
   );
 }
 
-/* ------------------------------------------------------------
-   Pending Item
------------------------------------------------------------- */
+// ------------------------------------------------------------
 
 function PendingItem({
   change,
@@ -80,23 +72,23 @@ function PendingItem({
   return (
     <li
       style={{
-        border: "1px solid #9ca3af",
-        borderRadius: "4px",
+        border: "1px solid #999",
+        borderRadius: "6px",
         padding: "12px",
         marginBottom: "12px",
-        background: "#ffffff",
-        color: "#111827",
+        background: "#fff",
+        color: "#111",
       }}
     >
-      <p style={{ margin: "0 0 6px 0", fontWeight: 600 }}>
-        Proposed change:
+      <p>
+        <strong>Proposed change:</strong>
       </p>
 
-      <p style={{ margin: "0 0 6px 8px" }}>
+      <p style={{ marginLeft: "8px" }}>
         {change.description}
       </p>
 
-      <p style={{ fontSize: "0.85em", color: "#6b7280" }}>
+      <p style={{ fontSize: "0.85em", opacity: 0.7 }}>
         Proposed by: {change.proposedBy}
       </p>
 
@@ -116,12 +108,4 @@ function PendingItem({
       </button>
     </li>
   );
-}
-
-/* ------------------------------------------------------------
-   Helpers
------------------------------------------------------------- */
-
-function _attachBackground(): string {
-  return "linear-gradient(180deg, #ffffff, #f3f4f6)";
 }
