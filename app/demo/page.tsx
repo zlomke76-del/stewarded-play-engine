@@ -265,7 +265,9 @@ export default function DemoPage() {
               .filter((e) => e.type === "OUTCOME")
               .map((event) => (
                 <li key={event.id}>
-                  {event.payload.description}
+                  {typeof event.payload.description === "string"
+                    ? event.payload.description
+                    : "(Unspecified outcome)"}
                 </li>
               ))}
           </ul>
