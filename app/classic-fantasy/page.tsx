@@ -6,7 +6,7 @@
 //
 // Invariants:
 // - Player issues commands
-// - Solace proposes + drafts (non-authoritative)
+// - Solace drafts (non-authoritative)
 // - Dice are advisory only
 // - Arbiter edits + records canon
 // - Audit ribbon always visible
@@ -32,6 +32,48 @@ import CardSection from "@/components/layout/CardSection";
 import Disclaimer from "@/components/layout/Disclaimer";
 
 // ------------------------------------------------------------
+// Difficulty inference (NO Option schema changes)
+// ------------------------------------------------------------
+
+type OptionKind =
+  | "safe"
+  | "environmental"
+  | "risky"
+  | "contested";
+
+function inferOptionKind(description: string): OptionKind {
+  const text = description.toLowerCase();
+
+  if (
+    text.includes("attack") ||
+    text.includes("fight") ||
+    text.includes("oppose") ||
+    text.includes("contest")
+  ) {
+    return "contested";
+  }
+
+  if (
+    text.includes("climb") ||
+    text.includes("cross") ||
+    text.includes("navigate") ||
+    text.includes("environment")
+  ) {
+    return "environmental";
+  }
+
+  if (
+    text.includes("steal") ||
+    text.includes("sneak") ||
+    text.includes("risk")
+  ) {
+    return "risky";
+  }
+
+  return "safe";
+}
+
+// ------------------------------------------------------------
 
 export default function ClassicFantasyPage() {
   const role: "arbiter" = "arbiter";
@@ -43,7 +85,6 @@ export default function ClassicFantasyPage() {
   const [command, setCommand] = useState("");
   const [parsed, setParsed] = useState<any>(null);
   const [options, setOptions] = useState<Option[] | null>(null);
-
   const [selectedOption, setSelectedOption] =
     useState<Option | null>(null);
 
@@ -170,7 +211,9 @@ export default function ClassicFantasyPage() {
           context={{
             optionDescription:
               selectedOption.description,
-            optionKind: selectedOption.kind,
+            optionKind: inferOptionKind(
+              selectedOption.description
+            ),
           }}
           onRecord={handleRecord}
         />
