@@ -1,10 +1,16 @@
 "use client";
 
 // ------------------------------------------------------------
-// Demo Page — Stewarded Play (Polished Demo)
+// Demo Page — Stewarded Play (Solace Neutral DM Enabled)
+// ------------------------------------------------------------
+//
+// Invariants:
+// - Solace may PROPOSE, never decide
+// - Canon only written via confirmation
+// - Auto-confirm is explicit and optional
 // ------------------------------------------------------------
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   createSession,
   proposeChange,
@@ -25,12 +31,23 @@ import ModeHeader from "@/components/layout/ModeHeader";
 import CardSection from "@/components/layout/CardSection";
 import Disclaimer from "@/components/layout/Disclaimer";
 
+import { exportCanon } from "@/lib/export/exportCanon";
+
+// ------------------------------------------------------------
+// Types
+// ------------------------------------------------------------
+
+type DMMode = "human" | "solace-neutral";
+
 // ------------------------------------------------------------
 
 export default function DemoPage() {
   const [state, setState] = useState<SessionState>(
     createSession("demo-session")
   );
+
+  const [dmMode, setDmMode] = useState<DMMode>("human");
+  const [autoConfirm, setAutoConfirm] = useState(false);
 
   const [playerInput, setPlayerInput] = useState("");
   const [parsed, setParsed] = useState<any>(null);
@@ -51,10 +68,15 @@ export default function DemoPage() {
   }
 
   // ----------------------------------------------------------
-  // DM selects an option → propose change
+  // Solace Neutral DM — auto propose (NO AUTHORITY)
   // ----------------------------------------------------------
 
-  function handleSelectOption(option: Option) {
+  useEffect(() => {
+    if (dmMode !== "solace-neutral") return;
+    if (!options || options.length === 0) return;
+
+    const option = options[0]; // neutral, deterministic
+
     setState((prev) =>
       proposeChange(prev, {
         id: crypto.randomUUID(),
@@ -63,10 +85,10 @@ export default function DemoPage() {
         createdAt: Date.now(),
       })
     );
-  }
+  }, [dmMode, options]);
 
   // ----------------------------------------------------------
-  // DM confirms change (authority moment)
+  // DM / Solace confirms change
   // ----------------------------------------------------------
 
   function handleConfirm(changeId: string) {
@@ -74,7 +96,7 @@ export default function DemoPage() {
   }
 
   // ----------------------------------------------------------
-  // DM records outcome → CANON
+  // Record OUTCOME → CANON
   // ----------------------------------------------------------
 
   function handleOutcome(outcomeText: string) {
@@ -82,7 +104,7 @@ export default function DemoPage() {
       recordEvent(prev, {
         id: crypto.randomUUID(),
         timestamp: Date.now(),
-        actor: "system",
+        actor: dmMode === "solace-neutral" ? "system" : "DM",
         type: "OUTCOME",
         payload: {
           description: outcomeText,
@@ -92,13 +114,24 @@ export default function DemoPage() {
   }
 
   // ----------------------------------------------------------
-  // Share link (read-only)
+  // Auto-confirm path (explicit, optional)
   // ----------------------------------------------------------
 
-  function copyShareLink() {
-    const url = `${window.location.origin}/demo?session=demo-session`;
-    navigator.clipboard.writeText(url);
-    alert("Session link copied (read-only).");
+  useEffect(() => {
+    if (!autoConfirm) return;
+    if (state.pending.length !== 1) return;
+
+    handleConfirm(state.pending[0].id);
+  }, [autoConfirm, state.pending]);
+
+  // ----------------------------------------------------------
+  // Share / Export Canon
+  // ----------------------------------------------------------
+
+  function shareCanon() {
+    const canon = exportCanon(state.events);
+    navigator.clipboard.writeText(canon);
+    alert("Canon copied to clipboard.");
   }
 
   // ----------------------------------------------------------
@@ -109,14 +142,55 @@ export default function DemoPage() {
     <StewardedShell>
       <ModeHeader
         title="Stewarded Play — Full Flow"
-        onShare={copyShareLink}
+        onShare={shareCanon}
         roles={[
           { label: "Player", description: "Declares intent" },
-          { label: "DM", description: "Confirms outcomes" },
+          {
+            label: dmMode === "human" ? "DM" : "Solace (Neutral)",
+            description:
+              dmMode === "human"
+                ? "Confirms outcomes"
+                : "Proposes neutral resolutions",
+          },
         ]}
       />
 
-      {/* INITIAL PROMPT — NON-CANONICAL */}
+      {/* MODE CONTROLS */}
+      <CardSection title="Facilitation Mode">
+        <label>
+          <input
+            type="radio"
+            checked={dmMode === "human"}
+            onChange={() => setDmMode("human")}
+          />{" "}
+          Human DM
+        </label>
+        <br />
+        <label>
+          <input
+            type="radio"
+            checked={dmMode === "solace-neutral"}
+            onChange={() => setDmMode("solace-neutral")}
+          />{" "}
+          Solace (Neutral Facilitator)
+        </label>
+
+        {dmMode === "solace-neutral" && (
+          <>
+            <br />
+            <label>
+              <input
+                type="checkbox"
+                checked={autoConfirm}
+                onChange={(e) => setAutoConfirm(e.target.checked)}
+              />{" "}
+              Auto-confirm Solace proposals
+            </label>
+          </>
+        )}
+      </CardSection>
+
+      {/* SESSION START */}
       <CardSection title="Session Start">
         <p className="muted">
           The facilitator has framed the situation.
@@ -128,7 +202,7 @@ export default function DemoPage() {
         </p>
       </CardSection>
 
-      {/* Player Action */}
+      {/* PLAYER ACTION */}
       <CardSection title="Player Action">
         <textarea
           rows={3}
@@ -139,66 +213,44 @@ export default function DemoPage() {
         <button onClick={handlePlayerAction}>Submit Action</button>
       </CardSection>
 
-      {/* Parsed Action */}
+      {/* PARSED */}
       {parsed && (
         <CardSection title="Parsed Action (System)">
           <pre>{JSON.stringify(parsed, null, 2)}</pre>
         </CardSection>
       )}
 
-      {/* Options */}
+      {/* OPTIONS */}
       {options && (
         <CardSection title="Possible Options (No Ranking)">
           <ul>
             {options.map((opt) => (
-              <li key={opt.id}>
-                <button onClick={() => handleSelectOption(opt)}>
-                  {opt.description}
-                </button>
-              </li>
+              <li key={opt.id}>{opt.description}</li>
             ))}
           </ul>
         </CardSection>
       )}
 
-      {/* DM Authority + Outcome */}
+      {/* AUTHORITY + OUTCOME */}
       <DMConfirmationPanel state={state} onConfirm={handleConfirm} />
-      <DiceOutcomePanel onSubmit={handleOutcome} />
+      <DiceOutcomePanel onSubmit={handleOutcome} spellCheck />
       <NextActionHint state={state} />
 
-      {/* CANON — AUTHORITATIVE, CONTEXTUAL */}
+      {/* CANON */}
       <CardSection title="Canon (Confirmed Narrative)" className="canon">
         {state.events.filter((e) => e.type === "OUTCOME").length === 0 ? (
           <p className="muted">No canon yet.</p>
         ) : (
           <ul>
-            {state.events.map((event, index, all) => {
-              if (event.type !== "OUTCOME") return null;
-
-              const outcome =
-                typeof event.payload.description === "string"
-                  ? event.payload.description
-                  : "(Unspecified outcome)";
-
-              // Find most recent confirmed change before this outcome
-              const prior = [...all.slice(0, index)]
-                .reverse()
-                .find((e) => e.type === "CONFIRMED_CHANGE");
-
-              const ruling =
-                prior &&
-                typeof prior.payload.description === "string"
-                  ? prior.payload.description
-                  : null;
-
-              return (
+            {state.events
+              .filter((e) => e.type === "OUTCOME")
+              .map((event) => (
                 <li key={event.id}>
-                  {ruling
-                    ? `DM ruled on "${ruling}": ${outcome}`
-                    : outcome}
+                  {typeof event.payload.description === "string"
+                    ? event.payload.description
+                    : "(Unspecified outcome)"}
                 </li>
-              );
-            })}
+              ))}
           </ul>
         )}
       </CardSection>
