@@ -1,21 +1,20 @@
 "use client";
 
 // ------------------------------------------------------------
-// Stewarded Play — Full Flow (Governed Resolution Engine)
+// Classic Fantasy — Stewarded Resolution (Governed)
 // ------------------------------------------------------------
 //
 // Invariants:
-// - Solace may DRAFT, never decide
-// - Dice advise, never authorize
-// - Canon written ONLY by Arbiter
-// - Draft is editable before record
+// - Player declares intent
+// - Solace drafts (non-authoritative)
+// - Dice advise only
+// - Arbiter edits + records canon
 // - All authority actions are visible
 // ------------------------------------------------------------
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import {
   createSession,
-  confirmChange,
   recordEvent,
   SessionState,
 } from "@/lib/session/SessionState";
@@ -33,10 +32,9 @@ import CardSection from "@/components/layout/CardSection";
 import Disclaimer from "@/components/layout/Disclaimer";
 
 // ------------------------------------------------------------
-// Authority + Dice Types
+// Dice + Difficulty
 // ------------------------------------------------------------
 
-type Role = "player" | "arbiter";
 type DiceMode = "d20" | "2d6";
 
 function difficultyFor(kind: Option["kind"]) {
@@ -65,18 +63,19 @@ function rollDice(mode: DiceMode) {
 
 // ------------------------------------------------------------
 
-export default function DemoPage() {
-  const role: Role = "arbiter"; // later from auth/session
+export default function ClassicFantasyPage() {
+  const role: "arbiter" = "arbiter"; // future: auth-gated
 
   const [state, setState] = useState<SessionState>(
-    createSession("demo-session")
+    createSession("classic-fantasy-session")
   );
 
-  const [playerInput, setPlayerInput] = useState("");
+  const [command, setCommand] = useState("");
   const [parsed, setParsed] = useState<any>(null);
   const [options, setOptions] = useState<Option[] | null>(null);
 
-  const [selectedOption, setSelectedOption] = useState<Option | null>(null);
+  const [selectedOption, setSelectedOption] =
+    useState<Option | null>(null);
 
   const [draftOutcome, setDraftOutcome] = useState("");
   const [diceMode, setDiceMode] = useState<DiceMode>("d20");
@@ -85,13 +84,13 @@ export default function DemoPage() {
   const [audit, setAudit] = useState<string[]>([]);
 
   // ----------------------------------------------------------
-  // Player action
+  // Player command
   // ----------------------------------------------------------
 
-  function handlePlayerAction() {
-    if (!playerInput.trim()) return;
+  function handleCommand() {
+    if (!command.trim()) return;
 
-    const parsedAction = parseAction("player_1", playerInput);
+    const parsedAction = parseAction("player_1", command);
     const optionSet = generateOptions(parsedAction);
 
     setParsed(parsedAction);
@@ -103,14 +102,14 @@ export default function DemoPage() {
   }
 
   // ----------------------------------------------------------
-  // Solace auto-draft (non-authoritative)
+  // Solace draft (non-authoritative)
   // ----------------------------------------------------------
 
   function handleSelectOption(option: Option) {
     setSelectedOption(option);
 
     setDraftOutcome(
-      `The action resolves as expected. ${option.description}.`
+      `The world responds accordingly. ${option.description}.`
     );
 
     setAudit(["Drafted by Solace"]);
@@ -157,37 +156,38 @@ export default function DemoPage() {
     selectedOption && difficultyFor(selectedOption.kind);
 
   return (
-    <StewardedShell>
+    <StewardedShell theme="fantasy">
       <ModeHeader
-        title="Stewarded Play — Full Flow"
+        title="Classic Fantasy — Stewarded Resolution"
         onShare={() =>
           navigator.clipboard.writeText(
             exportCanon(state.events)
           )
         }
         roles={[
-          { label: "Player", description: "Declares intent" },
+          { label: "Player", description: "Issues commands" },
           { label: "Arbiter", description: "Confirms outcomes" },
         ]}
       />
 
-      <CardSection title="Player Action">
+      <CardSection title="Command">
         <textarea
           rows={3}
-          value={playerInput}
-          onChange={(e) => setPlayerInput(e.target.value)}
+          value={command}
+          onChange={(e) => setCommand(e.target.value)}
+          placeholder="Declare an action or intent…"
         />
-        <button onClick={handlePlayerAction}>Submit Action</button>
+        <button onClick={handleCommand}>Submit Command</button>
       </CardSection>
 
       {parsed && (
-        <CardSection title="Parsed Action (System)">
+        <CardSection title="Command Classification (System)">
           <pre>{JSON.stringify(parsed, null, 2)}</pre>
         </CardSection>
       )}
 
       {options && (
-        <CardSection title="Possible Options">
+        <CardSection title="Possible Resolution Paths">
           <ul>
             {options.map((opt) => (
               <li key={opt.id}>
@@ -242,15 +242,13 @@ export default function DemoPage() {
             Record Outcome
           </button>
 
-          <p className="muted">
-            {audit.join(" · ")}
-          </p>
+          <p className="muted">{audit.join(" · ")}</p>
         </CardSection>
       )}
 
       <NextActionHint state={state} />
 
-      <CardSection title="Canon (Confirmed Narrative)" className="canon">
+      <CardSection title="Chronicle (Confirmed World State)" className="canon">
         {state.events
           .filter((e) => e.type === "OUTCOME")
           .map((e) => (
