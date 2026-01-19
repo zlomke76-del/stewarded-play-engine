@@ -7,8 +7,9 @@
 // Invariants:
 // - Solace may FRAME and PROPOSE, never decide
 // - Canon only written via OUTCOME
-// - Framing is non-canonical and excluded from export by default
+// - Framing is non-canonical and excluded from export
 // - Auto-confirm is explicit and optional
+// - Hydration-safe interactive rendering
 // ------------------------------------------------------------
 
 import { useEffect, useState } from "react";
@@ -47,7 +48,8 @@ type DMMode = "human" | "solace-neutral";
 function generateFraming(seed: string): string {
   return (
     `You arrive at the edge of a small settlement as dusk settles in. ` +
-    `Lantern light flickers through misty air. ${seed ? `Rumors speak of ${seed}. ` : ""}` +
+    `Lantern light flickers through misty air. ` +
+    (seed ? `Rumors speak of ${seed}. ` : "") +
     `Nothing has happened yet. The world waits.`
   );
 }
@@ -58,6 +60,10 @@ export default function DemoPage() {
   const [state, setState] = useState<SessionState>(
     createSession("demo-session")
   );
+
+  // hydration guard
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
 
   const [dmMode, setDmMode] = useState<DMMode>("human");
   const [autoConfirm, setAutoConfirm] = useState(false);
@@ -102,7 +108,7 @@ export default function DemoPage() {
   }
 
   // ----------------------------------------------------------
-  // Select option → PROPOSE change
+  // Select option → PROPOSE change (authority-safe)
   // ----------------------------------------------------------
 
   function handleSelectOption(option: Option) {
@@ -169,7 +175,7 @@ export default function DemoPage() {
   }, [autoConfirm, state.pending]);
 
   // ----------------------------------------------------------
-  // Share / Export Canon (framing excluded)
+  // Share / Export Canon
   // ----------------------------------------------------------
 
   function shareCanon() {
@@ -290,8 +296,8 @@ export default function DemoPage() {
         </CardSection>
       )}
 
-      {/* OPTIONS */}
-      {options && (
+      {/* OPTIONS — HYDRATION SAFE */}
+      {mounted && options && (
         <CardSection title="Possible Options (No Ranking)">
           <ul>
             {options.map((opt) => (
