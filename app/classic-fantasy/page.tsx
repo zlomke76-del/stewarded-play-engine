@@ -1,14 +1,7 @@
 "use client";
 
 // ------------------------------------------------------------
-// Classic Fantasy — Stewarded Resolution Mode (Automated)
-// ------------------------------------------------------------
-//
-// Invariants:
-// - System may FRAME and DRAFT, never decide
-// - Dice are evidence, not authority
-// - Canon written ONLY by explicit human action
-// - Confirmation validates legitimacy but does not drive UI flow
+// Classic Fantasy — Stewarded Resolution Mode (AUTO-ASSISTED)
 // ------------------------------------------------------------
 
 import { useEffect, useState } from "react";
@@ -36,18 +29,6 @@ import CardSection from "@/components/layout/CardSection";
 import Disclaimer from "@/components/layout/Disclaimer";
 
 // ------------------------------------------------------------
-// Draft helper (neutral, deterministic)
-// ------------------------------------------------------------
-
-function generateDraftOutcome(option: Option): string {
-  return (
-    `Following the chosen course (“${option.description}”), ` +
-    `events unfold in a way consistent with the world. ` +
-    `Some details become clear, while others remain uncertain.`
-  );
-}
-
-// ------------------------------------------------------------
 
 export default function ClassicFantasyPage() {
   const [state, setState] = useState<SessionState>(
@@ -59,8 +40,8 @@ export default function ClassicFantasyPage() {
   const [options, setOptions] = useState<Option[] | null>(null);
   const [chronicle, setChronicle] = useState<string[]>([]);
 
-  // Facilitation automation state (NEW)
-  const [selectedOption, setSelectedOption] = useState<Option | null>(null);
+  // automation guards
+  const [autoProposed, setAutoProposed] = useState(false);
   const [draftOutcome, setDraftOutcome] = useState<string>("");
 
   // ----------------------------------------------------------
@@ -75,18 +56,19 @@ export default function ClassicFantasyPage() {
 
     setParsed(parsedAction);
     setOptions([...optionSet.options]);
-
-    // reset facilitation
-    setSelectedOption(null);
+    setAutoProposed(false);
     setDraftOutcome("");
   }
 
   // ----------------------------------------------------------
-  // Option selected → auto-advance flow (NO CANON)
+  // Solace auto-proposes FIRST option (one-shot)
   // ----------------------------------------------------------
 
-  function handleSelectOption(option: Option) {
-    setSelectedOption(option);
+  useEffect(() => {
+    if (!options || options.length === 0) return;
+    if (autoProposed) return;
+
+    const option = options[0];
 
     setState((prev) =>
       proposeChange(prev, {
@@ -96,19 +78,17 @@ export default function ClassicFantasyPage() {
         createdAt: Date.now(),
       })
     );
-  }
+
+    // Draft neutral outcome text
+    setDraftOutcome(
+      `The action resolves in a straightforward manner. ${option.description}.`
+    );
+
+    setAutoProposed(true);
+  }, [options, autoProposed]);
 
   // ----------------------------------------------------------
-  // AUTO-DRAFT outcome once option is selected
-  // ----------------------------------------------------------
-
-  useEffect(() => {
-    if (!selectedOption) return;
-    setDraftOutcome(generateDraftOutcome(selectedOption));
-  }, [selectedOption]);
-
-  // ----------------------------------------------------------
-  // Arbiter confirms resolution path (legitimacy only)
+  // Arbiter confirms resolution path
   // ----------------------------------------------------------
 
   function handleConfirm(changeId: string) {
@@ -116,22 +96,19 @@ export default function ClassicFantasyPage() {
   }
 
   // ----------------------------------------------------------
-  // Record OUTCOME → CANON (human authority)
+  // Resolution / Outcome entry → canon
   // ----------------------------------------------------------
 
   function handleOutcome(outcomeText: string, diceResult?: any) {
-    if (!outcomeText.trim()) return;
-
     setState((prev) => {
       const next = recordEvent(prev, {
         id: crypto.randomUUID(),
         timestamp: Date.now(),
-        actor: "arbiter",
+        actor: "system",
         type: "OUTCOME",
         payload: {
           description: outcomeText,
           dice: diceResult ?? null,
-          basedOn: selectedOption?.description ?? null,
         },
       });
 
@@ -139,40 +116,21 @@ export default function ClassicFantasyPage() {
       const rendered = renderNarration(event, { tone: "neutral" });
 
       setChronicle((c) => [...c, rendered.text]);
+      setDraftOutcome("");
       return next;
     });
-
-    // reset for next turn
-    setCommand("");
-    setParsed(null);
-    setOptions(null);
-    setSelectedOption(null);
-    setDraftOutcome("");
   }
 
   // ----------------------------------------------------------
-  // Share = Export Canon (Authoritative)
+  // Share = Export Canon
   // ----------------------------------------------------------
 
   function handleShare() {
     const canonText = exportCanon(state.events);
+    if (!canonText.trim()) return alert("No canon to export.");
 
-    if (!canonText.trim()) {
-      alert("No canon to export yet.");
-      return;
-    }
-
-    const blob = new Blob([canonText], { type: "text/plain" });
-    const url = URL.createObjectURL(blob);
-
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "classic-fantasy-chronicle.txt";
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-
-    URL.revokeObjectURL(url);
+    navigator.clipboard.writeText(canonText);
+    alert("Canon copied.");
   }
 
   // ----------------------------------------------------------
@@ -186,7 +144,8 @@ export default function ClassicFantasyPage() {
         onShare={handleShare}
         roles={[
           { label: "Player", description: "Issues commands" },
-          { label: "Arbiter", description: "Confirms and records outcomes" },
+          { label: "Solace", description: "Drafts neutral resolutions" },
+          { label: "Arbiter", description: "Confirms outcomes" },
         ]}
       />
 
@@ -210,35 +169,19 @@ export default function ClassicFantasyPage() {
         <CardSection title="Possible Resolution Paths">
           <ul>
             {options.map((opt) => (
-              <li key={opt.id}>
-                <button onClick={() => handleSelectOption(opt)}>
-                  {opt.description}
-                </button>
-              </li>
+              <li key={opt.id}>{opt.description}</li>
             ))}
           </ul>
         </CardSection>
       )}
 
-      {/* Confirmation preserved, but no longer blocks flow */}
       <DMConfirmationPanel state={state} onConfirm={handleConfirm} />
 
-      {/* Automated Outcome Phase */}
-      {selectedOption && (
-        <CardSection title="Outcome (Arbiter)">
-          <p className="muted">
-            Drafted by system (editable, non-canonical):
-          </p>
-
-          <textarea
-            rows={4}
-            value={draftOutcome}
-            onChange={(e) => setDraftOutcome(e.target.value)}
-          />
-
-          {/* Dice appear automatically */}
-          <DiceOutcomePanel onSubmit={handleOutcome} />
-        </CardSection>
+      {state.pending.length > 0 && (
+        <DiceOutcomePanel
+          onSubmit={handleOutcome}
+          initialText={draftOutcome}
+        />
       )}
 
       <NextActionHint state={state} />
