@@ -102,7 +102,7 @@ export default function DemoPage() {
     const optionSet = generateOptions(parsedAction);
 
     setParsed(parsedAction);
-    setOptions(optionSet.options);
+    setOptions([...optionSet.options]); // ✅ FIX: copy readonly → mutable
   }
 
   // ----------------------------------------------------------
@@ -240,10 +240,8 @@ export default function DemoPage() {
         </CardSection>
       )}
 
-      {/* DM CONFIRMATION (EVENT-DRIVEN) */}
       <DMConfirmationPanel state={state} />
 
-      {/* DICE ONLY APPEARS WHEN A PROPOSAL EXISTS */}
       {proposals.length > 0 && (
         <DiceOutcomePanel
           state={state}
