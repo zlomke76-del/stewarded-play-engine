@@ -23,7 +23,9 @@ import DiceOutcomePanel from "@/components/DiceOutcomePanel";
 import NextActionHint from "@/components/NextActionHint";
 
 import StewardedShell from "@/components/layout/StewardedShell";
+import ModeHeader from "@/components/layout/ModeHeader";
 import CardSection from "@/components/layout/CardSection";
+import Disclaimer from "@/components/layout/Disclaimer";
 
 // ------------------------------------------------------------
 
@@ -87,10 +89,16 @@ export default function ClassicFantasyPage() {
   }
 
   return (
-    <StewardedShell
-      title="Classic Fantasy — Stewarded Resolution"
-      onShare={copyShareLink}
-    >
+    <StewardedShell>
+      <ModeHeader
+        title="Classic Fantasy — Stewarded Resolution"
+        onShare={copyShareLink}
+        roles={[
+          { label: "Player", description: "Issues commands" },
+          { label: "Arbiter", description: "Confirms resolutions" },
+        ]}
+      />
+
       <CardSection title="Command">
         <textarea
           rows={3}
@@ -137,13 +145,7 @@ export default function ClassicFantasyPage() {
         )}
       </CardSection>
 
-      <footer className="disclaimer">
-        <p>
-          This software provides a system-agnostic facilitation framework for
-          human-led tabletop roleplaying sessions and does not reproduce or
-          automate any proprietary game rules, content, or narrative.
-        </p>
-      </footer>
+      <Disclaimer />
     </StewardedShell>
   );
 }
