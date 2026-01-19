@@ -10,7 +10,7 @@
 // - Require explicit human confirmation
 // - Prevent silent or automatic state mutation
 //
-// This UI is intentionally plain.
+// This UI is intentionally plain and authoritative.
 // ------------------------------------------------------------
 
 import React from "react";
@@ -38,7 +38,8 @@ export default function DMConfirmationPanel({
         border: "2px solid #c00",
         padding: "16px",
         borderRadius: "6px",
-        background:_attachBackground(),
+        background: _attachBackground(),
+        color: "#111827", // ← ASSERT TEXT COLOR (critical)
         maxWidth: "480px",
       }}
     >
@@ -47,11 +48,11 @@ export default function DMConfirmationPanel({
       </h2>
 
       {pending.length === 0 ? (
-        <p style={{ opacity: 0.7 }}>
+        <p style={{ color: "#4b5563" }}>
           No pending changes.
         </p>
       ) : (
-        <ul style={{ listStyle: "none", padding: 0 }}>
+        <ul style={{ listStyle: "none", padding: 0, margin: 0 }}>
           {pending.map((change) => (
             <PendingItem
               key={change.id}
@@ -79,21 +80,23 @@ function PendingItem({
   return (
     <li
       style={{
-        border: "1px solid #999",
+        border: "1px solid #9ca3af",
         borderRadius: "4px",
         padding: "12px",
         marginBottom: "12px",
+        background: "#ffffff",
+        color: "#111827",
       }}
     >
-      <p>
-        <strong>Proposed change:</strong>
+      <p style={{ margin: "0 0 6px 0", fontWeight: 600 }}>
+        Proposed change:
       </p>
 
-      <p style={{ marginLeft: "8px" }}>
+      <p style={{ margin: "0 0 6px 8px" }}>
         {change.description}
       </p>
 
-      <p style={{ fontSize: "0.85em", opacity: 0.7 }}>
+      <p style={{ fontSize: "0.85em", color: "#6b7280" }}>
         Proposed by: {change.proposedBy}
       </p>
 
@@ -120,5 +123,5 @@ function PendingItem({
 ------------------------------------------------------------ */
 
 function _attachBackground(): string {
-  return "linear-gradient(180deg, #fff, #f7f7f7)";
+  return "linear-gradient(180deg, #ffffff, #f3f4f6)";
 }
