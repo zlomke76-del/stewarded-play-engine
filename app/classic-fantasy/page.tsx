@@ -1,15 +1,15 @@
 "use client";
 
 // ------------------------------------------------------------
-// Classic Fantasy — Stewarded Resolution (Governed)
+// Classic Fantasy — Stewarded Resolution (Full Governed Flow)
 // ------------------------------------------------------------
 //
 // Invariants:
-// - Player declares intent
-// - Solace drafts (non-authoritative)
-// - Dice advise only
+// - Player issues commands
+// - Solace proposes + drafts (non-authoritative)
+// - Dice are advisory only
 // - Arbiter edits + records canon
-// - All authority actions are visible
+// - Audit ribbon always visible
 // ------------------------------------------------------------
 
 import { useState } from "react";
@@ -23,7 +23,7 @@ import { parseAction } from "@/lib/parser/ActionParser";
 import { generateOptions, Option } from "@/lib/options/OptionGenerator";
 import { exportCanon } from "@/lib/export/exportCanon";
 
-import DMConfirmationPanel from "@/components/dm/DMConfirmationPanel";
+import ResolutionDraftPanel from "@/components/resolution/ResolutionDraftPanel";
 import NextActionHint from "@/components/NextActionHint";
 
 import StewardedShell from "@/components/layout/StewardedShell";
@@ -32,39 +32,9 @@ import CardSection from "@/components/layout/CardSection";
 import Disclaimer from "@/components/layout/Disclaimer";
 
 // ------------------------------------------------------------
-// Dice + Difficulty
-// ------------------------------------------------------------
-
-type DiceMode = "d20" | "2d6";
-
-function difficultyFor(kind: Option["kind"]) {
-  switch (kind) {
-    case "safe":
-      return { dc: 0, reason: "safe action" };
-    case "environmental":
-      return { dc: 6, reason: "environmental uncertainty" };
-    case "risky":
-      return { dc: 10, reason: "risky action" };
-    case "contested":
-      return { dc: 14, reason: "contested action" };
-    default:
-      return { dc: 10, reason: "default risk" };
-  }
-}
-
-function rollDice(mode: DiceMode) {
-  if (mode === "d20") {
-    return Math.ceil(Math.random() * 20);
-  }
-  return (
-    Math.ceil(Math.random() * 6) + Math.ceil(Math.random() * 6)
-  );
-}
-
-// ------------------------------------------------------------
 
 export default function ClassicFantasyPage() {
-  const role: "arbiter" = "arbiter"; // future: auth-gated
+  const role: "arbiter" = "arbiter";
 
   const [state, setState] = useState<SessionState>(
     createSession("classic-fantasy-session")
@@ -77,14 +47,8 @@ export default function ClassicFantasyPage() {
   const [selectedOption, setSelectedOption] =
     useState<Option | null>(null);
 
-  const [draftOutcome, setDraftOutcome] = useState("");
-  const [diceMode, setDiceMode] = useState<DiceMode>("d20");
-  const [diceResult, setDiceResult] = useState<number | null>(null);
-
-  const [audit, setAudit] = useState<string[]>([]);
-
   // ----------------------------------------------------------
-  // Player command
+  // Player issues a command
   // ----------------------------------------------------------
 
   function handleCommand() {
@@ -96,77 +60,70 @@ export default function ClassicFantasyPage() {
     setParsed(parsedAction);
     setOptions([...optionSet.options]);
     setSelectedOption(null);
-    setDraftOutcome("");
-    setDiceResult(null);
-    setAudit([]);
   }
 
   // ----------------------------------------------------------
-  // Solace draft (non-authoritative)
+  // Option selection → Solace draft
   // ----------------------------------------------------------
 
   function handleSelectOption(option: Option) {
     setSelectedOption(option);
-
-    setDraftOutcome(
-      `The world responds accordingly. ${option.description}.`
-    );
-
-    setAudit(["Drafted by Solace"]);
-  }
-
-  // ----------------------------------------------------------
-  // Dice roll (advisory)
-  // ----------------------------------------------------------
-
-  function handleRollDice() {
-    const roll = rollDice(diceMode);
-    setDiceResult(roll);
-    setAudit((a) => [...a, `Dice rolled (${diceMode}): ${roll}`]);
   }
 
   // ----------------------------------------------------------
   // Record canon (arbiter only)
   // ----------------------------------------------------------
 
-  function handleRecordOutcome() {
-    if (!draftOutcome.trim()) return;
-
+  function handleRecord(payload: {
+    description: string;
+    dice: {
+      mode: string;
+      roll: number | null;
+      dc: number;
+      justification: string;
+    };
+    audit: string[];
+  }) {
     setState((prev) =>
       recordEvent(prev, {
         id: crypto.randomUUID(),
         timestamp: Date.now(),
         actor: "arbiter",
         type: "OUTCOME",
-        payload: {
-          description: draftOutcome,
-          dice: diceResult,
-        },
+        payload,
       })
     );
+  }
 
-    setAudit((a) => [...a, "Recorded by Arbiter"]);
+  // ----------------------------------------------------------
+  // Share / Export Canon
+  // ----------------------------------------------------------
+
+  function handleShare() {
+    const canonText = exportCanon(state.events);
+    navigator.clipboard.writeText(canonText);
+    alert("Canon copied to clipboard.");
   }
 
   // ----------------------------------------------------------
   // UI
   // ----------------------------------------------------------
 
-  const difficulty =
-    selectedOption && difficultyFor(selectedOption.kind);
-
   return (
     <StewardedShell theme="fantasy">
       <ModeHeader
         title="Classic Fantasy — Stewarded Resolution"
-        onShare={() =>
-          navigator.clipboard.writeText(
-            exportCanon(state.events)
-          )
-        }
+        onShare={handleShare}
         roles={[
           { label: "Player", description: "Issues commands" },
-          { label: "Arbiter", description: "Confirms outcomes" },
+          {
+            label: "Solace (Neutral)",
+            description: "Drafts neutral resolutions",
+          },
+          {
+            label: "Arbiter",
+            description: "Edits and records canon",
+          },
         ]}
       />
 
@@ -175,9 +132,11 @@ export default function ClassicFantasyPage() {
           rows={3}
           value={command}
           onChange={(e) => setCommand(e.target.value)}
-          placeholder="Declare an action or intent…"
+          placeholder="Issue a command or declare an action…"
         />
-        <button onClick={handleCommand}>Submit Command</button>
+        <button onClick={handleCommand}>
+          Submit Command
+        </button>
       </CardSection>
 
       {parsed && (
@@ -191,7 +150,11 @@ export default function ClassicFantasyPage() {
           <ul>
             {options.map((opt) => (
               <li key={opt.id}>
-                <button onClick={() => handleSelectOption(opt)}>
+                <button
+                  onClick={() =>
+                    handleSelectOption(opt)
+                  }
+                >
                   {opt.description}
                 </button>
               </li>
@@ -200,62 +163,44 @@ export default function ClassicFantasyPage() {
         </CardSection>
       )}
 
-      {selectedOption && role === "arbiter" && (
-        <CardSection title="Resolution Draft">
-          {difficulty && (
-            <p className="muted">
-              🎲 Difficulty {difficulty.dc} — {difficulty.reason}
-            </p>
-          )}
-
-          <label>
-            Dice system:{" "}
-            <select
-              value={diceMode}
-              onChange={(e) =>
-                setDiceMode(e.target.value as DiceMode)
-              }
-            >
-              <option value="d20">d20</option>
-              <option value="2d6">2d6</option>
-            </select>
-          </label>
-
-          <button onClick={handleRollDice}>Roll Dice</button>
-
-          {diceResult !== null && (
-            <p>Result: {diceResult}</p>
-          )}
-
-          <textarea
-            rows={4}
-            value={draftOutcome}
-            onChange={(e) => {
-              setDraftOutcome(e.target.value);
-              if (!audit.includes("Edited by Arbiter")) {
-                setAudit((a) => [...a, "Edited by Arbiter"]);
-              }
-            }}
-          />
-
-          <button onClick={handleRecordOutcome}>
-            Record Outcome
-          </button>
-
-          <p className="muted">{audit.join(" · ")}</p>
-        </CardSection>
+      {/* ---------- RESOLUTION DRAFT (DICE LIVE HERE) ---------- */}
+      {selectedOption && (
+        <ResolutionDraftPanel
+          role={role}
+          context={{
+            optionDescription:
+              selectedOption.description,
+            optionKind: selectedOption.kind,
+          }}
+          onRecord={handleRecord}
+        />
       )}
 
       <NextActionHint state={state} />
 
-      <CardSection title="Chronicle (Confirmed World State)" className="canon">
-        {state.events
-          .filter((e) => e.type === "OUTCOME")
-          .map((e) => (
-            <p key={e.id}>
-              {String(e.payload.description)}
-            </p>
-          ))}
+      <CardSection
+        title="Chronicle (Confirmed World State)"
+        className="canon"
+      >
+        {state.events.filter(
+          (e) => e.type === "OUTCOME"
+        ).length === 0 ? (
+          <p className="muted">
+            No confirmed resolutions yet.
+          </p>
+        ) : (
+          <ul>
+            {state.events
+              .filter((e) => e.type === "OUTCOME")
+              .map((event) => (
+                <li key={event.id}>
+                  {String(
+                    event.payload.description
+                  )}
+                </li>
+              ))}
+          </ul>
+        )}
       </CardSection>
 
       <Disclaimer />
