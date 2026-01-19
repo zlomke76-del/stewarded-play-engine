@@ -80,9 +80,12 @@ function handleOutcome(outcomeText: string) {
   setState((prev) => {
     const next = recordEvent(prev, {
       id: crypto.randomUUID(),
-      type: "outcome",
-      description: outcomeText, // ✅ FIX
-      createdAt: Date.now(),
+      timestamp: Date.now(),
+      actor: "system",
+      type: "OUTCOME",
+      payload: {
+        description: outcomeText,
+      },
     });
 
     const event: SessionEvent = next.events.at(-1)!;
