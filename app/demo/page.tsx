@@ -1,15 +1,15 @@
 "use client";
 
 // ------------------------------------------------------------
-// Demo Page — Full Stewarded Flow (Polished + Share Link)
+// Demo Page — Stewarded Play (Polished Demo)
 // ------------------------------------------------------------
 
 import { useState } from "react";
-
 import {
   createSession,
   proposeChange,
   confirmChange,
+  recordEvent,
   SessionState,
   SessionEvent,
 } from "@/lib/session/SessionState";
@@ -18,38 +18,21 @@ import { parseAction } from "@/lib/parser/ActionParser";
 import { generateOptions, Option } from "@/lib/options/OptionGenerator";
 import { renderNarration } from "@/lib/narration/NarrationRenderer";
 
-import DMConfirmationPanel from "@/components/dm/DMConfirmationPanel";
+import DMConfirmationPanel from "@/components/DMConfirmationPanel";
+import DiceOutcomePanel from "@/components/DiceOutcomePanel";
+import NextActionHint from "@/components/NextActionHint";
 
 // ------------------------------------------------------------
 
-const SESSION_ID = "demo-session";
-
 export default function DemoPage() {
   const [state, setState] = useState<SessionState>(
-    createSession(SESSION_ID)
+    createSession("demo-session")
   );
 
   const [playerInput, setPlayerInput] = useState("");
   const [parsed, setParsed] = useState<any>(null);
   const [options, setOptions] = useState<Option[] | null>(null);
   const [narration, setNarration] = useState<string[]>([]);
-  const [copied, setCopied] = useState(false);
-
-  // ----------------------------------------------------------
-  // Share link
-  // ----------------------------------------------------------
-
-  const shareUrl =
-    typeof window !== "undefined"
-      ? `${window.location.origin}/demo?session=${SESSION_ID}`
-      : "";
-
-  function handleCopyLink() {
-    if (!shareUrl) return;
-    navigator.clipboard.writeText(shareUrl);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  }
 
   // ----------------------------------------------------------
   // Player submits an action
@@ -81,142 +64,85 @@ export default function DemoPage() {
   }
 
   // ----------------------------------------------------------
-  // DM confirms change → narrate
+  // DM confirms change
   // ----------------------------------------------------------
 
   function handleConfirm(changeId: string) {
+    setState((prev) => confirmChange(prev, changeId, "DM"));
+  }
+
+  // ----------------------------------------------------------
+  // Dice / Outcome entry → canon
+  // ----------------------------------------------------------
+
+  function handleOutcome(outcomeText: string) {
     setState((prev) => {
-      const confirmed = confirmChange(prev, changeId, "DM");
-      const event: SessionEvent = confirmed.events.at(-1)!;
+      const next = recordEvent(prev, {
+        id: crypto.randomUUID(),
+        type: "outcome",
+        text: outcomeText,
+        createdAt: Date.now(),
+      });
 
+      const event: SessionEvent = next.events.at(-1)!;
       const rendered = renderNarration(event, { tone: "neutral" });
-      setNarration((n) => [...n, rendered.text]);
 
-      return confirmed;
+      setNarration((n) => [...n, rendered.text]);
+      return next;
     });
   }
 
   // ----------------------------------------------------------
-  // Styles
+  // Share link (read-only)
   // ----------------------------------------------------------
 
-  const sectionStyle = {
-    background: "rgba(255,255,255,0.04)",
-    border: "1px solid rgba(255,255,255,0.08)",
-    borderRadius: "10px",
-    padding: "16px",
-    marginBottom: "24px",
-  };
+  function copyShareLink() {
+    const url = `${window.location.origin}/demo?session=demo-session`;
+    navigator.clipboard.writeText(url);
+    alert("Session link copied (read-only).");
+  }
 
   // ----------------------------------------------------------
   // UI
   // ----------------------------------------------------------
 
   return (
-    <main style={{ padding: "32px", maxWidth: "960px" }}>
-      <h1>Stewarded Play — Full Flow Demo</h1>
+    <main className="demo-shell">
+      <header className="demo-header">
+        <h1>Stewarded Play — Full Flow Demo</h1>
+        <button onClick={copyShareLink} className="share-btn">
+          🔗 Share Session
+        </button>
+      </header>
 
-      {/* Share Link */}
-      <section style={sectionStyle}>
-        <h2>Invite Players</h2>
-        <p style={{ opacity: 0.7 }}>
-          Share this link so players can join the session.
-        </p>
-        <div style={{ display: "flex", gap: "8px" }}>
-          <input
-            readOnly
-            value={shareUrl}
-            style={{
-              flex: 1,
-              padding: "8px",
-              borderRadius: "4px",
-              border: "1px solid #555",
-              background: "#1e1e1e",
-              color: "#fff",
-            }}
-          />
-          <button
-            onClick={handleCopyLink}
-            style={{
-              padding: "8px 12px",
-              background: "#444",
-              color: "#fff",
-              border: "none",
-              borderRadius: "4px",
-              cursor: "pointer",
-            }}
-          >
-            {copied ? "Copied" : "Copy"}
-          </button>
-        </div>
-      </section>
-
-      {/* Player Input */}
-      <section style={sectionStyle}>
+      {/* Player Action */}
+      <section className="card">
         <h2>Player Action</h2>
         <textarea
           rows={3}
           value={playerInput}
           onChange={(e) => setPlayerInput(e.target.value)}
-          style={{
-            width: "100%",
-            background: "#2b2b2b",
-            color: "#fff",
-            borderRadius: "6px",
-            padding: "10px",
-            border: "1px solid #444",
-          }}
           placeholder="Describe what your character does…"
         />
-        <button
-          onClick={handlePlayerAction}
-          style={{
-            marginTop: "10px",
-            padding: "8px 14px",
-            background: "#444",
-            color: "#fff",
-            border: "none",
-            borderRadius: "4px",
-            cursor: "pointer",
-          }}
-        >
-          Submit Action
-        </button>
+        <button onClick={handlePlayerAction}>Submit Action</button>
       </section>
 
-      {/* Parsed Action */}
+      {/* Parsed */}
       {parsed && (
-        <section style={sectionStyle}>
+        <section className="card fade-in">
           <h2>Parsed Action (System)</h2>
-          <pre
-            style={{
-              background: "#1e1e1e",
-              padding: "12px",
-              borderRadius: "6px",
-            }}
-          >
-            {JSON.stringify(parsed, null, 2)}
-          </pre>
+          <pre>{JSON.stringify(parsed, null, 2)}</pre>
         </section>
       )}
 
       {/* Options */}
       {options && (
-        <section style={sectionStyle}>
+        <section className="card fade-in">
           <h2>Possible Options (No Ranking)</h2>
           <ul>
             {options.map((opt) => (
               <li key={opt.id}>
-                <button
-                  onClick={() => handleSelectOption(opt)}
-                  style={{
-                    padding: "6px 10px",
-                    background: "#333",
-                    color: "#fff",
-                    border: "1px solid #555",
-                    borderRadius: "4px",
-                  }}
-                >
+                <button onClick={() => handleSelectOption(opt)}>
                   {opt.description}
                 </button>
               </li>
@@ -226,26 +152,19 @@ export default function DemoPage() {
       )}
 
       {/* DM Confirmation */}
-      <section style={sectionStyle}>
-        <DMConfirmationPanel state={state} onConfirm={handleConfirm} />
-      </section>
+      <DMConfirmationPanel state={state} onConfirm={handleConfirm} />
 
-      {/* Narration */}
-      <section
-        style={{
-          background: "#ffffff",
-          color: "#111",
-          borderRadius: "12px",
-          padding: "20px",
-          boxShadow: "0 12px 30px rgba(0,0,0,0.2)",
-        }}
-      >
+      {/* Dice / Outcome */}
+      <DiceOutcomePanel onSubmit={handleOutcome} />
+
+      {/* Next Action Hint */}
+      <NextActionHint state={state} />
+
+      {/* Canon */}
+      <section className="card canon fade-in">
         <h2>Canon (Confirmed Narrative)</h2>
-
         {narration.length === 0 ? (
-          <p style={{ opacity: 0.6, fontStyle: "italic" }}>
-            Awaiting first confirmed outcome…
-          </p>
+          <p className="muted">No canon yet.</p>
         ) : (
           <ul>
             {narration.map((line, i) => (
@@ -253,10 +172,6 @@ export default function DemoPage() {
             ))}
           </ul>
         )}
-
-        <p style={{ marginTop: "12px", opacity: 0.5 }}>
-          Awaiting next player action…
-        </p>
       </section>
     </main>
   );
