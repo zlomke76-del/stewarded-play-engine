@@ -102,7 +102,7 @@ export default function DemoPage() {
     const optionSet = generateOptions(parsedAction);
 
     setParsed(parsedAction);
-    setOptions([...optionSet.options]); // ✅ FIX: copy readonly → mutable
+    setOptions([...optionSet.options]);
   }
 
   // ----------------------------------------------------------
@@ -121,6 +121,15 @@ export default function DemoPage() {
         },
       })
     );
+  }
+
+  // ----------------------------------------------------------
+  // CONFIRMATION HANDLER (event-driven, no-op by design)
+  // ----------------------------------------------------------
+
+  function handleConfirm(_id: string) {
+    // Confirmation is implicit via OUTCOME.
+    // This exists to satisfy DMConfirmationPanel’s contract.
   }
 
   // ----------------------------------------------------------
@@ -240,7 +249,7 @@ export default function DemoPage() {
         </CardSection>
       )}
 
-      <DMConfirmationPanel state={state} />
+      <DMConfirmationPanel state={state} onConfirm={handleConfirm} />
 
       {proposals.length > 0 && (
         <DiceOutcomePanel
