@@ -5,8 +5,9 @@
 // ------------------------------------------------------------
 //
 // Invariants:
-// - Solace may PROPOSE, never decide
+// - Solace may FRAME and PROPOSE, never decide
 // - Canon only written via OUTCOME
+// - Framing is non-canonical and excluded from export by default
 // - Auto-confirm is explicit and optional
 // ------------------------------------------------------------
 
@@ -40,6 +41,18 @@ import { exportCanon } from "@/lib/export/exportCanon";
 type DMMode = "human" | "solace-neutral";
 
 // ------------------------------------------------------------
+// Framing helpers (neutral, deterministic)
+// ------------------------------------------------------------
+
+function generateFraming(seed: string): string {
+  return (
+    `You arrive at the edge of a small settlement as dusk settles in. ` +
+    `Lantern light flickers through misty air. ${seed ? `Rumors speak of ${seed}. ` : ""}` +
+    `Nothing has happened yet. The world waits.`
+  );
+}
+
+// ------------------------------------------------------------
 
 export default function DemoPage() {
   const [state, setState] = useState<SessionState>(
@@ -49,9 +62,30 @@ export default function DemoPage() {
   const [dmMode, setDmMode] = useState<DMMode>("human");
   const [autoConfirm, setAutoConfirm] = useState(false);
 
+  const [campaignSeed, setCampaignSeed] = useState("");
+  const [framing, setFraming] = useState<string | null>(null);
+
   const [playerInput, setPlayerInput] = useState("");
   const [parsed, setParsed] = useState<any>(null);
   const [options, setOptions] = useState<Option[] | null>(null);
+
+  const canonStarted = state.events.some((e) => e.type === "OUTCOME");
+
+  // ----------------------------------------------------------
+  // Generate framing when Solace mode activates
+  // ----------------------------------------------------------
+
+  useEffect(() => {
+    if (dmMode !== "solace-neutral") return;
+    if (canonStarted) return;
+
+    setFraming(generateFraming(campaignSeed));
+  }, [dmMode, campaignSeed, canonStarted]);
+
+  function regenerateFraming() {
+    if (canonStarted) return;
+    setFraming(generateFraming(campaignSeed));
+  }
 
   // ----------------------------------------------------------
   // Player submits an action
@@ -68,7 +102,7 @@ export default function DemoPage() {
   }
 
   // ----------------------------------------------------------
-  // Select option → PROPOSE change (authority-safe)
+  // Select option → PROPOSE change
   // ----------------------------------------------------------
 
   function handleSelectOption(option: Option) {
@@ -90,7 +124,6 @@ export default function DemoPage() {
     if (dmMode !== "solace-neutral") return;
     if (!options || options.length === 0) return;
 
-    // Deterministic neutral choice (first option)
     handleSelectOption(options[0]);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dmMode, options]);
@@ -124,7 +157,7 @@ export default function DemoPage() {
   }
 
   // ----------------------------------------------------------
-  // Optional auto-confirm (explicit)
+  // Optional auto-confirm
   // ----------------------------------------------------------
 
   useEffect(() => {
@@ -136,7 +169,7 @@ export default function DemoPage() {
   }, [autoConfirm, state.pending]);
 
   // ----------------------------------------------------------
-  // Share / Export Canon
+  // Share / Export Canon (framing excluded)
   // ----------------------------------------------------------
 
   function shareCanon() {
@@ -161,7 +194,7 @@ export default function DemoPage() {
             description:
               dmMode === "human"
                 ? "Confirms outcomes"
-                : "Proposes neutral resolutions",
+                : "Frames scenes and proposes neutral paths",
           },
         ]}
       />
@@ -190,6 +223,15 @@ export default function DemoPage() {
           <>
             <br />
             <label>
+              Campaign seed:{" "}
+              <input
+                value={campaignSeed}
+                onChange={(e) => setCampaignSeed(e.target.value)}
+                placeholder="Optional world hook"
+              />
+            </label>
+            <br />
+            <label>
               <input
                 type="checkbox"
                 checked={autoConfirm}
@@ -201,13 +243,30 @@ export default function DemoPage() {
         )}
       </CardSection>
 
-      {/* SESSION START */}
+      {/* SESSION START / FRAMING */}
       <CardSection title="Session Start">
-        <p className="muted">
-          The facilitator has framed the situation.
-          <br />
-          Nothing has happened yet.
-        </p>
+        {framing ? (
+          <>
+            <p className="muted">Facilitator framing (non-canonical):</p>
+            {dmMode === "human" && !canonStarted ? (
+              <textarea
+                rows={4}
+                value={framing}
+                onChange={(e) => setFraming(e.target.value)}
+              />
+            ) : (
+              <p>{framing}</p>
+            )}
+
+            {dmMode === "solace-neutral" && !canonStarted && (
+              <button onClick={regenerateFraming}>
+                Regenerate framing
+              </button>
+            )}
+          </>
+        ) : (
+          <p className="muted">No framing set.</p>
+        )}
         <p>
           <strong>Describe your opening action.</strong>
         </p>
@@ -231,7 +290,7 @@ export default function DemoPage() {
         </CardSection>
       )}
 
-      {/* OPTIONS — CLICKABLE */}
+      {/* OPTIONS */}
       {options && (
         <CardSection title="Possible Options (No Ranking)">
           <ul>
@@ -246,7 +305,7 @@ export default function DemoPage() {
         </CardSection>
       )}
 
-      {/* AUTHORITY + OUTCOME (REQUIRED) */}
+      {/* AUTHORITY + OUTCOME */}
       <DMConfirmationPanel state={state} onConfirm={handleConfirm} />
       <DiceOutcomePanel onSubmit={handleOutcome} />
       <NextActionHint state={state} />
