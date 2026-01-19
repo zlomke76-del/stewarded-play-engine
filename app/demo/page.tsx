@@ -11,12 +11,10 @@ import {
   confirmChange,
   recordEvent,
   SessionState,
-  SessionEvent,
 } from "@/lib/session/SessionState";
 
 import { parseAction } from "@/lib/parser/ActionParser";
 import { generateOptions, Option } from "@/lib/options/OptionGenerator";
-import { renderNarration } from "@/lib/narration/NarrationRenderer";
 
 import DMConfirmationPanel from "@/components/dm/DMConfirmationPanel";
 import DiceOutcomePanel from "@/components/DiceOutcomePanel";
@@ -37,7 +35,6 @@ export default function DemoPage() {
   const [playerInput, setPlayerInput] = useState("");
   const [parsed, setParsed] = useState<any>(null);
   const [options, setOptions] = useState<Option[] | null>(null);
-  const [narration, setNarration] = useState<string[]>([]);
 
   // ----------------------------------------------------------
   // Player submits an action
@@ -53,6 +50,10 @@ export default function DemoPage() {
     setOptions([...optionSet.options]);
   }
 
+  // ----------------------------------------------------------
+  // DM selects an option → propose change
+  // ----------------------------------------------------------
+
   function handleSelectOption(option: Option) {
     setState((prev) =>
       proposeChange(prev, {
@@ -64,27 +65,35 @@ export default function DemoPage() {
     );
   }
 
+  // ----------------------------------------------------------
+  // DM confirms change (authority moment)
+  // ----------------------------------------------------------
+
   function handleConfirm(changeId: string) {
     setState((prev) => confirmChange(prev, changeId, "DM"));
   }
 
+  // ----------------------------------------------------------
+  // DM records outcome → CANON
+  // ----------------------------------------------------------
+
   function handleOutcome(outcomeText: string) {
-    setState((prev) => {
-      const next = recordEvent(prev, {
+    setState((prev) =>
+      recordEvent(prev, {
         id: crypto.randomUUID(),
         timestamp: Date.now(),
         actor: "system",
         type: "OUTCOME",
-        payload: { description: outcomeText },
-      });
-
-      const event: SessionEvent = next.events.at(-1)!;
-      const rendered = renderNarration(event, { tone: "neutral" });
-
-      setNarration((n) => [...n, rendered.text]);
-      return next;
-    });
+        payload: {
+          description: outcomeText,
+        },
+      })
+    );
   }
+
+  // ----------------------------------------------------------
+  // Share link (read-only)
+  // ----------------------------------------------------------
 
   function copyShareLink() {
     const url = `${window.location.origin}/demo?session=demo-session`;
@@ -107,7 +116,7 @@ export default function DemoPage() {
         ]}
       />
 
-      {/* 🔹 INITIAL PROMPT — NON-CANONICAL */}
+      {/* INITIAL PROMPT — NON-CANONICAL */}
       <CardSection title="Session Start">
         <p className="muted">
           The facilitator has framed the situation.
@@ -130,12 +139,14 @@ export default function DemoPage() {
         <button onClick={handlePlayerAction}>Submit Action</button>
       </CardSection>
 
+      {/* Parsed Action */}
       {parsed && (
         <CardSection title="Parsed Action (System)">
           <pre>{JSON.stringify(parsed, null, 2)}</pre>
         </CardSection>
       )}
 
+      {/* Options */}
       {options && (
         <CardSection title="Possible Options (No Ranking)">
           <ul>
@@ -150,18 +161,27 @@ export default function DemoPage() {
         </CardSection>
       )}
 
+      {/* DM Authority + Outcome */}
       <DMConfirmationPanel state={state} onConfirm={handleConfirm} />
       <DiceOutcomePanel onSubmit={handleOutcome} />
       <NextActionHint state={state} />
 
+      {/* CANON — AUTHORITATIVE PROJECTION */}
       <CardSection title="Canon (Confirmed Narrative)" className="canon">
-        {narration.length === 0 ? (
+        {state.events.filter((e) => e.type === "OUTCOME").length === 0 ? (
           <p className="muted">No canon yet.</p>
         ) : (
           <ul>
-            {narration.map((line, i) => (
-              <li key={i}>{line}</li>
-            ))}
+            {state.events
+              .filter((e) => e.type === "OUTCOME")
+              .map((event) => {
+                const text =
+                  typeof event.payload.description === "string"
+                    ? event.payload.description
+                    : "(Unspecified outcome)";
+
+                return <li key={event.id}>{text}</li>;
+              })}
           </ul>
         )}
       </CardSection>
