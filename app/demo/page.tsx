@@ -8,7 +8,8 @@
 // - Solace may FRAME and PROPOSE, never decide
 // - Canon only written via OUTCOME
 // - Framing is non-canonical and excluded from export
-// - Auto-confirm is explicit and optional
+// - Dice are evidence, not authority
+// - Human explicitly records outcome
 // - Hydration-safe interactive rendering
 // ------------------------------------------------------------
 
@@ -22,7 +23,6 @@ import {
 import { parseAction } from "@/lib/parser/ActionParser";
 import { generateOptions, Option } from "@/lib/options/OptionGenerator";
 
-import DMConfirmationPanel from "@/components/dm/DMConfirmationPanel";
 import DiceOutcomePanel from "@/components/DiceOutcomePanel";
 import NextActionHint from "@/components/NextActionHint";
 
@@ -52,6 +52,14 @@ function generateFraming(seed: string): string {
   );
 }
 
+function generateDraftOutcome(option: Option): string {
+  return (
+    `Following the chosen path (“${option.description}”), ` +
+    `the interaction unfolds naturally. Information is exchanged, ` +
+    `revealing some details while leaving others unresolved.`
+  );
+}
+
 // ------------------------------------------------------------
 
 export default function DemoPage() {
@@ -70,14 +78,14 @@ export default function DemoPage() {
   const [parsed, setParsed] = useState<any>(null);
   const [options, setOptions] = useState<Option[] | null>(null);
 
+  // NEW: selected resolution + drafted outcome
+  const [selectedOption, setSelectedOption] = useState<Option | null>(null);
+  const [draftOutcome, setDraftOutcome] = useState<string>("");
+
   const canonStarted = state.events.some((e) => e.type === "OUTCOME");
 
-  const proposals = state.events.filter(
-    (e) => e.type === "PROPOSED_CHANGE"
-  );
-
   // ----------------------------------------------------------
-  // Generate framing
+  // Generate framing (Solace-only, non-canonical)
   // ----------------------------------------------------------
 
   useEffect(() => {
@@ -103,40 +111,27 @@ export default function DemoPage() {
 
     setParsed(parsedAction);
     setOptions([...optionSet.options]);
+
+    // reset downstream state
+    setSelectedOption(null);
+    setDraftOutcome("");
   }
 
   // ----------------------------------------------------------
-  // Select option → PROPOSED_CHANGE (event-based)
+  // Option selected → Solace frames outcome (NO CANON)
   // ----------------------------------------------------------
 
   function handleSelectOption(option: Option) {
-    setState((prev) =>
-      recordEvent(prev, {
-        id: crypto.randomUUID(),
-        timestamp: Date.now(),
-        actor: dmMode === "solace-neutral" ? "system" : "DM",
-        type: "PROPOSED_CHANGE",
-        payload: {
-          description: option.description,
-        },
-      })
-    );
+    setSelectedOption(option);
+    setDraftOutcome(generateDraftOutcome(option));
   }
 
   // ----------------------------------------------------------
-  // Confirmation handler (no-op by design)
+  // Record OUTCOME → CANON (human authority)
   // ----------------------------------------------------------
 
-  function handleConfirm(_id: string) {
-    // Confirmation is implicit via OUTCOME
-  }
-
-  // ----------------------------------------------------------
-  // Record OUTCOME → CANON (dice optional)
-  // ----------------------------------------------------------
-
-  function handleOutcome(outcomeText: string, diceResult?: any) {
-    if (!outcomeText.trim()) return;
+  function handleRecordOutcome(diceResult?: any) {
+    if (!draftOutcome.trim()) return;
 
     setState((prev) =>
       recordEvent(prev, {
@@ -145,11 +140,19 @@ export default function DemoPage() {
         actor: "DM",
         type: "OUTCOME",
         payload: {
-          description: outcomeText,
+          description: draftOutcome,
           dice: diceResult ?? null,
+          basedOn: selectedOption?.description ?? null,
         },
       })
     );
+
+    // clear resolution state
+    setSelectedOption(null);
+    setDraftOutcome("");
+    setOptions(null);
+    setParsed(null);
+    setPlayerInput("");
   }
 
   // ----------------------------------------------------------
@@ -177,8 +180,8 @@ export default function DemoPage() {
             label: dmMode === "human" ? "DM" : "Solace (Neutral)",
             description:
               dmMode === "human"
-                ? "Confirms outcomes"
-                : "Frames scenes and proposes neutral paths",
+                ? "Records outcomes"
+                : "Frames scenes and drafts neutral outcomes",
           },
         ]}
       />
@@ -201,6 +204,20 @@ export default function DemoPage() {
           />{" "}
           Solace (Neutral Facilitator)
         </label>
+
+        {dmMode === "solace-neutral" && (
+          <>
+            <br />
+            <label>
+              Campaign seed:{" "}
+              <input
+                value={campaignSeed}
+                onChange={(e) => setCampaignSeed(e.target.value)}
+                placeholder="Optional world hook"
+              />
+            </label>
+          </>
+        )}
       </CardSection>
 
       <CardSection title="Session Start">
@@ -224,6 +241,7 @@ export default function DemoPage() {
           rows={3}
           value={playerInput}
           onChange={(e) => setPlayerInput(e.target.value)}
+          placeholder="Describe what your character does…"
         />
         <button onClick={handlePlayerAction}>Submit Action</button>
       </CardSection>
@@ -248,10 +266,29 @@ export default function DemoPage() {
         </CardSection>
       )}
 
-      <DMConfirmationPanel state={state} onConfirm={handleConfirm} />
+      {/* DICE + OUTCOME — ONLY AFTER OPTION SELECTED */}
+      {selectedOption && (
+        <CardSection title="Outcome (DM / Arbiter)">
+          <p className="muted">
+            Drafted by Solace (editable, non-canonical):
+          </p>
+          <textarea
+            rows={4}
+            value={draftOutcome}
+            onChange={(e) => setDraftOutcome(e.target.value)}
+          />
 
-      {proposals.length > 0 && (
-        <DiceOutcomePanel onSubmit={handleOutcome} />
+          <DiceOutcomePanel
+            onSubmit={(dice) => handleRecordOutcome(dice)}
+          />
+
+          <button
+            style={{ marginTop: "12px" }}
+            onClick={() => handleRecordOutcome()}
+          >
+            Record Outcome
+          </button>
+        </CardSection>
       )}
 
       <NextActionHint state={state} />
