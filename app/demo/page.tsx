@@ -25,6 +25,7 @@ import NextActionHint from "@/components/NextActionHint";
 import StewardedShell from "@/components/layout/StewardedShell";
 import ModeHeader from "@/components/layout/ModeHeader";
 import CardSection from "@/components/layout/CardSection";
+import Disclaimer from "@/components/layout/Disclaimer";
 
 // ------------------------------------------------------------
 
@@ -143,6 +144,8 @@ export default function DemoPage() {
           </ul>
         )}
       </CardSection>
+
+      <Disclaimer />
     </StewardedShell>
   );
 }
