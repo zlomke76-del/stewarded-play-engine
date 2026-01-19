@@ -18,13 +18,12 @@ import { parseAction } from "@/lib/parser/ActionParser";
 import { generateOptions, Option } from "@/lib/options/OptionGenerator";
 import { renderNarration } from "@/lib/narration/NarrationRenderer";
 
-// Components
 import DMConfirmationPanel from "@/components/dm/DMConfirmationPanel";
 import DiceOutcomePanel from "@/components/DiceOutcomePanel";
 import NextActionHint from "@/components/NextActionHint";
 
-// Layout
 import StewardedShell from "@/components/layout/StewardedShell";
+import ModeHeader from "@/components/layout/ModeHeader";
 import CardSection from "@/components/layout/CardSection";
 
 // ------------------------------------------------------------
@@ -39,10 +38,6 @@ export default function DemoPage() {
   const [options, setOptions] = useState<Option[] | null>(null);
   const [narration, setNarration] = useState<string[]>([]);
 
-  // ----------------------------------------------------------
-  // Player submits an action
-  // ----------------------------------------------------------
-
   function handlePlayerAction() {
     if (!playerInput.trim()) return;
 
@@ -52,10 +47,6 @@ export default function DemoPage() {
     setParsed(parsedAction);
     setOptions([...optionSet.options]);
   }
-
-  // ----------------------------------------------------------
-  // DM selects an option → propose change
-  // ----------------------------------------------------------
 
   function handleSelectOption(option: Option) {
     setState((prev) =>
@@ -68,17 +59,9 @@ export default function DemoPage() {
     );
   }
 
-  // ----------------------------------------------------------
-  // DM confirms change
-  // ----------------------------------------------------------
-
   function handleConfirm(changeId: string) {
     setState((prev) => confirmChange(prev, changeId, "DM"));
   }
-
-  // ----------------------------------------------------------
-  // Dice / Outcome entry → canon
-  // ----------------------------------------------------------
 
   function handleOutcome(outcomeText: string) {
     setState((prev) => {
@@ -87,9 +70,7 @@ export default function DemoPage() {
         timestamp: Date.now(),
         actor: "system",
         type: "OUTCOME",
-        payload: {
-          description: outcomeText,
-        },
+        payload: { description: outcomeText },
       });
 
       const event: SessionEvent = next.events.at(-1)!;
@@ -100,25 +81,23 @@ export default function DemoPage() {
     });
   }
 
-  // ----------------------------------------------------------
-  // Share link (read-only)
-  // ----------------------------------------------------------
-
   function copyShareLink() {
     const url = `${window.location.origin}/demo?session=demo-session`;
     navigator.clipboard.writeText(url);
     alert("Session link copied (read-only).");
   }
 
-  // ----------------------------------------------------------
-  // UI
-  // ----------------------------------------------------------
-
   return (
-    <StewardedShell
-      title="Stewarded Play — Full Flow Demo"
-      onShare={copyShareLink}
-    >
+    <StewardedShell>
+      <ModeHeader
+        title="Stewarded Play — Full Flow Demo"
+        onShare={copyShareLink}
+        roles={[
+          { label: "Player", description: "Declares intent" },
+          { label: "DM", description: "Confirms outcomes" },
+        ]}
+      />
+
       <CardSection title="Player Action">
         <textarea
           rows={3}
