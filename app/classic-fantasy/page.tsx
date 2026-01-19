@@ -11,10 +11,13 @@ import {
   confirmChange,
   recordEvent,
   SessionState,
+  SessionEvent,
 } from "@/lib/session/SessionState";
 
 import { parseAction } from "@/lib/parser/ActionParser";
 import { generateOptions, Option } from "@/lib/options/OptionGenerator";
+import { renderNarration } from "@/lib/narration/NarrationRenderer";
+import { exportCanon } from "@/lib/export/exportCanon";
 
 import DMConfirmationPanel from "@/components/dm/DMConfirmationPanel";
 import DiceOutcomePanel from "@/components/DiceOutcomePanel";
@@ -35,6 +38,7 @@ export default function ClassicFantasyPage() {
   const [command, setCommand] = useState("");
   const [parsed, setParsed] = useState<any>(null);
   const [options, setOptions] = useState<Option[] | null>(null);
+  const [chronicle, setChronicle] = useState<string[]>([]);
 
   // ----------------------------------------------------------
   // Player issues a command
@@ -66,7 +70,7 @@ export default function ClassicFantasyPage() {
   }
 
   // ----------------------------------------------------------
-  // Arbiter confirms resolution path (authority moment)
+  // Arbiter confirms resolution path
   // ----------------------------------------------------------
 
   function handleConfirm(changeId: string) {
@@ -74,31 +78,53 @@ export default function ClassicFantasyPage() {
   }
 
   // ----------------------------------------------------------
-  // Resolution / Outcome entry → CANON
+  // Resolution / Outcome entry → canon
   // ----------------------------------------------------------
 
   function handleOutcome(outcomeText: string) {
-    setState((prev) =>
-      recordEvent(prev, {
+    setState((prev) => {
+      const next = recordEvent(prev, {
         id: crypto.randomUUID(),
         timestamp: Date.now(),
         actor: "system",
         type: "OUTCOME",
-        payload: {
-          description: outcomeText,
-        },
-      })
-    );
+        payload: { description: outcomeText },
+      });
+
+      const event: SessionEvent = next.events.at(-1)!;
+      const rendered = renderNarration(event, { tone: "neutral" });
+
+      setChronicle((c) => [...c, rendered.text]);
+      return next;
+    });
   }
 
   // ----------------------------------------------------------
-  // Share link (read-only)
+  // Share = Export Canon (Authoritative)
   // ----------------------------------------------------------
 
-  function copyShareLink() {
-    const url = `${window.location.origin}/classic-fantasy?session=classic-fantasy-session`;
-    navigator.clipboard.writeText(url);
-    alert("Read-only chronicle link copied.");
+  function handleShare() {
+    const canonText = exportCanon(state.events);
+
+    if (!canonText.trim()) {
+      alert("No canon to export yet.");
+      return;
+    }
+
+    const blob = new Blob([canonText], { type: "text/plain" });
+    const url = URL.createObjectURL(blob);
+
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "classic-fantasy-chronicle.txt";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+
+    URL.revokeObjectURL(url);
+
+    // Optional: also copy to clipboard
+    // navigator.clipboard.writeText(canonText);
   }
 
   // ----------------------------------------------------------
@@ -109,14 +135,13 @@ export default function ClassicFantasyPage() {
     <StewardedShell theme="fantasy">
       <ModeHeader
         title="Classic Fantasy — Stewarded Resolution"
-        onShare={copyShareLink}
+        onShare={handleShare}
         roles={[
           { label: "Player", description: "Issues commands" },
           { label: "Arbiter", description: "Confirms resolutions" },
         ]}
       />
 
-      {/* Command */}
       <CardSection title="Command">
         <textarea
           rows={3}
@@ -127,14 +152,12 @@ export default function ClassicFantasyPage() {
         <button onClick={handleCommand}>Submit Command</button>
       </CardSection>
 
-      {/* Parsed */}
       {parsed && (
         <CardSection title="Command Classification (System)">
           <pre>{JSON.stringify(parsed, null, 2)}</pre>
         </CardSection>
       )}
 
-      {/* Options */}
       {options && (
         <CardSection title="Possible Resolution Paths">
           <ul>
@@ -149,27 +172,18 @@ export default function ClassicFantasyPage() {
         </CardSection>
       )}
 
-      {/* Authority + Outcome */}
       <DMConfirmationPanel state={state} onConfirm={handleConfirm} />
       <DiceOutcomePanel onSubmit={handleOutcome} />
       <NextActionHint state={state} />
 
-      {/* CANON — AUTHORITATIVE PROJECTION */}
       <CardSection title="Chronicle (Confirmed World State)" className="canon">
-        {state.events.filter((e) => e.type === "OUTCOME").length === 0 ? (
+        {chronicle.length === 0 ? (
           <p className="muted">No confirmed resolutions yet.</p>
         ) : (
           <ul>
-            {state.events
-              .filter((e) => e.type === "OUTCOME")
-              .map((event) => {
-                const text =
-                  typeof event.payload.description === "string"
-                    ? event.payload.description
-                    : "(Unspecified outcome)";
-
-                return <li key={event.id}>{text}</li>;
-              })}
+            {chronicle.map((line, i) => (
+              <li key={i}>{line}</li>
+            ))}
           </ul>
         )}
       </CardSection>
