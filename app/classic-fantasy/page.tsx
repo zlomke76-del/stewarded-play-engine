@@ -3,9 +3,6 @@
 // ------------------------------------------------------------
 // Classic Fantasy — Stewarded Resolution Mode
 // ------------------------------------------------------------
-// This page intentionally duplicates the demo logic.
-// Differences are semantic + framing only.
-// ------------------------------------------------------------
 
 import { useState } from "react";
 import {
@@ -24,6 +21,7 @@ import { renderNarration } from "@/lib/narration/NarrationRenderer";
 import DMConfirmationPanel from "@/components/dm/DMConfirmationPanel";
 import DiceOutcomePanel from "@/components/DiceOutcomePanel";
 import NextActionHint from "@/components/NextActionHint";
+import StewardedShell from "@/components/layout/StewardedShell";
 
 // ------------------------------------------------------------
 
@@ -37,10 +35,6 @@ export default function ClassicFantasyPage() {
   const [options, setOptions] = useState<Option[] | null>(null);
   const [chronicle, setChronicle] = useState<string[]>([]);
 
-  // ----------------------------------------------------------
-  // Player issues a command
-  // ----------------------------------------------------------
-
   function handleCommand() {
     if (!command.trim()) return;
 
@@ -50,10 +44,6 @@ export default function ClassicFantasyPage() {
     setParsed(parsedAction);
     setOptions([...optionSet.options]);
   }
-
-  // ----------------------------------------------------------
-  // Arbiter selects a resolution path
-  // ----------------------------------------------------------
 
   function handleSelectOption(option: Option) {
     setState((prev) =>
@@ -66,17 +56,9 @@ export default function ClassicFantasyPage() {
     );
   }
 
-  // ----------------------------------------------------------
-  // Arbiter confirms resolution path
-  // ----------------------------------------------------------
-
   function handleConfirm(changeId: string) {
     setState((prev) => confirmChange(prev, changeId, "arbiter"));
   }
-
-  // ----------------------------------------------------------
-  // Resolution / Outcome entry → canon
-  // ----------------------------------------------------------
 
   function handleOutcome(outcomeText: string) {
     setState((prev) => {
@@ -85,9 +67,7 @@ export default function ClassicFantasyPage() {
         timestamp: Date.now(),
         actor: "system",
         type: "OUTCOME",
-        payload: {
-          description: outcomeText,
-        },
+        payload: { description: outcomeText },
       });
 
       const event: SessionEvent = next.events.at(-1)!;
@@ -98,30 +78,17 @@ export default function ClassicFantasyPage() {
     });
   }
 
-  // ----------------------------------------------------------
-  // Share link (read-only)
-  // ----------------------------------------------------------
-
   function copyShareLink() {
     const url = `${window.location.origin}/classic-fantasy?session=classic-fantasy-session`;
     navigator.clipboard.writeText(url);
     alert("Read-only chronicle link copied.");
   }
 
-  // ----------------------------------------------------------
-  // UI
-  // ----------------------------------------------------------
-
   return (
-    <main className="demo-shell">
-      <header className="demo-header">
-        <h1>Classic Fantasy — Stewarded Resolution</h1>
-        <button onClick={copyShareLink} className="share-btn">
-          🔗 Share Chronicle
-        </button>
-      </header>
-
-      {/* Command Input */}
+    <StewardedShell
+      title="Classic Fantasy — Stewarded Resolution"
+      onShare={copyShareLink}
+    >
       <section className="card">
         <h2>Command</h2>
         <textarea
@@ -133,7 +100,6 @@ export default function ClassicFantasyPage() {
         <button onClick={handleCommand}>Submit Command</button>
       </section>
 
-      {/* Parsed Command */}
       {parsed && (
         <section className="card fade-in">
           <h2>Command Classification (System)</h2>
@@ -141,7 +107,6 @@ export default function ClassicFantasyPage() {
         </section>
       )}
 
-      {/* Resolution Paths */}
       {options && (
         <section className="card fade-in">
           <h2>Possible Resolution Paths</h2>
@@ -157,16 +122,10 @@ export default function ClassicFantasyPage() {
         </section>
       )}
 
-      {/* Arbiter Confirmation */}
       <DMConfirmationPanel state={state} onConfirm={handleConfirm} />
-
-      {/* Resolution Entry */}
       <DiceOutcomePanel onSubmit={handleOutcome} />
-
-      {/* Flow Hint */}
       <NextActionHint state={state} />
 
-      {/* Chronicle */}
       <section className="card canon fade-in">
         <h2>Chronicle (Confirmed World State)</h2>
         {chronicle.length === 0 ? (
@@ -180,7 +139,6 @@ export default function ClassicFantasyPage() {
         )}
       </section>
 
-      {/* Disclaimer */}
       <footer className="disclaimer">
         <p>
           This software provides a system-agnostic facilitation framework for
@@ -188,6 +146,6 @@ export default function ClassicFantasyPage() {
           automate any proprietary game rules, content, or narrative.
         </p>
       </footer>
-    </main>
+    </StewardedShell>
   );
 }
