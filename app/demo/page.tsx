@@ -75,6 +75,9 @@ export default function DemoPage() {
   const [parsed, setParsed] = useState<any>(null);
   const [options, setOptions] = useState<Option[] | null>(null);
 
+  // one-shot guard for Solace auto-propose
+  const [autoProposed, setAutoProposed] = useState(false);
+
   const canonStarted = state.events.some((e) => e.type === "OUTCOME");
 
   // ----------------------------------------------------------
@@ -105,6 +108,9 @@ export default function DemoPage() {
 
     setParsed(parsedAction);
     setOptions([...optionSet.options]);
+
+    // reset Solace auto-propose guard for new action
+    setAutoProposed(false);
   }
 
   // ----------------------------------------------------------
@@ -123,16 +129,18 @@ export default function DemoPage() {
   }
 
   // ----------------------------------------------------------
-  // Solace Neutral DM — auto-propose (NO AUTHORITY)
+  // Solace Neutral DM — auto-propose (ONE-SHOT, NO LOOP)
   // ----------------------------------------------------------
 
   useEffect(() => {
     if (dmMode !== "solace-neutral") return;
     if (!options || options.length === 0) return;
+    if (autoProposed) return;
 
     handleSelectOption(options[0]);
+    setAutoProposed(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dmMode, options]);
+  }, [dmMode, options, autoProposed]);
 
   // ----------------------------------------------------------
   // Confirm change (authority moment)
@@ -143,20 +151,21 @@ export default function DemoPage() {
   }
 
   // ----------------------------------------------------------
-  // Record OUTCOME → CANON
+  // Record OUTCOME → CANON (dice optional, stewarded)
   // ----------------------------------------------------------
 
-  function handleOutcome(outcomeText: string) {
+  function handleOutcome(outcomeText: string, diceResult?: any) {
     if (!outcomeText.trim()) return;
 
     setState((prev) =>
       recordEvent(prev, {
         id: crypto.randomUUID(),
         timestamp: Date.now(),
-        actor: dmMode === "solace-neutral" ? "system" : "DM",
+        actor: "DM",
         type: "OUTCOME",
         payload: {
           description: outcomeText,
+          dice: diceResult ?? null,
         },
       })
     );
@@ -296,7 +305,7 @@ export default function DemoPage() {
         </CardSection>
       )}
 
-      {/* OPTIONS — HYDRATION SAFE */}
+      {/* OPTIONS */}
       {mounted && options && (
         <CardSection title="Possible Options (No Ranking)">
           <ul>
@@ -306,6 +315,17 @@ export default function DemoPage() {
                   {opt.description}
                 </button>
               </li>
+            ))}
+          </ul>
+        </CardSection>
+      )}
+
+      {/* PENDING PROPOSALS (VISIBILITY FIX) */}
+      {state.pending.length > 0 && (
+        <CardSection title="Pending Proposals">
+          <ul>
+            {state.pending.map((p) => (
+              <li key={p.id}>{p.description}</li>
             ))}
           </ul>
         </CardSection>
