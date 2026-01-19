@@ -39,6 +39,10 @@ export default function DemoPage() {
   const [options, setOptions] = useState<Option[] | null>(null);
   const [narration, setNarration] = useState<string[]>([]);
 
+  // ----------------------------------------------------------
+  // Player submits an action
+  // ----------------------------------------------------------
+
   function handlePlayerAction() {
     if (!playerInput.trim()) return;
 
@@ -88,6 +92,10 @@ export default function DemoPage() {
     alert("Session link copied (read-only).");
   }
 
+  // ----------------------------------------------------------
+  // UI
+  // ----------------------------------------------------------
+
   return (
     <StewardedShell>
       <ModeHeader
@@ -99,6 +107,19 @@ export default function DemoPage() {
         ]}
       />
 
+      {/* 🔹 INITIAL PROMPT — NON-CANONICAL */}
+      <CardSection title="Session Start">
+        <p className="muted">
+          The facilitator has framed the situation.
+          <br />
+          Nothing has happened yet.
+        </p>
+        <p>
+          <strong>Describe your opening action.</strong>
+        </p>
+      </CardSection>
+
+      {/* Player Action */}
       <CardSection title="Player Action">
         <textarea
           rows={3}
