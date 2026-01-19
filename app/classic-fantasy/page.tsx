@@ -39,6 +39,10 @@ export default function ClassicFantasyPage() {
   const [options, setOptions] = useState<Option[] | null>(null);
   const [chronicle, setChronicle] = useState<string[]>([]);
 
+  // ----------------------------------------------------------
+  // Player issues a command
+  // ----------------------------------------------------------
+
   function handleCommand() {
     if (!command.trim()) return;
 
@@ -48,6 +52,10 @@ export default function ClassicFantasyPage() {
     setParsed(parsedAction);
     setOptions([...optionSet.options]);
   }
+
+  // ----------------------------------------------------------
+  // Arbiter selects a resolution path
+  // ----------------------------------------------------------
 
   function handleSelectOption(option: Option) {
     setState((prev) =>
@@ -60,9 +68,17 @@ export default function ClassicFantasyPage() {
     );
   }
 
+  // ----------------------------------------------------------
+  // Arbiter confirms resolution path
+  // ----------------------------------------------------------
+
   function handleConfirm(changeId: string) {
     setState((prev) => confirmChange(prev, changeId, "arbiter"));
   }
+
+  // ----------------------------------------------------------
+  // Resolution / Outcome entry → canon
+  // ----------------------------------------------------------
 
   function handleOutcome(outcomeText: string) {
     setState((prev) => {
@@ -82,14 +98,22 @@ export default function ClassicFantasyPage() {
     });
   }
 
+  // ----------------------------------------------------------
+  // Share link (read-only)
+  // ----------------------------------------------------------
+
   function copyShareLink() {
     const url = `${window.location.origin}/classic-fantasy?session=classic-fantasy-session`;
     navigator.clipboard.writeText(url);
     alert("Read-only chronicle link copied.");
   }
 
+  // ----------------------------------------------------------
+  // UI
+  // ----------------------------------------------------------
+
   return (
-    <StewardedShell>
+    <StewardedShell theme="fantasy">
       <ModeHeader
         title="Classic Fantasy — Stewarded Resolution"
         onShare={copyShareLink}
