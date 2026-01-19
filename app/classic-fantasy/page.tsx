@@ -1,19 +1,14 @@
 "use client";
 
 // ------------------------------------------------------------
-// Classic Fantasy — Stewarded Resolution Mode (Fixed Pattern)
-// ------------------------------------------------------------
-//
-// Invariants:
-// - System may FRAME and DRAFT, never decide
-// - Dice are evidence, not authority
-// - Canon written ONLY by explicit human action
-// - Draft narration is editable and non-canonical
+// Classic Fantasy — Stewarded Resolution Mode
 // ------------------------------------------------------------
 
 import { useState } from "react";
 import {
   createSession,
+  proposeChange,
+  confirmChange,
   recordEvent,
   SessionState,
   SessionEvent,
@@ -24,6 +19,7 @@ import { generateOptions, Option } from "@/lib/options/OptionGenerator";
 import { renderNarration } from "@/lib/narration/NarrationRenderer";
 import { exportCanon } from "@/lib/export/exportCanon";
 
+import DMConfirmationPanel from "@/components/dm/DMConfirmationPanel";
 import DiceOutcomePanel from "@/components/DiceOutcomePanel";
 import NextActionHint from "@/components/NextActionHint";
 
@@ -33,14 +29,14 @@ import CardSection from "@/components/layout/CardSection";
 import Disclaimer from "@/components/layout/Disclaimer";
 
 // ------------------------------------------------------------
-// Draft helper (neutral, deterministic)
+// Draft helper (neutral, non-canonical)
 // ------------------------------------------------------------
 
 function generateDraftOutcome(option: Option): string {
   return (
-    `Following the chosen course (“${option.description}”), ` +
-    `events unfold in a manner consistent with the situation. ` +
-    `The world responds, though some consequences may not yet be fully clear.`
+    `Choosing the path “${option.description},” ` +
+    `events unfold in a way consistent with the situation. ` +
+    `Some information is revealed, while other details remain uncertain.`
   );
 }
 
@@ -54,12 +50,11 @@ export default function ClassicFantasyPage() {
   const [command, setCommand] = useState("");
   const [parsed, setParsed] = useState<any>(null);
   const [options, setOptions] = useState<Option[] | null>(null);
-
-  // NEW: resolution + draft outcome
-  const [selectedOption, setSelectedOption] = useState<Option | null>(null);
-  const [draftOutcome, setDraftOutcome] = useState("");
-
   const [chronicle, setChronicle] = useState<string[]>([]);
+
+  // NEW: facilitation-only state
+  const [selectedOption, setSelectedOption] = useState<Option | null>(null);
+  const [draftOutcome, setDraftOutcome] = useState<string>("");
 
   // ----------------------------------------------------------
   // Player issues a command
@@ -74,26 +69,43 @@ export default function ClassicFantasyPage() {
     setParsed(parsedAction);
     setOptions([...optionSet.options]);
 
-    // reset downstream resolution state
+    // reset downstream facilitation
     setSelectedOption(null);
     setDraftOutcome("");
   }
 
   // ----------------------------------------------------------
-  // Arbiter selects a resolution path (NO CANON)
+  // Arbiter selects a resolution path (proposal)
   // ----------------------------------------------------------
 
   function handleSelectOption(option: Option) {
     setSelectedOption(option);
     setDraftOutcome(generateDraftOutcome(option));
+
+    setState((prev) =>
+      proposeChange(prev, {
+        id: crypto.randomUUID(),
+        description: option.description,
+        proposedBy: "system",
+        createdAt: Date.now(),
+      })
+    );
   }
 
   // ----------------------------------------------------------
-  // Record OUTCOME → CANON (human authority)
+  // Arbiter confirms resolution path
   // ----------------------------------------------------------
 
-  function handleRecordOutcome(diceResult?: any) {
-    if (!draftOutcome.trim()) return;
+  function handleConfirm(changeId: string) {
+    setState((prev) => confirmChange(prev, changeId, "arbiter"));
+  }
+
+  // ----------------------------------------------------------
+  // Resolution / Outcome entry → canon
+  // ----------------------------------------------------------
+
+  function handleOutcome(outcomeText: string, diceResult?: any) {
+    if (!outcomeText.trim()) return;
 
     setState((prev) => {
       const next = recordEvent(prev, {
@@ -102,7 +114,7 @@ export default function ClassicFantasyPage() {
         actor: "arbiter",
         type: "OUTCOME",
         payload: {
-          description: draftOutcome,
+          description: outcomeText,
           dice: diceResult ?? null,
           basedOn: selectedOption?.description ?? null,
         },
@@ -115,7 +127,7 @@ export default function ClassicFantasyPage() {
       return next;
     });
 
-    // clear for next turn
+    // reset for next turn
     setCommand("");
     setParsed(null);
     setOptions(null);
@@ -159,7 +171,7 @@ export default function ClassicFantasyPage() {
         onShare={handleShare}
         roles={[
           { label: "Player", description: "Issues commands" },
-          { label: "Arbiter", description: "Records outcomes" },
+          { label: "Arbiter", description: "Confirms and records outcomes" },
         ]}
       />
 
@@ -193,7 +205,10 @@ export default function ClassicFantasyPage() {
         </CardSection>
       )}
 
-      {/* OUTCOME + DICE — ONLY AFTER OPTION SELECTED */}
+      {/* Existing confirmation component — preserved */}
+      <DMConfirmationPanel state={state} onConfirm={handleConfirm} />
+
+      {/* Outcome + Dice only once context exists */}
       {selectedOption && (
         <CardSection title="Outcome (Arbiter)">
           <p className="muted">
@@ -206,16 +221,7 @@ export default function ClassicFantasyPage() {
             onChange={(e) => setDraftOutcome(e.target.value)}
           />
 
-          <DiceOutcomePanel
-            onSubmit={(dice) => handleRecordOutcome(dice)}
-          />
-
-          <button
-            style={{ marginTop: "12px" }}
-            onClick={() => handleRecordOutcome()}
-          >
-            Record Outcome
-          </button>
+          <DiceOutcomePanel onSubmit={handleOutcome} />
         </CardSection>
       )}
 
