@@ -124,12 +124,11 @@ export default function DemoPage() {
   }
 
   // ----------------------------------------------------------
-  // CONFIRMATION HANDLER (event-driven, no-op by design)
+  // Confirmation handler (no-op by design)
   // ----------------------------------------------------------
 
   function handleConfirm(_id: string) {
-    // Confirmation is implicit via OUTCOME.
-    // This exists to satisfy DMConfirmationPanel’s contract.
+    // Confirmation is implicit via OUTCOME
   }
 
   // ----------------------------------------------------------
@@ -252,10 +251,7 @@ export default function DemoPage() {
       <DMConfirmationPanel state={state} onConfirm={handleConfirm} />
 
       {proposals.length > 0 && (
-        <DiceOutcomePanel
-          state={state}
-          onSubmit={handleOutcome}
-        />
+        <DiceOutcomePanel onSubmit={handleOutcome} />
       )}
 
       <NextActionHint state={state} />
