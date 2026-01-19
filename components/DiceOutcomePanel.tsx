@@ -1,44 +1,64 @@
 "use client";
 
+// ------------------------------------------------------------
+// DiceOutcomePanel
+// ------------------------------------------------------------
+// Purpose:
+// - Capture DM / Arbiter outcome text
+// - Explicit human-authored canon entry
+// - No automation, no inference
+// ------------------------------------------------------------
+
 import { useState } from "react";
+
+type Props = {
+  onSubmit: (text: string) => void;
+
+  /**
+   * Enable native browser spellcheck for DM text entry
+   * (Pure UX, zero logic impact)
+   */
+  spellCheck?: boolean;
+};
 
 export default function DiceOutcomePanel({
   onSubmit,
-}: {
-  onSubmit: (text: string) => void;
-}) {
-  const [dice, setDice] = useState("");
-  const [summary, setSummary] = useState("");
+  spellCheck = false,
+}: Props) {
+  const [text, setText] = useState("");
 
-  function submit() {
-    if (!summary.trim()) return;
-    const text =
-      dice.trim()
-        ? `Outcome (${dice}): ${summary}`
-        : `Outcome: ${summary}`;
-    onSubmit(text);
-    setDice("");
-    setSummary("");
+  function handleSubmit() {
+    if (!text.trim()) return;
+    onSubmit(text.trim());
+    setText("");
   }
 
   return (
-    <section className="card fade-in">
-      <h2>Dice / Outcome</h2>
-
-      <input
-        placeholder="Dice (e.g. d20+5)"
-        value={dice}
-        onChange={(e) => setDice(e.target.value)}
-      />
+    <section
+      style={{
+        border: "1px dashed #666",
+        padding: "16px",
+        borderRadius: "6px",
+        marginTop: "16px",
+      }}
+    >
+      <h3 style={{ marginTop: 0 }}>Outcome (DM / Arbiter)</h3>
 
       <textarea
-        rows={2}
-        placeholder="Outcome summary…"
-        value={summary}
-        onChange={(e) => setSummary(e.target.value)}
+        rows={3}
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        placeholder="Describe what actually happens…"
+        spellCheck={spellCheck}
+        style={{ width: "100%" }}
       />
 
-      <button onClick={submit}>Record Outcome</button>
+      <button
+        onClick={handleSubmit}
+        style={{ marginTop: "8px" }}
+      >
+        Record Outcome
+      </button>
     </section>
   );
 }
