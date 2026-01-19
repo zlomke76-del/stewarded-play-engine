@@ -72,26 +72,26 @@ export default function DemoPage() {
     setState((prev) => confirmChange(prev, changeId, "DM"));
   }
 
-  // ----------------------------------------------------------
-  // Dice / Outcome entry → canon
-  // ----------------------------------------------------------
+// ----------------------------------------------------------
+// Dice / Outcome entry → canon
+// ----------------------------------------------------------
 
-  function handleOutcome(outcomeText: string) {
-    setState((prev) => {
-      const next = recordEvent(prev, {
-        id: crypto.randomUUID(),
-        type: "outcome",
-        text: outcomeText,
-        createdAt: Date.now(),
-      });
-
-      const event: SessionEvent = next.events.at(-1)!;
-      const rendered = renderNarration(event, { tone: "neutral" });
-
-      setNarration((n) => [...n, rendered.text]);
-      return next;
+function handleOutcome(outcomeText: string) {
+  setState((prev) => {
+    const next = recordEvent(prev, {
+      id: crypto.randomUUID(),
+      type: "outcome",
+      description: outcomeText, // ✅ FIX
+      createdAt: Date.now(),
     });
-  }
+
+    const event: SessionEvent = next.events.at(-1)!;
+    const rendered = renderNarration(event, { tone: "neutral" });
+
+    setNarration((n) => [...n, rendered.text]);
+    return next;
+  });
+}
 
   // ----------------------------------------------------------
   // Share link (read-only)
