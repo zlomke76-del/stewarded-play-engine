@@ -6,7 +6,7 @@
 //
 // Invariants:
 // - Solace may PROPOSE, never decide
-// - Canon only written via confirmation
+// - Canon only written via OUTCOME
 // - Auto-confirm is explicit and optional
 // ------------------------------------------------------------
 
@@ -68,27 +68,35 @@ export default function DemoPage() {
   }
 
   // ----------------------------------------------------------
-  // Solace Neutral DM — auto propose (NO AUTHORITY)
+  // Select option → PROPOSE change (authority-safe)
+  // ----------------------------------------------------------
+
+  function handleSelectOption(option: Option) {
+    setState((prev) =>
+      proposeChange(prev, {
+        id: crypto.randomUUID(),
+        description: option.description,
+        proposedBy: dmMode === "solace-neutral" ? "system" : "DM",
+        createdAt: Date.now(),
+      })
+    );
+  }
+
+  // ----------------------------------------------------------
+  // Solace Neutral DM — auto-propose (NO AUTHORITY)
   // ----------------------------------------------------------
 
   useEffect(() => {
     if (dmMode !== "solace-neutral") return;
     if (!options || options.length === 0) return;
 
-    const option = options[0]; // neutral, deterministic
-
-    setState((prev) =>
-      proposeChange(prev, {
-        id: crypto.randomUUID(),
-        description: option.description,
-        proposedBy: "system",
-        createdAt: Date.now(),
-      })
-    );
+    // Deterministic neutral choice (first option)
+    handleSelectOption(options[0]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dmMode, options]);
 
   // ----------------------------------------------------------
-  // DM / Solace confirms change
+  // Confirm change (authority moment)
   // ----------------------------------------------------------
 
   function handleConfirm(changeId: string) {
@@ -100,6 +108,8 @@ export default function DemoPage() {
   // ----------------------------------------------------------
 
   function handleOutcome(outcomeText: string) {
+    if (!outcomeText.trim()) return;
+
     setState((prev) =>
       recordEvent(prev, {
         id: crypto.randomUUID(),
@@ -114,7 +124,7 @@ export default function DemoPage() {
   }
 
   // ----------------------------------------------------------
-  // Auto-confirm path (explicit, optional)
+  // Optional auto-confirm (explicit)
   // ----------------------------------------------------------
 
   useEffect(() => {
@@ -122,6 +132,7 @@ export default function DemoPage() {
     if (state.pending.length !== 1) return;
 
     handleConfirm(state.pending[0].id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autoConfirm, state.pending]);
 
   // ----------------------------------------------------------
@@ -220,20 +231,24 @@ export default function DemoPage() {
         </CardSection>
       )}
 
-      {/* OPTIONS */}
+      {/* OPTIONS — CLICKABLE */}
       {options && (
         <CardSection title="Possible Options (No Ranking)">
           <ul>
             {options.map((opt) => (
-              <li key={opt.id}>{opt.description}</li>
+              <li key={opt.id}>
+                <button onClick={() => handleSelectOption(opt)}>
+                  {opt.description}
+                </button>
+              </li>
             ))}
           </ul>
         </CardSection>
       )}
 
-      {/* AUTHORITY + OUTCOME */}
+      {/* AUTHORITY + OUTCOME (REQUIRED) */}
       <DMConfirmationPanel state={state} onConfirm={handleConfirm} />
-      <DiceOutcomePanel onSubmit={handleOutcome} spellCheck />
+      <DiceOutcomePanel onSubmit={handleOutcome} />
       <NextActionHint state={state} />
 
       {/* CANON */}
