@@ -1,10 +1,17 @@
 "use client";
 
 // ------------------------------------------------------------
-// Classic Fantasy — Stewarded Resolution Mode
+// Classic Fantasy — Stewarded Resolution Mode (Automated)
+// ------------------------------------------------------------
+//
+// Invariants:
+// - System may FRAME and DRAFT, never decide
+// - Dice are evidence, not authority
+// - Canon written ONLY by explicit human action
+// - Confirmation validates legitimacy but does not drive UI flow
 // ------------------------------------------------------------
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   createSession,
   proposeChange,
@@ -29,14 +36,14 @@ import CardSection from "@/components/layout/CardSection";
 import Disclaimer from "@/components/layout/Disclaimer";
 
 // ------------------------------------------------------------
-// Draft helper (neutral, non-canonical)
+// Draft helper (neutral, deterministic)
 // ------------------------------------------------------------
 
 function generateDraftOutcome(option: Option): string {
   return (
-    `Choosing the path “${option.description},” ` +
-    `events unfold in a way consistent with the situation. ` +
-    `Some information is revealed, while other details remain uncertain.`
+    `Following the chosen course (“${option.description}”), ` +
+    `events unfold in a way consistent with the world. ` +
+    `Some details become clear, while others remain uncertain.`
   );
 }
 
@@ -52,7 +59,7 @@ export default function ClassicFantasyPage() {
   const [options, setOptions] = useState<Option[] | null>(null);
   const [chronicle, setChronicle] = useState<string[]>([]);
 
-  // NEW: facilitation-only state
+  // Facilitation automation state (NEW)
   const [selectedOption, setSelectedOption] = useState<Option | null>(null);
   const [draftOutcome, setDraftOutcome] = useState<string>("");
 
@@ -69,18 +76,17 @@ export default function ClassicFantasyPage() {
     setParsed(parsedAction);
     setOptions([...optionSet.options]);
 
-    // reset downstream facilitation
+    // reset facilitation
     setSelectedOption(null);
     setDraftOutcome("");
   }
 
   // ----------------------------------------------------------
-  // Arbiter selects a resolution path (proposal)
+  // Option selected → auto-advance flow (NO CANON)
   // ----------------------------------------------------------
 
   function handleSelectOption(option: Option) {
     setSelectedOption(option);
-    setDraftOutcome(generateDraftOutcome(option));
 
     setState((prev) =>
       proposeChange(prev, {
@@ -93,7 +99,16 @@ export default function ClassicFantasyPage() {
   }
 
   // ----------------------------------------------------------
-  // Arbiter confirms resolution path
+  // AUTO-DRAFT outcome once option is selected
+  // ----------------------------------------------------------
+
+  useEffect(() => {
+    if (!selectedOption) return;
+    setDraftOutcome(generateDraftOutcome(selectedOption));
+  }, [selectedOption]);
+
+  // ----------------------------------------------------------
+  // Arbiter confirms resolution path (legitimacy only)
   // ----------------------------------------------------------
 
   function handleConfirm(changeId: string) {
@@ -101,7 +116,7 @@ export default function ClassicFantasyPage() {
   }
 
   // ----------------------------------------------------------
-  // Resolution / Outcome entry → canon
+  // Record OUTCOME → CANON (human authority)
   // ----------------------------------------------------------
 
   function handleOutcome(outcomeText: string, diceResult?: any) {
@@ -205,10 +220,10 @@ export default function ClassicFantasyPage() {
         </CardSection>
       )}
 
-      {/* Existing confirmation component — preserved */}
+      {/* Confirmation preserved, but no longer blocks flow */}
       <DMConfirmationPanel state={state} onConfirm={handleConfirm} />
 
-      {/* Outcome + Dice only once context exists */}
+      {/* Automated Outcome Phase */}
       {selectedOption && (
         <CardSection title="Outcome (Arbiter)">
           <p className="muted">
@@ -221,6 +236,7 @@ export default function ClassicFantasyPage() {
             onChange={(e) => setDraftOutcome(e.target.value)}
           />
 
+          {/* Dice appear automatically */}
           <DiceOutcomePanel onSubmit={handleOutcome} />
         </CardSection>
       )}
