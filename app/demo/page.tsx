@@ -18,7 +18,8 @@ import { parseAction } from "@/lib/parser/ActionParser";
 import { generateOptions, Option } from "@/lib/options/OptionGenerator";
 import { renderNarration } from "@/lib/narration/NarrationRenderer";
 
-import DMConfirmationPanel from "@/components/DMConfirmationPanel";
+// ✅ FIXED IMPORT PATHS
+import DMConfirmationPanel from "@/components/dm/DMConfirmationPanel";
 import DiceOutcomePanel from "@/components/DiceOutcomePanel";
 import NextActionHint from "@/components/NextActionHint";
 
