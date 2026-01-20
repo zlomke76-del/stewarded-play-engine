@@ -220,13 +220,16 @@ export default function CavemanPage() {
         </CardSection>
       )}
 
-      {selectedOption && (
-        <ResolutionDraftPanel
-          role="arbiter"
-          autoResolve
-          context={{
-          onRecord={handleAutoRecord}
-    />
+      <ResolutionDraftPanel
+  role="arbiter"
+  autoResolve
+  context={{
+    optionDescription: selectedOption.description,
+    optionKind: inferOptionKind(selectedOption.description),
+  }}
+  onRecord={handleAutoRecord}
+/>
+
       )}
 
       <WorldLedgerPanel events={state.events} />
