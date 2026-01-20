@@ -7,7 +7,7 @@
 // NO authority, NO mutation, NO dice, NO automation.
 //
 // Purpose:
-// - Make time, noise, and persistence *visible*
+// - Make time, noise, light, and persistence visible
 // - Preserve Arbiter authority
 // - Support classic dungeon-crawl tension (Might & Magic style)
 // ------------------------------------------------------------
@@ -31,47 +31,51 @@ type Props = {
 };
 
 // ------------------------------------------------------------
-// Helpers — pure derivations only
+// Pressure (time)
 // ------------------------------------------------------------
 
-function pressureForTurn(turn: number): {
-  label: string;
-  level: "low" | "rising" | "high" | "critical";
-  explanation: string;
-} {
+function pressureForTurn(turn: number) {
   if (turn < 5) {
     return {
       label: "Low",
-      level: "low",
+      level: "low" as const,
       explanation: "Minimal time pressure.",
+      bias: "No difficulty bias recommended.",
     };
   }
 
   if (turn < 10) {
     return {
       label: "Rising",
-      level: "rising",
+      level: "rising" as const,
       explanation: "Extended exploration increases risk.",
+      bias: "Consider +1–2 DC for cautious actions.",
     };
   }
 
   if (turn < 15) {
     return {
       label: "High",
-      level: "high",
+      level: "high" as const,
       explanation: "Dungeon denizens may react to prolonged activity.",
+      bias: "Consider +2–4 DC for risky actions.",
     };
   }
 
   return {
     label: "Critical",
-    level: "critical",
+    level: "critical" as const,
     explanation: "Sustained presence makes encounters increasingly likely.",
+    bias: "Strong bias: complications even on success.",
   };
 }
 
+// ------------------------------------------------------------
+// Alert state + decay
+// ------------------------------------------------------------
+
 function deriveAlertState(events: readonly SessionEvent[]) {
-  const noisy = events.filter(
+  const noisyEvents = events.filter(
     (e) =>
       e.type === "OUTCOME" &&
       typeof e.payload?.description === "string" &&
@@ -80,30 +84,50 @@ function deriveAlertState(events: readonly SessionEvent[]) {
       )
   );
 
-  if (noisy.length === 0) {
+  if (noisyEvents.length === 0) {
     return {
       status: "Quiet",
       explanation: "No significant noise detected.",
+      lastNoiseTurn: null,
     };
   }
 
-  const last = noisy.at(-1);
+  const last = noisyEvents.at(-1);
+  const lastTurn = last?.payload?.world?.turn ?? null;
 
   return {
     status: "Alerted",
-    explanation: last?.payload?.description ?? "Recent noisy activity.",
+    explanation: "Recent loud activity has drawn attention.",
+    lastNoiseTurn: lastTurn,
   };
 }
 
+function alertDecay(
+  currentTurn: number,
+  lastNoiseTurn: number | null
+) {
+  if (lastNoiseTurn === null) return "Quiet";
+
+  const delta = currentTurn - lastNoiseTurn;
+
+  if (delta <= 2) return "Alerted";
+  if (delta <= 5) return "Suspicious";
+  return "Quiet";
+}
+
+// ------------------------------------------------------------
+// Wandering monster advisory
+// ------------------------------------------------------------
+
 function wanderingMonsterAdvisory(
   turn: number,
-  alertStatus: string
-): { show: boolean; reason: string } {
-  if (turn >= 10 && alertStatus === "Alerted") {
+  alertLevel: string
+) {
+  if (alertLevel === "Alerted" && turn >= 8) {
     return {
       show: true,
       reason:
-        "Extended time combined with elevated alert level suggests a wandering monster check.",
+        "High alert combined with elapsed time suggests a wandering monster check.",
     };
   }
 
@@ -117,6 +141,10 @@ function wanderingMonsterAdvisory(
 
   return { show: false, reason: "" };
 }
+
+// ------------------------------------------------------------
+// Persistent room memory
+// ------------------------------------------------------------
 
 function derivePersistentWorldState(
   events: readonly SessionEvent[],
@@ -133,22 +161,61 @@ function derivePersistentWorldState(
 
     if (w.lock) {
       notes.push(
-        `Door ${w.lock.state === "locked" ? "locked" : "unlocked"}${
-          w.lock.keyId ? ` (Key: ${w.lock.keyId})` : ""
-        }`
+        `Door ${w.lock.state === "locked" ? "locked" : "unlocked"}`
       );
     }
 
     if (w.trap) {
-      notes.push(
-        `Trap ${
-          w.trap.state === "sprung" ? "sprung" : "armed"
-        }`
-      );
+      notes.push(`Trap ${w.trap.state}`);
     }
   });
 
   return notes;
+}
+
+// ------------------------------------------------------------
+// Light / torch tracking
+// ------------------------------------------------------------
+
+function deriveLightState(turn: number) {
+  const TORCH_DURATION = 6; // classic approximation
+  const remaining = TORCH_DURATION - (turn % TORCH_DURATION);
+
+  if (remaining <= 1) {
+    return {
+      status: "Flickering",
+      explanation:
+        "Light source nearly exhausted. Darkness imminent.",
+    };
+  }
+
+  if (remaining <= 3) {
+    return {
+      status: "Dim",
+      explanation: "Light is weakening. Shadows deepen.",
+    };
+  }
+
+  return {
+    status: "Bright",
+    explanation: "Adequate light maintained.",
+  };
+}
+
+// ------------------------------------------------------------
+// Adjacency awareness (heuristic)
+// ------------------------------------------------------------
+
+function adjacencyAdvisory(alertLevel: string) {
+  if (alertLevel === "Alerted") {
+    return "Noise may have propagated to adjacent rooms.";
+  }
+
+  if (alertLevel === "Suspicious") {
+    return "Nearby rooms may be aware of unusual activity.";
+  }
+
+  return "No signs of attention from adjacent rooms.";
 }
 
 // ------------------------------------------------------------
@@ -161,50 +228,57 @@ export default function DungeonPressurePanel({
   events,
 }: Props) {
   const pressure = pressureForTurn(turn);
-  const alert = deriveAlertState(events);
+
+  const rawAlert = deriveAlertState(events);
+  const alertLevel = alertDecay(turn, rawAlert.lastNoiseTurn);
+
   const wandering = wanderingMonsterAdvisory(
     turn,
-    alert.status
+    alertLevel
   );
+
   const persistent = derivePersistentWorldState(
     events,
     currentRoomId
   );
 
+  const light = deriveLightState(turn);
+  const adjacency = adjacencyAdvisory(alertLevel);
+
   return (
-    <section
-      className="card"
-      style={{
-        borderLeft: "4px solid #666",
-        background: "#111",
-      }}
-    >
+    <section className="card" style={{ borderLeft: "4px solid #666" }}>
       <h3>🧭 Dungeon Pressure (Advisory)</h3>
 
-      {/* Turn Pressure */}
       <p>
         <strong>Turn:</strong> {turn} ·{" "}
-        <strong>Pressure:</strong>{" "}
-        <span>{pressure.label}</span>
+        <strong>Pressure:</strong> {pressure.label}
       </p>
       <p className="muted">{pressure.explanation}</p>
-
-      <hr />
-
-      {/* Alert State */}
-      <p>
-        <strong>Alert Status:</strong> {alert.status}
+      <p className="muted">
+        <strong>Bias hint:</strong> {pressure.bias}
       </p>
-      <p className="muted">{alert.explanation}</p>
 
       <hr />
 
-      {/* Wandering Monsters */}
+      <p>
+        <strong>Alert Level:</strong> {alertLevel}
+      </p>
+      <p className="muted">{rawAlert.explanation}</p>
+      <p className="muted">{adjacency}</p>
+
+      <hr />
+
+      <p>
+        <strong>Light:</strong> {light.status}
+      </p>
+      <p className="muted">{light.explanation}</p>
+
+      <hr />
+
       {wandering.show ? (
         <>
           <p>
-            <strong>Wandering Monsters:</strong>{" "}
-            Check recommended
+            <strong>Wandering Monsters:</strong> Check recommended
           </p>
           <p className="muted">{wandering.reason}</p>
           <hr />
@@ -212,14 +286,12 @@ export default function DungeonPressurePanel({
       ) : (
         <>
           <p>
-            <strong>Wandering Monsters:</strong>{" "}
-            Unlikely at present
+            <strong>Wandering Monsters:</strong> Unlikely
           </p>
           <hr />
         </>
       )}
 
-      {/* Persistent World State */}
       <p>
         <strong>Environmental Memory:</strong>
       </p>
