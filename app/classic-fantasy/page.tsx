@@ -3,6 +3,14 @@
 // ------------------------------------------------------------
 // Classic Fantasy — Might & Magic Resolution
 // ------------------------------------------------------------
+//
+// Invariants:
+// - Player issues commands
+// - Solace drafts (non-authoritative)
+// - Dice are advisory only
+// - Arbiter records canon
+// - Dungeon pressure is visible but NEVER acts
+// ------------------------------------------------------------
 
 import { useState } from "react";
 import {
@@ -19,8 +27,7 @@ import ResolutionDraftPanel from "@/components/resolution/ResolutionDraftPanel";
 import NextActionHint from "@/components/NextActionHint";
 
 import WorldLedgerPanel from "@/components/world/WorldLedgerPanel";
-import TurnPressurePanel from "@/components/world/TurnPressurePanel";
-import FogOfWarPanel from "@/components/world/FogOfWarPanel";
+import DungeonPressurePanel from "@/components/world/DungeonPressurePanel";
 
 import StewardedShell from "@/components/layout/StewardedShell";
 import ModeHeader from "@/components/layout/ModeHeader";
@@ -119,16 +126,17 @@ export default function ClassicFantasyPage() {
       roomId?: string;
       scope?: "local" | "regional" | "global";
 
-      // extensions (future-safe)
       lock?: {
         state: "locked" | "unlocked";
         keyId?: string;
       };
+
       trap?: {
         id: string;
         state: "armed" | "sprung" | "disarmed";
         effect?: string;
       };
+
       alert?: {
         level: "none" | "suspicious" | "alerted";
         source?: string;
@@ -189,9 +197,12 @@ export default function ClassicFantasyPage() {
         ]}
       />
 
-      {/* ---------- DUNGEON STATE ---------- */}
-      <TurnPressurePanel turn={turn} />
-      <FogOfWarPanel events={state.events} />
+      {/* ---------- DUNGEON PRESSURE (ADVISORY ONLY) ---------- */}
+      <DungeonPressurePanel
+        turn={turn}
+        currentRoomId={undefined}
+        events={state.events}
+      />
 
       {/* ---------- COMMAND ---------- */}
       <CardSection title="Command">
@@ -218,9 +229,7 @@ export default function ClassicFantasyPage() {
             {options.map((opt) => (
               <li key={opt.id}>
                 <button
-                  onClick={() =>
-                    setSelectedOption(opt)
-                  }
+                  onClick={() => setSelectedOption(opt)}
                 >
                   {opt.description}
                 </button>
