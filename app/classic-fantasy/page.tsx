@@ -76,6 +76,11 @@ function inferOptionKind(description: string): OptionKind {
   return "safe";
 }
 
+function formatRoomName(roomId?: string) {
+  if (!roomId) return "Unknown Location";
+  return roomId;
+}
+
 // ------------------------------------------------------------
 
 export default function ClassicFantasyPage() {
@@ -94,22 +99,19 @@ export default function ClassicFantasyPage() {
     useState<Option | null>(null);
 
   // ----------------------------------------------------------
-  // DERIVE CURRENT ROOM (CANON ONLY)
+  // Derive current room from canon (authoritative)
   // ----------------------------------------------------------
 
   const currentRoomId = useMemo(() => {
-    const reversed = [...state.events].reverse();
+    const last = [...state.events]
+      .reverse()
+      .find(
+        (e) =>
+          e.type === "OUTCOME" &&
+          e.payload?.world?.roomId
+      );
 
-    for (const e of reversed) {
-      if (
-        e.type === "OUTCOME" &&
-        e.payload?.world?.roomId
-      ) {
-        return e.payload.world.roomId as string;
-      }
-    }
-
-    return undefined;
+    return last?.payload?.world?.roomId;
   }, [state.events]);
 
   // ----------------------------------------------------------
@@ -215,6 +217,18 @@ export default function ClassicFantasyPage() {
           },
         ]}
       />
+
+      {/* ---------- CURRENT LOCATION ---------- */}
+      <CardSection title="📍 Current Location">
+        <p>
+          <strong>{formatRoomName(currentRoomId)}</strong>
+        </p>
+        {!currentRoomId && (
+          <p className="muted">
+            The party has not yet entered a defined room.
+          </p>
+        )}
+      </CardSection>
 
       {/* ---------- DUNGEON PRESSURE (ADVISORY ONLY) ---------- */}
       <DungeonPressurePanel
