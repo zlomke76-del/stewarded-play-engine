@@ -1,16 +1,14 @@
 "use client";
 
 // ------------------------------------------------------------
-// Classic Fantasy — Might and Magic Resolution Flow
+// Classic Fantasy — Might & Magic Resolution
 // ------------------------------------------------------------
 //
-// Governing invariants:
-// - Player issues commands (procedural intent)
-// - Solace drafts resolution (non-authoritative)
-// - Dice are advisory only
-// - Arbiter edits + records canon
-// - No narrative framing
-// - World-state outcomes, not prose
+// Design goals:
+// - Procedural, state-first dungeon play
+// - Dice are advisory (polyhedral supported)
+// - Solace proposes, Arbiter disposes
+// - World state changes are explicit and persistent
 // ------------------------------------------------------------
 
 import { useState } from "react";
@@ -33,7 +31,7 @@ import CardSection from "@/components/layout/CardSection";
 import Disclaimer from "@/components/layout/Disclaimer";
 
 // ------------------------------------------------------------
-// Option classification (NO schema changes)
+// Helpers
 // ------------------------------------------------------------
 
 type OptionKind =
@@ -43,30 +41,30 @@ type OptionKind =
   | "contested";
 
 function inferOptionKind(description: string): OptionKind {
-  const text = description.toLowerCase();
+  const t = description.toLowerCase();
 
   if (
-    text.includes("attack") ||
-    text.includes("fight") ||
-    text.includes("enemy") ||
-    text.includes("contest")
+    t.includes("attack") ||
+    t.includes("fight") ||
+    t.includes("enemy") ||
+    t.includes("contest")
   ) {
     return "contested";
   }
 
   if (
-    text.includes("move") ||
-    text.includes("climb") ||
-    text.includes("cross") ||
-    text.includes("terrain")
+    t.includes("climb") ||
+    t.includes("cross") ||
+    t.includes("door") ||
+    t.includes("environment")
   ) {
     return "environmental";
   }
 
   if (
-    text.includes("steal") ||
-    text.includes("sneak") ||
-    text.includes("risk")
+    t.includes("steal") ||
+    t.includes("sneak") ||
+    t.includes("risk")
   ) {
     return "risky";
   }
@@ -80,7 +78,7 @@ export default function ClassicFantasyPage() {
   const role: "arbiter" = "arbiter";
 
   const [state, setState] = useState<SessionState>(
-    createSession("might-and-magic-session")
+    createSession("classic-fantasy-session")
   );
 
   const [command, setCommand] = useState("");
@@ -90,10 +88,10 @@ export default function ClassicFantasyPage() {
     useState<Option | null>(null);
 
   // ----------------------------------------------------------
-  // Player submits command
+  // Player issues command
   // ----------------------------------------------------------
 
-  function handleCommand() {
+  function handleSubmitCommand() {
     if (!command.trim()) return;
 
     const parsedAction = parseAction("player_1", command);
@@ -105,15 +103,7 @@ export default function ClassicFantasyPage() {
   }
 
   // ----------------------------------------------------------
-  // Option selected → resolution draft
-  // ----------------------------------------------------------
-
-  function handleSelectOption(option: Option) {
-    setSelectedOption(option);
-  }
-
-  // ----------------------------------------------------------
-  // Record canon (arbiter only)
+  // Arbiter records canon
   // ----------------------------------------------------------
 
   function handleRecord(payload: {
@@ -123,9 +113,13 @@ export default function ClassicFantasyPage() {
       roll: number | null;
       dc: number;
       justification: string;
-      outcome: "success" | "partial" | "failure" | null;
     };
     audit: string[];
+    world?: {
+      primary: string;
+      secondary?: string[];
+      scope?: "local" | "regional" | "global";
+    };
   }) {
     setState((prev) =>
       recordEvent(prev, {
@@ -158,46 +152,38 @@ export default function ClassicFantasyPage() {
         title="Classic Fantasy — Might & Magic Resolution"
         onShare={handleShare}
         roles={[
-          {
-            label: "Player",
-            description: "Issues commands",
-          },
+          { label: "Player", description: "Issues commands" },
           {
             label: "Solace",
             description:
-              "Drafts neutral resolution (procedural)",
+              "Drafts procedural outcomes (non-authoritative)",
           },
           {
             label: "Arbiter",
             description:
-              "Applies world-state changes and records canon",
+              "Applies world state changes and records canon",
           },
         ]}
       />
 
-      {/* COMMAND INPUT */}
       <CardSection title="Command">
         <textarea
-          rows={2}
+          rows={3}
           value={command}
-          onChange={(e) =>
-            setCommand(e.target.value)
-          }
-          placeholder="Issue a command (e.g., ATTACK GOBLIN, OPEN CHEST, CAST FIREBALL)…"
+          onChange={(e) => setCommand(e.target.value)}
+          placeholder="Issue a command (e.g., OPEN DOOR, ATTACK GOBLIN, SEARCH CHEST)…"
         />
-        <button onClick={handleCommand}>
+        <button onClick={handleSubmitCommand}>
           Submit Command
         </button>
       </CardSection>
 
-      {/* PARSED COMMAND */}
       {parsed && (
         <CardSection title="Parsed Command (System)">
           <pre>{JSON.stringify(parsed, null, 2)}</pre>
         </CardSection>
       )}
 
-      {/* RESOLUTION OPTIONS */}
       {options && (
         <CardSection title="Possible Resolution Paths">
           <ul>
@@ -205,7 +191,7 @@ export default function ClassicFantasyPage() {
               <li key={opt.id}>
                 <button
                   onClick={() =>
-                    handleSelectOption(opt)
+                    setSelectedOption(opt)
                   }
                 >
                   {opt.description}
@@ -216,7 +202,7 @@ export default function ClassicFantasyPage() {
         </CardSection>
       )}
 
-      {/* ---------- RESOLUTION DRAFT (IDENTICAL PANEL) ---------- */}
+      {/* ---------------- Resolution Draft ---------------- */}
       {selectedOption && (
         <ResolutionDraftPanel
           role={role}
@@ -233,7 +219,6 @@ export default function ClassicFantasyPage() {
 
       <NextActionHint state={state} />
 
-      {/* CANON */}
       <CardSection
         title="Canon (Confirmed World State)"
         className="canon"
