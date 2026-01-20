@@ -115,18 +115,18 @@ export default function CavemanPage() {
     console.log("PARSED ACTION:", parsedAction);
     console.log("OPTION SET:", optionSet);
 
-    // ---------- SAFE FALLBACK ----------
     const resolvedOptions =
       optionSet?.options?.length > 0
         ? optionSet.options
-        : [
+        : ([
             {
               id: "fallback",
               description: `Proceed cautiously: ${command}`,
-            } as Option,
-          ];
+            },
+          ] as Option[]);
 
-    setOptions(resolvedOptions);
+    // 🔑 FIX: clone readonly array before storing in state
+    setOptions([...resolvedOptions]);
     setSelectedOption(null);
   }
 
