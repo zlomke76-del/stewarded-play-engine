@@ -222,15 +222,11 @@ export default function CavemanPage() {
 
       {selectedOption && (
         <ResolutionDraftPanel
-          role="arbiter" // UI reuse only; authority is structural
+          role="arbiter"
+          autoResolve
           context={{
-            optionDescription: selectedOption.description,
-            optionKind: inferOptionKind(
-              selectedOption.description
-            ),
-          }}
           onRecord={handleAutoRecord}
-        />
+    />
       )}
 
       <WorldLedgerPanel events={state.events} />
