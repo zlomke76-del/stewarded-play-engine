@@ -12,7 +12,7 @@
 // - Dungeon pressure is visible but NEVER acts
 // ------------------------------------------------------------
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
   createSession,
   recordEvent,
@@ -92,6 +92,25 @@ export default function ClassicFantasyPage() {
   const [options, setOptions] = useState<Option[] | null>(null);
   const [selectedOption, setSelectedOption] =
     useState<Option | null>(null);
+
+  // ----------------------------------------------------------
+  // DERIVE CURRENT ROOM (CANON ONLY)
+  // ----------------------------------------------------------
+
+  const currentRoomId = useMemo(() => {
+    const reversed = [...state.events].reverse();
+
+    for (const e of reversed) {
+      if (
+        e.type === "OUTCOME" &&
+        e.payload?.world?.roomId
+      ) {
+        return e.payload.world.roomId as string;
+      }
+    }
+
+    return undefined;
+  }, [state.events]);
 
   // ----------------------------------------------------------
   // Player issues command
@@ -200,7 +219,7 @@ export default function ClassicFantasyPage() {
       {/* ---------- DUNGEON PRESSURE (ADVISORY ONLY) ---------- */}
       <DungeonPressurePanel
         turn={turn}
-        currentRoomId={undefined}
+        currentRoomId={currentRoomId}
         events={state.events}
       />
 
