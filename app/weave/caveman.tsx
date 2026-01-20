@@ -5,12 +5,10 @@
 // ------------------------------------------------------------
 //
 // Invariants:
-// - Player selects actions
-// - Solace arbitrates (authoritative)
-// - Dice are mandatory + auto-rolled
-// - Canon is committed immediately
-// - Pressure escalates mechanically
-// - No human override
+// - Player selects intent and dice
+// - Solace rolls and resolves
+// - Canon is committed automatically
+// - No human arbiter
 // ------------------------------------------------------------
 
 import { useMemo, useState } from "react";
@@ -24,40 +22,13 @@ import { parseAction } from "@/lib/parser/ActionParser";
 import { generateOptions, Option } from "@/lib/options/OptionGenerator";
 import { exportCanon } from "@/lib/export/exportCanon";
 
+import ResolutionDraftPanel from "@/components/resolution/ResolutionDraftPanel";
 import WorldLedgerPanel from "@/components/world/WorldLedgerPanel";
 
 import StewardedShell from "@/components/layout/StewardedShell";
 import ModeHeader from "@/components/layout/ModeHeader";
 import CardSection from "@/components/layout/CardSection";
 import Disclaimer from "@/components/layout/Disclaimer";
-
-// ------------------------------------------------------------
-// Helpers
-// ------------------------------------------------------------
-
-type OptionKind =
-  | "safe"
-  | "environmental"
-  | "risky"
-  | "contested";
-
-function inferOptionKind(description: string): OptionKind {
-  const t = description.toLowerCase();
-
-  if (t.includes("attack") || t.includes("fight")) {
-    return "contested";
-  }
-
-  if (t.includes("cross") || t.includes("move")) {
-    return "environmental";
-  }
-
-  if (t.includes("risk")) {
-    return "risky";
-  }
-
-  return "safe";
-}
 
 // ------------------------------------------------------------
 
@@ -71,9 +42,11 @@ export default function CavemanPage() {
   const [command, setCommand] = useState("");
   const [parsed, setParsed] = useState<any>(null);
   const [options, setOptions] = useState<Option[] | null>(null);
+  const [selectedOption, setSelectedOption] =
+    useState<Option | null>(null);
 
   // ----------------------------------------------------------
-  // Derive current location from canon
+  // Canon-derived location
   // ----------------------------------------------------------
 
   const currentLocation = useMemo(() => {
@@ -89,7 +62,7 @@ export default function CavemanPage() {
   }, [state.events]);
 
   // ----------------------------------------------------------
-  // Player submits intent
+  // Player intent
   // ----------------------------------------------------------
 
   function handleSubmitCommand() {
@@ -100,13 +73,24 @@ export default function CavemanPage() {
 
     setParsed(parsedAction);
     setOptions([...optionSet.options]);
+    setSelectedOption(null);
   }
 
   // ----------------------------------------------------------
-  // Solace auto-resolves + records canon (governed)
+  // Solace auto-records canon (governed)
   // ----------------------------------------------------------
 
-  function autoResolve(option: Option) {
+  function handleAutoRecord(payload: {
+    description: string;
+    dice: {
+      mode: string;
+      roll: number | null;
+      dc: number;
+      justification: string;
+    };
+    audit: string[];
+    world?: any;
+  }) {
     const nextTurn = turn + 1;
     setTurn(nextTurn);
 
@@ -117,25 +101,20 @@ export default function CavemanPage() {
         actor: "solace",
         type: "OUTCOME",
         payload: {
-          description: option.description,
-          dice: {
-            mode: option.diceMode ?? "d20",
-            roll: null,
-            dc: option.dc ?? 10,
-            justification: "Governed resolution",
-          },
-          audit: ["Resolved by Solace", "The Weave enforced"],
+          ...payload,
+          audit: [...payload.audit, "The Weave enforced"],
           world: {
+            ...payload.world,
             turn: nextTurn,
-            pressure: "escalated",
           },
         },
       })
     );
 
-    setOptions(null);
-    setParsed(null);
     setCommand("");
+    setParsed(null);
+    setOptions(null);
+    setSelectedOption(null);
   }
 
   // ----------------------------------------------------------
@@ -160,23 +139,18 @@ export default function CavemanPage() {
         roles={[
           {
             label: "Player",
-            description: "Selects actions under pressure",
+            description: "Selects intent and risk",
           },
           {
             label: "Solace",
             description:
-              "Arbitrates outcomes and enforces canon",
+              "Rolls dice, resolves outcomes, commits canon",
           },
         ]}
       />
 
       <CardSection title="🌍 Current State">
-        <p>
-          <strong>{currentLocation}</strong>
-        </p>
-        <p className="muted">
-          Shared reality governed by The Weave.
-        </p>
+        <strong>{currentLocation}</strong>
       </CardSection>
 
       <CardSection title="Intent">
@@ -184,7 +158,7 @@ export default function CavemanPage() {
           rows={3}
           value={command}
           onChange={(e) => setCommand(e.target.value)}
-          placeholder="HUNT, MOVE CAMP, SCOUT, DEFEND…"
+          placeholder="HUNT, SCOUT, DEFEND, MOVE CAMP…"
         />
         <button onClick={handleSubmitCommand}>
           Commit Intent
@@ -196,7 +170,9 @@ export default function CavemanPage() {
           <ul>
             {options.map((opt) => (
               <li key={opt.id}>
-                <button onClick={() => autoResolve(opt)}>
+                <button
+                  onClick={() => setSelectedOption(opt)}
+                >
                   {opt.description}
                 </button>
               </li>
@@ -205,29 +181,19 @@ export default function CavemanPage() {
         </CardSection>
       )}
 
-      <WorldLedgerPanel events={state.events} />
+      {selectedOption && (
+        <ResolutionDraftPanel
+          role="arbiter" // UI reuse only; authority is locked
+          context={{
+            optionDescription: selectedOption.description,
+            optionKind: selectedOption.kind,
+          }}
+          onRecord={handleAutoRecord}
+          autoCommit
+        />
+      )}
 
-      <CardSection title="Canon">
-        {state.events.filter(
-          (e) => e.type === "OUTCOME"
-        ).length === 0 ? (
-          <p className="muted">
-            The Weave has not yet resolved.
-          </p>
-        ) : (
-          <ul>
-            {state.events
-              .filter((e) => e.type === "OUTCOME")
-              .map((event) => (
-                <li key={event.id}>
-                  {String(
-                    (event as any).payload.description
-                  )}
-                </li>
-              ))}
-          </ul>
-        )}
-      </CardSection>
+      <WorldLedgerPanel events={state.events} />
 
       <Disclaimer />
     </StewardedShell>
