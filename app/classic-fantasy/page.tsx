@@ -17,8 +17,12 @@ import { exportCanon } from "@/lib/export/exportCanon";
 
 import ResolutionDraftPanel from "@/components/resolution/ResolutionDraftPanel";
 import NextActionHint from "@/components/NextActionHint";
+
 import WorldLedgerPanel from "@/components/world/WorldLedgerPanel";
 import TurnPressurePanel from "@/components/world/TurnPressurePanel";
+import FogOfWarPanel from "@/components/world/FogOfWarPanel";
+import WanderingMonsterPanel from "@/components/world/WanderingMonsterPanel";
+import ResourceClockPanel from "@/components/world/ResourceClockPanel";
 
 import StewardedShell from "@/components/layout/StewardedShell";
 import ModeHeader from "@/components/layout/ModeHeader";
@@ -172,8 +176,13 @@ export default function ClassicFantasyPage() {
         ]}
       />
 
+      {/* ---------- DUNGEON STATE ---------- */}
       <TurnPressurePanel turn={turn} />
+      <WanderingMonsterPanel turn={turn} />
+      <ResourceClockPanel turn={turn} />
+      <FogOfWarPanel events={state.events} />
 
+      {/* ---------- COMMAND ---------- */}
       <CardSection title="Command">
         <textarea
           rows={3}
