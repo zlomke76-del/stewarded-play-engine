@@ -24,7 +24,7 @@ type TrapState = "armed" | "sprung" | "disarmed";
 type Props = {
   context: ResolutionContext;
   role: "arbiter";
-  autoResolve?: boolean; // ← NEW, opt-in only
+  autoResolve?: boolean;
   onRecord: (payload: {
     description: string;
     dice: {
@@ -49,11 +49,13 @@ type Props = {
 };
 
 // ------------------------------------------------------------
+// Difficulty framing (language-only, non-authoritative)
+// ------------------------------------------------------------
 
 function difficultyFor(kind?: ResolutionContext["optionKind"]) {
   switch (kind) {
     case "safe":
-      return { dc: 0, justification: "Low immediate risk (roll optional)" };
+      return { dc: 0, justification: "Low immediate risk" };
     case "environmental":
       return { dc: 6, justification: "Environmental uncertainty" };
     case "risky":
@@ -61,16 +63,23 @@ function difficultyFor(kind?: ResolutionContext["optionKind"]) {
     case "contested":
       return { dc: 14, justification: "Active opposition expected" };
     default:
-      return { dc: 10, justification: "Situation requires Arbiter judgment" };
+      return { dc: 10, justification: "Outcome uncertain" };
   }
 }
 
 function inferRoomName(text: string): string {
   const t = text.toLowerCase();
+
+  if (t.includes("hunt")) return "Hunting Grounds";
+  if (t.includes("scout")) return "Nearby Ridge";
+  if (t.includes("defend")) return "Camp Perimeter";
+  if (t.includes("move")) return "New Camp";
+
   if (t.includes("hallway")) return "Stone Hallway";
   if (t.includes("room")) return "Unmarked Chamber";
   if (t.includes("door")) return "Threshold Chamber";
-  return "Unspecified Location";
+
+  return "The Wilds";
 }
 
 function diceMax(mode: DiceMode): number {
@@ -91,11 +100,14 @@ export default function ResolutionDraftPanel({
   const [roll, setRoll] = useState<number | null>(null);
   const [rollSource, setRollSource] = useState<RollSource>("auto");
 
-  const [draft] = useState(
-    `The situation resolves based on the chosen path: ${context.optionDescription}.`
-  );
+  // IMPORTANT:
+  // Draft text is now intentionally neutral and short.
+  // Narrative synthesis should happen at the caller (game) level.
+  const draft = `Outcome resolved: ${context.optionDescription}`;
 
-  const [audit, setAudit] = useState<string[]>(["Drafted by Solace"]);
+  const [audit, setAudit] = useState<string[]>([
+    "Drafted by Solace",
+  ]);
 
   const inferredRoomName = useMemo(
     () => inferRoomName(context.optionDescription),
@@ -117,7 +129,10 @@ export default function ResolutionDraftPanel({
 
     setRoll(r);
     setRollSource("auto");
-    setAudit((a) => [...a, `Dice rolled (${diceMode}, auto): ${r}`]);
+    setAudit((a) => [
+      ...a,
+      `Dice rolled (${diceMode}, auto): ${r}`,
+    ]);
   }, [autoResolve, roll, diceMode]);
 
   useEffect(() => {
@@ -144,7 +159,7 @@ export default function ResolutionDraftPanel({
   }, [autoResolve, roll]);
 
   // ----------------------------------------------------------
-  // MANUAL (UNCHANGED)
+  // MANUAL (UNCHANGED BEHAVIOR)
   // ----------------------------------------------------------
 
   function handleAutoRoll() {
@@ -152,7 +167,10 @@ export default function ResolutionDraftPanel({
     const r = Math.ceil(Math.random() * max);
     setRoll(r);
     setRollSource("auto");
-    setAudit((a) => [...a, `Dice rolled (${diceMode}, auto): ${r}`]);
+    setAudit((a) => [
+      ...a,
+      `Dice rolled (${diceMode}, auto): ${r}`,
+    ]);
   }
 
   function handleRecord() {
@@ -175,18 +193,27 @@ export default function ResolutionDraftPanel({
   }
 
   // ----------------------------------------------------------
+  // AUTO-RESOLVE UI (MINIMAL, BUT LEGIBLE)
+  // ----------------------------------------------------------
 
   if (autoResolve) {
     return (
-      <section style={{ opacity: 0.85 }}>
-        <p className="muted">Solace resolving outcome…</p>
+      <section style={{ opacity: 0.85, marginTop: 12 }}>
+        <p className="muted">
+          Solace weighs risk… rolls fate… commits canon.
+        </p>
       </section>
     );
   }
 
+  // ----------------------------------------------------------
+  // ARBITER UI (UNCHANGED)
+  // ----------------------------------------------------------
+
   return (
     <section style={{ border: "1px dashed #666", padding: 16 }}>
       <h3>Resolution Draft</h3>
+
       <p className="muted">
         Difficulty {dc} — {justification}
       </p>
@@ -200,7 +227,9 @@ export default function ResolutionDraftPanel({
       )}
 
       {role === "arbiter" && (
-        <button onClick={handleRecord}>Record Outcome</button>
+        <button onClick={handleRecord}>
+          Record Outcome
+        </button>
       )}
 
       <p className="muted">{audit.join(" · ")}</p>
