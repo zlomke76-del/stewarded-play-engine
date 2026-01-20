@@ -1,22 +1,18 @@
 "use client";
 
 // ------------------------------------------------------------
-// Demo Page — Stewarded Play (Resolution-Aware)
+// Demo Page — Stewarded Play (Full Resolution Loop)
 // ------------------------------------------------------------
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   createSession,
   recordEvent,
-  confirmChange,
   SessionState,
 } from "@/lib/session/SessionState";
 
 import { parseAction } from "@/lib/parser/ActionParser";
 import { generateOptions, Option } from "@/lib/options/OptionGenerator";
-
-import DMConfirmationPanel from "@/components/dm/DMConfirmationPanel";
-import NextActionHint from "@/components/NextActionHint";
 
 import StewardedShell from "@/components/layout/StewardedShell";
 import ModeHeader from "@/components/layout/ModeHeader";
@@ -24,57 +20,51 @@ import CardSection from "@/components/layout/CardSection";
 import Disclaimer from "@/components/layout/Disclaimer";
 
 // ------------------------------------------------------------
-// Dice + Evaluation helpers (advisory only)
+// Dice + Resolution helpers (LOCAL, EXPLICIT)
 // ------------------------------------------------------------
 
 type DiceMode = "d20" | "2d6";
-type EvalResult = "success" | "partial" | "failure";
+type ResolutionClass = "success" | "partial" | "failure";
 
 function rollDice(mode: DiceMode): number {
-  if (mode === "d20") return Math.floor(Math.random() * 20) + 1;
-  return (
-    Math.floor(Math.random() * 6) +
-    1 +
-    (Math.floor(Math.random() * 6) + 1)
-  );
+  if (mode === "2d6") {
+    return (
+      Math.floor(Math.random() * 6) + 1 +
+      Math.floor(Math.random() * 6) + 1
+    );
+  }
+  return Math.floor(Math.random() * 20) + 1;
 }
 
-function evaluateRoll(
-  mode: DiceMode,
-  roll: number,
-  dc: number
-): { result: EvalResult; justification: string } {
-  if (mode === "d20") {
-    return roll >= dc
-      ? {
-          result: "success",
-          justification: `Rolled ${roll} ≥ DC ${dc}`,
-        }
-      : {
-          result: "failure",
-          justification: `Rolled ${roll} < DC ${dc}`,
-        };
+function difficultyFor(optionDescription: string) {
+  if (/safe|simple/i.test(optionDescription)) {
+    return { dc: 0, reason: "safe action" };
   }
-
-  // 2d6 bands
-  if (roll >= dc + 2) {
-    return {
-      result: "success",
-      justification: `Rolled ${roll} ≥ DC ${dc}+2 (strong success band)`,
-    };
+  if (/contested|resist/i.test(optionDescription)) {
+    return { dc: 14, reason: "contested action" };
   }
+  return { dc: 10, reason: "standard difficulty" };
+}
 
-  if (roll >= dc) {
-    return {
-      result: "partial",
-      justification: `Rolled ${roll} ≥ DC ${dc} (partial band)`,
-    };
+function classifyResult(roll: number, dc: number): ResolutionClass {
+  if (dc === 0) return "success";
+  if (roll >= dc + 5) return "success";
+  if (roll >= dc) return "partial";
+  return "failure";
+}
+
+function synthesizeDraft(
+  option: string,
+  result: ResolutionClass
+): string {
+  switch (result) {
+    case "success":
+      return `The action succeeds. ${option} resolves cleanly and without complication.`;
+    case "partial":
+      return `The action partially succeeds. ${option} resolves, but introduces a complication or cost.`;
+    case "failure":
+      return `The action fails. ${option} does not resolve as intended, and the situation escalates.`;
   }
-
-  return {
-    result: "failure",
-    justification: `Rolled ${roll} < DC ${dc}`,
-  };
 }
 
 // ------------------------------------------------------------
@@ -87,26 +77,23 @@ export default function DemoPage() {
   const [playerInput, setPlayerInput] = useState("");
   const [parsed, setParsed] = useState<any>(null);
   const [options, setOptions] = useState<Option[] | null>(null);
+
   const [selectedOption, setSelectedOption] = useState<Option | null>(null);
 
-  // Resolution state
   const [diceMode, setDiceMode] = useState<DiceMode>("d20");
-  const [dc, setDc] = useState<number>(6);
-  const [roll, setRoll] = useState<number | null>(null);
-  const [manualRoll, setManualRoll] = useState(false);
+  const [rollResult, setRollResult] = useState<number | null>(null);
+
+  const [manualDice, setManualDice] = useState(false);
   const [manualValue, setManualValue] = useState<number>(0);
 
   const [draftText, setDraftText] = useState("");
-  const [evaluation, setEvaluation] = useState<{
-    result: EvalResult;
-    justification: string;
-  } | null>(null);
+  const [arbiterEdited, setArbiterEdited] = useState(false);
 
   // ----------------------------------------------------------
   // Player submits action
   // ----------------------------------------------------------
 
-  function handlePlayerAction() {
+  function handleSubmitAction() {
     if (!playerInput.trim()) return;
 
     const parsedAction = parseAction("player_1", playerInput);
@@ -115,67 +102,79 @@ export default function DemoPage() {
     setParsed(parsedAction);
     setOptions([...optionSet.options]);
     setSelectedOption(null);
-    setRoll(null);
-    setEvaluation(null);
+    setRollResult(null);
     setDraftText("");
+    setArbiterEdited(false);
   }
 
   // ----------------------------------------------------------
-  // Option selected → prepare resolution
+  // Option selected → auto-roll
   // ----------------------------------------------------------
 
   function handleSelectOption(option: Option) {
     setSelectedOption(option);
-    setDc(6); // neutral default; not a ruleset
-    setDraftText(
-      `The situation follows the chosen path: ${option.description}.`
+    setManualDice(false);
+    setManualValue(0);
+
+    const roll = rollDice(diceMode);
+    setRollResult(roll);
+  }
+
+  // ----------------------------------------------------------
+  // Derived evaluation
+  // ----------------------------------------------------------
+
+  const evaluation = useMemo(() => {
+    if (!selectedOption || rollResult === null) return null;
+
+    const { dc, reason } = difficultyFor(selectedOption.description);
+    const effectiveRoll = manualDice ? manualValue : rollResult;
+    const outcome = classifyResult(effectiveRoll, dc);
+
+    return {
+      dc,
+      reason,
+      outcome,
+      effectiveRoll,
+    };
+  }, [selectedOption, rollResult, manualDice, manualValue]);
+
+  // ----------------------------------------------------------
+  // Draft synthesis (Solace)
+  // ----------------------------------------------------------
+
+  useEffect(() => {
+    if (!evaluation || !selectedOption) return;
+
+    const synthesized = synthesizeDraft(
+      selectedOption.description,
+      evaluation.outcome
     );
-  }
+
+    setDraftText(synthesized);
+    setArbiterEdited(false);
+  }, [evaluation, selectedOption]);
 
   // ----------------------------------------------------------
-  // Roll dice (manual or automatic)
+  // Record Outcome (ONLY authority moment)
   // ----------------------------------------------------------
 
-  function handleRoll() {
-    const value = manualRoll ? manualValue : rollDice(diceMode);
-    setRoll(value);
-
-    const evalResult = evaluateRoll(diceMode, value, dc);
-    setEvaluation(evalResult);
-
-    setDraftText(() => {
-      switch (evalResult.result) {
-        case "success":
-          return `The action succeeds. ${selectedOption?.description} resolves cleanly.`;
-        case "partial":
-          return `The action partially succeeds. ${selectedOption?.description} resolves, but with complications.`;
-        case "failure":
-          return `The action fails. ${selectedOption?.description} does not resolve as intended.`;
-      }
-    });
-  }
-
-  // ----------------------------------------------------------
-  // Record Outcome → Canon
-  // ----------------------------------------------------------
-
-  function handleRecord() {
+  function handleRecordOutcome() {
     if (!draftText.trim()) return;
 
     setState((prev) =>
       recordEvent(prev, {
         id: crypto.randomUUID(),
         timestamp: Date.now(),
-        actor: "DM",
+        actor: "arbiter",
         type: "OUTCOME",
         payload: {
           description: draftText,
           dice: {
             mode: diceMode,
-            roll,
-            dc,
-            evaluation,
-            manual: manualRoll,
+            roll: evaluation?.effectiveRoll,
+            dc: evaluation?.dc,
+            manual: manualDice,
           },
         },
       })
@@ -192,7 +191,8 @@ export default function DemoPage() {
         title="Stewarded Play — Full Flow"
         roles={[
           { label: "Player", description: "Declares intent" },
-          { label: "Solace", description: "Drafts neutral resolution" },
+          { label: "Solace", description: "Drafts resolution" },
+          { label: "Arbiter", description: "Confirms canon" },
         ]}
       />
 
@@ -201,9 +201,8 @@ export default function DemoPage() {
           rows={3}
           value={playerInput}
           onChange={(e) => setPlayerInput(e.target.value)}
-          placeholder="Describe what your character does…"
         />
-        <button onClick={handlePlayerAction}>Submit Action</button>
+        <button onClick={handleSubmitAction}>Submit Action</button>
       </CardSection>
 
       {parsed && (
@@ -226,81 +225,89 @@ export default function DemoPage() {
         </CardSection>
       )}
 
-      {selectedOption && (
+      {selectedOption && evaluation && (
         <CardSection title="Resolution Draft">
           <p>
-            <strong>Difficulty:</strong> DC {dc}
+            <strong>Difficulty {evaluation.dc}</strong> —{" "}
+            {evaluation.reason}
+          </p>
+
+          <p>
+            <strong>Result:</strong>{" "}
+            {evaluation.outcome.toUpperCase()}
           </p>
 
           <label>
-            Dice system:{" "}
+            Dice system:
             <select
               value={diceMode}
-              onChange={(e) => setDiceMode(e.target.value as DiceMode)}
+              onChange={(e) =>
+                setDiceMode(e.target.value as DiceMode)
+              }
             >
               <option value="d20">d20</option>
               <option value="2d6">2d6</option>
             </select>
           </label>
 
-          <br />
+          <p>
+            Roll:{" "}
+            <strong>{evaluation.effectiveRoll}</strong>
+          </p>
+
           <label>
             <input
               type="checkbox"
-              checked={manualRoll}
-              onChange={(e) => setManualRoll(e.target.checked)}
+              checked={manualDice}
+              onChange={(e) =>
+                setManualDice(e.target.checked)
+              }
             />{" "}
-            Enter roll manually
+            Manual dice entry
           </label>
 
-          {manualRoll && (
+          {manualDice && (
             <input
               type="number"
               value={manualValue}
-              onChange={(e) => setManualValue(Number(e.target.value))}
+              onChange={(e) =>
+                setManualValue(Number(e.target.value))
+              }
             />
-          )}
-
-          <br />
-          <button onClick={handleRoll}>Roll Dice</button>
-
-          {roll !== null && evaluation && (
-            <p>
-              <strong>Result:</strong> {evaluation.result} —{" "}
-              {evaluation.justification}
-            </p>
           )}
 
           <textarea
             rows={4}
             value={draftText}
-            onChange={(e) => setDraftText(e.target.value)}
+            onChange={(e) => {
+              setDraftText(e.target.value);
+              setArbiterEdited(true);
+            }}
           />
 
-          <button onClick={handleRecord}>Record Outcome</button>
+          <button onClick={handleRecordOutcome}>
+            Record Outcome
+          </button>
 
           <p className="muted">
-            Drafted by Solace · Dice: {diceMode} ·{" "}
-            {manualRoll ? "manual" : "auto"}
+            Drafted by Solace ·{" "}
+            {arbiterEdited
+              ? "Edited by Arbiter"
+              : "Unedited"}{" "}
+            · Dice{" "}
+            {manualDice
+              ? "entered manually"
+              : "rolled automatically"}
           </p>
         </CardSection>
       )}
 
-      <DMConfirmationPanel state={state} onConfirm={() => {}} />
-      <NextActionHint state={state} />
-
-      <CardSection title="Canon (Confirmed Narrative)" className="canon">
-        {state.events.filter((e) => e.type === "OUTCOME").length === 0 ? (
-          <p className="muted">No canon yet.</p>
-        ) : (
-          <ul>
-            {state.events
-              .filter((e) => e.type === "OUTCOME")
-              .map((e) => (
-                <li key={e.id}>{e.payload.description as string}</li>
-              ))}
-          </ul>
-        )}
+      <CardSection title="Canon (Confirmed Narrative)">
+        {state.events
+          .filter((e) => e.type === "OUTCOME")
+          .map((e) => (
+            <p key={e.id}>{String(e.payload.description)}</p>
+          ))}
       </CardSection>
 
       <Disclaimer />
