@@ -3,208 +3,172 @@
 // ------------------------------------------------------------
 // PatrolHeatMapPanel
 // ------------------------------------------------------------
-// Advisory-only patrol / danger visualization
+// Advisory-only patrol / danger heat overlay by room
 //
-// Purpose:
-// - Show which rooms are becoming dangerous over time
-// - Reflect noise, alerts, and prolonged presence
-// - Decay naturally if no new activity occurs
-//
-// NO authority
-// NO mutation
-// NO automation
+// FIXED:
+// - Numeric heat score separated from HeatLevel enum
+// - No invalid number → HeatLevel assignments
 // ------------------------------------------------------------
 
 import React, { useMemo } from "react";
 
 // ------------------------------------------------------------
-// Types (minimal, compatible)
+// Types
 // ------------------------------------------------------------
 
 type SessionEvent = {
   id: string;
   type: string;
-  timestamp?: number;
   payload?: any;
 };
 
-type Props = {
-  events: readonly SessionEvent[];
-  currentRoomId?: string;
-};
-
-// ------------------------------------------------------------
-// Heat model
-// ------------------------------------------------------------
-
-type HeatLevel = 0 | 1 | 2 | 3 | 4;
+type HeatLevel = "cold" | "warm" | "hot" | "danger";
 
 type RoomHeat = {
   roomId: string;
-  heat: HeatLevel;
-  reasons: string[];
+  score: number; // numeric only
+  level: HeatLevel;
+  lastTurn: number;
 };
 
 // ------------------------------------------------------------
-// Helpers — pure derivation
+// Helpers
 // ------------------------------------------------------------
 
-function heatColor(level: HeatLevel): string {
+function heatLevelFromScore(score: number): HeatLevel {
+  if (score <= 1) return "cold";
+  if (score <= 3) return "warm";
+  if (score <= 6) return "hot";
+  return "danger";
+}
+
+function colorForHeat(level: HeatLevel): string {
   switch (level) {
-    case 0:
-      return "#2a2a2a";
-    case 1:
-      return "#355f2e";
-    case 2:
-      return "#9c7c1c";
-    case 3:
-      return "#c44d1a";
-    case 4:
-      return "#c1121f";
-    default:
-      return "#2a2a2a";
+    case "cold":
+      return "#2a9d8f";
+    case "warm":
+      return "#e9c46a";
+    case "hot":
+      return "#f4a261";
+    case "danger":
+      return "#e63946";
   }
 }
 
-function deriveRoomHeat(
-  events: readonly SessionEvent[]
+// ------------------------------------------------------------
+// Core derivation (PURE)
+// ------------------------------------------------------------
+
+function derivePatrolHeat(
+  events: readonly SessionEvent[],
+  currentTurn: number
 ): RoomHeat[] {
-  const map = new Map<string, RoomHeat>();
+  const map = new Map<string, { score: number; lastTurn: number }>();
 
-  events.forEach((e, index) => {
-    if (e.type !== "OUTCOME") return;
+  for (const e of events) {
+    if (e.type !== "OUTCOME") continue;
 
-    const w = e.payload?.world;
-    if (!w?.roomId) return;
+    const world = e.payload?.world;
+    const roomId = world?.roomId;
+    if (!roomId) continue;
 
-    if (!map.has(w.roomId)) {
-      map.set(w.roomId, {
-        roomId: w.roomId,
-        heat: 0,
-        reasons: [],
-      });
+    if (!map.has(roomId)) {
+      map.set(roomId, { score: 0, lastTurn: currentTurn });
     }
 
-    const entry = map.get(w.roomId)!;
+    const entry = map.get(roomId)!;
 
-    // --- Noise-based heat ---
+    // ---- Noise & combat ----
     if (
       typeof e.payload?.description === "string" &&
-      /(attack|fight|smash|break|loud|explode)/i.test(
+      /(attack|fight|combat|shout|smash|break|explode)/i.test(
         e.payload.description
       )
     ) {
-      entry.heat = Math.min(
-        4,
-        (entry.heat + 2) as HeatLevel
-      );
-      entry.reasons.push("Noisy activity");
+      entry.score += 3;
     }
 
-    // --- Alert-based heat ---
-    if (w.alert?.level === "alerted") {
-      entry.heat = Math.min(
-        4,
-        (entry.heat + 1) as HeatLevel
-      );
-      entry.reasons.push("Alert propagated");
+    // ---- Alert escalation ----
+    if (world.alert?.level === "suspicious") {
+      entry.score += 1;
     }
 
-    // --- Repeated presence heat ---
-    if (index > 0) {
-      entry.heat = Math.min(
-        4,
-        (entry.heat + 1) as HeatLevel
-      );
-      entry.reasons.push("Repeated activity");
+    if (world.alert?.level === "alerted") {
+      entry.score += 3;
     }
-  });
 
-  // --- Natural decay pass ---
-  map.forEach((entry) => {
-    if (entry.reasons.length === 0) {
-      entry.heat = Math.max(
-        0,
-        (entry.heat - 1) as HeatLevel
-      );
-    }
-  });
+    entry.lastTurn = world.turn ?? currentTurn;
+  }
 
-  return Array.from(map.values());
+  // ---- Decay over time ----
+  const results: RoomHeat[] = [];
+
+  for (const [roomId, entry] of map.entries()) {
+    const age = currentTurn - entry.lastTurn;
+    const decayedScore = Math.max(
+      0,
+      entry.score - Math.floor(age / 3)
+    );
+
+    results.push({
+      roomId,
+      score: decayedScore,
+      level: heatLevelFromScore(decayedScore),
+      lastTurn: entry.lastTurn,
+    });
+  }
+
+  return results.sort((a, b) => b.score - a.score);
 }
 
 // ------------------------------------------------------------
 // Component
 // ------------------------------------------------------------
 
+type Props = {
+  events: readonly SessionEvent[];
+  turn: number;
+};
+
 export default function PatrolHeatMapPanel({
   events,
-  currentRoomId,
+  turn,
 }: Props) {
-  const rooms = useMemo(
-    () => deriveRoomHeat(events),
-    [events]
+  const heat = useMemo(
+    () => derivePatrolHeat(events, turn),
+    [events, turn]
   );
 
   return (
     <section className="card">
-      <h3>🔥 Patrol Heat Map (Advisory)</h3>
+      <h3>🔥 Patrol Heat (Advisory)</h3>
 
-      {rooms.length === 0 ? (
+      {heat.length === 0 ? (
         <p className="muted">
-          No rooms have accumulated patrol pressure.
+          No patrol pressure detected yet.
         </p>
       ) : (
-        <ul style={{ listStyle: "none", padding: 0 }}>
-          {rooms.map((r) => {
-            const isCurrent =
-              currentRoomId === r.roomId;
-
-            return (
-              <li
-                key={r.roomId}
-                style={{
-                  marginBottom: 8,
-                  padding: 8,
-                  borderRadius: 4,
-                  background: heatColor(r.heat),
-                  outline: isCurrent
-                    ? "2px solid #ffd166"
-                    : undefined,
-                }}
-              >
-                <strong>{r.roomId}</strong>{" "}
-                {isCurrent && (
-                  <span className="muted">
-                    (current room)
-                  </span>
-                )}
-                <br />
-                <span className="muted">
-                  Danger level: {r.heat}/4
-                </span>
-
-                {r.reasons.length > 0 && (
-                  <ul
-                    className="muted"
-                    style={{ marginTop: 4 }}
-                  >
-                    {Array.from(
-                      new Set(r.reasons)
-                    ).map((reason, i) => (
-                      <li key={i}>{reason}</li>
-                    ))}
-                  </ul>
-                )}
-              </li>
-            );
-          })}
+        <ul>
+          {heat.map((r) => (
+            <li
+              key={r.roomId}
+              style={{ color: colorForHeat(r.level) }}
+            >
+              <strong>{r.roomId}</strong> ·{" "}
+              {r.level.toUpperCase()}{" "}
+              <span className="muted">
+                (score {r.score}, last activity{" "}
+                {turn - r.lastTurn} turns ago)
+              </span>
+            </li>
+          ))}
         </ul>
       )}
 
       <p className="muted" style={{ marginTop: 8 }}>
-        Heat represents patrol likelihood — Arbiter
-        determines encounters.
+        Heat reflects time, noise, and alerts.
+        Advisory only — Arbiter determines encounters
+        and patrol behavior.
       </p>
     </section>
   );
