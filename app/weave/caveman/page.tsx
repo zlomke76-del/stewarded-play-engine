@@ -25,6 +25,10 @@ import { exportCanon } from "@/lib/export/exportCanon";
 import ResolutionDraftPanel from "@/components/resolution/ResolutionDraftPanel";
 import WorldLedgerPanel from "@/components/world/WorldLedgerPanel";
 
+// ✅ NEW (advisory-only panels)
+import EnvironmentalPressurePanel from "@/components/world/EnvironmentalPressurePanel";
+import SurvivalResourcePanel from "@/components/world/SurvivalResourcePanel";
+
 import StewardedShell from "@/components/layout/StewardedShell";
 import ModeHeader from "@/components/layout/ModeHeader";
 import CardSection from "@/components/layout/CardSection";
@@ -115,9 +119,7 @@ export default function CavemanPage() {
   const [command, setCommand] = useState("");
   const [options, setOptions] = useState<Option[] | null>(null);
 
-  // IMPORTANT:
   // selectedOption persists across resolution
-  // and only changes when a NEW option is chosen
   const [selectedOption, setSelectedOption] =
     useState<Option | null>(null);
 
@@ -157,11 +159,7 @@ export default function CavemanPage() {
             },
           ] as Option[]);
 
-    // clone readonly → mutable
     setOptions([...resolvedOptions]);
-
-    // DO NOT clear selectedOption here
-    // It represents the last resolved turn
   }
 
   // ----------------------------------------------------------
@@ -210,10 +208,9 @@ export default function CavemanPage() {
       })
     );
 
-    // Reset ONLY intent + options
+    // reset only forward-looking inputs
     setCommand("");
     setOptions(null);
-    // selectedOption intentionally persists
   }
 
   // ----------------------------------------------------------
@@ -245,16 +242,20 @@ export default function CavemanPage() {
         ]}
       />
 
+      {/* ---------- CURRENT STATE ---------- */}
       <CardSection title="🌍 Current State">
         <strong>{currentLocation}</strong>
       </CardSection>
 
-      {/* ---------------- LAST TURN (PERSISTENT) ---------------- */}
+      {/* ---------- PRESSURE & RESOURCES (ADVISORY) ---------- */}
+      <EnvironmentalPressurePanel turn={turn} />
+      <SurvivalResourcePanel turn={turn} />
 
+      {/* ---------- LAST TURN (PERSISTENT) ---------- */}
       {selectedOption && (
         <CardSection title="Last Turn">
           <ResolutionDraftPanel
-            role="arbiter" // structural only
+            role="arbiter"
             autoResolve
             context={{
               optionDescription:
@@ -268,8 +269,7 @@ export default function CavemanPage() {
         </CardSection>
       )}
 
-      {/* ---------------- NEW INTENT ---------------- */}
-
+      {/* ---------- NEW INTENT ---------- */}
       <CardSection title="Intent">
         <textarea
           rows={3}
@@ -302,8 +302,7 @@ export default function CavemanPage() {
         </CardSection>
       )}
 
-      {/* ---------------- LEDGER ---------------- */}
-
+      {/* ---------- LEDGER ---------- */}
       <WorldLedgerPanel events={state.events} />
 
       <Disclaimer />
