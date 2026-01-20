@@ -7,7 +7,7 @@
 // - Drafted by Solace (non-authoritative)
 // - Dice are advisory only
 // - Arbiter edits + records canon
-// - World state suggestions are explicit, optional, and visible
+// - World state suggestions are explicit and persistent
 // ------------------------------------------------------------
 
 import { useMemo, useState } from "react";
@@ -26,6 +26,8 @@ export type ResolutionContext = {
   optionKind?: "safe" | "environmental" | "risky" | "contested";
 };
 
+type TrapState = "armed" | "sprung" | "disarmed";
+
 type Props = {
   context: ResolutionContext;
   role: "arbiter";
@@ -43,10 +45,17 @@ type Props = {
       roomId?: string;
       scope?: "local" | "regional" | "global";
 
-      // --- NEW ---
+      // --- LOCKS ---
       lock?: {
         state: "locked" | "unlocked";
         keyId?: string;
+      };
+
+      // --- TRAPS ---
+      trap?: {
+        id: string;
+        state: TrapState;
+        effect?: string;
       };
     };
   }) => void;
@@ -95,7 +104,7 @@ function rollDice(mode: DiceMode) {
 }
 
 // ------------------------------------------------------------
-// Room inference (movement only)
+// Room inference
 // ------------------------------------------------------------
 
 function inferRoomSuggestion(text: string): string | null {
@@ -104,9 +113,9 @@ function inferRoomSuggestion(text: string): string | null {
   if (
     t.includes("open door") ||
     t.includes("enter") ||
-    t.includes("go through") ||
-    t.includes("descend") ||
-    t.includes("ascend")
+    t.includes("hallway") ||
+    t.includes("room") ||
+    t.includes("passage")
   ) {
     return `room-${crypto.randomUUID().slice(0, 6)}`;
   }
@@ -115,19 +124,23 @@ function inferRoomSuggestion(text: string): string | null {
 }
 
 // ------------------------------------------------------------
-// Lock inference (suggestion only)
+// Trap inference (suggestion only)
 // ------------------------------------------------------------
 
-function inferLockSuggestion(text: string): {
-  locked: boolean;
-  keyId?: string;
+function inferTrapSuggestion(text: string): {
+  id: string;
+  effect: string;
 } | null {
   const t = text.toLowerCase();
 
-  if (t.includes("locked")) {
+  if (
+    t.includes("trap") ||
+    t.includes("pressure plate") ||
+    t.includes("tripwire")
+  ) {
     return {
-      locked: true,
-      keyId: "iron-key",
+      id: `trap-${crypto.randomUUID().slice(0, 6)}`,
+      effect: "Damage or condition applied",
     };
   }
 
@@ -154,7 +167,7 @@ export default function ResolutionDraftPanel({
     "Drafted by Solace",
   ]);
 
-  // --- Room suggestion ---
+  // ---------- ROOM ----------
   const suggestedRoomId = useMemo(
     () => inferRoomSuggestion(context.optionDescription),
     [context.optionDescription]
@@ -164,19 +177,28 @@ export default function ResolutionDraftPanel({
     suggestedRoomId
   );
 
-  // --- Lock suggestion ---
-  const suggestedLock = useMemo(
-    () => inferLockSuggestion(context.optionDescription),
+  // ---------- TRAP ----------
+  const suggestedTrap = useMemo(
+    () => inferTrapSuggestion(context.optionDescription),
     [context.optionDescription]
   );
 
-  const [locked, setLocked] = useState<boolean>(
-    suggestedLock?.locked ?? false
+  const [trapPresent, setTrapPresent] = useState<boolean>(
+    Boolean(suggestedTrap)
   );
 
-  const [keyId, setKeyId] = useState<string>(
-    suggestedLock?.keyId ?? "iron-key"
+  const [trapId, setTrapId] = useState<string>(
+    suggestedTrap?.id ?? `trap-${crypto.randomUUID().slice(0, 6)}`
   );
+
+  const [trapState, setTrapState] =
+    useState<TrapState>("armed");
+
+  const [trapEffect, setTrapEffect] = useState<string>(
+    suggestedTrap?.effect ?? "Damage or condition applied"
+  );
+
+  // ----------------------------------------------------------
 
   function handleRoll() {
     const result = rollDice(diceMode);
@@ -207,14 +229,15 @@ export default function ResolutionDraftPanel({
       },
       audit: [...audit, "Recorded by Arbiter"],
       world: {
-        primary: roomId ? "location change" : "state change",
+        primary: "room state update",
         roomId: roomId ?? undefined,
         scope: "local",
-        ...(locked
+        ...(trapPresent
           ? {
-              lock: {
-                state: "locked",
-                keyId,
+              trap: {
+                id: trapId,
+                state: trapState,
+                effect: trapEffect,
               },
             }
           : undefined),
@@ -281,27 +304,59 @@ export default function ResolutionDraftPanel({
         </div>
       )}
 
-      {/* ---------- LOCK ---------- */}
+      {/* ---------- TRAP ---------- */}
       <div style={{ marginTop: 12 }}>
         <label>
           <input
             type="checkbox"
-            checked={locked}
+            checked={trapPresent}
             onChange={(e) =>
-              setLocked(e.target.checked)
+              setTrapPresent(e.target.checked)
             }
           />{" "}
-          Door is locked
+          Trap present in room
         </label>
 
-        {locked && (
-          <div style={{ marginTop: 4 }}>
+        {trapPresent && (
+          <div style={{ marginTop: 8 }}>
             <label>
-              Required key:&nbsp;
+              Trap ID:&nbsp;
               <input
-                value={keyId}
+                value={trapId}
                 onChange={(e) =>
-                  setKeyId(e.target.value)
+                  setTrapId(e.target.value)
+                }
+              />
+            </label>
+
+            <br />
+
+            <label>
+              Trap state:&nbsp;
+              <select
+                value={trapState}
+                onChange={(e) =>
+                  setTrapState(
+                    e.target.value as TrapState
+                  )
+                }
+              >
+                <option value="armed">Armed</option>
+                <option value="sprung">Sprung</option>
+                <option value="disarmed">
+                  Disarmed
+                </option>
+              </select>
+            </label>
+
+            <br />
+
+            <label>
+              Effect:&nbsp;
+              <input
+                value={trapEffect}
+                onChange={(e) =>
+                  setTrapEffect(e.target.value)
                 }
               />
             </label>
