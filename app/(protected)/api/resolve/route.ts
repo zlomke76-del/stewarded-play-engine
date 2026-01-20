@@ -5,7 +5,8 @@ import { cookies } from "next/headers";
 import { createServerClient } from "@supabase/ssr";
 
 export async function POST(req: Request) {
-  const cookieStore = cookies();
+  // 🔑 cookies() is ASYNC in Next.js 16 route handlers
+  const cookieStore = await cookies();
 
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
