@@ -1,14 +1,7 @@
 "use client";
 
 // ------------------------------------------------------------
-// ResolutionDraftPanel
-// ------------------------------------------------------------
-// Governing contract:
-// - Drafted by Solace (non-authoritative)
-// - Dice are advisory only
-// - Arbiter edits + records canon
-// - Full audit ribbon always visible
-// - Layout-safe (CardSection only)
+// ResolutionDraftPanel — Polyhedral Governed
 // ------------------------------------------------------------
 
 import { useEffect, useState } from "react";
@@ -18,7 +11,15 @@ import CardSection from "@/components/layout/CardSection";
 // Types
 // ------------------------------------------------------------
 
-type DiceMode = "d20" | "2d6";
+type DiceMode =
+  | "d4"
+  | "d6"
+  | "d8"
+  | "d10"
+  | "d12"
+  | "d20"
+  | "d100";
+
 type EvalResult = "success" | "partial" | "failure";
 
 export type ResolutionContext = {
@@ -44,44 +45,64 @@ type Props = {
 };
 
 // ------------------------------------------------------------
-// Difficulty mapping (transparent + visible)
+// Difficulty + recommendation mapping
 // ------------------------------------------------------------
 
 function difficultyFor(kind?: ResolutionContext["optionKind"]) {
   switch (kind) {
     case "safe":
-      return { dc: 0, justification: "Safe action" };
+      return { dc: 4, justification: "Low-impact, safe action", recommend: "d4" };
     case "environmental":
-      return { dc: 6, justification: "Environmental uncertainty" };
+      return {
+        dc: 6,
+        justification: "Environmental uncertainty",
+        recommend: "d6",
+      };
     case "risky":
-      return { dc: 10, justification: "Risky action" };
+      return { dc: 10, justification: "Risky action", recommend: "d10" };
     case "contested":
-      return { dc: 14, justification: "Contested action" };
+      return {
+        dc: 14,
+        justification: "Contested or opposed action",
+        recommend: "d20",
+      };
     default:
-      return { dc: 10, justification: "Default risk" };
+      return { dc: 8, justification: "Uncertain action", recommend: "d8" };
   }
 }
 
-function rollDice(mode: DiceMode) {
-  if (mode === "d20") return Math.ceil(Math.random() * 20);
-  return Math.ceil(Math.random() * 6) + Math.ceil(Math.random() * 6);
+// ------------------------------------------------------------
+// Dice rolling
+// ------------------------------------------------------------
+
+function rollDice(mode: DiceMode): number {
+  switch (mode) {
+    case "d4":
+      return Math.ceil(Math.random() * 4);
+    case "d6":
+      return Math.ceil(Math.random() * 6);
+    case "d8":
+      return Math.ceil(Math.random() * 8);
+    case "d10":
+      return Math.ceil(Math.random() * 10);
+    case "d12":
+      return Math.ceil(Math.random() * 12);
+    case "d20":
+      return Math.ceil(Math.random() * 20);
+    case "d100":
+      return Math.ceil(Math.random() * 100);
+  }
 }
 
+// ------------------------------------------------------------
+// Evaluation logic (system-agnostic)
+// ------------------------------------------------------------
+
 function evaluateRoll(
-  mode: DiceMode,
   roll: number,
   dc: number
 ): EvalResult {
-  if (dc === 0) return "success";
-
-  if (mode === "d20") {
-    if (roll >= dc) return "success";
-    if (roll >= dc - 3) return "partial";
-    return "failure";
-  }
-
-  // 2d6 bands
-  if (roll >= dc + 2) return "success";
+  if (roll >= dc + 4) return "success";
   if (roll >= dc) return "partial";
   return "failure";
 }
@@ -93,22 +114,19 @@ export default function ResolutionDraftPanel({
   role,
   onRecord,
 }: Props) {
-  const { dc, justification } = difficultyFor(context.optionKind);
+  const { dc, justification, recommend } = difficultyFor(context.optionKind);
 
-  const [diceMode, setDiceMode] = useState<DiceMode>("d20");
+  const [diceMode, setDiceMode] = useState<DiceMode>(recommend);
   const [roll, setRoll] = useState<number | null>(null);
   const [manual, setManual] = useState(false);
   const [manualValue, setManualValue] = useState<number>(0);
 
   const [evaluation, setEvaluation] = useState<EvalResult | null>(null);
-
   const [draft, setDraft] = useState("");
-  const [audit, setAudit] = useState<string[]>([
-    "Drafted by Solace",
-  ]);
+  const [audit, setAudit] = useState<string[]>(["Drafted by Solace"]);
 
   // ----------------------------------------------------------
-  // Initial Solace draft (on option select)
+  // Initial Solace draft
   // ----------------------------------------------------------
 
   useEffect(() => {
@@ -118,7 +136,8 @@ export default function ResolutionDraftPanel({
     setAudit(["Drafted by Solace"]);
     setRoll(null);
     setEvaluation(null);
-  }, [context.optionDescription]);
+    setDiceMode(recommend);
+  }, [context.optionDescription, recommend]);
 
   // ----------------------------------------------------------
   // Roll dice
@@ -128,7 +147,7 @@ export default function ResolutionDraftPanel({
     const value = manual ? manualValue : rollDice(diceMode);
     setRoll(value);
 
-    const result = evaluateRoll(diceMode, value, dc);
+    const result = evaluateRoll(value, dc);
     setEvaluation(result);
 
     setDraft(() => {
@@ -136,7 +155,7 @@ export default function ResolutionDraftPanel({
         case "success":
           return `The action succeeds. ${context.optionDescription} resolves cleanly.`;
         case "partial":
-          return `The action partially succeeds. ${context.optionDescription} resolves, but with complications or cost.`;
+          return `The action partially succeeds. ${context.optionDescription} resolves, but with complications.`;
         case "failure":
           return `The action fails. ${context.optionDescription} does not resolve as intended.`;
       }
@@ -189,18 +208,25 @@ export default function ResolutionDraftPanel({
     <CardSection title="Resolution Draft">
       <p className="muted">
         🎲 Difficulty {dc} — {justification}
+        <br />
+        Recommended die: <strong>{recommend}</strong>
       </p>
 
       <label>
-        Dice system:&nbsp;
+        Dice:&nbsp;
         <select
           value={diceMode}
           onChange={(e) =>
             setDiceMode(e.target.value as DiceMode)
           }
         >
+          <option value="d4">d4</option>
+          <option value="d6">d6</option>
+          <option value="d8">d8</option>
+          <option value="d10">d10</option>
+          <option value="d12">d12</option>
           <option value="d20">d20</option>
-          <option value="2d6">2d6</option>
+          <option value="d100">d100</option>
         </select>
       </label>
 
