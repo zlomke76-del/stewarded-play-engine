@@ -232,11 +232,12 @@ export default function ClassicFantasyPage() {
       </CardSection>
 
       {/* ---------- DUNGEON PRESSURE (ADVISORY ONLY) ---------- */}
-      <DungeonPressurePanel
-        turn={turn}
-        currentRoomId={currentRoomId}
-        events={state.events}
-      />
+    <DungeonPressurePanel
+      turn={turn}
+      currentRoomId={currentRoomId}
+      events={state.events}
+      parsedCommand={parsed}
+    />
 
       {/* ---------- COMMAND ---------- */}
       <CardSection title="Command">
