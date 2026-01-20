@@ -75,10 +75,6 @@ function inferRoomName(text: string): string {
   if (t.includes("defend")) return "Camp Perimeter";
   if (t.includes("move")) return "New Camp";
 
-  if (t.includes("hallway")) return "Stone Hallway";
-  if (t.includes("room")) return "Unmarked Chamber";
-  if (t.includes("door")) return "Threshold Chamber";
-
   return "The Wilds";
 }
 
@@ -100,9 +96,6 @@ export default function ResolutionDraftPanel({
   const [roll, setRoll] = useState<number | null>(null);
   const [rollSource, setRollSource] = useState<RollSource>("auto");
 
-  // IMPORTANT:
-  // Draft text is now intentionally neutral and short.
-  // Narrative synthesis should happen at the caller (game) level.
   const draft = `Outcome resolved: ${context.optionDescription}`;
 
   const [audit, setAudit] = useState<string[]>([
@@ -159,19 +152,84 @@ export default function ResolutionDraftPanel({
   }, [autoResolve, roll]);
 
   // ----------------------------------------------------------
-  // MANUAL (UNCHANGED BEHAVIOR)
+  // AUTO-RESOLVE UI (SHOW THE DICE)
   // ----------------------------------------------------------
 
-  function handleAutoRoll() {
-    const max = diceMax(diceMode);
-    const r = Math.ceil(Math.random() * max);
-    setRoll(r);
-    setRollSource("auto");
-    setAudit((a) => [
-      ...a,
-      `Dice rolled (${diceMode}, auto): ${r}`,
-    ]);
+  if (autoResolve) {
+    const outcome =
+      roll === null || dc === 0
+        ? "No roll required"
+        : roll >= dc
+        ? "Success"
+        : "Setback";
+
+    return (
+      <section
+        style={{
+          border: "1px dashed #666",
+          padding: 12,
+          marginTop: 12,
+          opacity: 0.9,
+        }}
+      >
+        <p className="muted">
+          Solace weighs risk… rolls fate… commits canon.
+        </p>
+
+        {roll !== null && (
+          <p>
+            🎲 <strong>{diceMode}</strong> rolled{" "}
+            <strong>{roll}</strong> vs DC{" "}
+            <strong>{dc}</strong> —{" "}
+            <strong>{outcome}</strong>
+          </p>
+        )}
+      </section>
+    );
   }
+
+  // ----------------------------------------------------------
+  // ARBITER UI (UNCHANGED)
+  // ----------------------------------------------------------
+
+  return (
+    <section style={{ border: "1px dashed #666", padding: 16 }}>
+      <h3>Resolution Draft</h3>
+
+      <p className="muted">
+        Difficulty {dc} — {justification}
+      </p>
+
+      <button
+        onClick={() => {
+          const max = diceMax(diceMode);
+          const r = Math.ceil(Math.random() * max);
+          setRoll(r);
+          setRollSource("auto");
+          setAudit((a) => [
+            ...a,
+            `Dice rolled (${diceMode}, auto): ${r}`,
+          ]);
+        }}
+      >
+        Roll (Auto)
+      </button>
+
+      {roll !== null && (
+        <p>
+          Result: <strong>{roll}</strong> ({rollSource})
+        </p>
+      )}
+
+      {role === "arbiter" && (
+        <button onClick={() => handleRecord()}>
+          Record Outcome
+        </button>
+      )}
+
+      <p className="muted">{audit.join(" · ")}</p>
+    </section>
+  );
 
   function handleRecord() {
     onRecord({
@@ -191,48 +249,4 @@ export default function ResolutionDraftPanel({
       },
     });
   }
-
-  // ----------------------------------------------------------
-  // AUTO-RESOLVE UI (MINIMAL, BUT LEGIBLE)
-  // ----------------------------------------------------------
-
-  if (autoResolve) {
-    return (
-      <section style={{ opacity: 0.85, marginTop: 12 }}>
-        <p className="muted">
-          Solace weighs risk… rolls fate… commits canon.
-        </p>
-      </section>
-    );
-  }
-
-  // ----------------------------------------------------------
-  // ARBITER UI (UNCHANGED)
-  // ----------------------------------------------------------
-
-  return (
-    <section style={{ border: "1px dashed #666", padding: 16 }}>
-      <h3>Resolution Draft</h3>
-
-      <p className="muted">
-        Difficulty {dc} — {justification}
-      </p>
-
-      <button onClick={handleAutoRoll}>Roll (Auto)</button>
-
-      {roll !== null && (
-        <p>
-          Result: <strong>{roll}</strong> ({rollSource})
-        </p>
-      )}
-
-      {role === "arbiter" && (
-        <button onClick={handleRecord}>
-          Record Outcome
-        </button>
-      )}
-
-      <p className="muted">{audit.join(" · ")}</p>
-    </section>
-  );
 }
