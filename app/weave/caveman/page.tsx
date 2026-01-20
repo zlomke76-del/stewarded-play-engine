@@ -31,8 +31,9 @@ import ModeHeader from "@/components/layout/ModeHeader";
 import CardSection from "@/components/layout/CardSection";
 import Disclaimer from "@/components/layout/Disclaimer";
 
-// 🪨 NEW
+// 🪨 Cave system
 import { WindscarCave } from "@/lib/world/caves/WindscarCave";
+import { evolveCaveState } from "@/lib/world/caves/evolveCaveState";
 
 // ------------------------------------------------------------
 // Risk inference
@@ -76,36 +77,31 @@ function inferOptionKind(description: string): OptionKind {
 }
 
 // ------------------------------------------------------------
-// Cave resolution logic (Solace-controlled)
+// Cave resolution logic (Solace-only)
 // ------------------------------------------------------------
 
-function resolveCaveNode(
-  option: Option,
-  turn: number
-) {
-  const text = option.description.toLowerCase();
+function resolveCaveNode(option: Option) {
+  const t = option.description.toLowerCase();
 
-  // Solace enters Windscar Cave only on
-  // shelter / defense / rest-implied intents
   const shouldEnterCave =
-    text.includes("defend") ||
-    text.includes("fortify") ||
-    text.includes("rest") ||
-    text.includes("hold position") ||
-    text.includes("wait");
+    t.includes("defend") ||
+    t.includes("fortify") ||
+    t.includes("rest") ||
+    t.includes("wait") ||
+    t.includes("hold");
 
   if (!shouldEnterCave) return null;
 
-  const entryNode =
+  const entry =
     WindscarCave.nodes[WindscarCave.entryNodeId];
 
   return {
     caveId: WindscarCave.caveId,
-    nodeId: entryNode.nodeId,
-    nodeName: entryNode.name,
-    depth: entryNode.depth,
-    traits: entryNode.traits,
-    state: entryNode.state,
+    nodeId: entry.nodeId,
+    nodeName: entry.name,
+    depth: entry.depth,
+    traits: entry.traits,
+    state: entry.state,
   };
 }
 
@@ -119,9 +115,7 @@ export default function CavemanPage() {
   const [turn, setTurn] = useState(0);
 
   const [command, setCommand] = useState("");
-  const [options, setOptions] = useState<Option[] | null>(
-    null
-  );
+  const [options, setOptions] = useState<Option[] | null>(null);
   const [selectedOption, setSelectedOption] =
     useState<Option | null>(null);
 
@@ -152,22 +146,20 @@ export default function CavemanPage() {
   function handleSubmitCommand() {
     if (!command.trim()) return;
 
-    const parsedAction = parseAction(
+    const parsed = parseAction(
       "player_1",
       command
     );
     const optionSet =
-      generateOptions(parsedAction);
+      generateOptions(parsed);
 
     const resolved =
       optionSet?.options?.length > 0
         ? optionSet.options
-        : ([
-            {
-              id: "fallback",
-              description: `Proceed cautiously: ${command}`,
-            },
-          ] as Option[]);
+        : ([{
+            id: "fallback",
+            description: `Proceed cautiously: ${command}`,
+          }] as Option[]);
 
     setOptions([...resolved]);
   }
@@ -190,13 +182,65 @@ export default function CavemanPage() {
     const nextTurn = turn + 1;
     setTurn(nextTurn);
 
-    // 🪨 NEW — Solace checks for cave entry
-    const caveResolution =
-      selectedOption &&
-      resolveCaveNode(
-        selectedOption,
-        nextTurn
+    // 🔎 Detect last cave state
+    const lastCaveEvent = [...state.events]
+      .reverse()
+      .find(
+        (e) =>
+          e.type === "OUTCOME" &&
+          (e as any).payload?.world
+            ?.nodeType === "cave"
+      ) as any | undefined;
+
+    const previousCave =
+      lastCaveEvent?.payload?.world;
+
+    // 🔥 Solace signals
+    const fireUsed =
+      payload.description
+        .toLowerCase()
+        .includes("fire") ||
+      payload.audit.some((a) =>
+        a.toLowerCase().includes("fire")
       );
+
+    const successfulHunt =
+      payload.world?.resources?.foodDelta &&
+      payload.world.resources.foodDelta > 0;
+
+    const rested =
+      selectedOption?.description
+        .toLowerCase()
+        .includes("rest") ||
+      selectedOption?.description
+        .toLowerCase()
+        .includes("wait");
+
+    // 🪨 Cave entry
+    const caveEntry =
+      selectedOption &&
+      resolveCaveNode(selectedOption);
+
+    // 🪨 Cave evolution
+    let evolvedState =
+      previousCave?.state;
+
+    if (previousCave) {
+      evolvedState = evolveCaveState(
+        {
+          caveId: previousCave.caveId,
+          nodeId: previousCave.roomId,
+          currentState: previousCave.state,
+          traits: previousCave.traits ?? [],
+        },
+        {
+          fireUsed,
+          successfulHunt,
+          rested,
+          turn: nextTurn,
+        }
+      );
+    }
 
     setState((prev) =>
       recordEvent(prev, {
@@ -210,18 +254,21 @@ export default function CavemanPage() {
             ...payload.audit,
             "The Weave enforced",
           ],
-          world: caveResolution
+          world: caveEntry
             ? {
                 primary: "location",
-                roomId:
-                  caveResolution.nodeId,
-                caveId:
-                  caveResolution.caveId,
+                roomId: caveEntry.nodeId,
+                caveId: caveEntry.caveId,
                 nodeType: "cave",
-                depth: caveResolution.depth,
-                traits:
-                  caveResolution.traits,
-                state: caveResolution.state,
+                depth: caveEntry.depth,
+                traits: caveEntry.traits,
+                state: caveEntry.state,
+                turn: nextTurn,
+              }
+            : previousCave
+            ? {
+                ...previousCave,
+                state: evolvedState,
                 turn: nextTurn,
               }
             : {
@@ -232,7 +279,7 @@ export default function CavemanPage() {
       })
     );
 
-    // reset forward intent only
+    // Reset forward inputs
     setCommand("");
     setOptions(null);
   }
@@ -282,7 +329,7 @@ export default function CavemanPage() {
       {selectedOption && (
         <CardSection title="Last Turn">
           <ResolutionDraftPanel
-            key={turn} // 🔑 ensures turn progression
+            key={turn} // 🔑 forces progression
             role="arbiter"
             autoResolve
             context={{
