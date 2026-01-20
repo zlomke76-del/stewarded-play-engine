@@ -1,30 +1,13 @@
 // app/(protected)/api/resolve/route.ts
 
 import { NextResponse } from "next/server";
-import { cookies } from "next/headers";
-import { createServerClient } from "@supabase/ssr";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 export async function POST(req: Request) {
-  // 🔑 cookies() is ASYNC in Next.js 16 route handlers
-  const cookieStore = await cookies();
+  const res = NextResponse.next();
 
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        get(name: string) {
-          return cookieStore.get(name)?.value;
-        },
-        set() {
-          // 🚫 Do not mutate cookies in route handlers
-        },
-        remove() {
-          // 🚫 Do not mutate cookies in route handlers
-        },
-      },
-    }
-  );
+  // ✅ Use the Solace canonical helper
+  const supabase = createSupabaseServerClient(req, res);
 
   // 🔐 Auth check
   const {
@@ -38,6 +21,6 @@ export async function POST(req: Request) {
     );
   }
 
-  // ---- normal logic continues here ----
+  // ---- route logic continues here ----
   return NextResponse.json({ ok: true });
 }
