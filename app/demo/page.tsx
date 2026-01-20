@@ -25,6 +25,7 @@ import { exportCanon } from "@/lib/export/exportCanon";
 
 import ResolutionDraftPanel from "@/components/resolution/ResolutionDraftPanel";
 import NextActionHint from "@/components/NextActionHint";
+import WorldLedgerPanel from "@/components/world/WorldLedgerPanel";
 
 import StewardedShell from "@/components/layout/StewardedShell";
 import ModeHeader from "@/components/layout/ModeHeader";
@@ -293,7 +294,7 @@ export default function DemoPage() {
         </CardSection>
       )}
 
-      {/* ---------- RESOLUTION DRAFT (DICE LIVE HERE) ---------- */}
+      {/* ---------- RESOLUTION DRAFT ---------- */}
       {selectedOption && (
         <ResolutionDraftPanel
           role={role}
@@ -309,6 +310,9 @@ export default function DemoPage() {
       )}
 
       <NextActionHint state={state} />
+
+      {/* ---------- WORLD LEDGER (READ-ONLY) ---------- */}
+      <WorldLedgerPanel events={state.events} />
 
       <CardSection
         title="Canon (Confirmed Narrative)"
