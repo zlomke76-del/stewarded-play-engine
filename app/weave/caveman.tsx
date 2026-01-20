@@ -5,10 +5,10 @@
 // ------------------------------------------------------------
 //
 // Invariants:
-// - Player selects intent and dice
-// - Solace rolls and resolves
+// - Player selects intent
+// - Solace resolves (no human arbiter)
+// - Dice are advisory but auto-rolled
 // - Canon is committed automatically
-// - No human arbiter
 // ------------------------------------------------------------
 
 import { useMemo, useState } from "react";
@@ -29,6 +29,48 @@ import StewardedShell from "@/components/layout/StewardedShell";
 import ModeHeader from "@/components/layout/ModeHeader";
 import CardSection from "@/components/layout/CardSection";
 import Disclaimer from "@/components/layout/Disclaimer";
+
+// ------------------------------------------------------------
+// Risk inference (derived, not declared)
+// ------------------------------------------------------------
+
+type OptionKind =
+  | "safe"
+  | "environmental"
+  | "risky"
+  | "contested";
+
+function inferOptionKind(description: string): OptionKind {
+  const t = description.toLowerCase();
+
+  if (
+    t.includes("attack") ||
+    t.includes("fight") ||
+    t.includes("defend") ||
+    t.includes("enemy")
+  ) {
+    return "contested";
+  }
+
+  if (
+    t.includes("hunt") ||
+    t.includes("travel") ||
+    t.includes("move") ||
+    t.includes("scout")
+  ) {
+    return "environmental";
+  }
+
+  if (
+    t.includes("risk") ||
+    t.includes("sneak") ||
+    t.includes("steal")
+  ) {
+    return "risky";
+  }
+
+  return "safe";
+}
 
 // ------------------------------------------------------------
 
@@ -77,7 +119,7 @@ export default function CavemanPage() {
   }
 
   // ----------------------------------------------------------
-  // Solace auto-records canon (governed)
+  // Solace auto-records canon
   // ----------------------------------------------------------
 
   function handleAutoRecord(payload: {
@@ -132,14 +174,14 @@ export default function CavemanPage() {
   // ----------------------------------------------------------
 
   return (
-    <StewardedShell theme="primitive">
+    <StewardedShell theme="dark">
       <ModeHeader
         title="Caveman — Survival (The Weave)"
         onShare={handleShare}
         roles={[
           {
             label: "Player",
-            description: "Selects intent and risk",
+            description: "Selects intent",
           },
           {
             label: "Solace",
@@ -186,7 +228,9 @@ export default function CavemanPage() {
           role="arbiter" // UI reuse only; authority is locked
           context={{
             optionDescription: selectedOption.description,
-            optionKind: selectedOption.kind,
+            optionKind: inferOptionKind(
+              selectedOption.description
+            ),
           }}
           onRecord={handleAutoRecord}
           autoCommit
