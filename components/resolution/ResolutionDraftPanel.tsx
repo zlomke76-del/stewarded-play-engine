@@ -11,13 +11,8 @@
 
 import { useMemo, useState } from "react";
 
-type DiceMode =
-  | "d4"
-  | "d6"
-  | "d8"
-  | "d10"
-  | "d12"
-  | "d20";
+type DiceMode = "d4" | "d6" | "d8" | "d10" | "d12" | "d20";
+type RollSource = "auto" | "manual";
 
 export type ResolutionContext = {
   optionDescription: string;
@@ -36,6 +31,7 @@ type Props = {
       roll: number | null;
       dc: number;
       justification: string;
+      source: RollSource;
     };
     audit: string[];
     world?: {
@@ -76,6 +72,10 @@ function inferRoomName(text: string): string {
   return "Unspecified Location";
 }
 
+function diceMax(mode: DiceMode): number {
+  return parseInt(mode.replace("d", ""), 10);
+}
+
 // ------------------------------------------------------------
 
 export default function ResolutionDraftPanel({
@@ -87,6 +87,7 @@ export default function ResolutionDraftPanel({
 
   const [diceMode, setDiceMode] = useState<DiceMode>("d20");
   const [roll, setRoll] = useState<number | null>(null);
+  const [rollSource, setRollSource] = useState<RollSource>("auto");
 
   const [draft, setDraft] = useState(
     `The situation resolves based on the chosen path: ${context.optionDescription}.`
@@ -101,24 +102,29 @@ export default function ResolutionDraftPanel({
     [context.optionDescription]
   );
 
-  const [commitLocation, setCommitLocation] =
-    useState<boolean>(true);
-
-  const [roomName, setRoomName] =
-    useState<string>(inferredRoomName);
+  const [commitLocation, setCommitLocation] = useState(true);
+  const [roomName, setRoomName] = useState(inferredRoomName);
 
   // ---------------- TRAP ----------------
 
   const [trapPresent, setTrapPresent] = useState(false);
-  const [trapState, setTrapState] =
-    useState<TrapState>("armed");
+  const [trapState, setTrapState] = useState<TrapState>("armed");
 
   // ------------------------------------------------
 
-  function handleRoll() {
-    const r = Math.ceil(Math.random() * 20);
+  function handleAutoRoll() {
+    const max = diceMax(diceMode);
+    const r = Math.ceil(Math.random() * max);
     setRoll(r);
-    setAudit((a) => [...a, `Dice rolled (${diceMode}): ${r}`]);
+    setRollSource("auto");
+    setAudit((a) => [...a, `Dice rolled (${diceMode}, auto): ${r}`]);
+  }
+
+  function handleManualRoll(value: number) {
+    if (value < 1 || value > diceMax(diceMode)) return;
+    setRoll(value);
+    setRollSource("manual");
+    setAudit((a) => [...a, `Dice entered (${diceMode}, manual): ${value}`]);
   }
 
   function handleRecord() {
@@ -129,6 +135,7 @@ export default function ResolutionDraftPanel({
         roll,
         dc,
         justification,
+        source: rollSource,
       },
       audit: [...audit, "Recorded by Arbiter"],
       world: commitLocation
@@ -167,8 +174,48 @@ export default function ResolutionDraftPanel({
         Difficulty {dc} — {justification}
       </p>
 
-      <button onClick={handleRoll}>Roll Dice</button>
-      {roll !== null && <span> Result: {roll}</span>}
+      {/* -------- DICE CONTROL -------- */}
+      <div style={{ marginBottom: 12 }}>
+        <label>
+          Dice:&nbsp;
+          <select
+            value={diceMode}
+            onChange={(e) => {
+              setDiceMode(e.target.value as DiceMode);
+              setRoll(null);
+            }}
+          >
+            <option value="d4">d4</option>
+            <option value="d6">d6</option>
+            <option value="d8">d8</option>
+            <option value="d10">d10</option>
+            <option value="d12">d12</option>
+            <option value="d20">d20</option>
+          </select>
+        </label>
+
+        <button style={{ marginLeft: 8 }} onClick={handleAutoRoll}>
+          Roll (Auto)
+        </button>
+
+        <label style={{ marginLeft: 12 }}>
+          Manual:&nbsp;
+          <input
+            type="number"
+            min={1}
+            max={diceMax(diceMode)}
+            onChange={(e) => handleManualRoll(Number(e.target.value))}
+            placeholder="—"
+            style={{ width: 60 }}
+          />
+        </label>
+
+        {roll !== null && (
+          <span style={{ marginLeft: 12 }}>
+            Result: <strong>{roll}</strong> ({rollSource})
+          </span>
+        )}
+      </div>
 
       {/* -------- LOCATION COMMIT -------- */}
       <hr />
@@ -178,9 +225,7 @@ export default function ResolutionDraftPanel({
         <input
           type="checkbox"
           checked={commitLocation}
-          onChange={(e) =>
-            setCommitLocation(e.target.checked)
-          }
+          onChange={(e) => setCommitLocation(e.target.checked)}
         />{" "}
         This outcome establishes party location
       </label>
@@ -191,9 +236,7 @@ export default function ResolutionDraftPanel({
             Room name:&nbsp;
             <input
               value={roomName}
-              onChange={(e) =>
-                setRoomName(e.target.value)
-              }
+              onChange={(e) => setRoomName(e.target.value)}
             />
           </label>
           <p className="muted">
@@ -208,9 +251,7 @@ export default function ResolutionDraftPanel({
         <input
           type="checkbox"
           checked={trapPresent}
-          onChange={(e) =>
-            setTrapPresent(e.target.checked)
-          }
+          onChange={(e) => setTrapPresent(e.target.checked)}
         />{" "}
         Trap present
       </label>
@@ -218,11 +259,7 @@ export default function ResolutionDraftPanel({
       {trapPresent && (
         <select
           value={trapState}
-          onChange={(e) =>
-            setTrapState(
-              e.target.value as TrapState
-            )
-          }
+          onChange={(e) => setTrapState(e.target.value as TrapState)}
         >
           <option value="armed">Armed</option>
           <option value="sprung">Sprung</option>
@@ -238,10 +275,7 @@ export default function ResolutionDraftPanel({
       />
 
       {role === "arbiter" && (
-        <button
-          style={{ marginTop: 8 }}
-          onClick={handleRecord}
-        >
+        <button style={{ marginTop: 8 }} onClick={handleRecord}>
           Record Outcome
         </button>
       )}
