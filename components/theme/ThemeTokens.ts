@@ -5,7 +5,7 @@
 // No logic, no DOM, no CSS.
 // ------------------------------------------------------------
 
-export type ThemeName = "neutral" | "fantasy" | "dark";
+export type ThemeName = "neutral" | "fantasy" | "dark" | "primitive";
 
 export type ThemeTokens = {
   name: ThemeName;
