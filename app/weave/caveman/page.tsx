@@ -114,6 +114,10 @@ export default function CavemanPage() {
 
   const [command, setCommand] = useState("");
   const [options, setOptions] = useState<Option[] | null>(null);
+
+  // IMPORTANT:
+  // selectedOption persists across resolution
+  // and only changes when a NEW option is chosen
   const [selectedOption, setSelectedOption] =
     useState<Option | null>(null);
 
@@ -153,9 +157,11 @@ export default function CavemanPage() {
             },
           ] as Option[]);
 
-    // clone readonly → mutable for state
+    // clone readonly → mutable
     setOptions([...resolvedOptions]);
-    setSelectedOption(null);
+
+    // DO NOT clear selectedOption here
+    // It represents the last resolved turn
   }
 
   // ----------------------------------------------------------
@@ -204,9 +210,10 @@ export default function CavemanPage() {
       })
     );
 
+    // Reset ONLY intent + options
     setCommand("");
     setOptions(null);
-    setSelectedOption(null);
+    // selectedOption intentionally persists
   }
 
   // ----------------------------------------------------------
@@ -242,11 +249,34 @@ export default function CavemanPage() {
         <strong>{currentLocation}</strong>
       </CardSection>
 
+      {/* ---------------- LAST TURN (PERSISTENT) ---------------- */}
+
+      {selectedOption && (
+        <CardSection title="Last Turn">
+          <ResolutionDraftPanel
+            role="arbiter" // structural only
+            autoResolve
+            context={{
+              optionDescription:
+                selectedOption.description,
+              optionKind: inferOptionKind(
+                selectedOption.description
+              ),
+            }}
+            onRecord={handleAutoRecord}
+          />
+        </CardSection>
+      )}
+
+      {/* ---------------- NEW INTENT ---------------- */}
+
       <CardSection title="Intent">
         <textarea
           rows={3}
           value={command}
-          onChange={(e) => setCommand(e.target.value)}
+          onChange={(e) =>
+            setCommand(e.target.value)
+          }
           placeholder="HUNT, SCOUT, DEFEND, MOVE CAMP…"
         />
         <button onClick={handleSubmitCommand}>
@@ -260,7 +290,9 @@ export default function CavemanPage() {
             {options.map((opt) => (
               <li key={opt.id}>
                 <button
-                  onClick={() => setSelectedOption(opt)}
+                  onClick={() =>
+                    setSelectedOption(opt)
+                  }
                 >
                   {opt.description}
                 </button>
@@ -270,19 +302,7 @@ export default function CavemanPage() {
         </CardSection>
       )}
 
-      {selectedOption && (
-        <ResolutionDraftPanel
-          role="arbiter" // structural only
-          autoResolve
-          context={{
-            optionDescription: selectedOption.description,
-            optionKind: inferOptionKind(
-              selectedOption.description
-            ),
-          }}
-          onRecord={handleAutoRecord}
-        />
-      )}
+      {/* ---------------- LEDGER ---------------- */}
 
       <WorldLedgerPanel events={state.events} />
 
