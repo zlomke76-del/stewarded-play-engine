@@ -1,21 +1,19 @@
 "use client";
 
 // ------------------------------------------------------------
-// Demo Page — Stewarded Play (Full Resolution Flow)
+// Demo Page — Stewarded Play (Resolution-Aware)
 // ------------------------------------------------------------
 
 import { useEffect, useState } from "react";
 import {
   createSession,
-  proposeChange,
-  confirmChange,
   recordEvent,
+  confirmChange,
   SessionState,
 } from "@/lib/session/SessionState";
 
 import { parseAction } from "@/lib/parser/ActionParser";
 import { generateOptions, Option } from "@/lib/options/OptionGenerator";
-import { exportCanon } from "@/lib/export/exportCanon";
 
 import DMConfirmationPanel from "@/components/dm/DMConfirmationPanel";
 import NextActionHint from "@/components/NextActionHint";
@@ -26,54 +24,57 @@ import CardSection from "@/components/layout/CardSection";
 import Disclaimer from "@/components/layout/Disclaimer";
 
 // ------------------------------------------------------------
-// Dice + Resolution helpers
+// Dice + Evaluation helpers (advisory only)
 // ------------------------------------------------------------
 
 type DiceMode = "d20" | "2d6";
-type ResolutionResult = "success" | "partial" | "failure";
+type EvalResult = "success" | "partial" | "failure";
 
-function rollDice(mode: DiceMode) {
+function rollDice(mode: DiceMode): number {
   if (mode === "d20") return Math.floor(Math.random() * 20) + 1;
   return (
-    Math.floor(Math.random() * 6) + 1 +
-    Math.floor(Math.random() * 6) + 1
+    Math.floor(Math.random() * 6) +
+    1 +
+    (Math.floor(Math.random() * 6) + 1)
   );
 }
 
-function difficultyFor(option: Option) {
-  const text = option.description.toLowerCase();
-
-  if (text.includes("simple") || text.includes("freeform")) {
-    return { dc: 0, reason: "Safe / uncontested action" };
-  }
-  if (text.includes("alter") || text.includes("change")) {
-    return { dc: 12, reason: "State-altering action" };
-  }
-  return { dc: 14, reason: "Contested or risky action" };
-}
-
 function evaluateRoll(
+  mode: DiceMode,
   roll: number,
   dc: number
-): ResolutionResult {
-  if (dc === 0) return "success";
-  if (roll >= dc) return "success";
-  if (roll >= dc - 3) return "partial";
-  return "failure";
-}
-
-function synthesizeDraft(
-  option: Option,
-  result: ResolutionResult
-) {
-  switch (result) {
-    case "success":
-      return `The action succeeds. ${option.description} resolves cleanly.`;
-    case "partial":
-      return `The action partially succeeds. ${option.description} resolves, but with complications or cost.`;
-    case "failure":
-      return `The action fails. ${option.description} does not resolve as intended, and the situation escalates.`;
+): { result: EvalResult; justification: string } {
+  if (mode === "d20") {
+    return roll >= dc
+      ? {
+          result: "success",
+          justification: `Rolled ${roll} ≥ DC ${dc}`,
+        }
+      : {
+          result: "failure",
+          justification: `Rolled ${roll} < DC ${dc}`,
+        };
   }
+
+  // 2d6 bands
+  if (roll >= dc + 2) {
+    return {
+      result: "success",
+      justification: `Rolled ${roll} ≥ DC ${dc}+2 (strong success band)`,
+    };
+  }
+
+  if (roll >= dc) {
+    return {
+      result: "partial",
+      justification: `Rolled ${roll} ≥ DC ${dc} (partial band)`,
+    };
+  }
+
+  return {
+    result: "failure",
+    justification: `Rolled ${roll} < DC ${dc}`,
+  };
 }
 
 // ------------------------------------------------------------
@@ -86,17 +87,23 @@ export default function DemoPage() {
   const [playerInput, setPlayerInput] = useState("");
   const [parsed, setParsed] = useState<any>(null);
   const [options, setOptions] = useState<Option[] | null>(null);
-
   const [selectedOption, setSelectedOption] = useState<Option | null>(null);
 
-  // Resolution Draft state
+  // Resolution state
   const [diceMode, setDiceMode] = useState<DiceMode>("d20");
-  const [rolled, setRolled] = useState<number | null>(null);
-  const [manualRoll, setManualRoll] = useState<string>("");
-  const [draftText, setDraftText] = useState("");
-  const [result, setResult] = useState<ResolutionResult | null>(null);
-  const [auditEdited, setAuditEdited] = useState(false);
+  const [dc, setDc] = useState<number>(6);
+  const [roll, setRoll] = useState<number | null>(null);
+  const [manualRoll, setManualRoll] = useState(false);
+  const [manualValue, setManualValue] = useState<number>(0);
 
+  const [draftText, setDraftText] = useState("");
+  const [evaluation, setEvaluation] = useState<{
+    result: EvalResult;
+    justification: string;
+  } | null>(null);
+
+  // ----------------------------------------------------------
+  // Player submits action
   // ----------------------------------------------------------
 
   function handlePlayerAction() {
@@ -107,48 +114,52 @@ export default function DemoPage() {
 
     setParsed(parsedAction);
     setOptions([...optionSet.options]);
-
-    // reset resolution
     setSelectedOption(null);
-    setRolled(null);
+    setRoll(null);
+    setEvaluation(null);
     setDraftText("");
-    setResult(null);
-    setAuditEdited(false);
   }
+
+  // ----------------------------------------------------------
+  // Option selected → prepare resolution
+  // ----------------------------------------------------------
 
   function handleSelectOption(option: Option) {
     setSelectedOption(option);
-
-    setState((prev) =>
-      proposeChange(prev, {
-        id: crypto.randomUUID(),
-        description: option.description,
-        proposedBy: "system",
-        createdAt: Date.now(),
-      })
+    setDc(6); // neutral default; not a ruleset
+    setDraftText(
+      `The situation follows the chosen path: ${option.description}.`
     );
   }
 
+  // ----------------------------------------------------------
+  // Roll dice (manual or automatic)
+  // ----------------------------------------------------------
+
   function handleRoll() {
-    const value =
-      manualRoll.trim() !== ""
-        ? Number(manualRoll)
-        : rollDice(diceMode);
+    const value = manualRoll ? manualValue : rollDice(diceMode);
+    setRoll(value);
 
-    if (Number.isNaN(value)) return;
+    const evalResult = evaluateRoll(diceMode, value, dc);
+    setEvaluation(evalResult);
 
-    setRolled(value);
-
-    if (!selectedOption) return;
-
-    const { dc } = difficultyFor(selectedOption);
-    const outcome = evaluateRoll(value, dc);
-
-    setResult(outcome);
-    setDraftText(synthesizeDraft(selectedOption, outcome));
+    setDraftText(() => {
+      switch (evalResult.result) {
+        case "success":
+          return `The action succeeds. ${selectedOption?.description} resolves cleanly.`;
+        case "partial":
+          return `The action partially succeeds. ${selectedOption?.description} resolves, but with complications.`;
+        case "failure":
+          return `The action fails. ${selectedOption?.description} does not resolve as intended.`;
+      }
+    });
   }
 
-  function handleRecordOutcome() {
+  // ----------------------------------------------------------
+  // Record Outcome → Canon
+  // ----------------------------------------------------------
+
+  function handleRecord() {
     if (!draftText.trim()) return;
 
     setState((prev) =>
@@ -161,30 +172,27 @@ export default function DemoPage() {
           description: draftText,
           dice: {
             mode: diceMode,
-            roll: rolled,
-            result,
+            roll,
+            dc,
+            evaluation,
+            manual: manualRoll,
           },
         },
       })
     );
   }
 
-  function handleShare() {
-    navigator.clipboard.writeText(exportCanon(state.events));
-    alert("Canon copied to clipboard.");
-  }
-
+  // ----------------------------------------------------------
+  // UI
   // ----------------------------------------------------------
 
   return (
     <StewardedShell>
       <ModeHeader
         title="Stewarded Play — Full Flow"
-        onShare={handleShare}
         roles={[
           { label: "Player", description: "Declares intent" },
           { label: "Solace", description: "Drafts neutral resolution" },
-          { label: "DM", description: "Records canon" },
         ]}
       />
 
@@ -220,89 +228,76 @@ export default function DemoPage() {
 
       {selectedOption && (
         <CardSection title="Resolution Draft">
-          {(() => {
-            const { dc, reason } = difficultyFor(selectedOption);
-            return (
-              <>
-                <p>
-                  <strong>Difficulty:</strong> {dc} — {reason}
-                </p>
+          <p>
+            <strong>Difficulty:</strong> DC {dc}
+          </p>
 
-                <label>
-                  Dice system:&nbsp;
-                  <select
-                    value={diceMode}
-                    onChange={(e) =>
-                      setDiceMode(e.target.value as DiceMode)
-                    }
-                  >
-                    <option value="d20">d20</option>
-                    <option value="2d6">2d6</option>
-                  </select>
-                </label>
+          <label>
+            Dice system:{" "}
+            <select
+              value={diceMode}
+              onChange={(e) => setDiceMode(e.target.value as DiceMode)}
+            >
+              <option value="d20">d20</option>
+              <option value="2d6">2d6</option>
+            </select>
+          </label>
 
-                <br />
+          <br />
+          <label>
+            <input
+              type="checkbox"
+              checked={manualRoll}
+              onChange={(e) => setManualRoll(e.target.checked)}
+            />{" "}
+            Enter roll manually
+          </label>
 
-                <label>
-                  Manual roll override:&nbsp;
-                  <input
-                    value={manualRoll}
-                    onChange={(e) =>
-                      setManualRoll(e.target.value)
-                    }
-                    placeholder="optional"
-                  />
-                </label>
+          {manualRoll && (
+            <input
+              type="number"
+              value={manualValue}
+              onChange={(e) => setManualValue(Number(e.target.value))}
+            />
+          )}
 
-                <br />
+          <br />
+          <button onClick={handleRoll}>Roll Dice</button>
 
-                <button onClick={handleRoll}>Roll Dice</button>
+          {roll !== null && evaluation && (
+            <p>
+              <strong>Result:</strong> {evaluation.result} —{" "}
+              {evaluation.justification}
+            </p>
+          )}
 
-                {rolled !== null && (
-                  <p>
-                    <strong>Result:</strong> {rolled} (
-                    {result})
-                  </p>
-                )}
+          <textarea
+            rows={4}
+            value={draftText}
+            onChange={(e) => setDraftText(e.target.value)}
+          />
 
-                <textarea
-                  rows={4}
-                  value={draftText}
-                  onChange={(e) => {
-                    setDraftText(e.target.value);
-                    setAuditEdited(true);
-                  }}
-                  placeholder="Solace draft appears here…"
-                />
+          <button onClick={handleRecord}>Record Outcome</button>
 
-                <button onClick={handleRecordOutcome}>
-                  Record Outcome
-                </button>
-
-                <p className="muted">
-                  Drafted by Solace
-                  {auditEdited && " · Edited by Arbiter"}
-                </p>
-              </>
-            );
-          })()}
+          <p className="muted">
+            Drafted by Solace · Dice: {diceMode} ·{" "}
+            {manualRoll ? "manual" : "auto"}
+          </p>
         </CardSection>
       )}
 
+      <DMConfirmationPanel state={state} onConfirm={() => {}} />
       <NextActionHint state={state} />
 
       <CardSection title="Canon (Confirmed Narrative)" className="canon">
-        {state.events.filter((e) => e.type === "OUTCOME").length ===
-        0 ? (
+        {state.events.filter((e) => e.type === "OUTCOME").length === 0 ? (
           <p className="muted">No canon yet.</p>
         ) : (
           <ul>
             {state.events
               .filter((e) => e.type === "OUTCOME")
               .map((e) => (
-                <li key={e.id}>
-                  {String(e.payload.description)}
-                </li>
+                <li key={e.id}>{e.payload.description as string}</li>
               ))}
           </ul>
         )}
