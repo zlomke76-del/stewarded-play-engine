@@ -1,24 +1,21 @@
 "use client";
 
 // ------------------------------------------------------------
-// DungeonAwarenessPanel
+// DungeonPressurePanel.tsx
 // ------------------------------------------------------------
-// Advisory-only dungeon intelligence layer
+// Advisory-only dungeon pressure + location inference.
+// NO authority, NO mutation, NO automation.
 //
 // Purpose:
-// - Visualize dungeon state without authority
-// - Make pressure, memory, and risk legible
-// - Support Arbiter judgment (not replace it)
-//
-// NO mutation
-// NO automation
-// NO dice
+// - Make time, noise, and spatial continuity visible
+// - Recommend (never assert) current location
+// - Preserve Arbiter authority
 // ------------------------------------------------------------
 
-import React from "react";
+import React, { useMemo } from "react";
 
 // ------------------------------------------------------------
-// Types (minimal, compatible)
+// Types
 // ------------------------------------------------------------
 
 type SessionEvent = {
@@ -29,208 +26,275 @@ type SessionEvent = {
 
 type Props = {
   turn: number;
+  currentRoomId?: string; // canonical room, if any
   events: readonly SessionEvent[];
-  currentRoomId?: string;
+  parsedCommand?: any; // optional, advisory-only
 };
 
 // ------------------------------------------------------------
-// Helpers — PURE DERIVATIONS
+// Pressure
 // ------------------------------------------------------------
 
-function pressureForTurn(turn: number) {
-  if (turn < 5)
+function pressureForTurn(turn: number): {
+  label: string;
+  level: "low" | "rising" | "high" | "critical";
+  explanation: string;
+  difficultyHint: string;
+} {
+  if (turn < 5) {
     return {
-      tier: "Low",
-      bias: "+0 DC",
-      note: "Early exploration. Minimal resistance.",
+      label: "Low",
+      level: "low",
+      explanation: "Minimal time pressure.",
+      difficultyHint: "No difficulty bias suggested.",
     };
-
-  if (turn < 10)
-    return {
-      tier: "Rising",
-      bias: "+1–2 DC",
-      note: "Extended activity increases friction.",
-    };
-
-  if (turn < 15)
-    return {
-      tier: "High",
-      bias: "+3–4 DC",
-      note: "Dungeon denizens likely reacting.",
-    };
-
-  return {
-    tier: "Critical",
-    bias: "+5 DC or narrative escalation",
-    note: "Sustained presence attracts danger.",
-  };
-}
-
-function deriveAlert(events: readonly SessionEvent[]) {
-  const noisy = events.filter(
-    (e) =>
-      e.type === "OUTCOME" &&
-      typeof e.payload?.description === "string" &&
-      /(attack|fight|smash|break|shout|explode|alarm)/i.test(
-        e.payload.description
-      )
-  );
-
-  if (noisy.length === 0) {
-    return { level: "Quiet", decay: "Stable" };
   }
 
-  const lastTurn = noisy.length;
+  if (turn < 10) {
+    return {
+      label: "Rising",
+      level: "rising",
+      explanation: "Extended exploration increases risk.",
+      difficultyHint:
+        "Environmental actions may justify slightly higher difficulty.",
+    };
+  }
+
+  if (turn < 15) {
+    return {
+      label: "High",
+      level: "high",
+      explanation:
+        "Dungeon denizens may react to prolonged activity.",
+      difficultyHint:
+        "Risky or noisy actions may justify higher difficulty.",
+    };
+  }
+
   return {
-    level: "Alerted",
-    decay:
-      lastTurn > 3
-        ? "Fading if no further noise"
-        : "Fresh disturbance",
+    label: "Critical",
+    level: "critical",
+    explanation:
+      "Sustained presence makes encounters increasingly likely.",
+    difficultyHint:
+      "All actions may justify elevated difficulty or complications.",
   };
 }
 
-function deriveRooms(events: readonly SessionEvent[]) {
-  const rooms = new Set<string>();
+// ------------------------------------------------------------
+// Alert (with decay)
+// ------------------------------------------------------------
+
+function deriveAlertState(
+  events: readonly SessionEvent[],
+  turn: number
+): { status: "Quiet" | "Suspicious" | "Alerted"; explanation: string } {
+  const noisy = events
+    .filter(
+      (e) =>
+        e.type === "OUTCOME" &&
+        typeof e.payload?.description === "string" &&
+        /(attack|fight|smash|break|loud|explode)/i.test(
+          e.payload.description
+        )
+    )
+    .map((e) => e.payload?.world?.turn)
+    .filter((t): t is number => typeof t === "number");
+
+  if (noisy.length === 0) {
+    return {
+      status: "Quiet",
+      explanation: "No significant noise detected.",
+    };
+  }
+
+  const lastNoiseTurn = Math.max(...noisy);
+  const delta = turn - lastNoiseTurn;
+
+  if (delta >= 6) {
+    return {
+      status: "Quiet",
+      explanation:
+        "Earlier disturbances have faded over time.",
+    };
+  }
+
+  if (delta >= 3) {
+    return {
+      status: "Suspicious",
+      explanation:
+        "Earlier disturbances linger but are not fresh.",
+    };
+  }
+
+  return {
+    status: "Alerted",
+    explanation:
+      "Recent loud or violent activity detected.",
+  };
+}
+
+// ------------------------------------------------------------
+// Location inference (ADVISORY ONLY)
+// ------------------------------------------------------------
+
+function recommendLocation(
+  parsedCommand?: any
+): { id: string; label: string; reason: string } {
+  const text =
+    parsedCommand?.rawInput?.toLowerCase?.() ?? "";
+
+  if (
+    text.includes("open door") ||
+    text.includes("enter") ||
+    text.includes("hallway") ||
+    text.includes("passage")
+  ) {
+    return {
+      id: "room-stone-hallway",
+      label: "Stone Hallway",
+      reason:
+        "Entry or door interaction implies movement into an interior passage.",
+    };
+  }
+
+  return {
+    id: "room-dungeon-entrance",
+    label: "Dungeon Entrance",
+    reason:
+      "No interior movement recorded; default staging location.",
+  };
+}
+
+// ------------------------------------------------------------
+// Persistent world notes (room-scoped)
+// ------------------------------------------------------------
+
+function derivePersistentWorldState(
+  events: readonly SessionEvent[],
+  roomId?: string
+): string[] {
+  const notes: string[] = [];
 
   events.forEach((e) => {
-    const roomId = e.payload?.world?.roomId;
-    if (typeof roomId === "string") rooms.add(roomId);
+    if (e.type !== "OUTCOME") return;
+    const w = e.payload?.world;
+    if (!w) return;
+
+    if (roomId && w.roomId && w.roomId !== roomId) return;
+
+    if (w.lock) {
+      notes.push(
+        `Door ${w.lock.state}${
+          w.lock.keyId ? ` (Key: ${w.lock.keyId})` : ""
+        }`
+      );
+    }
+
+    if (w.trap) {
+      notes.push(`Trap ${w.trap.state}`);
+    }
   });
 
-  return Array.from(rooms);
-}
-
-function deriveLocks(events: readonly SessionEvent[]) {
-  return events
-    .map((e) => e.payload?.world)
-    .filter(Boolean)
-    .filter((w: any) => w.lock)
-    .map((w: any) => ({
-      roomId: w.roomId,
-      state: w.lock.state,
-      keyId: w.lock.keyId,
-    }));
-}
-
-function deriveTraps(events: readonly SessionEvent[]) {
-  return events
-    .map((e) => e.payload?.world)
-    .filter(Boolean)
-    .filter((w: any) => w.trap)
-    .map((w: any) => ({
-      roomId: w.roomId,
-      trapId: w.trap.id,
-      state: w.trap.state,
-    }));
+  return notes;
 }
 
 // ------------------------------------------------------------
 // Component
 // ------------------------------------------------------------
 
-export default function DungeonAwarenessPanel({
+export default function DungeonPressurePanel({
   turn,
-  events,
   currentRoomId,
+  events,
+  parsedCommand,
 }: Props) {
   const pressure = pressureForTurn(turn);
-  const alert = deriveAlert(events);
-  const rooms = deriveRooms(events);
-  const locks = deriveLocks(events);
-  const traps = deriveTraps(events);
+  const alert = deriveAlertState(events, turn);
+
+  const location = useMemo(() => {
+    if (currentRoomId) {
+      return {
+        id: currentRoomId,
+        label: currentRoomId,
+        canonical: true,
+        reason: "Confirmed by recorded canon.",
+      };
+    }
+
+    const rec = recommendLocation(parsedCommand);
+    return { ...rec, canonical: false };
+  }, [currentRoomId, parsedCommand]);
+
+  const persistent = derivePersistentWorldState(
+    events,
+    location.canonical ? location.id : undefined
+  );
 
   return (
     <section
       className="card"
       style={{
-        borderLeft: "4px solid #555",
+        borderLeft: "4px solid #666",
         background: "#111",
       }}
     >
-      <h3>🧭 Dungeon Awareness (Advisory)</h3>
+      <h3>🧭 Dungeon Pressure (Advisory)</h3>
 
-      {/* PRESSURE */}
+      {/* Location */}
+      <p>
+        <strong>📍 Current Location:</strong>{" "}
+        {location.label}
+      </p>
+      {!location.canonical && (
+        <p className="muted">
+          Recommended — not yet confirmed.
+          <br />
+          Reason: {location.reason}
+        </p>
+      )}
+
+      <hr />
+
+      {/* Turn / Pressure */}
       <p>
         <strong>Turn:</strong> {turn} ·{" "}
-        <strong>Pressure:</strong> {pressure.tier}
+        <strong>Pressure:</strong> {pressure.label}
       </p>
+      <p className="muted">{pressure.explanation}</p>
       <p className="muted">
-        Difficulty bias hint: {pressure.bias}
-      </p>
-      <p className="muted">{pressure.note}</p>
-
-      <hr />
-
-      {/* ALERT */}
-      <p>
-        <strong>Alert State:</strong> {alert.level}
-      </p>
-      <p className="muted">
-        Alert decay: {alert.decay}
+        Difficulty hint: {pressure.difficultyHint}
       </p>
 
       <hr />
 
-      {/* ROOMS */}
+      {/* Alert */}
       <p>
-        <strong>Known Rooms:</strong>
+        <strong>Alert Status:</strong> {alert.status}
+      </p>
+      <p className="muted">{alert.explanation}</p>
+
+      <hr />
+
+      {/* Persistent memory */}
+      <p>
+        <strong>Environmental Memory:</strong>
       </p>
 
-      {rooms.length === 0 ? (
-        <p className="muted">No rooms recorded yet.</p>
+      {persistent.length === 0 ? (
+        <p className="muted">
+          No notable persistent changes in this area.
+        </p>
       ) : (
         <ul>
-          {rooms.map((r) => (
-            <li key={r}>
-              {r === currentRoomId ? "📍 " : ""}
-              {r}
-            </li>
-          ))}
-        </ul>
-      )}
-
-      <hr />
-
-      {/* LOCKS */}
-      <p>
-        <strong>Locks:</strong>
-      </p>
-
-      {locks.length === 0 ? (
-        <p className="muted">No known locked doors.</p>
-      ) : (
-        <ul>
-          {locks.map((l, i) => (
-            <li key={i}>
-              Room {l.roomId}: {l.state}
-              {l.keyId ? ` (Key: ${l.keyId})` : ""}
-            </li>
-          ))}
-        </ul>
-      )}
-
-      <hr />
-
-      {/* TRAPS */}
-      <p>
-        <strong>Traps:</strong>
-      </p>
-
-      {traps.length === 0 ? (
-        <p className="muted">No known traps.</p>
-      ) : (
-        <ul>
-          {traps.map((t, i) => (
-            <li key={i}>
-              Room {t.roomId}: Trap {t.trapId} ({t.state})
-            </li>
+          {persistent.map((n, i) => (
+            <li key={i}>{n}</li>
           ))}
         </ul>
       )}
 
       <p className="muted" style={{ marginTop: 8 }}>
-        Advisory only — Arbiter retains full authority.
+        Advisory only — Arbiter determines all outcomes.
       </p>
     </section>
   );
