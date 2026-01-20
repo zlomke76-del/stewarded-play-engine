@@ -48,19 +48,36 @@ type Props = {
 };
 
 // ------------------------------------------------------------
+// Difficulty framing (language-only, non-authoritative)
+// ------------------------------------------------------------
 
 function difficultyFor(kind?: ResolutionContext["optionKind"]) {
   switch (kind) {
     case "safe":
-      return { dc: 0, justification: "Safe action" };
+      return {
+        dc: 0,
+        justification: "Low immediate risk (roll optional)",
+      };
     case "environmental":
-      return { dc: 6, justification: "Environmental uncertainty" };
+      return {
+        dc: 6,
+        justification: "Environmental uncertainty",
+      };
     case "risky":
-      return { dc: 10, justification: "Risk involved" };
+      return {
+        dc: 10,
+        justification: "Meaningful risk involved",
+      };
     case "contested":
-      return { dc: 14, justification: "Opposition expected" };
+      return {
+        dc: 14,
+        justification: "Active opposition expected",
+      };
     default:
-      return { dc: 10, justification: "Default difficulty" };
+      return {
+        dc: 10,
+        justification: "Situation requires Arbiter judgment",
+      };
   }
 }
 
