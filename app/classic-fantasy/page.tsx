@@ -3,13 +3,6 @@
 // ------------------------------------------------------------
 // Classic Fantasy — Might & Magic Resolution
 // ------------------------------------------------------------
-//
-// Design goals:
-// - Procedural, state-first dungeon play
-// - Dice are advisory (polyhedral supported)
-// - Solace proposes, Arbiter disposes
-// - World state changes are explicit and persistent
-// ------------------------------------------------------------
 
 import { useState } from "react";
 import {
@@ -25,6 +18,7 @@ import { exportCanon } from "@/lib/export/exportCanon";
 import ResolutionDraftPanel from "@/components/resolution/ResolutionDraftPanel";
 import NextActionHint from "@/components/NextActionHint";
 import WorldLedgerPanel from "@/components/world/WorldLedgerPanel";
+import TurnPressurePanel from "@/components/world/TurnPressurePanel";
 
 import StewardedShell from "@/components/layout/StewardedShell";
 import ModeHeader from "@/components/layout/ModeHeader";
@@ -82,6 +76,8 @@ export default function ClassicFantasyPage() {
     createSession("classic-fantasy-session")
   );
 
+  const [turn, setTurn] = useState(0);
+
   const [command, setCommand] = useState("");
   const [parsed, setParsed] = useState<any>(null);
   const [options, setOptions] = useState<Option[] | null>(null);
@@ -104,7 +100,7 @@ export default function ClassicFantasyPage() {
   }
 
   // ----------------------------------------------------------
-  // Arbiter records canon
+  // Arbiter records canon (increments turn)
   // ----------------------------------------------------------
 
   function handleRecord(payload: {
@@ -118,17 +114,26 @@ export default function ClassicFantasyPage() {
     audit: string[];
     world?: {
       primary: string;
-      secondary?: string[];
+      roomId?: string;
       scope?: "local" | "regional" | "global";
     };
   }) {
+    const nextTurn = turn + 1;
+    setTurn(nextTurn);
+
     setState((prev) =>
       recordEvent(prev, {
         id: crypto.randomUUID(),
         timestamp: Date.now(),
         actor: "arbiter",
         type: "OUTCOME",
-        payload,
+        payload: {
+          ...payload,
+          world: {
+            ...payload.world,
+            turn: nextTurn,
+          },
+        },
       })
     );
   }
@@ -167,12 +172,14 @@ export default function ClassicFantasyPage() {
         ]}
       />
 
+      <TurnPressurePanel turn={turn} />
+
       <CardSection title="Command">
         <textarea
           rows={3}
           value={command}
           onChange={(e) => setCommand(e.target.value)}
-          placeholder="Issue a command (e.g., OPEN DOOR, ATTACK GOBLIN, SEARCH CHEST)…"
+          placeholder="OPEN DOOR, ATTACK GOBLIN, SEARCH CHEST…"
         />
         <button onClick={handleSubmitCommand}>
           Submit Command
@@ -203,7 +210,6 @@ export default function ClassicFantasyPage() {
         </CardSection>
       )}
 
-      {/* ---------------- Resolution Draft ---------------- */}
       {selectedOption && (
         <ResolutionDraftPanel
           role={role}
@@ -220,7 +226,6 @@ export default function ClassicFantasyPage() {
 
       <NextActionHint state={state} />
 
-      {/* ---------------- WORLD LEDGER ---------------- */}
       <WorldLedgerPanel events={state.events} />
 
       <CardSection
