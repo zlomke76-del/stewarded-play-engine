@@ -6,9 +6,10 @@
 //
 // Invariants:
 // - Player selects intent
+// - Solace interprets
 // - Solace resolves outcomes
 // - Canon is committed automatically
-// - No human arbiter
+// - Clarification is ephemeral (not a turn, not canon)
 // ------------------------------------------------------------
 
 import { useMemo, useState } from "react";
@@ -25,7 +26,6 @@ import { exportCanon } from "@/lib/export/exportCanon";
 import ResolutionDraftPanel from "@/components/resolution/ResolutionDraftPanel";
 import WorldLedgerPanel from "@/components/world/WorldLedgerPanel";
 
-// ✅ NEW (advisory-only panels)
 import EnvironmentalPressurePanel from "@/components/world/EnvironmentalPressurePanel";
 import SurvivalResourcePanel from "@/components/world/SurvivalResourcePanel";
 
@@ -35,7 +35,7 @@ import CardSection from "@/components/layout/CardSection";
 import Disclaimer from "@/components/layout/Disclaimer";
 
 // ------------------------------------------------------------
-// Risk inference (derived, never declared)
+// Types
 // ------------------------------------------------------------
 
 type OptionKind =
@@ -43,6 +43,15 @@ type OptionKind =
   | "environmental"
   | "risky"
   | "contested";
+
+type InterpretationState =
+  | { mode: "idle" }
+  | { mode: "ask"; question: string }
+  | { mode: "resolve"; option: Option };
+
+// ------------------------------------------------------------
+// Helpers
+// ------------------------------------------------------------
 
 function inferOptionKind(description: string): OptionKind {
   const t = description.toLowerCase();
@@ -76,26 +85,6 @@ function inferOptionKind(description: string): OptionKind {
   return "safe";
 }
 
-// ------------------------------------------------------------
-// Narrative synthesis (Caveman-only)
-// ------------------------------------------------------------
-
-function narrateOutcome(
-  option: Option,
-  roll: number | null,
-  dc: number
-): string {
-  if (roll === null || dc === 0) {
-    return `You proceed carefully. The tribe endures without incident.`;
-  }
-
-  if (roll >= dc) {
-    return `The attempt succeeds. Momentum shifts in your favor.`;
-  }
-
-  return `The attempt falters. The land resists your effort.`;
-}
-
 function inferBiome(description: string): string {
   const t = description.toLowerCase();
 
@@ -105,6 +94,35 @@ function inferBiome(description: string): string {
   if (t.includes("defend")) return "Camp Perimeter";
 
   return "The Wilds";
+}
+
+function narrateOutcome(
+  roll: number | null,
+  dc: number
+): string {
+  if (roll === null || dc === 0) {
+    return "You proceed carefully. The tribe endures.";
+  }
+
+  if (roll >= dc) {
+    return "The attempt succeeds. Momentum shifts in your favor.";
+  }
+
+  return "The attempt falters. The land resists your effort.";
+}
+
+// Simple heuristic: ambiguous scale → ask
+function needsClarification(intent: string): string | null {
+  const t = intent.toLowerCase();
+
+  if (t.includes("hunt"))
+    return "How many hunters are involved?";
+  if (t.includes("scout"))
+    return "How far do you scout from camp?";
+  if (t.includes("defend"))
+    return "What threat are you defending against?";
+
+  return null;
 }
 
 // ------------------------------------------------------------
@@ -117,11 +135,10 @@ export default function CavemanPage() {
   const [turn, setTurn] = useState(0);
 
   const [command, setCommand] = useState("");
-  const [options, setOptions] = useState<Option[] | null>(null);
+  const [clarification, setClarification] = useState("");
 
-  // selectedOption persists across resolution
-  const [selectedOption, setSelectedOption] =
-    useState<Option | null>(null);
+  const [interpretation, setInterpretation] =
+    useState<InterpretationState>({ mode: "idle" });
 
   // ----------------------------------------------------------
   // Canon-derived location
@@ -140,48 +157,70 @@ export default function CavemanPage() {
   }, [state.events]);
 
   // ----------------------------------------------------------
-  // Player intent
+  // Player intent submission
   // ----------------------------------------------------------
 
   function handleSubmitCommand() {
     if (!command.trim()) return;
 
-    const parsedAction = parseAction("player_1", command);
-    const optionSet = generateOptions(parsedAction);
+    const parsed = parseAction("player_1", command);
+    const optionSet = generateOptions(parsed);
 
-    const resolvedOptions =
-      optionSet?.options?.length > 0
-        ? optionSet.options
-        : ([
-            {
-              id: "fallback",
-              description: `Proceed cautiously: ${command}`,
-            },
-          ] as Option[]);
+    const question = needsClarification(command);
 
-    setOptions([...resolvedOptions]);
+    if (question) {
+      setInterpretation({ mode: "ask", question });
+      return;
+    }
+
+    const option =
+      optionSet.options[0] ??
+      ({
+        id: "fallback",
+        description: command,
+      } as Option);
+
+    setInterpretation({ mode: "resolve", option });
   }
 
   // ----------------------------------------------------------
-  // Solace auto-records canon
+  // Clarification response
+  // ----------------------------------------------------------
+
+  function handleClarificationSubmit() {
+    const combinedIntent = `${command} (${clarification})`;
+    const parsed = parseAction("player_1", combinedIntent);
+    const optionSet = generateOptions(parsed);
+
+    const option =
+      optionSet.options[0] ??
+      ({
+        id: "fallback",
+        description: combinedIntent,
+      } as Option);
+
+    setClarification("");
+    setInterpretation({ mode: "resolve", option });
+  }
+
+  // ----------------------------------------------------------
+  // Canon commit (Solace)
   // ----------------------------------------------------------
 
   function handleAutoRecord(payload: {
-    description: string;
     dice: {
-      mode: string;
       roll: number | null;
       dc: number;
-      justification: string;
     };
     audit: string[];
-    world?: any;
   }) {
     const nextTurn = turn + 1;
     setTurn(nextTurn);
 
     const biome = inferBiome(
-      selectedOption?.description ?? command
+      interpretation.mode === "resolve"
+        ? interpretation.option.description
+        : command
     );
 
     setState((prev) =>
@@ -191,9 +230,7 @@ export default function CavemanPage() {
         actor: "solace",
         type: "OUTCOME",
         payload: {
-          ...payload,
           description: narrateOutcome(
-            selectedOption!,
             payload.dice.roll,
             payload.dice.dc
           ),
@@ -208,9 +245,9 @@ export default function CavemanPage() {
       })
     );
 
-    // reset only forward-looking inputs
+    // reset forward state
     setCommand("");
-    setOptions(null);
+    setInterpretation({ mode: "idle" });
   }
 
   // ----------------------------------------------------------
@@ -233,35 +270,51 @@ export default function CavemanPage() {
         title="Caveman — Survival (The Weave)"
         onShare={handleShare}
         roles={[
-          { label: "Player", description: "Selects intent" },
+          { label: "Player", description: "Declares intent" },
           {
             label: "Solace",
             description:
-              "Rolls fate, weighs risk, commits canon",
+              "Interprets, resolves, and commits canon",
           },
         ]}
       />
 
-      {/* ---------- CURRENT STATE ---------- */}
       <CardSection title="🌍 Current State">
         <strong>{currentLocation}</strong>
       </CardSection>
 
-      {/* ---------- PRESSURE & RESOURCES (ADVISORY) ---------- */}
       <EnvironmentalPressurePanel turn={turn} />
       <SurvivalResourcePanel turn={turn} />
 
-      {/* ---------- LAST TURN (PERSISTENT) ---------- */}
-      {selectedOption && (
+      {/* ---------- INTERPRETATION ---------- */}
+
+      {interpretation.mode === "ask" && (
+        <CardSection title="Clarification Requested">
+          <p className="muted">{interpretation.question}</p>
+          <textarea
+            rows={2}
+            value={clarification}
+            onChange={(e) =>
+              setClarification(e.target.value)
+            }
+            placeholder="Respond briefly…"
+          />
+          <button onClick={handleClarificationSubmit}>
+            Respond
+          </button>
+        </CardSection>
+      )}
+
+      {interpretation.mode === "resolve" && (
         <CardSection title="Last Turn">
           <ResolutionDraftPanel
             role="arbiter"
             autoResolve
             context={{
               optionDescription:
-                selectedOption.description,
+                interpretation.option.description,
               optionKind: inferOptionKind(
-                selectedOption.description
+                interpretation.option.description
               ),
             }}
             onRecord={handleAutoRecord}
@@ -270,41 +323,24 @@ export default function CavemanPage() {
       )}
 
       {/* ---------- NEW INTENT ---------- */}
-      <CardSection title="Intent">
-        <textarea
-          rows={3}
-          value={command}
-          onChange={(e) =>
-            setCommand(e.target.value)
-          }
-          placeholder="HUNT, SCOUT, DEFEND, MOVE CAMP…"
-        />
-        <button onClick={handleSubmitCommand}>
-          Commit Intent
-        </button>
-      </CardSection>
 
-      {options && (
-        <CardSection title="Available Paths">
-          <ul>
-            {options.map((opt) => (
-              <li key={opt.id}>
-                <button
-                  onClick={() =>
-                    setSelectedOption(opt)
-                  }
-                >
-                  {opt.description}
-                </button>
-              </li>
-            ))}
-          </ul>
+      {interpretation.mode === "idle" && (
+        <CardSection title="Intent">
+          <textarea
+            rows={3}
+            value={command}
+            onChange={(e) =>
+              setCommand(e.target.value)
+            }
+            placeholder="HUNT, SCOUT, DEFEND, MOVE CAMP…"
+          />
+          <button onClick={handleSubmitCommand}>
+            Commit Intent
+          </button>
         </CardSection>
       )}
 
-      {/* ---------- LEDGER ---------- */}
       <WorldLedgerPanel events={state.events} />
-
       <Disclaimer />
     </StewardedShell>
   );
