@@ -8,11 +8,18 @@
 // - Dice are advisory only
 // - Arbiter edits + records canon
 // - Full audit ribbon always visible
+// - Layout-safe (CardSection only)
 // ------------------------------------------------------------
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import CardSection from "@/components/layout/CardSection";
+
+// ------------------------------------------------------------
+// Types
+// ------------------------------------------------------------
 
 type DiceMode = "d20" | "2d6";
+type EvalResult = "success" | "partial" | "failure";
 
 export type ResolutionContext = {
   optionDescription: string;
@@ -29,6 +36,8 @@ type Props = {
       roll: number | null;
       dc: number;
       justification: string;
+      evaluation: EvalResult | null;
+      manual: boolean;
     };
     audit: string[];
   }) => void;
@@ -54,13 +63,27 @@ function difficultyFor(kind?: ResolutionContext["optionKind"]) {
 }
 
 function rollDice(mode: DiceMode) {
+  if (mode === "d20") return Math.ceil(Math.random() * 20);
+  return Math.ceil(Math.random() * 6) + Math.ceil(Math.random() * 6);
+}
+
+function evaluateRoll(
+  mode: DiceMode,
+  roll: number,
+  dc: number
+): EvalResult {
+  if (dc === 0) return "success";
+
   if (mode === "d20") {
-    return Math.ceil(Math.random() * 20);
+    if (roll >= dc) return "success";
+    if (roll >= dc - 3) return "partial";
+    return "failure";
   }
-  return (
-    Math.ceil(Math.random() * 6) +
-    Math.ceil(Math.random() * 6)
-  );
+
+  // 2d6 bands
+  if (roll >= dc + 2) return "success";
+  if (roll >= dc) return "partial";
+  return "failure";
 }
 
 // ------------------------------------------------------------
@@ -74,22 +97,61 @@ export default function ResolutionDraftPanel({
 
   const [diceMode, setDiceMode] = useState<DiceMode>("d20");
   const [roll, setRoll] = useState<number | null>(null);
-  const [draft, setDraft] = useState(
-    `The situation resolves based on the chosen path: ${context.optionDescription}.`
-  );
+  const [manual, setManual] = useState(false);
+  const [manualValue, setManualValue] = useState<number>(0);
 
+  const [evaluation, setEvaluation] = useState<EvalResult | null>(null);
+
+  const [draft, setDraft] = useState("");
   const [audit, setAudit] = useState<string[]>([
     "Drafted by Solace",
   ]);
 
+  // ----------------------------------------------------------
+  // Initial Solace draft (on option select)
+  // ----------------------------------------------------------
+
+  useEffect(() => {
+    setDraft(
+      `Solace proposes a possible resolution: ${context.optionDescription}. The outcome will depend on the roll.`
+    );
+    setAudit(["Drafted by Solace"]);
+    setRoll(null);
+    setEvaluation(null);
+  }, [context.optionDescription]);
+
+  // ----------------------------------------------------------
+  // Roll dice
+  // ----------------------------------------------------------
+
   function handleRoll() {
-    const result = rollDice(diceMode);
-    setRoll(result);
+    const value = manual ? manualValue : rollDice(diceMode);
+    setRoll(value);
+
+    const result = evaluateRoll(diceMode, value, dc);
+    setEvaluation(result);
+
+    setDraft(() => {
+      switch (result) {
+        case "success":
+          return `The action succeeds. ${context.optionDescription} resolves cleanly.`;
+        case "partial":
+          return `The action partially succeeds. ${context.optionDescription} resolves, but with complications or cost.`;
+        case "failure":
+          return `The action fails. ${context.optionDescription} does not resolve as intended.`;
+      }
+    });
+
     setAudit((a) => [
       ...a,
-      `Dice rolled (${diceMode}): ${result}`,
+      `Dice rolled (${diceMode}): ${value}`,
+      `Evaluated as ${result}`,
     ]);
   }
+
+  // ----------------------------------------------------------
+  // Arbiter edits
+  // ----------------------------------------------------------
 
   function handleEdit(text: string) {
     setDraft(text);
@@ -97,6 +159,10 @@ export default function ResolutionDraftPanel({
       setAudit((a) => [...a, "Edited by Arbiter"]);
     }
   }
+
+  // ----------------------------------------------------------
+  // Record canon
+  // ----------------------------------------------------------
 
   function handleRecord() {
     if (!draft.trim()) return;
@@ -108,24 +174,19 @@ export default function ResolutionDraftPanel({
         roll,
         dc,
         justification,
+        evaluation,
+        manual,
       },
       audit: [...audit, "Recorded by Arbiter"],
     });
   }
 
   // ----------------------------------------------------------
+  // UI
+  // ----------------------------------------------------------
 
   return (
-    <section
-      style={{
-        border: "1px dashed #666",
-        padding: 16,
-        borderRadius: 6,
-        marginTop: 16,
-      }}
-    >
-      <h3>Resolution Draft</h3>
-
+    <CardSection title="Resolution Draft">
       <p className="muted">
         🎲 Difficulty {dc} — {justification}
       </p>
@@ -143,11 +204,34 @@ export default function ResolutionDraftPanel({
         </select>
       </label>
 
+      <br />
+
+      <label>
+        <input
+          type="checkbox"
+          checked={manual}
+          onChange={(e) => setManual(e.target.checked)}
+        />{" "}
+        Enter roll manually
+      </label>
+
+      {manual && (
+        <input
+          type="number"
+          value={manualValue}
+          onChange={(e) =>
+            setManualValue(Number(e.target.value))
+          }
+          style={{ marginLeft: 8, width: 80 }}
+        />
+      )}
+
       <div style={{ marginTop: 8 }}>
         <button onClick={handleRoll}>Roll Dice</button>
         {roll !== null && (
           <span style={{ marginLeft: 8 }}>
-            Result: <strong>{roll}</strong>
+            Result: <strong>{roll}</strong>{" "}
+            {evaluation && `(${evaluation})`}
           </span>
         )}
       </div>
@@ -171,6 +255,6 @@ export default function ResolutionDraftPanel({
       <p className="muted" style={{ marginTop: 8 }}>
         {audit.join(" · ")}
       </p>
-    </section>
+    </CardSection>
   );
 }
