@@ -112,13 +112,24 @@ export default function ClassicFantasyPage() {
   // Derive current room from canon (LAST roomId)
   // ----------------------------------------------------------
 
-  const currentRoomId = useMemo(() => {
-    const last = [...state.events]
-      .reverse()
-      .find(hasWorldRoomId);
+const currentRoomId = useMemo(() => {
+  for (let i = state.events.length - 1; i >= 0; i--) {
+    const e = state.events[i];
 
-    return last?.payload?.world?.roomId;
-  }, [state.events]);
+    if (
+      e.type === "OUTCOME" &&
+      typeof e.payload === "object" &&
+      e.payload !== null &&
+      typeof (e.payload as any).world === "object" &&
+      (e.payload as any).world !== null &&
+      typeof (e.payload as any).world.roomId === "string"
+    ) {
+      return (e.payload as any).world.roomId as string;
+    }
+  }
+
+  return undefined;
+}, [state.events]);
 
   // ----------------------------------------------------------
   // Player issues command
