@@ -1,143 +1,77 @@
 "use client";
 
 // ------------------------------------------------------------
-// DungeonPressurePanel (Advisory Only)
+// DungeonPressurePanel
 // ------------------------------------------------------------
-// Purpose:
-// - Aggregate dungeon risk from canon
-// - No authority, no mutation
-// - Explains WHY pressure is rising
+// Advisory-only dungeon tension model
+// - Reads turn count
+// - Computes pressure tier
+// - Performs wandering monster advisory roll
 // ------------------------------------------------------------
 
 import { useMemo } from "react";
 
+export type PressureTier =
+  | "Calm"
+  | "Tense"
+  | "Dangerous"
+  | "Critical";
+
 type Props = {
-  events: readonly {
-    type: string;
-    payload: any;
-  }[];
+  turn: number;
 };
 
-// ------------------------------------------------------------
-// Pressure evaluation
-// ------------------------------------------------------------
-
-type PressureTier = "Calm" | "Tense" | "Dangerous" | "Critical";
-
-function evaluatePressure(events: Props["events"]) {
-  let turn = 0;
-  let activeTraps = 0;
-  let alertedRooms = 0;
-  let lockedDoors = 0;
-
-  for (const e of events) {
-    if (e.type !== "OUTCOME") continue;
-
-    const world = e.payload?.world;
-    if (!world) continue;
-
-    if (typeof world.turn === "number") {
-      turn = Math.max(turn, world.turn);
-    }
-
-    if (world.trap?.state === "armed") activeTraps++;
-    if (world.alert?.level === "alerted") alertedRooms++;
-    if (world.lock?.state === "locked") lockedDoors++;
-  }
-
-  let tier: PressureTier = "Calm";
-  const reasons: string[] = [];
-
-  if (turn >= 5) {
-    tier = "Tense";
-    reasons.push("Time spent in dungeon");
-  }
-
-  if (activeTraps > 0) {
-    tier = "Tense";
-    reasons.push(`${activeTraps} armed trap(s)`);
-  }
-
-  if (alertedRooms > 0) {
-    tier = "Dangerous";
-    reasons.push(`${alertedRooms} room(s) on alert`);
-  }
-
-  if (turn >= 10 || alertedRooms >= 2) {
-    tier = "Critical";
-    reasons.push("Escalating monster activity");
-  }
-
-  return {
-    tier,
-    turn,
-    activeTraps,
-    alertedRooms,
-    lockedDoors,
-    reasons,
-  };
+function pressureForTurn(turn: number): PressureTier {
+  if (turn < 3) return "Calm";
+  if (turn < 6) return "Tense";
+  if (turn < 10) return "Dangerous";
+  return "Critical";
 }
 
-// ------------------------------------------------------------
+function wanderingAdvisory(tier: PressureTier): string {
+  const roll = Math.ceil(Math.random() * 6);
 
-export default function DungeonPressurePanel({ events }: Props) {
-  const pressure = useMemo(
-    () => evaluatePressure(events),
-    [events]
+  switch (tier) {
+    case "Calm":
+      return "No unusual activity.";
+    case "Tense":
+      return roll === 6
+        ? "You hear distant movement."
+        : "The dungeon is quiet.";
+    case "Dangerous":
+      return roll >= 4
+        ? "Something is moving nearby."
+        : "Uneasy silence.";
+    case "Critical":
+      return "An encounter is imminent.";
+  }
+}
+
+export default function DungeonPressurePanel({ turn }: Props) {
+  const tier = useMemo(() => pressureForTurn(turn), [turn]);
+  const advisory = useMemo(
+    () => wanderingAdvisory(tier),
+    [tier, turn]
   );
 
   return (
-    <section
-      style={{
-        border: "1px solid #444",
-        borderRadius: 6,
-        padding: 16,
-        marginTop: 16,
-        background: "#0f1a2a",
-      }}
-    >
+    <section className="card">
       <h3>Dungeon Pressure</h3>
 
       <p>
-        <strong>Status:</strong>{" "}
-        <span
-          style={{
-            color:
-              pressure.tier === "Calm"
-                ? "#9f9"
-                : pressure.tier === "Tense"
-                ? "#ff9"
-                : pressure.tier === "Dangerous"
-                ? "#f99"
-                : "#f55",
-          }}
-        >
-          {pressure.tier}
-        </span>
+        <strong>Turn:</strong> {turn}
       </p>
 
-      <ul style={{ marginTop: 8 }}>
-        <li>Turn: {pressure.turn}</li>
-        <li>Armed traps: {pressure.activeTraps}</li>
-        <li>Locked doors: {pressure.lockedDoors}</li>
-        <li>Alerted rooms: {pressure.alertedRooms}</li>
-      </ul>
+      <p>
+        <strong>Pressure Tier:</strong> {tier}
+      </p>
 
-      {pressure.reasons.length > 0 && (
-        <>
-          <p className="muted" style={{ marginTop: 8 }}>
-            Contributing factors:
-          </p>
-          <ul>
-            {pressure.reasons.map((r, i) => (
-              <li key={i}>{r}</li>
-            ))}
-          </ul>
-        </>
-      )}
+      <p className="muted">
+        🎲 Wandering Monster Check: {advisory}
+      </p>
 
-      <p className="muted" style={{ marginTop: 8 }}>
-        Advisory only. No outcomes are enforced.
+      <p className="muted small">
+        Advisory only · No encounters are forced
       </p>
     </section>
   );
