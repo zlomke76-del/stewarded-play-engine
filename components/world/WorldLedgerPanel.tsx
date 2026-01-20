@@ -5,6 +5,7 @@
 // ------------------------------------------------------------
 // Read-only world state viewer
 // Groups outcomes by room / map ID
+// Displays resolved dice transparently
 // ------------------------------------------------------------
 
 import type { SessionEvent } from "@/lib/session/SessionState";
@@ -14,6 +15,28 @@ type Props = {
   events: readonly SessionEvent[];
 };
 
+function renderDice(payload: any) {
+  const dice = payload?.dice;
+  if (!dice) return null;
+
+  const { mode, roll, dc } = dice;
+
+  if (roll === null || typeof dc !== "number") return null;
+
+  const outcome =
+    dc === 0
+      ? "No roll required"
+      : roll >= dc
+      ? "Success"
+      : "Setback";
+
+  return (
+    <span className="muted" style={{ marginLeft: 6 }}>
+      🎲 {mode} {roll} vs DC {dc} — {outcome}
+    </span>
+  );
+}
+
 export default function WorldLedgerPanel({ events }: Props) {
   const outcomes = events.filter((e) => e.type === "OUTCOME");
 
@@ -22,7 +45,7 @@ export default function WorldLedgerPanel({ events }: Props) {
 
   for (const e of outcomes) {
     const payload = e.payload as any;
-    const room = payload.world?.roomId;
+    const room = payload?.world?.roomId;
 
     if (room) {
       if (!byRoom.has(room)) byRoom.set(room, []);
@@ -39,14 +62,18 @@ export default function WorldLedgerPanel({ events }: Props) {
       )}
 
       {[...byRoom.entries()].map(([room, events]) => (
-        <div key={room} style={{ marginBottom: 12 }}>
+        <div key={room} style={{ marginBottom: 14 }}>
           <strong>Room {room}</strong>
           <ul>
-            {events.map((e) => (
-              <li key={e.id}>
-                {String((e.payload as any).description)}
-              </li>
-            ))}
+            {events.map((e) => {
+              const payload = e.payload as any;
+              return (
+                <li key={e.id}>
+                  {String(payload.description)}
+                  {renderDice(payload)}
+                </li>
+              );
+            })}
           </ul>
         </div>
       ))}
@@ -55,11 +82,15 @@ export default function WorldLedgerPanel({ events }: Props) {
         <>
           <strong>Global</strong>
           <ul>
-            {global.map((e) => (
-              <li key={e.id}>
-                {String((e.payload as any).description)}
-              </li>
-            ))}
+            {global.map((e) => {
+              const payload = e.payload as any;
+              return (
+                <li key={e.id}>
+                  {String(payload.description)}
+                  {renderDice(payload)}
+                </li>
+              );
+            })}
           </ul>
         </>
       )}
