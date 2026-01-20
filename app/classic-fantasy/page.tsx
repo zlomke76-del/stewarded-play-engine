@@ -3,6 +3,12 @@
 // ------------------------------------------------------------
 // Classic Fantasy — Might & Magic Resolution
 // ------------------------------------------------------------
+// Procedural dungeon play with:
+// - Advisory polyhedral dice
+// - Arbiter-only canon writes
+// - Persistent world ledger
+// - Turn pressure + dungeon attrition
+// ------------------------------------------------------------
 
 import { useState } from "react";
 import {
@@ -176,11 +182,11 @@ export default function ClassicFantasyPage() {
         ]}
       />
 
-      {/* ---------- DUNGEON STATE ---------- */}
+      {/* ---------- DUNGEON PRESSURE ---------- */}
       <TurnPressurePanel turn={turn} />
       <WanderingMonsterPanel turn={turn} />
       <ResourceClockPanel turn={turn} />
-      <FogOfWarPanel events={state.events} />
+      <FogOfWarPanel events={[...state.events]} />
 
       {/* ---------- COMMAND ---------- */}
       <CardSection title="Command">
@@ -219,6 +225,7 @@ export default function ClassicFantasyPage() {
         </CardSection>
       )}
 
+      {/* ---------- RESOLUTION DRAFT ---------- */}
       {selectedOption && (
         <ResolutionDraftPanel
           role={role}
@@ -235,7 +242,8 @@ export default function ClassicFantasyPage() {
 
       <NextActionHint state={state} />
 
-      <WorldLedgerPanel events={state.events} />
+      {/* ---------- WORLD LEDGER ---------- */}
+      <WorldLedgerPanel events={[...state.events]} />
 
       <CardSection
         title="Canon (Confirmed World State)"
