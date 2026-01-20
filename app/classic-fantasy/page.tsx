@@ -24,6 +24,7 @@ import { exportCanon } from "@/lib/export/exportCanon";
 
 import ResolutionDraftPanel from "@/components/resolution/ResolutionDraftPanel";
 import NextActionHint from "@/components/NextActionHint";
+import WorldLedgerPanel from "@/components/world/WorldLedgerPanel";
 
 import StewardedShell from "@/components/layout/StewardedShell";
 import ModeHeader from "@/components/layout/ModeHeader";
@@ -218,6 +219,9 @@ export default function ClassicFantasyPage() {
       )}
 
       <NextActionHint state={state} />
+
+      {/* ---------------- WORLD LEDGER ---------------- */}
+      <WorldLedgerPanel events={state.events} />
 
       <CardSection
         title="Canon (Confirmed World State)"
