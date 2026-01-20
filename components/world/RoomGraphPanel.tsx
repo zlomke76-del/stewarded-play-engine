@@ -3,22 +3,19 @@
 // ------------------------------------------------------------
 // RoomGraphPanel
 // ------------------------------------------------------------
-// Advisory-only dungeon room graph visualization
+// Advisory-only visual dungeon map
 //
-// Purpose:
-// - Show explored rooms and connections
-// - Visualize locks, traps, alerts
-// - Highlight current position
-//
-// NO mutation
-// NO automation
-// NO authority
+// Features:
+// - SVG room graph (nodes + edges)
+// - Patrol heat overlay
+// - Derived ONLY from canon events
+// - No mutation, no automation
 // ------------------------------------------------------------
 
 import React, { useMemo } from "react";
 
 // ------------------------------------------------------------
-// Types (minimal + compatible)
+// Types
 // ------------------------------------------------------------
 
 type SessionEvent = {
@@ -29,212 +26,183 @@ type SessionEvent = {
 
 type RoomNode = {
   id: string;
-  label: string;
-  locked?: boolean;
-  trap?: "armed" | "sprung" | "disarmed";
-  alert?: "none" | "suspicious" | "alerted";
-};
-
-type RoomEdge = {
-  from: string;
-  to: string;
-  locked?: boolean;
-};
-
-type Props = {
-  events: readonly SessionEvent[];
-  currentRoomId?: string;
+  heat: number;
+  x: number;
+  y: number;
+  adjacent: string[];
 };
 
 // ------------------------------------------------------------
-// Helpers — pure derivation
+// Helpers
 // ------------------------------------------------------------
 
-function deriveRoomsAndEdges(
-  events: readonly SessionEvent[]
-): { rooms: RoomNode[]; edges: RoomEdge[] } {
-  const rooms = new Map<string, RoomNode>();
-  const edges: RoomEdge[] = [];
+function heatColor(score: number): string {
+  if (score <= 1) return "#2a9d8f";
+  if (score <= 3) return "#e9c46a";
+  if (score <= 6) return "#f4a261";
+  return "#e63946";
+}
 
-  events.forEach((e) => {
-    if (e.type !== "OUTCOME") return;
+function deriveRoomGraph(
+  events: readonly SessionEvent[],
+  turn: number
+): RoomNode[] {
+  const map = new Map<
+    string,
+    { heat: number; adjacent: Set<string> }
+  >();
+
+  // ----------------------------------------------------------
+  // Pass 1: collect rooms + adjacency + heat
+  // ----------------------------------------------------------
+
+  for (const e of events) {
+    if (e.type !== "OUTCOME") continue;
 
     const w = e.payload?.world;
-    if (!w?.roomId) return;
+    const roomId = w?.roomId;
+    if (!roomId) continue;
 
-    // --- Room creation ---
-    if (!rooms.has(w.roomId)) {
-      rooms.set(w.roomId, {
-        id: w.roomId,
-        label: w.roomId,
-        alert: "none",
+    if (!map.has(roomId)) {
+      map.set(roomId, {
+        heat: 0,
+        adjacent: new Set<string>(),
       });
     }
 
-    const room = rooms.get(w.roomId)!;
+    const entry = map.get(roomId)!;
 
-    // --- Lock state ---
-    if (w.lock) {
-      room.locked = w.lock.state === "locked";
+    // adjacency
+    if (Array.isArray(w.adjacent)) {
+      w.adjacent.forEach((r: string) =>
+        entry.adjacent.add(r)
+      );
     }
 
-    // --- Trap state ---
-    if (w.trap) {
-      room.trap = w.trap.state;
+    // noise → heat
+    if (
+      typeof e.payload?.description === "string" &&
+      /(attack|fight|combat|shout|break|smash|explode)/i.test(
+        e.payload.description
+      )
+    ) {
+      entry.heat += 3;
     }
 
-    // --- Alert state ---
-    if (w.alert?.level) {
-      room.alert = w.alert.level;
+    if (w.alert?.level === "suspicious") {
+      entry.heat += 1;
     }
 
-    // --- Connection inference ---
-    if (w.primary === "move" && w.fromRoomId) {
-      edges.push({
-        from: w.fromRoomId,
-        to: w.roomId,
-        locked: room.locked,
-      });
+    if (w.alert?.level === "alerted") {
+      entry.heat += 3;
     }
-  });
+  }
 
-  return {
-    rooms: Array.from(rooms.values()),
-    edges,
-  };
-}
+  // ----------------------------------------------------------
+  // Layout (radial, deterministic)
+  // ----------------------------------------------------------
 
-// ------------------------------------------------------------
-// Layout — simple radial placement
-// ------------------------------------------------------------
+  const rooms = Array.from(map.entries());
+  const radius = 180;
+  const cx = 250;
+  const cy = 200;
 
-function layoutRooms(rooms: RoomNode[]) {
-  const radius = 140;
-  const center = { x: 200, y: 200 };
+  return rooms.map(([id, data], i) => {
+    const angle =
+      (i / Math.max(rooms.length, 1)) * Math.PI * 2;
 
-  return rooms.map((room, i) => {
-    const angle = (i / rooms.length) * Math.PI * 2;
     return {
-      ...room,
-      x: center.x + Math.cos(angle) * radius,
-      y: center.y + Math.sin(angle) * radius,
+      id,
+      heat: data.heat,
+      adjacent: Array.from(data.adjacent),
+      x: cx + Math.cos(angle) * radius,
+      y: cy + Math.sin(angle) * radius,
     };
   });
-}
-
-// ------------------------------------------------------------
-// Visual helpers
-// ------------------------------------------------------------
-
-function roomColor(room: RoomNode) {
-  if (room.alert === "alerted") return "#c1121f";
-  if (room.alert === "suspicious") return "#e09f3e";
-  if (room.trap === "sprung") return "#9c6644";
-  if (room.locked) return "#495057";
-  return "#2a9d8f";
 }
 
 // ------------------------------------------------------------
 // Component
 // ------------------------------------------------------------
 
+type Props = {
+  events: readonly SessionEvent[];
+  turn: number;
+};
+
 export default function RoomGraphPanel({
   events,
-  currentRoomId,
+  turn,
 }: Props) {
-  const { rooms, edges } = useMemo(
-    () => deriveRoomsAndEdges(events),
-    [events]
+  const rooms = useMemo(
+    () => deriveRoomGraph(events, turn),
+    [events, turn]
   );
 
-  const positionedRooms = useMemo(
-    () => layoutRooms(rooms),
-    [rooms]
+  const roomIndex = Object.fromEntries(
+    rooms.map((r) => [r.id, r])
   );
-
-  if (rooms.length === 0) {
-    return (
-      <section className="card">
-        <h3>🗺️ Dungeon Map</h3>
-        <p className="muted">
-          No rooms discovered yet.
-        </p>
-      </section>
-    );
-  }
 
   return (
     <section className="card">
       <h3>🗺️ Dungeon Map (Advisory)</h3>
 
-      <svg
-        width={400}
-        height={400}
-        style={{
-          background: "#0b0b0b",
-          borderRadius: 6,
-        }}
-      >
-        {/* Edges */}
-        {edges.map((e, i) => {
-          const from = positionedRooms.find(
-            (r) => r.id === e.from
-          );
-          const to = positionedRooms.find(
-            (r) => r.id === e.to
-          );
-          if (!from || !to) return null;
+      {rooms.length === 0 ? (
+        <p className="muted">
+          No rooms discovered yet.
+        </p>
+      ) : (
+        <svg
+          width={500}
+          height={400}
+          style={{
+            background: "#0d0d0d",
+            borderRadius: 6,
+          }}
+        >
+          {/* Edges */}
+          {rooms.flatMap((r) =>
+            r.adjacent
+              .filter((a) => roomIndex[a])
+              .map((a) => (
+                <line
+                  key={`${r.id}-${a}`}
+                  x1={r.x}
+                  y1={r.y}
+                  x2={roomIndex[a].x}
+                  y2={roomIndex[a].y}
+                  stroke="#444"
+                  strokeWidth={1}
+                />
+              ))
+          )}
 
-          return (
-            <line
-              key={i}
-              x1={from.x}
-              y1={from.y}
-              x2={to.x}
-              y2={to.y}
-              stroke={e.locked ? "#888" : "#555"}
-              strokeDasharray={
-                e.locked ? "4 2" : undefined
-              }
-            />
-          );
-        })}
-
-        {/* Nodes */}
-        {positionedRooms.map((room) => {
-          const isCurrent =
-            room.id === currentRoomId;
-
-          return (
-            <g key={room.id}>
+          {/* Nodes */}
+          {rooms.map((r) => (
+            <g key={r.id}>
               <circle
-                cx={room.x}
-                cy={room.y}
-                r={18}
-                fill={roomColor(room)}
-                stroke={
-                  isCurrent ? "#ffd166" : "#000"
-                }
-                strokeWidth={isCurrent ? 3 : 1}
+                cx={r.x}
+                cy={r.y}
+                r={16}
+                fill={heatColor(r.heat)}
               />
               <text
-                x={room.x}
-                y={room.y + 32}
+                x={r.x}
+                y={r.y + 30}
                 textAnchor="middle"
                 fontSize="10"
-                fill="#ddd"
+                fill="#ccc"
               >
-                {room.label}
+                {r.id}
               </text>
             </g>
-          );
-        })}
-      </svg>
+          ))}
+        </svg>
+      )}
 
       <p className="muted" style={{ marginTop: 8 }}>
-        Map shows discovered rooms and inferred
-        connections. Locked paths and alert states
-        are advisory only.
+        Colors reflect patrol pressure. Connections reflect
+        known adjacency only. Advisory — no automation.
       </p>
     </section>
   );
