@@ -28,7 +28,6 @@ import NextActionHint from "@/components/NextActionHint";
 
 import WorldLedgerPanel from "@/components/world/WorldLedgerPanel";
 import DungeonPressurePanel from "@/components/world/DungeonPressurePanel";
-import RoomLedgerPanel from "@/components/world/RoomLedgerPanel";
 
 import StewardedShell from "@/components/layout/StewardedShell";
 import ModeHeader from "@/components/layout/ModeHeader";
@@ -44,20 +43,6 @@ type OptionKind =
   | "environmental"
   | "risky"
   | "contested";
-
-// Narrow OUTCOME payload locally (type guard)
-function hasWorldRoomId(
-  e: any
-): e is {
-  type: "OUTCOME";
-  payload: { world: { roomId?: string } };
-} {
-  return (
-    e?.type === "OUTCOME" &&
-    typeof e?.payload === "object" &&
-    typeof e?.payload?.world === "object"
-  );
-}
 
 function inferOptionKind(description: string): OptionKind {
   const t = description.toLowerCase();
@@ -75,7 +60,8 @@ function inferOptionKind(description: string): OptionKind {
     t.includes("climb") ||
     t.includes("cross") ||
     t.includes("door") ||
-    t.includes("environment")
+    t.includes("hallway") ||
+    t.includes("room")
   ) {
     return "environmental";
   }
@@ -89,6 +75,13 @@ function inferOptionKind(description: string): OptionKind {
   }
 
   return "safe";
+}
+
+// Friendly room naming (fallback only)
+function prettyRoomName(roomId?: string) {
+  if (!roomId) return "Unknown";
+  if (roomId.startsWith("room-")) return "Stone Hallway";
+  return roomId;
 }
 
 // ------------------------------------------------------------
@@ -109,27 +102,20 @@ export default function ClassicFantasyPage() {
     useState<Option | null>(null);
 
   // ----------------------------------------------------------
-  // Derive current room from canon (LAST roomId)
+  // Derive current room from last recorded outcome
   // ----------------------------------------------------------
 
-const currentRoomId = useMemo(() => {
-  for (let i = state.events.length - 1; i >= 0; i--) {
-    const e = state.events[i];
+  const currentRoomId = useMemo(() => {
+    const last = [...state.events]
+      .reverse()
+      .find(
+        (e) =>
+          e.type === "OUTCOME" &&
+          typeof (e as any).payload?.world?.roomId === "string"
+      ) as any | undefined;
 
-    if (
-      e.type === "OUTCOME" &&
-      typeof e.payload === "object" &&
-      e.payload !== null &&
-      typeof (e.payload as any).world === "object" &&
-      (e.payload as any).world !== null &&
-      typeof (e.payload as any).world.roomId === "string"
-    ) {
-      return (e.payload as any).world.roomId as string;
-    }
-  }
-
-  return undefined;
-}, [state.events]);
+    return last?.payload?.world?.roomId;
+  }, [state.events]);
 
   // ----------------------------------------------------------
   // Player issues command
@@ -235,28 +221,21 @@ const currentRoomId = useMemo(() => {
         ]}
       />
 
-      {/* ---------- CURRENT LOCATION ---------- */}
+      {/* ---------- LOCATION ---------- */}
       <CardSection title="📍 Current Location">
-        {currentRoomId ? (
-          <strong>{currentRoomId}</strong>
-        ) : (
-          <span className="muted">
-            Location not yet established
-          </span>
-        )}
+        <p>
+          <strong>{prettyRoomName(currentRoomId)}</strong>
+        </p>
+        <p className="muted">
+          Canon location derived from last recorded outcome.
+        </p>
       </CardSection>
 
-      {/* ---------- DUNGEON PRESSURE (ADVISORY) ---------- */}
+      {/* ---------- DUNGEON PRESSURE (ADVISORY ONLY) ---------- */}
       <DungeonPressurePanel
         turn={turn}
         currentRoomId={currentRoomId}
         events={state.events}
-      />
-
-      {/* ---------- ROOM LEDGER (CLICKABLE) ---------- */}
-      <RoomLedgerPanel
-        events={state.events}
-        currentRoomId={currentRoomId}
       />
 
       {/* ---------- COMMAND ---------- */}
@@ -284,9 +263,7 @@ const currentRoomId = useMemo(() => {
             {options.map((opt) => (
               <li key={opt.id}>
                 <button
-                  onClick={() =>
-                    setSelectedOption(opt)
-                  }
+                  onClick={() => setSelectedOption(opt)}
                 >
                   {opt.description}
                 </button>
@@ -331,7 +308,7 @@ const currentRoomId = useMemo(() => {
               .map((event) => (
                 <li key={event.id}>
                   {String(
-                    event.payload?.description
+                    (event as any).payload.description
                   )}
                 </li>
               ))}
