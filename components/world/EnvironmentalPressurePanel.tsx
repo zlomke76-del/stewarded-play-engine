@@ -36,8 +36,7 @@ function pressureForTurn(turn: number) {
     label: "Harsh",
     description:
       "The environment presses back. Resources thin. Predators may stir.",
-    };
-  }
+  };
 }
 
 export default function EnvironmentalPressurePanel({
