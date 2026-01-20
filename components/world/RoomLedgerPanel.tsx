@@ -3,25 +3,35 @@
 // ------------------------------------------------------------
 // RoomLedgerPanel.tsx
 // ------------------------------------------------------------
-// Read-only room navigation + scoped ledger
-//
-// Invariants:
-// - Canon only
-// - No state mutation
-// - No movement authority
-// - Selection is purely visual
+// Inspect-only room ledger.
+// Clicking a room NEVER moves the party.
+// Derived strictly from recorded canon.
 // ------------------------------------------------------------
 
-import { useMemo, useState } from "react";
+import React, { useMemo, useState } from "react";
 
 // ------------------------------------------------------------
-// Types
+// Types (minimal, safe)
 // ------------------------------------------------------------
 
 type SessionEvent = {
   id: string;
   type: string;
-  payload?: any;
+  payload?: {
+    description?: string;
+    world?: {
+      roomId?: string;
+      primary?: string;
+      trap?: {
+        id: string;
+        state: string;
+      };
+      lock?: {
+        state: string;
+        keyId?: string;
+      };
+    };
+  };
 };
 
 type Props = {
@@ -33,31 +43,21 @@ type Props = {
 // Helpers
 // ------------------------------------------------------------
 
-function collectRooms(events: readonly SessionEvent[]): string[] {
-  const rooms = new Set<string>();
+function deriveRooms(events: readonly SessionEvent[]) {
+  const map = new Map<string, SessionEvent[]>();
 
   events.forEach((e) => {
     if (e.type !== "OUTCOME") return;
     const roomId = e.payload?.world?.roomId;
-    if (roomId) rooms.add(roomId);
+    if (!roomId) return;
+
+    if (!map.has(roomId)) {
+      map.set(roomId, []);
+    }
+    map.get(roomId)!.push(e);
   });
 
-  return Array.from(rooms);
-}
-
-function roomLabel(roomId: string) {
-  return roomId;
-}
-
-function filterEventsForRoom(
-  events: readonly SessionEvent[],
-  roomId: string
-) {
-  return events.filter(
-    (e) =>
-      e.type === "OUTCOME" &&
-      e.payload?.world?.roomId === roomId
-  );
+  return map;
 }
 
 // ------------------------------------------------------------
@@ -68,89 +68,91 @@ export default function RoomLedgerPanel({
   events,
   currentRoomId,
 }: Props) {
-  const rooms = useMemo(
-    () => collectRooms(events),
-    [events]
-  );
+  const rooms = useMemo(() => deriveRooms(events), [events]);
+
+  const roomIds = Array.from(rooms.keys());
 
   const [selectedRoom, setSelectedRoom] =
     useState<string | null>(null);
-
-  const activeRoom = selectedRoom ?? currentRoomId;
-
-  const roomEvents = useMemo(() => {
-    if (!activeRoom) return [];
-    return filterEventsForRoom(events, activeRoom);
-  }, [events, activeRoom]);
 
   return (
     <section className="card">
       <h3>🗺️ Known Rooms</h3>
 
-      {rooms.length === 0 ? (
+      {roomIds.length === 0 ? (
         <p className="muted">
-          No rooms have been recorded yet.
-        </p>
-      ) : (
-        <ul style={{ paddingLeft: 16 }}>
-          {rooms.map((roomId) => {
-            const isCurrent =
-              roomId === currentRoomId;
-            const isSelected =
-              roomId === activeRoom;
-
-            return (
-              <li key={roomId}>
-                <button
-                  onClick={() =>
-                    setSelectedRoom(roomId)
-                  }
-                  style={{
-                    fontWeight: isCurrent
-                      ? "bold"
-                      : "normal",
-                    textDecoration: isSelected
-                      ? "underline"
-                      : "none",
-                  }}
-                >
-                  {roomLabel(roomId)}
-                  {isCurrent && " 📍"}
-                </button>
-              </li>
-            );
-          })}
-        </ul>
-      )}
-
-      <hr />
-
-      <h4>
-        Room Ledger{" "}
-        {activeRoom ? `— ${activeRoom}` : ""}
-      </h4>
-
-      {!activeRoom ? (
-        <p className="muted">
-          Select a room to inspect its history.
-        </p>
-      ) : roomEvents.length === 0 ? (
-        <p className="muted">
-          No recorded events for this room.
+          No rooms have been committed to canon yet.
         </p>
       ) : (
         <ul>
-          {roomEvents.map((e) => (
-            <li key={e.id}>
-              {String(e.payload?.description)}
+          {roomIds.map((id) => (
+            <li key={id}>
+              <button
+                onClick={() => setSelectedRoom(id)}
+                style={{
+                  fontWeight:
+                    id === currentRoomId
+                      ? "bold"
+                      : "normal",
+                }}
+              >
+                {id}
+                {id === currentRoomId
+                  ? " (current)"
+                  : ""}
+              </button>
             </li>
           ))}
         </ul>
       )}
 
+      <hr />
+
+      <h4>Room Ledger</h4>
+
+      {selectedRoom ? (
+        <>
+          <p className="muted">
+            Inspecting <strong>{selectedRoom}</strong>
+            <br />
+            Inspection only — selecting a room does
+            not move the party.
+          </p>
+
+          <ul>
+            {rooms.get(selectedRoom)!.map((e) => (
+              <li key={e.id}>
+                {e.payload?.description}
+
+                {e.payload?.world?.trap && (
+                  <div className="muted">
+                    Trap:{" "}
+                    {e.payload.world.trap.state}
+                  </div>
+                )}
+
+                {e.payload?.world?.lock && (
+                  <div className="muted">
+                    Door:{" "}
+                    {e.payload.world.lock.state}
+                    {e.payload.world.lock.keyId
+                      ? ` (Key: ${e.payload.world.lock.keyId})`
+                      : ""}
+                  </div>
+                )}
+              </li>
+            ))}
+          </ul>
+        </>
+      ) : (
+        <p className="muted">
+          Select a room to inspect its history.
+        </p>
+      )}
+
       <p className="muted" style={{ marginTop: 8 }}>
-        Inspection only — selecting a room does not
-        move the party.
+        Advisory view only — Arbiter retains full
+        authority.
       </p>
     </section>
   );
