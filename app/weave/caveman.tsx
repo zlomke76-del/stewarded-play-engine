@@ -6,9 +6,9 @@
 //
 // Invariants:
 // - Player selects intent
-// - Solace resolves (no human arbiter)
-// - Dice are advisory but auto-rolled
+// - Solace resolves outcomes
 // - Canon is committed automatically
+// - No human arbiter
 // ------------------------------------------------------------
 
 import { useMemo, useState } from "react";
@@ -31,7 +31,7 @@ import CardSection from "@/components/layout/CardSection";
 import Disclaimer from "@/components/layout/Disclaimer";
 
 // ------------------------------------------------------------
-// Risk inference (derived, not declared)
+// Risk inference (derived, never declared)
 // ------------------------------------------------------------
 
 type OptionKind =
@@ -54,8 +54,8 @@ function inferOptionKind(description: string): OptionKind {
 
   if (
     t.includes("hunt") ||
-    t.includes("travel") ||
     t.includes("move") ||
+    t.includes("travel") ||
     t.includes("scout")
   ) {
     return "environmental";
@@ -179,10 +179,7 @@ export default function CavemanPage() {
         title="Caveman — Survival (The Weave)"
         onShare={handleShare}
         roles={[
-          {
-            label: "Player",
-            description: "Selects intent",
-          },
+          { label: "Player", description: "Selects intent" },
           {
             label: "Solace",
             description:
@@ -225,7 +222,7 @@ export default function CavemanPage() {
 
       {selectedOption && (
         <ResolutionDraftPanel
-          role="arbiter" // UI reuse only; authority is locked
+          role="arbiter" // UI reuse only; authority is structural
           context={{
             optionDescription: selectedOption.description,
             optionKind: inferOptionKind(
@@ -233,7 +230,6 @@ export default function CavemanPage() {
             ),
           }}
           onRecord={handleAutoRecord}
-          autoCommit
         />
       )}
 
