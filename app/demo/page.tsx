@@ -1,21 +1,29 @@
 "use client";
 
 // ------------------------------------------------------------
-// Demo Page — Stewarded Play (Resolution-Aware)
+// Demo Page — Stewarded Play (Full Governed Flow)
+// ------------------------------------------------------------
+//
+// Invariants:
+// - Player declares intent
+// - Solace proposes + drafts (non-authoritative)
+// - Dice are advisory only
+// - Arbiter edits + records canon
+// - Audit ribbon always visible
 // ------------------------------------------------------------
 
 import { useEffect, useState } from "react";
 import {
   createSession,
   recordEvent,
-  confirmChange,
   SessionState,
 } from "@/lib/session/SessionState";
 
 import { parseAction } from "@/lib/parser/ActionParser";
 import { generateOptions, Option } from "@/lib/options/OptionGenerator";
+import { exportCanon } from "@/lib/export/exportCanon";
 
-import DMConfirmationPanel from "@/components/dm/DMConfirmationPanel";
+import ResolutionDraftPanel from "@/components/resolution/ResolutionDraftPanel";
 import NextActionHint from "@/components/NextActionHint";
 
 import StewardedShell from "@/components/layout/StewardedShell";
@@ -24,83 +32,98 @@ import CardSection from "@/components/layout/CardSection";
 import Disclaimer from "@/components/layout/Disclaimer";
 
 // ------------------------------------------------------------
-// Dice + Evaluation helpers (advisory only)
+// Types
 // ------------------------------------------------------------
 
-type DiceMode = "d20" | "2d6";
-type EvalResult = "success" | "partial" | "failure";
+type DMMode = "human" | "solace-neutral";
+type OptionKind =
+  | "safe"
+  | "environmental"
+  | "risky"
+  | "contested";
 
-function rollDice(mode: DiceMode): number {
-  if (mode === "d20") return Math.floor(Math.random() * 20) + 1;
+// ------------------------------------------------------------
+// Framing helpers
+// ------------------------------------------------------------
+
+function generateFraming(seed: string): string {
   return (
-    Math.floor(Math.random() * 6) +
-    1 +
-    (Math.floor(Math.random() * 6) + 1)
+    `You arrive at the edge of a small settlement as dusk settles in. ` +
+    `Lantern light flickers through misty air. ` +
+    (seed ? `Rumors speak of ${seed}. ` : "") +
+    `Nothing has happened yet. The world waits.`
   );
 }
 
-function evaluateRoll(
-  mode: DiceMode,
-  roll: number,
-  dc: number
-): { result: EvalResult; justification: string } {
-  if (mode === "d20") {
-    return roll >= dc
-      ? {
-          result: "success",
-          justification: `Rolled ${roll} ≥ DC ${dc}`,
-        }
-      : {
-          result: "failure",
-          justification: `Rolled ${roll} < DC ${dc}`,
-        };
+// ------------------------------------------------------------
+// Difficulty inference (NO Option schema changes)
+// ------------------------------------------------------------
+
+function inferOptionKind(description: string): OptionKind {
+  const text = description.toLowerCase();
+
+  if (
+    text.includes("attack") ||
+    text.includes("fight") ||
+    text.includes("oppose") ||
+    text.includes("contest")
+  ) {
+    return "contested";
   }
 
-  // 2d6 bands
-  if (roll >= dc + 2) {
-    return {
-      result: "success",
-      justification: `Rolled ${roll} ≥ DC ${dc}+2 (strong success band)`,
-    };
+  if (
+    text.includes("climb") ||
+    text.includes("cross") ||
+    text.includes("navigate") ||
+    text.includes("environment")
+  ) {
+    return "environmental";
   }
 
-  if (roll >= dc) {
-    return {
-      result: "partial",
-      justification: `Rolled ${roll} ≥ DC ${dc} (partial band)`,
-    };
+  if (
+    text.includes("steal") ||
+    text.includes("sneak") ||
+    text.includes("risk")
+  ) {
+    return "risky";
   }
 
-  return {
-    result: "failure",
-    justification: `Rolled ${roll} < DC ${dc}`,
-  };
+  return "safe";
 }
 
 // ------------------------------------------------------------
 
 export default function DemoPage() {
+  const role: "arbiter" = "arbiter";
+
   const [state, setState] = useState<SessionState>(
     createSession("demo-session")
   );
 
+  const [dmMode, setDmMode] = useState<DMMode>("solace-neutral");
+  const [campaignSeed, setCampaignSeed] = useState("");
+  const [framing, setFraming] = useState<string | null>(null);
+
   const [playerInput, setPlayerInput] = useState("");
   const [parsed, setParsed] = useState<any>(null);
   const [options, setOptions] = useState<Option[] | null>(null);
-  const [selectedOption, setSelectedOption] = useState<Option | null>(null);
+  const [selectedOption, setSelectedOption] =
+    useState<Option | null>(null);
 
-  // Resolution state
-  const [diceMode, setDiceMode] = useState<DiceMode>("d20");
-  const [dc, setDc] = useState<number>(6);
-  const [roll, setRoll] = useState<number | null>(null);
-  const [manualRoll, setManualRoll] = useState(false);
-  const [manualValue, setManualValue] = useState<number>(0);
+  const canonStarted = state.events.some(
+    (e) => e.type === "OUTCOME"
+  );
 
-  const [draftText, setDraftText] = useState("");
-  const [evaluation, setEvaluation] = useState<{
-    result: EvalResult;
-    justification: string;
-  } | null>(null);
+  // ----------------------------------------------------------
+  // Framing
+  // ----------------------------------------------------------
+
+  useEffect(() => {
+    if (dmMode !== "solace-neutral") return;
+    if (canonStarted) return;
+
+    setFraming(generateFraming(campaignSeed));
+  }, [dmMode, campaignSeed, canonStarted]);
 
   // ----------------------------------------------------------
   // Player submits action
@@ -115,71 +138,49 @@ export default function DemoPage() {
     setParsed(parsedAction);
     setOptions([...optionSet.options]);
     setSelectedOption(null);
-    setRoll(null);
-    setEvaluation(null);
-    setDraftText("");
   }
 
   // ----------------------------------------------------------
-  // Option selected → prepare resolution
+  // Option selection → Solace draft
   // ----------------------------------------------------------
 
   function handleSelectOption(option: Option) {
     setSelectedOption(option);
-    setDc(6); // neutral default; not a ruleset
-    setDraftText(
-      `The situation follows the chosen path: ${option.description}.`
-    );
   }
 
   // ----------------------------------------------------------
-  // Roll dice (manual or automatic)
+  // Record canon (arbiter only)
   // ----------------------------------------------------------
 
-  function handleRoll() {
-    const value = manualRoll ? manualValue : rollDice(diceMode);
-    setRoll(value);
-
-    const evalResult = evaluateRoll(diceMode, value, dc);
-    setEvaluation(evalResult);
-
-    setDraftText(() => {
-      switch (evalResult.result) {
-        case "success":
-          return `The action succeeds. ${selectedOption?.description} resolves cleanly.`;
-        case "partial":
-          return `The action partially succeeds. ${selectedOption?.description} resolves, but with complications.`;
-        case "failure":
-          return `The action fails. ${selectedOption?.description} does not resolve as intended.`;
-      }
-    });
-  }
-
-  // ----------------------------------------------------------
-  // Record Outcome → Canon
-  // ----------------------------------------------------------
-
-  function handleRecord() {
-    if (!draftText.trim()) return;
-
+  function handleRecord(payload: {
+    description: string;
+    dice: {
+      mode: string;
+      roll: number | null;
+      dc: number;
+      justification: string;
+    };
+    audit: string[];
+  }) {
     setState((prev) =>
       recordEvent(prev, {
         id: crypto.randomUUID(),
         timestamp: Date.now(),
-        actor: "DM",
+        actor: "arbiter",
         type: "OUTCOME",
-        payload: {
-          description: draftText,
-          dice: {
-            mode: diceMode,
-            roll,
-            dc,
-            evaluation,
-            manual: manualRoll,
-          },
-        },
+        payload,
       })
     );
+  }
+
+  // ----------------------------------------------------------
+  // Share canon
+  // ----------------------------------------------------------
+
+  function shareCanon() {
+    const canon = exportCanon(state.events);
+    navigator.clipboard.writeText(canon);
+    alert("Canon copied to clipboard.");
   }
 
   // ----------------------------------------------------------
@@ -190,20 +191,82 @@ export default function DemoPage() {
     <StewardedShell>
       <ModeHeader
         title="Stewarded Play — Full Flow"
+        onShare={shareCanon}
         roles={[
           { label: "Player", description: "Declares intent" },
-          { label: "Solace", description: "Drafts neutral resolution" },
+          {
+            label: "Solace (Neutral)",
+            description:
+              "Frames scenes and drafts neutral resolutions",
+          },
+          {
+            label: "Arbiter",
+            description: "Edits and records canon",
+          },
         ]}
       />
+
+      <CardSection title="Facilitation Mode">
+        <label>
+          <input
+            type="radio"
+            checked={dmMode === "human"}
+            onChange={() => setDmMode("human")}
+          />{" "}
+          Human DM
+        </label>
+        <br />
+        <label>
+          <input
+            type="radio"
+            checked={dmMode === "solace-neutral"}
+            onChange={() => setDmMode("solace-neutral")}
+          />{" "}
+          Solace (Neutral Facilitator)
+        </label>
+
+        {dmMode === "solace-neutral" && (
+          <>
+            <br />
+            <label>
+              Campaign seed:{" "}
+              <input
+                value={campaignSeed}
+                onChange={(e) =>
+                  setCampaignSeed(e.target.value)
+                }
+                placeholder="Optional world hook"
+              />
+            </label>
+          </>
+        )}
+      </CardSection>
+
+      <CardSection title="Session Start">
+        {framing ? (
+          <>
+            <p className="muted">
+              Facilitator framing (non-canonical):
+            </p>
+            <p>{framing}</p>
+          </>
+        ) : (
+          <p className="muted">No framing set.</p>
+        )}
+      </CardSection>
 
       <CardSection title="Player Action">
         <textarea
           rows={3}
           value={playerInput}
-          onChange={(e) => setPlayerInput(e.target.value)}
+          onChange={(e) =>
+            setPlayerInput(e.target.value)
+          }
           placeholder="Describe what your character does…"
         />
-        <button onClick={handlePlayerAction}>Submit Action</button>
+        <button onClick={handlePlayerAction}>
+          Submit Action
+        </button>
       </CardSection>
 
       {parsed && (
@@ -217,7 +280,11 @@ export default function DemoPage() {
           <ul>
             {options.map((opt) => (
               <li key={opt.id}>
-                <button onClick={() => handleSelectOption(opt)}>
+                <button
+                  onClick={() =>
+                    handleSelectOption(opt)
+                  }
+                >
                   {opt.description}
                 </button>
               </li>
@@ -226,78 +293,41 @@ export default function DemoPage() {
         </CardSection>
       )}
 
+      {/* ---------- RESOLUTION DRAFT (DICE LIVE HERE) ---------- */}
       {selectedOption && (
-        <CardSection title="Resolution Draft">
-          <p>
-            <strong>Difficulty:</strong> DC {dc}
-          </p>
-
-          <label>
-            Dice system:{" "}
-            <select
-              value={diceMode}
-              onChange={(e) => setDiceMode(e.target.value as DiceMode)}
-            >
-              <option value="d20">d20</option>
-              <option value="2d6">2d6</option>
-            </select>
-          </label>
-
-          <br />
-          <label>
-            <input
-              type="checkbox"
-              checked={manualRoll}
-              onChange={(e) => setManualRoll(e.target.checked)}
-            />{" "}
-            Enter roll manually
-          </label>
-
-          {manualRoll && (
-            <input
-              type="number"
-              value={manualValue}
-              onChange={(e) => setManualValue(Number(e.target.value))}
-            />
-          )}
-
-          <br />
-          <button onClick={handleRoll}>Roll Dice</button>
-
-          {roll !== null && evaluation && (
-            <p>
-              <strong>Result:</strong> {evaluation.result} —{" "}
-              {evaluation.justification}
-            </p>
-          )}
-
-          <textarea
-            rows={4}
-            value={draftText}
-            onChange={(e) => setDraftText(e.target.value)}
-          />
-
-          <button onClick={handleRecord}>Record Outcome</button>
-
-          <p className="muted">
-            Drafted by Solace · Dice: {diceMode} ·{" "}
-            {manualRoll ? "manual" : "auto"}
-          </p>
-        </CardSection>
+        <ResolutionDraftPanel
+          role={role}
+          context={{
+            optionDescription:
+              selectedOption.description,
+            optionKind: inferOptionKind(
+              selectedOption.description
+            ),
+          }}
+          onRecord={handleRecord}
+        />
       )}
 
-      <DMConfirmationPanel state={state} onConfirm={() => {}} />
       <NextActionHint state={state} />
 
-      <CardSection title="Canon (Confirmed Narrative)" className="canon">
-        {state.events.filter((e) => e.type === "OUTCOME").length === 0 ? (
+      <CardSection
+        title="Canon (Confirmed Narrative)"
+        className="canon"
+      >
+        {state.events.filter(
+          (e) => e.type === "OUTCOME"
+        ).length === 0 ? (
           <p className="muted">No canon yet.</p>
         ) : (
           <ul>
             {state.events
               .filter((e) => e.type === "OUTCOME")
-              .map((e) => (
-                <li key={e.id}>{e.payload.description as string}</li>
+              .map((event) => (
+                <li key={event.id}>
+                  {String(
+                    event.payload.description
+                  )}
+                </li>
               ))}
           </ul>
         )}
