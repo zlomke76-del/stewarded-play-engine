@@ -3,22 +3,22 @@
 // ------------------------------------------------------------
 // KeyDoorPanel
 // ------------------------------------------------------------
-// Advisory-only key inventory & door matching
+// Advisory-only key inventory & door matching visualization
 //
 // Purpose:
-// - Show keys acquired by the party
-// - Show doors encountered (locked / unlocked)
-// - Indicate potential key-door matches
+// - Make progression constraints visible
+// - Show which doors can be opened with which keys
+// - Highlight locked vs unlocked paths
 //
+// NO authority
 // NO mutation
 // NO automation
-// NO authority
 // ------------------------------------------------------------
 
 import React, { useMemo } from "react";
 
 // ------------------------------------------------------------
-// Types (minimal, compatible)
+// Types (minimal, compatible with canon)
 // ------------------------------------------------------------
 
 type SessionEvent = {
@@ -27,28 +27,23 @@ type SessionEvent = {
   payload?: any;
 };
 
-type Props = {
-  events: readonly SessionEvent[];
-  currentRoomId?: string;
+type Key = {
+  id: string;
+  label: string;
 };
 
-// ------------------------------------------------------------
-// Helpers — pure canon derivation
-// ------------------------------------------------------------
-
-type KeyInfo = {
-  keyId: string;
-  source?: string;
-};
-
-type DoorInfo = {
+type Door = {
   roomId?: string;
   state: "locked" | "unlocked";
   keyId?: string;
 };
 
-function deriveKeys(events: readonly SessionEvent[]): KeyInfo[] {
-  const keys = new Map<string, KeyInfo>();
+// ------------------------------------------------------------
+// Helpers — pure derivation
+// ------------------------------------------------------------
+
+function deriveKeys(events: readonly SessionEvent[]): Key[] {
+  const keys = new Map<string, Key>();
 
   events.forEach((e) => {
     if (e.type !== "OUTCOME") return;
@@ -56,10 +51,11 @@ function deriveKeys(events: readonly SessionEvent[]): KeyInfo[] {
     const w = e.payload?.world;
     if (!w?.lock?.keyId) return;
 
-    if (w.lock.state === "unlocked") {
+    // Key becomes known once referenced
+    if (!keys.has(w.lock.keyId)) {
       keys.set(w.lock.keyId, {
-        keyId: w.lock.keyId,
-        source: w.roomId,
+        id: w.lock.keyId,
+        label: w.lock.keyId,
       });
     }
   });
@@ -67,10 +63,8 @@ function deriveKeys(events: readonly SessionEvent[]): KeyInfo[] {
   return Array.from(keys.values());
 }
 
-function deriveDoors(
-  events: readonly SessionEvent[]
-): DoorInfo[] {
-  const doors: DoorInfo[] = [];
+function deriveDoors(events: readonly SessionEvent[]): Door[] {
+  const doors: Door[] = [];
 
   events.forEach((e) => {
     if (e.type !== "OUTCOME") return;
@@ -92,93 +86,86 @@ function deriveDoors(
 // Component
 // ------------------------------------------------------------
 
-export default function KeyDoorPanel({
-  events,
-  currentRoomId,
-}: Props) {
-  const keys = useMemo(() => deriveKeys(events), [
-    events,
-  ]);
-  const doors = useMemo(() => deriveDoors(events), [
-    events,
-  ]);
+type Props = {
+  events: readonly SessionEvent[];
+};
+
+export default function KeyDoorPanel({ events }: Props) {
+  const keys = useMemo(() => deriveKeys(events), [events]);
+  const doors = useMemo(() => deriveDoors(events), [events]);
 
   return (
     <section className="card">
-      <h3>🗝️ Keys & Doors (Advisory)</h3>
+      <h3>🗝️ Keys & Locked Doors (Advisory)</h3>
 
-      {/* ---------- KEYS ---------- */}
-      <h4>Party Keys</h4>
+      {/* ---------------- KEYS ---------------- */}
+      <p>
+        <strong>Key Inventory</strong>
+      </p>
 
       {keys.length === 0 ? (
-        <p className="muted">No keys acquired.</p>
+        <p className="muted">
+          No keys discovered yet.
+        </p>
       ) : (
         <ul>
           {keys.map((k) => (
-            <li key={k.keyId}>
-              <strong>{k.keyId}</strong>
-              {k.source && (
-                <span className="muted">
-                  {" "}
-                  (from {k.source})
-                </span>
-              )}
-            </li>
+            <li key={k.id}>🔑 {k.label}</li>
           ))}
         </ul>
       )}
 
       <hr />
 
-      {/* ---------- DOORS ---------- */}
-      <h4>Known Doors</h4>
+      {/* ---------------- DOORS ---------------- */}
+      <p>
+        <strong>Doors Encountered</strong>
+      </p>
 
       {doors.length === 0 ? (
         <p className="muted">
-          No locked doors encountered.
+          No locked doors recorded.
         </p>
       ) : (
         <ul>
           {doors.map((d, i) => {
-            const match =
+            const hasKey =
               d.keyId &&
-              keys.some((k) => k.keyId === d.keyId);
-
-            const isCurrent =
-              currentRoomId &&
-              d.roomId === currentRoomId;
+              keys.some((k) => k.id === d.keyId);
 
             return (
               <li key={i}>
+                🚪{" "}
+                {d.roomId
+                  ? `Room ${d.roomId}`
+                  : "Unknown location"}{" "}
+                —{" "}
                 <strong>
-                  {d.roomId ?? "Unknown location"}
+                  {d.state.toUpperCase()}
                 </strong>
-                {" — "}
-                {d.state === "locked"
-                  ? "Locked"
-                  : "Unlocked"}
-
                 {d.keyId && (
                   <>
                     {" "}
                     · Key:{" "}
-                    <strong>{d.keyId}</strong>
+                    <span
+                      style={{
+                        color: hasKey
+                          ? "#2a9d8f"
+                          : "#e63946",
+                      }}
+                    >
+                      {d.keyId}
+                    </span>
                   </>
                 )}
-
-                {match && d.state === "locked" && (
-                  <span style={{ color: "#ffd166" }}>
-                    {" "}
-                    ✔ Key Available
-                  </span>
-                )}
-
-                {isCurrent && (
-                  <span className="muted">
-                    {" "}
-                    (current room)
-                  </span>
-                )}
+                {d.state === "locked" &&
+                  d.keyId &&
+                  !hasKey && (
+                    <span className="muted">
+                      {" "}
+                      (No matching key)
+                    </span>
+                  )}
               </li>
             );
           })}
@@ -186,7 +173,8 @@ export default function KeyDoorPanel({
       )}
 
       <p className="muted" style={{ marginTop: 8 }}>
-        Advisory only — Arbiter determines if keys apply.
+        Advisory only — Arbiter determines access,
+        key usage, and consequences.
       </p>
     </section>
   );
