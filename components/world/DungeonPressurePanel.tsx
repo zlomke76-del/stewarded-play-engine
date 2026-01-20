@@ -1,243 +1,143 @@
 "use client";
 
 // ------------------------------------------------------------
-// DungeonPressurePanel.tsx
+// DungeonPressurePanel (Advisory Only)
 // ------------------------------------------------------------
-// Advisory-only dungeon pressure visualization.
-// NO authority, NO mutation, NO dice, NO automation.
-//
 // Purpose:
-// - Make time, noise, and persistence *visible*
-// - Preserve Arbiter authority
-// - Support classic dungeon-crawl tension (Might & Magic style)
+// - Aggregate dungeon risk from canon
+// - No authority, no mutation
+// - Explains WHY pressure is rising
 // ------------------------------------------------------------
 
-import React from "react";
-
-// ------------------------------------------------------------
-// Types (minimal + compatible)
-// ------------------------------------------------------------
-
-type SessionEvent = {
-  id: string;
-  type: string;
-  payload?: any;
-};
+import { useMemo } from "react";
 
 type Props = {
-  turn: number;
-  currentRoomId?: string;
-  events: readonly SessionEvent[];
+  events: readonly {
+    type: string;
+    payload: any;
+  }[];
 };
 
 // ------------------------------------------------------------
-// Helpers — pure derivations only
+// Pressure evaluation
 // ------------------------------------------------------------
 
-function pressureForTurn(turn: number): {
-  label: string;
-  level: "low" | "rising" | "high" | "critical";
-  explanation: string;
-} {
-  if (turn < 5) {
-    return {
-      label: "Low",
-      level: "low",
-      explanation: "Minimal time pressure.",
-    };
+type PressureTier = "Calm" | "Tense" | "Dangerous" | "Critical";
+
+function evaluatePressure(events: Props["events"]) {
+  let turn = 0;
+  let activeTraps = 0;
+  let alertedRooms = 0;
+  let lockedDoors = 0;
+
+  for (const e of events) {
+    if (e.type !== "OUTCOME") continue;
+
+    const world = e.payload?.world;
+    if (!world) continue;
+
+    if (typeof world.turn === "number") {
+      turn = Math.max(turn, world.turn);
+    }
+
+    if (world.trap?.state === "armed") activeTraps++;
+    if (world.alert?.level === "alerted") alertedRooms++;
+    if (world.lock?.state === "locked") lockedDoors++;
   }
 
-  if (turn < 10) {
-    return {
-      label: "Rising",
-      level: "rising",
-      explanation: "Extended exploration increases risk.",
-    };
+  let tier: PressureTier = "Calm";
+  const reasons: string[] = [];
+
+  if (turn >= 5) {
+    tier = "Tense";
+    reasons.push("Time spent in dungeon");
   }
 
-  if (turn < 15) {
-    return {
-      label: "High",
-      level: "high",
-      explanation: "Dungeon denizens may react to prolonged activity.",
-    };
+  if (activeTraps > 0) {
+    tier = "Tense";
+    reasons.push(`${activeTraps} armed trap(s)`);
+  }
+
+  if (alertedRooms > 0) {
+    tier = "Dangerous";
+    reasons.push(`${alertedRooms} room(s) on alert`);
+  }
+
+  if (turn >= 10 || alertedRooms >= 2) {
+    tier = "Critical";
+    reasons.push("Escalating monster activity");
   }
 
   return {
-    label: "Critical",
-    level: "critical",
-    explanation: "Sustained presence makes encounters increasingly likely.",
-  };
-}
-
-function deriveAlertState(events: readonly SessionEvent[]) {
-  const noisy = events.filter(
-    (e) =>
-      e.type === "OUTCOME" &&
-      typeof e.payload?.description === "string" &&
-      /(attack|fight|smash|break|loud|explode)/i.test(
-        e.payload.description
-      )
-  );
-
-  if (noisy.length === 0) {
-    return {
-      status: "Quiet",
-      explanation: "No significant noise detected.",
-    };
-  }
-
-  const last = noisy.at(-1);
-
-  return {
-    status: "Alerted",
-    explanation: last?.payload?.description ?? "Recent noisy activity.",
-  };
-}
-
-function wanderingMonsterAdvisory(
-  turn: number,
-  alertStatus: string
-): { show: boolean; reason: string } {
-  if (turn >= 10 && alertStatus === "Alerted") {
-    return {
-      show: true,
-      reason:
-        "Extended time combined with elevated alert level suggests a wandering monster check.",
-    };
-  }
-
-  if (turn >= 12) {
-    return {
-      show: true,
-      reason:
-        "Extended exploration time alone may justify a wandering monster check.",
-    };
-  }
-
-  return { show: false, reason: "" };
-}
-
-function derivePersistentWorldState(
-  events: readonly SessionEvent[],
-  roomId?: string
-): string[] {
-  const notes: string[] = [];
-
-  events.forEach((e) => {
-    if (e.type !== "OUTCOME") return;
-    const w = e.payload?.world;
-    if (!w) return;
-
-    if (roomId && w.roomId && w.roomId !== roomId) return;
-
-    if (w.lock) {
-      notes.push(
-        `Door ${w.lock.state === "locked" ? "locked" : "unlocked"}${
-          w.lock.keyId ? ` (Key: ${w.lock.keyId})` : ""
-        }`
-      );
-    }
-
-    if (w.trap) {
-      notes.push(
-        `Trap ${
-          w.trap.state === "sprung" ? "sprung" : "armed"
-        }`
-      );
-    }
-  });
-
-  return notes;
-}
-
-// ------------------------------------------------------------
-// Component
-// ------------------------------------------------------------
-
-export default function DungeonPressurePanel({
-  turn,
-  currentRoomId,
-  events,
-}: Props) {
-  const pressure = pressureForTurn(turn);
-  const alert = deriveAlertState(events);
-  const wandering = wanderingMonsterAdvisory(
+    tier,
     turn,
-    alert.status
-  );
-  const persistent = derivePersistentWorldState(
-    events,
-    currentRoomId
+    activeTraps,
+    alertedRooms,
+    lockedDoors,
+    reasons,
+  };
+}
+
+// ------------------------------------------------------------
+
+export default function DungeonPressurePanel({ events }: Props) {
+  const pressure = useMemo(
+    () => evaluatePressure(events),
+    [events]
   );
 
   return (
     <section
-      className="card"
       style={{
-        borderLeft: "4px solid #666",
-        background: "#111",
+        border: "1px solid #444",
+        borderRadius: 6,
+        padding: 16,
+        marginTop: 16,
+        background: "#0f1a2a",
       }}
     >
-      <h3>🧭 Dungeon Pressure (Advisory)</h3>
+      <h3>Dungeon Pressure</h3>
 
-      {/* Turn Pressure */}
       <p>
-        <strong>Turn:</strong> {turn} ·{" "}
-        <strong>Pressure:</strong>{" "}
-        <span>{pressure.label}</span>
+        <strong>Status:</strong>{" "}
+        <span
+          style={{
+            color:
+              pressure.tier === "Calm"
+                ? "#9f9"
+                : pressure.tier === "Tense"
+                ? "#ff9"
+                : pressure.tier === "Dangerous"
+                ? "#f99"
+                : "#f55",
+          }}
+        >
+          {pressure.tier}
+        </span>
       </p>
-      <p className="muted">{pressure.explanation}</p>
 
-      <hr />
+      <ul style={{ marginTop: 8 }}>
+        <li>Turn: {pressure.turn}</li>
+        <li>Armed traps: {pressure.activeTraps}</li>
+        <li>Locked doors: {pressure.lockedDoors}</li>
+        <li>Alerted rooms: {pressure.alertedRooms}</li>
+      </ul>
 
-      {/* Alert State */}
-      <p>
-        <strong>Alert Status:</strong> {alert.status}
-      </p>
-      <p className="muted">{alert.explanation}</p>
-
-      <hr />
-
-      {/* Wandering Monsters */}
-      {wandering.show ? (
+      {pressure.reasons.length > 0 && (
         <>
-          <p>
-            <strong>Wandering Monsters:</strong>{" "}
-            Check recommended
+          <p className="muted" style={{ marginTop: 8 }}>
+            Contributing factors:
           </p>
-          <p className="muted">{wandering.reason}</p>
-          <hr />
+          <ul>
+            {pressure.reasons.map((r, i) => (
+              <li key={i}>{r}</li>
+            ))}
+          </ul>
         </>
-      ) : (
-        <>
-          <p>
-            <strong>Wandering Monsters:</strong>{" "}
-            Unlikely at present
-          </p>
-          <hr />
-        </>
-      )}
-
-      {/* Persistent World State */}
-      <p>
-        <strong>Environmental Memory:</strong>
-      </p>
-
-      {persistent.length === 0 ? (
-        <p className="muted">
-          No notable persistent changes in this area.
-        </p>
-      ) : (
-        <ul>
-          {persistent.map((n, i) => (
-            <li key={i}>{n}</li>
-          ))}
-        </ul>
       )}
 
       <p className="muted" style={{ marginTop: 8 }}>
-        Advisory only — Arbiter determines all outcomes.
+        Advisory only. No outcomes are enforced.
       </p>
     </section>
   );
