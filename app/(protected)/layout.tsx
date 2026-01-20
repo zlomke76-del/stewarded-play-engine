@@ -9,7 +9,8 @@ export default async function ProtectedLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const headerStore = headers();
+  // 🔑 headers() is ASYNC in Next.js 16
+  const headerStore = await headers();
   const cookieHeader = headerStore.get("cookie") ?? "";
 
   const supabase = createServerClient(
@@ -17,7 +18,7 @@ export default async function ProtectedLayout({
     process.env.SUPABASE_ANON_KEY!,
     {
       cookies: {
-        // 🔒 READ-ONLY in layout
+        // 🔒 READ-ONLY cookie access in layout
         get(name: string) {
           const match = cookieHeader.match(
             new RegExp(`${name}=([^;]+)`)
