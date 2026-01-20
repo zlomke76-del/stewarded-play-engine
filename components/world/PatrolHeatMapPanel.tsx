@@ -5,9 +5,11 @@
 // ------------------------------------------------------------
 // Advisory-only patrol / danger heat overlay by room
 //
-// FIXED:
-// - Numeric heat score separated from HeatLevel enum
-// - No invalid number → HeatLevel assignments
+// Features:
+// - Primary heat from noise + alerts
+// - Adjacency bleed to neighboring rooms
+// - Time-based decay
+// - PURE derivation (no mutation, no authority)
 // ------------------------------------------------------------
 
 import React, { useMemo } from "react";
@@ -26,7 +28,7 @@ type HeatLevel = "cold" | "warm" | "hot" | "danger";
 
 type RoomHeat = {
   roomId: string;
-  score: number; // numeric only
+  score: number;
   level: HeatLevel;
   lastTurn: number;
 };
@@ -63,7 +65,14 @@ function derivePatrolHeat(
   events: readonly SessionEvent[],
   currentTurn: number
 ): RoomHeat[] {
-  const map = new Map<string, { score: number; lastTurn: number }>();
+  const roomMap = new Map<
+    string,
+    { score: number; lastTurn: number; adjacent: Set<string> }
+  >();
+
+  // ----------------------------------------------------------
+  // Pass 1: Build base heat + adjacency graph
+  // ----------------------------------------------------------
 
   for (const e of events) {
     if (e.type !== "OUTCOME") continue;
@@ -72,13 +81,24 @@ function derivePatrolHeat(
     const roomId = world?.roomId;
     if (!roomId) continue;
 
-    if (!map.has(roomId)) {
-      map.set(roomId, { score: 0, lastTurn: currentTurn });
+    if (!roomMap.has(roomId)) {
+      roomMap.set(roomId, {
+        score: 0,
+        lastTurn: currentTurn,
+        adjacent: new Set<string>(),
+      });
     }
 
-    const entry = map.get(roomId)!;
+    const entry = roomMap.get(roomId)!;
 
-    // ---- Noise & combat ----
+    // --- adjacency registration ---
+    if (Array.isArray(world.adjacent)) {
+      world.adjacent.forEach((r: string) =>
+        entry.adjacent.add(r)
+      );
+    }
+
+    // --- noise & combat ---
     if (
       typeof e.payload?.description === "string" &&
       /(attack|fight|combat|shout|smash|break|explode)/i.test(
@@ -88,7 +108,7 @@ function derivePatrolHeat(
       entry.score += 3;
     }
 
-    // ---- Alert escalation ----
+    // --- alert escalation ---
     if (world.alert?.level === "suspicious") {
       entry.score += 1;
     }
@@ -100,10 +120,44 @@ function derivePatrolHeat(
     entry.lastTurn = world.turn ?? currentTurn;
   }
 
-  // ---- Decay over time ----
+  // ----------------------------------------------------------
+  // Pass 2: Adjacency bleed (soft propagation)
+  // ----------------------------------------------------------
+
+  const bleedAdds = new Map<string, number>();
+
+  for (const [roomId, entry] of roomMap.entries()) {
+    if (entry.score <= 1) continue;
+
+    const bleed = Math.floor(entry.score / 2);
+
+    entry.adjacent.forEach((adj) => {
+      bleedAdds.set(
+        adj,
+        (bleedAdds.get(adj) ?? 0) + bleed
+      );
+    });
+  }
+
+  for (const [roomId, bleed] of bleedAdds.entries()) {
+    if (!roomMap.has(roomId)) {
+      roomMap.set(roomId, {
+        score: 0,
+        lastTurn: currentTurn,
+        adjacent: new Set(),
+      });
+    }
+
+    roomMap.get(roomId)!.score += bleed;
+  }
+
+  // ----------------------------------------------------------
+  // Pass 3: Decay + finalize
+  // ----------------------------------------------------------
+
   const results: RoomHeat[] = [];
 
-  for (const [roomId, entry] of map.entries()) {
+  for (const [roomId, entry] of roomMap.entries()) {
     const age = currentTurn - entry.lastTurn;
     const decayedScore = Math.max(
       0,
@@ -157,8 +211,7 @@ export default function PatrolHeatMapPanel({
               <strong>{r.roomId}</strong> ·{" "}
               {r.level.toUpperCase()}{" "}
               <span className="muted">
-                (score {r.score}, last activity{" "}
-                {turn - r.lastTurn} turns ago)
+                (score {r.score})
               </span>
             </li>
           ))}
@@ -166,9 +219,9 @@ export default function PatrolHeatMapPanel({
       )}
 
       <p className="muted" style={{ marginTop: 8 }}>
-        Heat reflects time, noise, and alerts.
-        Advisory only — Arbiter determines encounters
-        and patrol behavior.
+        Heat propagates to adjacent rooms and decays
+        over time. Advisory only — Arbiter determines
+        encounters and patrol behavior.
       </p>
     </section>
   );
