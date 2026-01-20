@@ -11,6 +11,10 @@
 
 import { useEffect, useMemo, useState } from "react";
 
+/* ------------------------------------------------------------
+   Types
+------------------------------------------------------------ */
+
 type DiceMode = "d4" | "d6" | "d8" | "d10" | "d12" | "d20";
 type RollSource = "auto" | "manual";
 
@@ -25,6 +29,13 @@ type Props = {
   context: ResolutionContext;
   role: "arbiter";
   autoResolve?: boolean;
+
+  // 🔑 NEW (optional, non-breaking)
+  tribeBias?: {
+    dcShift: number;
+    narrative?: string;
+  };
+
   onRecord: (payload: {
     description: string;
     dice: {
@@ -44,13 +55,16 @@ type Props = {
         state: TrapState;
         effect?: string;
       };
+      resources?: {
+        foodDelta?: number;
+      };
     };
   }) => void;
 };
 
-// ------------------------------------------------------------
-// Difficulty framing (language-only, non-authoritative)
-// ------------------------------------------------------------
+/* ------------------------------------------------------------
+   Difficulty framing (language-only)
+------------------------------------------------------------ */
 
 function difficultyFor(kind?: ResolutionContext["optionKind"]) {
   switch (kind) {
@@ -69,12 +83,10 @@ function difficultyFor(kind?: ResolutionContext["optionKind"]) {
 
 function inferRoomName(text: string): string {
   const t = text.toLowerCase();
-
   if (t.includes("hunt")) return "Hunting Grounds";
   if (t.includes("scout")) return "Nearby Ridge";
   if (t.includes("defend")) return "Camp Perimeter";
   if (t.includes("move")) return "New Camp";
-
   return "The Wilds";
 }
 
@@ -82,36 +94,53 @@ function diceMax(mode: DiceMode): number {
   return parseInt(mode.replace("d", ""), 10);
 }
 
-// ------------------------------------------------------------
+/* ------------------------------------------------------------ */
 
 export default function ResolutionDraftPanel({
   context,
   role,
   autoResolve = false,
+  tribeBias,
   onRecord,
 }: Props) {
-  const { dc, justification } = difficultyFor(context.optionKind);
+  const base = difficultyFor(context.optionKind);
+
+  // 🔑 Bias applied here — invisible to player
+  const dc = Math.max(base.dc + (tribeBias?.dcShift ?? 0), 0);
+  const justification =
+    base.justification +
+    (tribeBias?.dcShift
+      ? " (shaped by tribal experience)"
+      : "");
 
   const [diceMode] = useState<DiceMode>("d20");
   const [roll, setRoll] = useState<number | null>(null);
-  const [rollSource, setRollSource] = useState<RollSource>("auto");
-
-  const draft = `Outcome resolved: ${context.optionDescription}`;
-
-  const [audit, setAudit] = useState<string[]>([
-    "Drafted by Solace",
-  ]);
+  const [rollSource, setRollSource] =
+    useState<RollSource>("auto");
 
   const inferredRoomName = useMemo(
     () => inferRoomName(context.optionDescription),
     [context.optionDescription]
   );
 
-  const [roomName] = useState(inferredRoomName);
+  const [audit, setAudit] = useState<string[]>([
+    "Drafted by Solace",
+    ...(tribeBias?.narrative ? [tribeBias.narrative] : []),
+  ]);
 
-  // ----------------------------------------------------------
-  // AUTO RESOLUTION (OPT-IN)
-  // ----------------------------------------------------------
+  const draftDescription = useMemo(() => {
+    if (roll === null || dc === 0) {
+      return "The tribe moves cautiously, conserving strength.";
+    }
+    if (roll >= dc) {
+      return "The tribe acts decisively. Fortune favors them.";
+    }
+    return "The attempt falters. The land pushes back.";
+  }, [roll, dc]);
+
+  /* ----------------------------------------------------------
+     AUTO RESOLUTION
+  ---------------------------------------------------------- */
 
   useEffect(() => {
     if (!autoResolve) return;
@@ -132,8 +161,10 @@ export default function ResolutionDraftPanel({
     if (!autoResolve) return;
     if (roll === null) return;
 
+    const success = roll >= dc;
+
     onRecord({
-      description: draft,
+      description: draftDescription,
       dice: {
         mode: diceMode,
         roll,
@@ -144,16 +175,20 @@ export default function ResolutionDraftPanel({
       audit: [...audit, "Auto-recorded by Solace"],
       world: {
         primary: "location",
-        roomId: roomName,
+        roomId: inferredRoomName,
         scope: "local",
+        resources:
+          context.optionKind === "contested" && success
+            ? { foodDelta: 2 }
+            : undefined,
       },
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autoResolve, roll]);
 
-  // ----------------------------------------------------------
-  // AUTO-RESOLVE UI (SHOW THE DICE)
-  // ----------------------------------------------------------
+  /* ----------------------------------------------------------
+     AUTO UI (DICE VISIBLE)
+  ---------------------------------------------------------- */
 
   if (autoResolve) {
     const outcome =
@@ -169,11 +204,11 @@ export default function ResolutionDraftPanel({
           border: "1px dashed #666",
           padding: 12,
           marginTop: 12,
-          opacity: 0.9,
+          opacity: 0.95,
         }}
       >
         <p className="muted">
-          Solace weighs risk… rolls fate… commits canon.
+          Solace weighs risk… fate turns…
         </p>
 
         {roll !== null && (
@@ -188,9 +223,34 @@ export default function ResolutionDraftPanel({
     );
   }
 
-  // ----------------------------------------------------------
-  // ARBITER UI (UNCHANGED)
-  // ----------------------------------------------------------
+  /* ----------------------------------------------------------
+     ARBITER UI (UNCHANGED)
+  ---------------------------------------------------------- */
+
+  function handleRecord() {
+    const success = roll !== null && roll >= dc;
+
+    onRecord({
+      description: draftDescription,
+      dice: {
+        mode: diceMode,
+        roll,
+        dc,
+        justification,
+        source: rollSource,
+      },
+      audit: [...audit, "Recorded by Arbiter"],
+      world: {
+        primary: "location",
+        roomId: inferredRoomName,
+        scope: "local",
+        resources:
+          context.optionKind === "contested" && success
+            ? { foodDelta: 2 }
+            : undefined,
+      },
+    });
+  }
 
   return (
     <section style={{ border: "1px dashed #666", padding: 16 }}>
@@ -222,7 +282,7 @@ export default function ResolutionDraftPanel({
       )}
 
       {role === "arbiter" && (
-        <button onClick={() => handleRecord()}>
+        <button onClick={handleRecord}>
           Record Outcome
         </button>
       )}
@@ -230,23 +290,4 @@ export default function ResolutionDraftPanel({
       <p className="muted">{audit.join(" · ")}</p>
     </section>
   );
-
-  function handleRecord() {
-    onRecord({
-      description: draft,
-      dice: {
-        mode: diceMode,
-        roll,
-        dc,
-        justification,
-        source: rollSource,
-      },
-      audit: [...audit, "Recorded by Arbiter"],
-      world: {
-        primary: "location",
-        roomId: roomName,
-        scope: "local",
-      },
-    });
-  }
 }
