@@ -28,6 +28,7 @@ import NextActionHint from "@/components/NextActionHint";
 
 import WorldLedgerPanel from "@/components/world/WorldLedgerPanel";
 import DungeonPressurePanel from "@/components/world/DungeonPressurePanel";
+import RoomLedgerPanel from "@/components/world/RoomLedgerPanel";
 
 import StewardedShell from "@/components/layout/StewardedShell";
 import ModeHeader from "@/components/layout/ModeHeader";
@@ -43,6 +44,20 @@ type OptionKind =
   | "environmental"
   | "risky"
   | "contested";
+
+// Narrow OUTCOME payload locally (type guard)
+function hasWorldRoomId(
+  e: any
+): e is {
+  type: "OUTCOME";
+  payload: { world: { roomId?: string } };
+} {
+  return (
+    e?.type === "OUTCOME" &&
+    typeof e?.payload === "object" &&
+    typeof e?.payload?.world === "object"
+  );
+}
 
 function inferOptionKind(description: string): OptionKind {
   const t = description.toLowerCase();
@@ -76,11 +91,6 @@ function inferOptionKind(description: string): OptionKind {
   return "safe";
 }
 
-function formatRoomName(roomId?: string) {
-  if (!roomId) return "Unknown Location";
-  return roomId;
-}
-
 // ------------------------------------------------------------
 
 export default function ClassicFantasyPage() {
@@ -99,17 +109,13 @@ export default function ClassicFantasyPage() {
     useState<Option | null>(null);
 
   // ----------------------------------------------------------
-  // Derive current room from canon (authoritative)
+  // Derive current room from canon (LAST roomId)
   // ----------------------------------------------------------
 
   const currentRoomId = useMemo(() => {
     const last = [...state.events]
       .reverse()
-      .find(
-        (e) =>
-          e.type === "OUTCOME" &&
-          e.payload?.world?.roomId
-      );
+      .find(hasWorldRoomId);
 
     return last?.payload?.world?.roomId;
   }, [state.events]);
@@ -220,21 +226,26 @@ export default function ClassicFantasyPage() {
 
       {/* ---------- CURRENT LOCATION ---------- */}
       <CardSection title="📍 Current Location">
-        <p>
-          <strong>{formatRoomName(currentRoomId)}</strong>
-        </p>
-        {!currentRoomId && (
-          <p className="muted">
-            The party has not yet entered a defined room.
-          </p>
+        {currentRoomId ? (
+          <strong>{currentRoomId}</strong>
+        ) : (
+          <span className="muted">
+            Location not yet established
+          </span>
         )}
       </CardSection>
 
-      {/* ---------- DUNGEON PRESSURE (ADVISORY ONLY) ---------- */}
+      {/* ---------- DUNGEON PRESSURE (ADVISORY) ---------- */}
       <DungeonPressurePanel
         turn={turn}
         currentRoomId={currentRoomId}
         events={state.events}
+      />
+
+      {/* ---------- ROOM LEDGER (CLICKABLE) ---------- */}
+      <RoomLedgerPanel
+        events={state.events}
+        currentRoomId={currentRoomId}
       />
 
       {/* ---------- COMMAND ---------- */}
@@ -262,7 +273,9 @@ export default function ClassicFantasyPage() {
             {options.map((opt) => (
               <li key={opt.id}>
                 <button
-                  onClick={() => setSelectedOption(opt)}
+                  onClick={() =>
+                    setSelectedOption(opt)
+                  }
                 >
                   {opt.description}
                 </button>
@@ -307,7 +320,7 @@ export default function ClassicFantasyPage() {
               .map((event) => (
                 <li key={event.id}>
                   {String(
-                    event.payload.description
+                    event.payload?.description
                   )}
                 </li>
               ))}
