@@ -26,6 +26,7 @@ import { exportCanon } from "@/lib/export/exportCanon";
 import ResolutionDraftPanel from "@/components/resolution/ResolutionDraftPanel";
 import NextActionHint from "@/components/NextActionHint";
 import WorldLedgerPanel from "@/components/world/WorldLedgerPanel";
+import DungeonPressurePanel from "@/components/world/DungeonPressurePanel";
 
 import StewardedShell from "@/components/layout/StewardedShell";
 import ModeHeader from "@/components/layout/ModeHeader";
@@ -207,6 +208,14 @@ export default function DemoPage() {
         ]}
       />
 
+      {/* ---------- ADVISORY DUNGEON PRESSURE ---------- */}
+      <DungeonPressurePanel
+        turn={state.events.filter(
+          (e) => e.type === "OUTCOME"
+        ).length}
+        events={state.events}
+      />
+
       <CardSection title="Facilitation Mode">
         <label>
           <input
@@ -294,7 +303,6 @@ export default function DemoPage() {
         </CardSection>
       )}
 
-      {/* ---------- RESOLUTION DRAFT ---------- */}
       {selectedOption && (
         <ResolutionDraftPanel
           role={role}
@@ -311,7 +319,6 @@ export default function DemoPage() {
 
       <NextActionHint state={state} />
 
-      {/* ---------- WORLD LEDGER (READ-ONLY) ---------- */}
       <WorldLedgerPanel events={state.events} />
 
       <CardSection
