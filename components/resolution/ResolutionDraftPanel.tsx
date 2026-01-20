@@ -1,58 +1,197 @@
 "use client";
 
 // ------------------------------------------------------------
-// WorldLedgerPanel
+// ResolutionDraftPanel
 // ------------------------------------------------------------
-// Read-only world state ledger
-// - Displays confirmed OUTCOME events
-// - Does NOT mutate canon
-// - Accepts readonly SessionEvent[]
+// - Drafted by Solace (non-authoritative)
+// - Dice advisory only (polyhedral supported)
+// - Arbiter records canon
+// - Room / Map ID tagging supported
 // ------------------------------------------------------------
 
-import type { SessionEvent } from "@/lib/session/SessionState";
-import CardSection from "@/components/layout/CardSection";
+import { useState } from "react";
 
-type Props = {
-  events: readonly SessionEvent[];
+type DiceMode =
+  | "d4"
+  | "d6"
+  | "d8"
+  | "d10"
+  | "d12"
+  | "d20"
+  | "d100";
+
+export type ResolutionContext = {
+  optionDescription: string;
+  optionKind?: "safe" | "environmental" | "risky" | "contested";
 };
 
-export default function WorldLedgerPanel({ events }: Props) {
-  const outcomes = events.filter(
-    (e) => e.type === "OUTCOME"
+type Props = {
+  context: ResolutionContext;
+  role: "arbiter";
+  onRecord: (payload: {
+    description: string;
+    dice: {
+      mode: DiceMode;
+      roll: number | null;
+      dc: number;
+      justification: string;
+    };
+    audit: string[];
+    world?: {
+      primary: string;
+      roomId?: string;
+      scope?: "local" | "regional" | "global";
+    };
+  }) => void;
+};
+
+// ------------------------------------------------------------
+// Difficulty mapping
+// ------------------------------------------------------------
+
+function difficultyFor(kind?: ResolutionContext["optionKind"]) {
+  switch (kind) {
+    case "safe":
+      return { dc: 0, justification: "Safe action" };
+    case "environmental":
+      return { dc: 6, justification: "Environmental uncertainty" };
+    case "risky":
+      return { dc: 10, justification: "Risky action" };
+    case "contested":
+      return { dc: 14, justification: "Contested action" };
+    default:
+      return { dc: 10, justification: "Default difficulty" };
+  }
+}
+
+function rollDie(sides: number) {
+  return Math.ceil(Math.random() * sides);
+}
+
+function rollDice(mode: DiceMode): number {
+  switch (mode) {
+    case "d4":
+      return rollDie(4);
+    case "d6":
+      return rollDie(6);
+    case "d8":
+      return rollDie(8);
+    case "d10":
+      return rollDie(10);
+    case "d12":
+      return rollDie(12);
+    case "d20":
+      return rollDie(20);
+    case "d100":
+      return rollDie(10) * 10 + rollDie(10);
+  }
+}
+
+// ------------------------------------------------------------
+
+export default function ResolutionDraftPanel({
+  context,
+  role,
+  onRecord,
+}: Props) {
+  const { dc, justification } = difficultyFor(context.optionKind);
+
+  const [diceMode, setDiceMode] = useState<DiceMode>("d20");
+  const [roll, setRoll] = useState<number | null>(null);
+  const [draft, setDraft] = useState(
+    `The situation resolves based on the chosen path: ${context.optionDescription}.`
   );
 
+  const [roomId, setRoomId] = useState("");
+  const [audit, setAudit] = useState<string[]>(["Drafted by Solace"]);
+
+  function handleRoll() {
+    const result = rollDice(diceMode);
+    setRoll(result);
+    setAudit((a) => [...a, `Dice rolled (${diceMode}): ${result}`]);
+  }
+
+  function handleEdit(text: string) {
+    setDraft(text);
+    if (!audit.includes("Edited by Arbiter")) {
+      setAudit((a) => [...a, "Edited by Arbiter"]);
+    }
+  }
+
+  function handleRecord() {
+    if (!draft.trim()) return;
+
+    onRecord({
+      description: draft,
+      dice: {
+        mode: diceMode,
+        roll,
+        dc,
+        justification,
+      },
+      audit: [...audit, "Recorded by Arbiter"],
+      world: {
+        primary: draft,
+        roomId: roomId || undefined,
+        scope: "local",
+      },
+    });
+  }
+
   return (
-    <CardSection title="World Ledger">
-      {outcomes.length === 0 ? (
-        <p className="muted">
-          No world state changes recorded yet.
-        </p>
-      ) : (
-        <ul>
-          {outcomes.map((event) => {
-            const payload = event.payload as any;
+    <section className="card dashed">
+      <h3>Resolution Draft</h3>
 
-            return (
-              <li key={event.id}>
-                <strong>
-                  {payload.world?.primary ??
-                    "World Update"}
-                </strong>
-                <br />
-                <span>
-                  {String(payload.description)}
-                </span>
+      <p className="muted">
+        🎲 Difficulty {dc} — {justification}
+      </p>
 
-                {payload.world?.scope && (
-                  <div className="muted">
-                    Scope: {payload.world.scope}
-                  </div>
-                )}
-              </li>
-            );
-          })}
-        </ul>
+      <label>
+        Dice system:&nbsp;
+        <select
+          value={diceMode}
+          onChange={(e) => setDiceMode(e.target.value as DiceMode)}
+        >
+          {["d4","d6","d8","d10","d12","d20","d100"].map((d) => (
+            <option key={d} value={d}>{d}</option>
+          ))}
+        </select>
+      </label>
+
+      <div style={{ marginTop: 8 }}>
+        <button onClick={handleRoll}>Roll Dice</button>
+        {roll !== null && (
+          <span style={{ marginLeft: 8 }}>
+            Result: <strong>{roll}</strong>
+          </span>
+        )}
+      </div>
+
+      <label style={{ marginTop: 12, display: "block" }}>
+        Room / Map ID (optional):
+        <input
+          value={roomId}
+          onChange={(e) => setRoomId(e.target.value)}
+          placeholder="e.g. A3, Dungeon-01, Castle-East"
+        />
+      </label>
+
+      <textarea
+        rows={4}
+        style={{ width: "100%", marginTop: 12 }}
+        value={draft}
+        onChange={(e) => handleEdit(e.target.value)}
+      />
+
+      {role === "arbiter" && (
+        <button style={{ marginTop: 8 }} onClick={handleRecord}>
+          Record Outcome
+        </button>
       )}
-    </CardSection>
+
+      <p className="muted" style={{ marginTop: 8 }}>
+        {audit.join(" · ")}
+      </p>
+    </section>
   );
 }
