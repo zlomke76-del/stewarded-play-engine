@@ -3,12 +3,6 @@
 // ------------------------------------------------------------
 // Classic Fantasy — Might & Magic Resolution
 // ------------------------------------------------------------
-// Procedural dungeon play with:
-// - Advisory polyhedral dice
-// - Arbiter-only canon writes
-// - Persistent world ledger
-// - Turn pressure + dungeon attrition
-// ------------------------------------------------------------
 
 import { useState } from "react";
 import {
@@ -27,8 +21,6 @@ import NextActionHint from "@/components/NextActionHint";
 import WorldLedgerPanel from "@/components/world/WorldLedgerPanel";
 import TurnPressurePanel from "@/components/world/TurnPressurePanel";
 import FogOfWarPanel from "@/components/world/FogOfWarPanel";
-import WanderingMonsterPanel from "@/components/world/WanderingMonsterPanel";
-import ResourceClockPanel from "@/components/world/ResourceClockPanel";
 
 import StewardedShell from "@/components/layout/StewardedShell";
 import ModeHeader from "@/components/layout/ModeHeader";
@@ -110,7 +102,7 @@ export default function ClassicFantasyPage() {
   }
 
   // ----------------------------------------------------------
-  // Arbiter records canon (increments turn)
+  // Arbiter records canon (TURN ADVANCES HERE)
   // ----------------------------------------------------------
 
   function handleRecord(payload: {
@@ -123,9 +115,24 @@ export default function ClassicFantasyPage() {
     };
     audit: string[];
     world?: {
-      primary: string;
+      primary?: string;
       roomId?: string;
       scope?: "local" | "regional" | "global";
+
+      // extensions (future-safe)
+      lock?: {
+        state: "locked" | "unlocked";
+        keyId?: string;
+      };
+      trap?: {
+        id: string;
+        state: "armed" | "sprung" | "disarmed";
+        effect?: string;
+      };
+      alert?: {
+        level: "none" | "suspicious" | "alerted";
+        source?: string;
+      };
     };
   }) {
     const nextTurn = turn + 1;
@@ -165,7 +172,7 @@ export default function ClassicFantasyPage() {
   return (
     <StewardedShell theme="fantasy">
       <ModeHeader
-        title="Classic Fantasy — Might & Magic Resolution"
+        title="Classic Fantasy — Resolution"
         onShare={handleShare}
         roles={[
           { label: "Player", description: "Issues commands" },
@@ -182,11 +189,9 @@ export default function ClassicFantasyPage() {
         ]}
       />
 
-      {/* ---------- DUNGEON PRESSURE ---------- */}
+      {/* ---------- DUNGEON STATE ---------- */}
       <TurnPressurePanel turn={turn} />
-      <WanderingMonsterPanel turn={turn} />
-      <ResourceClockPanel turn={turn} />
-      <FogOfWarPanel events={[...state.events]} />
+      <FogOfWarPanel events={state.events} />
 
       {/* ---------- COMMAND ---------- */}
       <CardSection title="Command">
@@ -225,7 +230,6 @@ export default function ClassicFantasyPage() {
         </CardSection>
       )}
 
-      {/* ---------- RESOLUTION DRAFT ---------- */}
       {selectedOption && (
         <ResolutionDraftPanel
           role={role}
@@ -242,8 +246,7 @@ export default function ClassicFantasyPage() {
 
       <NextActionHint state={state} />
 
-      {/* ---------- WORLD LEDGER ---------- */}
-      <WorldLedgerPanel events={[...state.events]} />
+      <WorldLedgerPanel events={state.events} />
 
       <CardSection
         title="Canon (Confirmed World State)"
