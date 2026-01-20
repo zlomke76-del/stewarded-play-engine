@@ -12,7 +12,14 @@
 
 import { useMemo, useState } from "react";
 
-type DiceMode = "d4" | "d6" | "d8" | "d10" | "d12" | "d20" | "d100";
+type DiceMode =
+  | "d4"
+  | "d6"
+  | "d8"
+  | "d10"
+  | "d12"
+  | "d20"
+  | "d100";
 
 export type ResolutionContext = {
   optionDescription: string;
@@ -35,6 +42,12 @@ type Props = {
       primary?: string;
       roomId?: string;
       scope?: "local" | "regional" | "global";
+
+      // --- NEW ---
+      lock?: {
+        state: "locked" | "unlocked";
+        keyId?: string;
+      };
     };
   }) => void;
 };
@@ -82,7 +95,7 @@ function rollDice(mode: DiceMode) {
 }
 
 // ------------------------------------------------------------
-// Room inference (suggestion only)
+// Room inference (movement only)
 // ------------------------------------------------------------
 
 function inferRoomSuggestion(text: string): string | null {
@@ -102,6 +115,26 @@ function inferRoomSuggestion(text: string): string | null {
 }
 
 // ------------------------------------------------------------
+// Lock inference (suggestion only)
+// ------------------------------------------------------------
+
+function inferLockSuggestion(text: string): {
+  locked: boolean;
+  keyId?: string;
+} | null {
+  const t = text.toLowerCase();
+
+  if (t.includes("locked")) {
+    return {
+      locked: true,
+      keyId: "iron-key",
+    };
+  }
+
+  return null;
+}
+
+// ------------------------------------------------------------
 
 export default function ResolutionDraftPanel({
   context,
@@ -112,6 +145,7 @@ export default function ResolutionDraftPanel({
 
   const [diceMode, setDiceMode] = useState<DiceMode>("d20");
   const [roll, setRoll] = useState<number | null>(null);
+
   const [draft, setDraft] = useState(
     `The situation resolves based on the chosen path: ${context.optionDescription}.`
   );
@@ -120,6 +154,7 @@ export default function ResolutionDraftPanel({
     "Drafted by Solace",
   ]);
 
+  // --- Room suggestion ---
   const suggestedRoomId = useMemo(
     () => inferRoomSuggestion(context.optionDescription),
     [context.optionDescription]
@@ -127,6 +162,20 @@ export default function ResolutionDraftPanel({
 
   const [roomId, setRoomId] = useState<string | null>(
     suggestedRoomId
+  );
+
+  // --- Lock suggestion ---
+  const suggestedLock = useMemo(
+    () => inferLockSuggestion(context.optionDescription),
+    [context.optionDescription]
+  );
+
+  const [locked, setLocked] = useState<boolean>(
+    suggestedLock?.locked ?? false
+  );
+
+  const [keyId, setKeyId] = useState<string>(
+    suggestedLock?.keyId ?? "iron-key"
   );
 
   function handleRoll() {
@@ -157,13 +206,19 @@ export default function ResolutionDraftPanel({
         justification,
       },
       audit: [...audit, "Recorded by Arbiter"],
-      world: roomId
-        ? {
-            primary: "location change",
-            roomId,
-            scope: "local",
-          }
-        : undefined,
+      world: {
+        primary: roomId ? "location change" : "state change",
+        roomId: roomId ?? undefined,
+        scope: "local",
+        ...(locked
+          ? {
+              lock: {
+                state: "locked",
+                keyId,
+              },
+            }
+          : undefined),
+      },
     });
   }
 
@@ -211,11 +266,11 @@ export default function ResolutionDraftPanel({
         )}
       </div>
 
-      {/* ---------- ROOM SUGGESTION ---------- */}
+      {/* ---------- ROOM ---------- */}
       {roomId && (
         <div style={{ marginTop: 12 }}>
           <label>
-            Suggested Room ID (editable):{" "}
+            Room ID:&nbsp;
             <input
               value={roomId}
               onChange={(e) =>
@@ -223,12 +278,36 @@ export default function ResolutionDraftPanel({
               }
             />
           </label>
-          <p className="muted">
-            Suggested due to movement action. This will
-            reveal a new location in Fog of War if recorded.
-          </p>
         </div>
       )}
+
+      {/* ---------- LOCK ---------- */}
+      <div style={{ marginTop: 12 }}>
+        <label>
+          <input
+            type="checkbox"
+            checked={locked}
+            onChange={(e) =>
+              setLocked(e.target.checked)
+            }
+          />{" "}
+          Door is locked
+        </label>
+
+        {locked && (
+          <div style={{ marginTop: 4 }}>
+            <label>
+              Required key:&nbsp;
+              <input
+                value={keyId}
+                onChange={(e) =>
+                  setKeyId(e.target.value)
+                }
+              />
+            </label>
+          </div>
+        )}
+      </div>
 
       <textarea
         rows={4}
