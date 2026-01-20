@@ -73,6 +73,37 @@ function inferOptionKind(description: string): OptionKind {
 }
 
 // ------------------------------------------------------------
+// Narrative synthesis (Caveman-only)
+// ------------------------------------------------------------
+
+function narrateOutcome(
+  option: Option,
+  roll: number | null,
+  dc: number
+): string {
+  if (roll === null || dc === 0) {
+    return `You proceed carefully. The tribe endures without incident.`;
+  }
+
+  if (roll >= dc) {
+    return `The attempt succeeds. Momentum shifts in your favor.`;
+  }
+
+  return `The attempt falters. The land resists your effort.`;
+}
+
+function inferBiome(description: string): string {
+  const t = description.toLowerCase();
+
+  if (t.includes("hunt")) return "Hunting Grounds";
+  if (t.includes("scout")) return "Nearby Ridge";
+  if (t.includes("move")) return "New Camp";
+  if (t.includes("defend")) return "Camp Perimeter";
+
+  return "The Wilds";
+}
+
+// ------------------------------------------------------------
 
 export default function CavemanPage() {
   const [state, setState] = useState<SessionState>(
@@ -99,7 +130,7 @@ export default function CavemanPage() {
           typeof (e as any).payload?.world?.roomId === "string"
       ) as any | undefined;
 
-    return last?.payload?.world?.roomId ?? "The Camp";
+    return last?.payload?.world?.roomId ?? "The Wilds";
   }, [state.events]);
 
   // ----------------------------------------------------------
@@ -112,9 +143,6 @@ export default function CavemanPage() {
     const parsedAction = parseAction("player_1", command);
     const optionSet = generateOptions(parsedAction);
 
-    console.log("PARSED ACTION:", parsedAction);
-    console.log("OPTION SET:", optionSet);
-
     const resolvedOptions =
       optionSet?.options?.length > 0
         ? optionSet.options
@@ -125,7 +153,7 @@ export default function CavemanPage() {
             },
           ] as Option[]);
 
-    // 🔑 FIX: clone readonly array before storing in state
+    // clone readonly → mutable for state
     setOptions([...resolvedOptions]);
     setSelectedOption(null);
   }
@@ -148,6 +176,10 @@ export default function CavemanPage() {
     const nextTurn = turn + 1;
     setTurn(nextTurn);
 
+    const biome = inferBiome(
+      selectedOption?.description ?? command
+    );
+
     setState((prev) =>
       recordEvent(prev, {
         id: crypto.randomUUID(),
@@ -156,9 +188,16 @@ export default function CavemanPage() {
         type: "OUTCOME",
         payload: {
           ...payload,
+          description: narrateOutcome(
+            selectedOption!,
+            payload.dice.roll,
+            payload.dice.dc
+          ),
           audit: [...payload.audit, "The Weave enforced"],
           world: {
-            ...payload.world,
+            primary: "location",
+            roomId: biome,
+            scope: "local",
             turn: nextTurn,
           },
         },
@@ -194,7 +233,7 @@ export default function CavemanPage() {
           {
             label: "Solace",
             description:
-              "Rolls dice, resolves outcomes, commits canon",
+              "Rolls fate, weighs risk, commits canon",
           },
         ]}
       />
@@ -233,7 +272,7 @@ export default function CavemanPage() {
 
       {selectedOption && (
         <ResolutionDraftPanel
-          role="arbiter"
+          role="arbiter" // structural only
           autoResolve
           context={{
             optionDescription: selectedOption.description,
