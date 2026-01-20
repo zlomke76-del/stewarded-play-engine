@@ -1,15 +1,20 @@
 "use client";
 
 // ------------------------------------------------------------
-// ResolutionDraftPanel — Polyhedral Governed
+// ResolutionDraftPanel
+// ------------------------------------------------------------
+// Governing contract:
+// - Drafted by Solace (non-authoritative)
+// - Dice are advisory only
+// - Arbiter edits + records canon
+// - Full audit ribbon always visible
 // ------------------------------------------------------------
 
-import { useEffect, useState } from "react";
-import CardSection from "@/components/layout/CardSection";
+import { useState } from "react";
 
-// ------------------------------------------------------------
-// Types
-// ------------------------------------------------------------
+/* ------------------------------------------------------------ */
+/* Dice Types                                                   */
+/* ------------------------------------------------------------ */
 
 type DiceMode =
   | "d4"
@@ -21,6 +26,10 @@ type DiceMode =
   | "d100";
 
 type EvalResult = "success" | "partial" | "failure";
+
+/* ------------------------------------------------------------ */
+/* Props & Context                                              */
+/* ------------------------------------------------------------ */
 
 export type ResolutionContext = {
   optionDescription: string;
@@ -36,44 +45,36 @@ type Props = {
       mode: DiceMode;
       roll: number | null;
       dc: number;
-      justification: string;
       evaluation: EvalResult | null;
+      justification: string;
       manual: boolean;
     };
     audit: string[];
   }) => void;
 };
 
-// ------------------------------------------------------------
-// Difficulty + recommendation mapping
-// ------------------------------------------------------------
+/* ------------------------------------------------------------ */
+/* Difficulty Mapping (Transparent & Visible)                   */
+/* ------------------------------------------------------------ */
 
 function difficultyFor(kind?: ResolutionContext["optionKind"]) {
   switch (kind) {
     case "safe":
-      return { dc: 4, justification: "Low-impact, safe action", recommend: "d4" };
+      return { dc: 0, justification: "Safe action" };
     case "environmental":
-      return {
-        dc: 6,
-        justification: "Environmental uncertainty",
-        recommend: "d6",
-      };
+      return { dc: 6, justification: "Environmental uncertainty" };
     case "risky":
-      return { dc: 10, justification: "Risky action", recommend: "d10" };
+      return { dc: 10, justification: "Risky action" };
     case "contested":
-      return {
-        dc: 14,
-        justification: "Contested or opposed action",
-        recommend: "d20",
-      };
+      return { dc: 14, justification: "Contested action" };
     default:
-      return { dc: 8, justification: "Uncertain action", recommend: "d8" };
+      return { dc: 10, justification: "Default risk" };
   }
 }
 
-// ------------------------------------------------------------
-// Dice rolling
-// ------------------------------------------------------------
+/* ------------------------------------------------------------ */
+/* Dice Roller                                                  */
+/* ------------------------------------------------------------ */
 
 function rollDice(mode: DiceMode): number {
   switch (mode) {
@@ -90,76 +91,75 @@ function rollDice(mode: DiceMode): number {
     case "d20":
       return Math.ceil(Math.random() * 20);
     case "d100":
-      return Math.ceil(Math.random() * 100);
+      return (
+        Math.floor(Math.random() * 10) * 10 +
+        Math.floor(Math.random() * 10)
+      );
   }
 }
 
-// ------------------------------------------------------------
-// Evaluation logic (system-agnostic)
-// ------------------------------------------------------------
+/* ------------------------------------------------------------ */
+/* Roll Evaluation (Advisory)                                   */
+/* ------------------------------------------------------------ */
 
 function evaluateRoll(
   roll: number,
   dc: number
 ): EvalResult {
+  if (dc === 0) return "success";
   if (roll >= dc + 4) return "success";
   if (roll >= dc) return "partial";
   return "failure";
 }
 
-// ------------------------------------------------------------
+/* ------------------------------------------------------------ */
+/* Component                                                    */
+/* ------------------------------------------------------------ */
 
 export default function ResolutionDraftPanel({
   context,
   role,
   onRecord,
 }: Props) {
-  const { dc, justification, recommend } = difficultyFor(context.optionKind);
+  const { dc, justification } = difficultyFor(context.optionKind);
 
-  const [diceMode, setDiceMode] = useState<DiceMode>(recommend);
-  const [roll, setRoll] = useState<number | null>(null);
+  const [diceMode, setDiceMode] = useState<DiceMode>("d20");
   const [manual, setManual] = useState(false);
   const [manualValue, setManualValue] = useState<number>(0);
 
+  const [roll, setRoll] = useState<number | null>(null);
   const [evaluation, setEvaluation] = useState<EvalResult | null>(null);
-  const [draft, setDraft] = useState("");
-  const [audit, setAudit] = useState<string[]>(["Drafted by Solace"]);
 
-  // ----------------------------------------------------------
-  // Initial Solace draft
-  // ----------------------------------------------------------
+  const [draft, setDraft] = useState(
+    `The situation follows the chosen path: ${context.optionDescription}.`
+  );
 
-  useEffect(() => {
-    setDraft(
-      `Solace proposes a possible resolution: ${context.optionDescription}. The outcome will depend on the roll.`
-    );
-    setAudit(["Drafted by Solace"]);
-    setRoll(null);
-    setEvaluation(null);
-    setDiceMode(recommend);
-  }, [context.optionDescription, recommend]);
+  const [audit, setAudit] = useState<string[]>([
+    "Drafted by Solace",
+  ]);
 
-  // ----------------------------------------------------------
-  // Roll dice
-  // ----------------------------------------------------------
+  /* ---------------------------------------------------------- */
+  /* Pre-roll Resolution Bands (Solace Draft)                   */
+  /* ---------------------------------------------------------- */
+
+  const bands = {
+    success: `Success: ${context.optionDescription} resolves cleanly and decisively.`,
+    partial: `Partial success: ${context.optionDescription} resolves, but with complications or cost.`,
+    failure: `Failure: ${context.optionDescription} does not resolve as intended.`,
+  };
+
+  /* ---------------------------------------------------------- */
+  /* Dice Roll                                                  */
+  /* ---------------------------------------------------------- */
 
   function handleRoll() {
     const value = manual ? manualValue : rollDice(diceMode);
-    setRoll(value);
-
     const result = evaluateRoll(value, dc);
+
+    setRoll(value);
     setEvaluation(result);
 
-    setDraft(() => {
-      switch (result) {
-        case "success":
-          return `The action succeeds. ${context.optionDescription} resolves cleanly.`;
-        case "partial":
-          return `The action partially succeeds. ${context.optionDescription} resolves, but with complications.`;
-        case "failure":
-          return `The action fails. ${context.optionDescription} does not resolve as intended.`;
-      }
-    });
+    setDraft(bands[result]);
 
     setAudit((a) => [
       ...a,
@@ -168,9 +168,9 @@ export default function ResolutionDraftPanel({
     ]);
   }
 
-  // ----------------------------------------------------------
-  // Arbiter edits
-  // ----------------------------------------------------------
+  /* ---------------------------------------------------------- */
+  /* Arbiter Edit                                               */
+  /* ---------------------------------------------------------- */
 
   function handleEdit(text: string) {
     setDraft(text);
@@ -179,9 +179,9 @@ export default function ResolutionDraftPanel({
     }
   }
 
-  // ----------------------------------------------------------
-  // Record canon
-  // ----------------------------------------------------------
+  /* ---------------------------------------------------------- */
+  /* Record Outcome                                             */
+  /* ---------------------------------------------------------- */
 
   function handleRecord() {
     if (!draft.trim()) return;
@@ -192,28 +192,36 @@ export default function ResolutionDraftPanel({
         mode: diceMode,
         roll,
         dc,
-        justification,
         evaluation,
+        justification,
         manual,
       },
       audit: [...audit, "Recorded by Arbiter"],
     });
   }
 
-  // ----------------------------------------------------------
-  // UI
-  // ----------------------------------------------------------
+  /* ---------------------------------------------------------- */
+  /* Render                                                     */
+  /* ---------------------------------------------------------- */
 
   return (
-    <CardSection title="Resolution Draft">
+    <section
+      style={{
+        border: "1px dashed #666",
+        padding: 16,
+        borderRadius: 6,
+        marginTop: 16,
+      }}
+    >
+      <h3>Resolution Draft</h3>
+
       <p className="muted">
         🎲 Difficulty {dc} — {justification}
-        <br />
-        Recommended die: <strong>{recommend}</strong>
       </p>
 
+      {/* Dice Controls */}
       <label>
-        Dice:&nbsp;
+        Dice system:&nbsp;
         <select
           value={diceMode}
           onChange={(e) =>
@@ -226,31 +234,31 @@ export default function ResolutionDraftPanel({
           <option value="d10">d10</option>
           <option value="d12">d12</option>
           <option value="d20">d20</option>
-          <option value="d100">d100</option>
+          <option value="d100">d100 / percentile</option>
         </select>
       </label>
 
-      <br />
+      <div style={{ marginTop: 8 }}>
+        <label>
+          <input
+            type="checkbox"
+            checked={manual}
+            onChange={(e) => setManual(e.target.checked)}
+          />{" "}
+          Enter roll manually
+        </label>
 
-      <label>
-        <input
-          type="checkbox"
-          checked={manual}
-          onChange={(e) => setManual(e.target.checked)}
-        />{" "}
-        Enter roll manually
-      </label>
-
-      {manual && (
-        <input
-          type="number"
-          value={manualValue}
-          onChange={(e) =>
-            setManualValue(Number(e.target.value))
-          }
-          style={{ marginLeft: 8, width: 80 }}
-        />
-      )}
+        {manual && (
+          <input
+            type="number"
+            value={manualValue}
+            onChange={(e) =>
+              setManualValue(Number(e.target.value))
+            }
+            style={{ marginLeft: 8, width: 80 }}
+          />
+        )}
+      </div>
 
       <div style={{ marginTop: 8 }}>
         <button onClick={handleRoll}>Roll Dice</button>
@@ -262,6 +270,7 @@ export default function ResolutionDraftPanel({
         )}
       </div>
 
+      {/* Draft Text */}
       <textarea
         rows={4}
         style={{ width: "100%", marginTop: 12 }}
@@ -269,6 +278,7 @@ export default function ResolutionDraftPanel({
         onChange={(e) => handleEdit(e.target.value)}
       />
 
+      {/* Record */}
       {role === "arbiter" && (
         <button
           style={{ marginTop: 8 }}
@@ -278,9 +288,10 @@ export default function ResolutionDraftPanel({
         </button>
       )}
 
+      {/* Audit */}
       <p className="muted" style={{ marginTop: 8 }}>
         {audit.join(" · ")}
       </p>
-    </CardSection>
+    </section>
   );
 }
