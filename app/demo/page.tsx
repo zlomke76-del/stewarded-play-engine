@@ -36,9 +36,14 @@ import Disclaimer from "@/components/layout/Disclaimer";
 // ------------------------------------------------------------
 
 type DMMode = "human" | "solace-neutral";
+type OptionKind =
+  | "safe"
+  | "environmental"
+  | "risky"
+  | "contested";
 
 // ------------------------------------------------------------
-// Framing helpers (neutral, deterministic)
+// Framing helpers
 // ------------------------------------------------------------
 
 function generateFraming(seed: string): string {
@@ -48,6 +53,42 @@ function generateFraming(seed: string): string {
     (seed ? `Rumors speak of ${seed}. ` : "") +
     `Nothing has happened yet. The world waits.`
   );
+}
+
+// ------------------------------------------------------------
+// Difficulty inference (NO Option schema changes)
+// ------------------------------------------------------------
+
+function inferOptionKind(description: string): OptionKind {
+  const text = description.toLowerCase();
+
+  if (
+    text.includes("attack") ||
+    text.includes("fight") ||
+    text.includes("oppose") ||
+    text.includes("contest")
+  ) {
+    return "contested";
+  }
+
+  if (
+    text.includes("climb") ||
+    text.includes("cross") ||
+    text.includes("navigate") ||
+    text.includes("environment")
+  ) {
+    return "environmental";
+  }
+
+  if (
+    text.includes("steal") ||
+    text.includes("sneak") ||
+    text.includes("risk")
+  ) {
+    return "risky";
+  }
+
+  return "safe";
 }
 
 // ------------------------------------------------------------
@@ -66,7 +107,6 @@ export default function DemoPage() {
   const [playerInput, setPlayerInput] = useState("");
   const [parsed, setParsed] = useState<any>(null);
   const [options, setOptions] = useState<Option[] | null>(null);
-
   const [selectedOption, setSelectedOption] =
     useState<Option | null>(null);
 
@@ -75,7 +115,7 @@ export default function DemoPage() {
   );
 
   // ----------------------------------------------------------
-  // Framing (Solace)
+  // Framing
   // ----------------------------------------------------------
 
   useEffect(() => {
@@ -134,7 +174,7 @@ export default function DemoPage() {
   }
 
   // ----------------------------------------------------------
-  // Share / Export Canon
+  // Share canon
   // ----------------------------------------------------------
 
   function shareCanon() {
@@ -260,7 +300,9 @@ export default function DemoPage() {
           context={{
             optionDescription:
               selectedOption.description,
-            optionKind: selectedOption.kind,
+            optionKind: inferOptionKind(
+              selectedOption.description
+            ),
           }}
           onRecord={handleRecord}
         />
