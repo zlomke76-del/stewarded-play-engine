@@ -9,7 +9,7 @@
 // - Arbiter explicitly commits world state OR Solace auto-commits
 // ------------------------------------------------------------
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 /* ------------------------------------------------------------
    Types
@@ -30,7 +30,7 @@ type Props = {
   role: "arbiter";
   autoResolve?: boolean;
 
-  // 🔑 NEW (optional, non-breaking)
+  // Optional, invisible bias from tribe history / skills
   tribeBias?: {
     dcShift: number;
     narrative?: string;
@@ -105,18 +105,15 @@ export default function ResolutionDraftPanel({
 }: Props) {
   const base = difficultyFor(context.optionKind);
 
-  // 🔑 Bias applied here — invisible to player
+  // Bias applied here (never exposed directly)
   const dc = Math.max(base.dc + (tribeBias?.dcShift ?? 0), 0);
   const justification =
     base.justification +
-    (tribeBias?.dcShift
-      ? " (shaped by tribal experience)"
-      : "");
+    (tribeBias?.dcShift ? " (shaped by tribal experience)" : "");
 
   const [diceMode] = useState<DiceMode>("d20");
   const [roll, setRoll] = useState<number | null>(null);
-  const [rollSource, setRollSource] =
-    useState<RollSource>("auto");
+  const [rollSource, setRollSource] = useState<RollSource>("auto");
 
   const inferredRoomName = useMemo(
     () => inferRoomName(context.optionDescription),
@@ -127,6 +124,15 @@ export default function ResolutionDraftPanel({
     "Drafted by Solace",
     ...(tribeBias?.narrative ? [tribeBias.narrative] : []),
   ]);
+
+  // Prevent double-commit in strict / remount scenarios
+  const committedRef = useRef(false);
+
+  // Reset roll when context meaningfully changes
+  useEffect(() => {
+    setRoll(null);
+    committedRef.current = false;
+  }, [context.optionDescription]);
 
   const draftDescription = useMemo(() => {
     if (roll === null || dc === 0) {
@@ -160,6 +166,9 @@ export default function ResolutionDraftPanel({
   useEffect(() => {
     if (!autoResolve) return;
     if (roll === null) return;
+    if (committedRef.current) return;
+
+    committedRef.current = true;
 
     const success = roll >= dc;
 
@@ -183,8 +192,19 @@ export default function ResolutionDraftPanel({
             : undefined,
       },
     });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [autoResolve, roll]);
+  }, [
+    autoResolve,
+    roll,
+    dc,
+    draftDescription,
+    audit,
+    justification,
+    inferredRoomName,
+    diceMode,
+    rollSource,
+    context.optionKind,
+    onRecord,
+  ]);
 
   /* ----------------------------------------------------------
      AUTO UI (DICE VISIBLE)
@@ -207,9 +227,7 @@ export default function ResolutionDraftPanel({
           opacity: 0.95,
         }}
       >
-        <p className="muted">
-          Solace weighs risk… fate turns…
-        </p>
+        <p className="muted">Solace weighs risk… fate turns…</p>
 
         {roll !== null && (
           <p>
@@ -224,10 +242,13 @@ export default function ResolutionDraftPanel({
   }
 
   /* ----------------------------------------------------------
-     ARBITER UI (UNCHANGED)
+     ARBITER UI
   ---------------------------------------------------------- */
 
   function handleRecord() {
+    if (committedRef.current) return;
+    committedRef.current = true;
+
     const success = roll !== null && roll >= dc;
 
     onRecord({
