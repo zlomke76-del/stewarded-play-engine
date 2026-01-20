@@ -82,7 +82,6 @@ export default function CavemanPage() {
   const [turn, setTurn] = useState(0);
 
   const [command, setCommand] = useState("");
-  const [parsed, setParsed] = useState<any>(null);
   const [options, setOptions] = useState<Option[] | null>(null);
   const [selectedOption, setSelectedOption] =
     useState<Option | null>(null);
@@ -113,8 +112,21 @@ export default function CavemanPage() {
     const parsedAction = parseAction("player_1", command);
     const optionSet = generateOptions(parsedAction);
 
-    setParsed(parsedAction);
-    setOptions([...optionSet.options]);
+    console.log("PARSED ACTION:", parsedAction);
+    console.log("OPTION SET:", optionSet);
+
+    // ---------- SAFE FALLBACK ----------
+    const resolvedOptions =
+      optionSet?.options?.length > 0
+        ? optionSet.options
+        : [
+            {
+              id: "fallback",
+              description: `Proceed cautiously: ${command}`,
+            } as Option,
+          ];
+
+    setOptions(resolvedOptions);
     setSelectedOption(null);
   }
 
@@ -154,7 +166,6 @@ export default function CavemanPage() {
     );
 
     setCommand("");
-    setParsed(null);
     setOptions(null);
     setSelectedOption(null);
   }
@@ -222,7 +233,7 @@ export default function CavemanPage() {
 
       {selectedOption && (
         <ResolutionDraftPanel
-          role="arbiter" // structural only
+          role="arbiter"
           autoResolve
           context={{
             optionDescription: selectedOption.description,
