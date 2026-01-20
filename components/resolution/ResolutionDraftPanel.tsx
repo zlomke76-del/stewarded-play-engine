@@ -12,6 +12,10 @@
 
 import { useMemo, useState } from "react";
 
+// ------------------------------------------------------------
+// Types
+// ------------------------------------------------------------
+
 type DiceMode =
   | "d4"
   | "d6"
@@ -45,13 +49,11 @@ type Props = {
       roomId?: string;
       scope?: "local" | "regional" | "global";
 
-      // --- LOCKS ---
       lock?: {
         state: "locked" | "unlocked";
         keyId?: string;
       };
 
-      // --- TRAPS ---
       trap?: {
         id: string;
         state: TrapState;
@@ -85,39 +87,49 @@ function difficultyFor(kind?: ResolutionContext["optionKind"]) {
 // ------------------------------------------------------------
 
 function rollDice(mode: DiceMode) {
-  switch (mode) {
-    case "d4":
-      return Math.ceil(Math.random() * 4);
-    case "d6":
-      return Math.ceil(Math.random() * 6);
-    case "d8":
-      return Math.ceil(Math.random() * 8);
-    case "d10":
-      return Math.ceil(Math.random() * 10);
-    case "d12":
-      return Math.ceil(Math.random() * 12);
-    case "d20":
-      return Math.ceil(Math.random() * 20);
-    case "d100":
-      return Math.ceil(Math.random() * 100);
-  }
+  const sides = Number(mode.slice(1));
+  return Math.ceil(Math.random() * sides);
 }
 
 // ------------------------------------------------------------
-// Room inference
+// Room inference + naming
 // ------------------------------------------------------------
 
-function inferRoomSuggestion(text: string): string | null {
+const ROOM_NAME_POOL = [
+  "Stone Hallway",
+  "Guard Post",
+  "Collapsed Passage",
+  "Antechamber",
+  "Watch Corridor",
+  "Old Armory",
+  "Dusty Shrine",
+  "Hidden Alcove",
+  "Barracks",
+  "Ritual Chamber",
+];
+
+function inferRoomSuggestion(text: string): {
+  id: string;
+  name: string;
+} | null {
   const t = text.toLowerCase();
 
   if (
-    t.includes("open door") ||
     t.includes("enter") ||
+    t.includes("open door") ||
     t.includes("hallway") ||
     t.includes("room") ||
     t.includes("passage")
   ) {
-    return `room-${crypto.randomUUID().slice(0, 6)}`;
+    const name =
+      ROOM_NAME_POOL[
+        Math.floor(Math.random() * ROOM_NAME_POOL.length)
+      ];
+
+    return {
+      id: `room-${crypto.randomUUID().slice(0, 6)}`,
+      name,
+    };
   }
 
   return null;
@@ -163,18 +175,24 @@ export default function ResolutionDraftPanel({
     `The situation resolves based on the chosen path: ${context.optionDescription}.`
   );
 
-  const [audit, setAudit] = useState<string[]>([
-    "Drafted by Solace",
-  ]);
+  const [audit, setAudit] = useState<string[]>(["Drafted by Solace"]);
 
   // ---------- ROOM ----------
-  const suggestedRoomId = useMemo(
+  const suggestedRoom = useMemo(
     () => inferRoomSuggestion(context.optionDescription),
     [context.optionDescription]
   );
 
-  const [roomId, setRoomId] = useState<string | null>(
-    suggestedRoomId
+  const [commitRoom, setCommitRoom] = useState<boolean>(
+    Boolean(suggestedRoom)
+  );
+
+  const [roomId, setRoomId] = useState<string>(
+    suggestedRoom?.id ?? ""
+  );
+
+  const [roomName, setRoomName] = useState<string>(
+    suggestedRoom?.name ?? ""
   );
 
   // ---------- TRAP ----------
@@ -188,7 +206,8 @@ export default function ResolutionDraftPanel({
   );
 
   const [trapId, setTrapId] = useState<string>(
-    suggestedTrap?.id ?? `trap-${crypto.randomUUID().slice(0, 6)}`
+    suggestedTrap?.id ??
+      `trap-${crypto.randomUUID().slice(0, 6)}`
   );
 
   const [trapState, setTrapState] =
@@ -203,10 +222,7 @@ export default function ResolutionDraftPanel({
   function handleRoll() {
     const result = rollDice(diceMode);
     setRoll(result);
-    setAudit((a) => [
-      ...a,
-      `Dice rolled (${diceMode}): ${result}`,
-    ]);
+    setAudit((a) => [...a, `Dice rolled (${diceMode}): ${result}`]);
   }
 
   function handleEdit(text: string) {
@@ -229,9 +245,13 @@ export default function ResolutionDraftPanel({
       },
       audit: [...audit, "Recorded by Arbiter"],
       world: {
-        primary: "room state update",
-        roomId: roomId ?? undefined,
-        scope: "local",
+        ...(commitRoom
+          ? {
+              primary: `Entered ${roomName}`,
+              roomId,
+              scope: "local",
+            }
+          : undefined),
         ...(trapPresent
           ? {
               trap: {
@@ -270,13 +290,13 @@ export default function ResolutionDraftPanel({
             setDiceMode(e.target.value as DiceMode)
           }
         >
-          <option value="d4">d4</option>
-          <option value="d6">d6</option>
-          <option value="d8">d8</option>
-          <option value="d10">d10</option>
-          <option value="d12">d12</option>
-          <option value="d20">d20</option>
-          <option value="d100">d100</option>
+          {["d4", "d6", "d8", "d10", "d12", "d20", "d100"].map(
+            (d) => (
+              <option key={d} value={d}>
+                {d}
+              </option>
+            )
+          )}
         </select>
       </label>
 
@@ -289,18 +309,45 @@ export default function ResolutionDraftPanel({
         )}
       </div>
 
-      {/* ---------- ROOM ---------- */}
-      {roomId && (
+      {/* ---------- ROOM COMMIT ---------- */}
+      {suggestedRoom && (
         <div style={{ marginTop: 12 }}>
           <label>
-            Room ID:&nbsp;
             <input
-              value={roomId}
+              type="checkbox"
+              checked={commitRoom}
               onChange={(e) =>
-                setRoomId(e.target.value)
+                setCommitRoom(e.target.checked)
               }
-            />
+            />{" "}
+            Commit room to canon
           </label>
+
+          {commitRoom && (
+            <div style={{ marginTop: 6 }}>
+              <label>
+                Room Name:&nbsp;
+                <input
+                  value={roomName}
+                  onChange={(e) =>
+                    setRoomName(e.target.value)
+                  }
+                />
+              </label>
+
+              <br />
+
+              <label>
+                Room ID:&nbsp;
+                <input
+                  value={roomId}
+                  onChange={(e) =>
+                    setRoomId(e.target.value)
+                  }
+                />
+              </label>
+            </div>
+          )}
         </div>
       )}
 
@@ -343,9 +390,7 @@ export default function ResolutionDraftPanel({
               >
                 <option value="armed">Armed</option>
                 <option value="sprung">Sprung</option>
-                <option value="disarmed">
-                  Disarmed
-                </option>
+                <option value="disarmed">Disarmed</option>
               </select>
             </label>
 
