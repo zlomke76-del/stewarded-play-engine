@@ -24,7 +24,6 @@ import { parseAction } from "@/lib/parser/ActionParser";
 import { generateOptions, Option } from "@/lib/options/OptionGenerator";
 import { exportCanon } from "@/lib/export/exportCanon";
 
-import ResolutionDraftPanel from "@/components/resolution/ResolutionDraftPanel";
 import WorldLedgerPanel from "@/components/world/WorldLedgerPanel";
 
 import StewardedShell from "@/components/layout/StewardedShell";
@@ -64,9 +63,7 @@ function inferOptionKind(description: string): OptionKind {
 
 export default function CavemanPage() {
   const [state, setState] = useState<SessionState>(
-    createSession("caveman-session", {
-      governance: "weave",
-    })
+    createSession("caveman-session")
   );
 
   const [turn, setTurn] = useState(0);
@@ -74,8 +71,6 @@ export default function CavemanPage() {
   const [command, setCommand] = useState("");
   const [parsed, setParsed] = useState<any>(null);
   const [options, setOptions] = useState<Option[] | null>(null);
-  const [selectedOption, setSelectedOption] =
-    useState<Option | null>(null);
 
   // ----------------------------------------------------------
   // Derive current location from canon
@@ -105,11 +100,10 @@ export default function CavemanPage() {
 
     setParsed(parsedAction);
     setOptions([...optionSet.options]);
-    setSelectedOption(null);
   }
 
   // ----------------------------------------------------------
-  // Solace auto-resolves + records canon
+  // Solace auto-resolves + records canon (governed)
   // ----------------------------------------------------------
 
   function autoResolve(option: Option) {
@@ -126,7 +120,7 @@ export default function CavemanPage() {
           description: option.description,
           dice: {
             mode: option.diceMode ?? "d20",
-            roll: null, // auto-rolled downstream
+            roll: null,
             dc: option.dc ?? 10,
             justification: "Governed resolution",
           },
@@ -140,7 +134,6 @@ export default function CavemanPage() {
     );
 
     setOptions(null);
-    setSelectedOption(null);
     setParsed(null);
     setCommand("");
   }
@@ -203,12 +196,7 @@ export default function CavemanPage() {
           <ul>
             {options.map((opt) => (
               <li key={opt.id}>
-                <button
-                  onClick={() => {
-                    setSelectedOption(opt);
-                    autoResolve(opt);
-                  }}
-                >
+                <button onClick={() => autoResolve(opt)}>
                   {opt.description}
                 </button>
               </li>
