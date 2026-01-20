@@ -35,8 +35,7 @@ function pressureForTurn(turn: number) {
     label: "Dangerous",
     description:
       "The dungeon reacts. Enemies may mobilize. Resources strain.",
-    };
-  }
+  };
 }
 
 export default function TurnPressurePanel({ turn }: Props) {
