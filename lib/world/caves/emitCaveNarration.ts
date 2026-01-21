@@ -1,20 +1,16 @@
 // ------------------------------------------------------------
-// Cave Narration Emitter
+// Emit Cave Narration
 // ------------------------------------------------------------
-// Emits narrative text based on entropy, tribe perception,
-// and cave sentence availability.
-// Silence is intentional and NOT exported.
+// Orchestrates:
+// - Sentence selection
+// - Entropy application
+// - Impossible-line enforcement
 // ------------------------------------------------------------
 
-import {
-  applySentenceEntropy,
-  SentenceMemory,
-  TribeProfile,
-} from "./applySentenceEntropy";
-
+import { applySentenceEntropy } from "./applySentenceEntropy";
 import {
   selectCaveSentence,
-  CaveSentenceResult,
+  TribeProfile,
 } from "./selectCaveSentence";
 
 import type { CaveNode } from "./WindscarCave";
@@ -23,85 +19,68 @@ import type { CaveNode } from "./WindscarCave";
    Types
 ------------------------------------------------------------ */
 
-export type EmitCaveNarrationContext = {
+export type SentenceMemory = {
+  usedSentenceIds: Set<string>;
+  usedImpossibleIds: Set<string>;
+};
+
+export type CaveNarrationContext = {
   node: CaveNode;
   entropy: number;
   tribe: TribeProfile;
   memory: SentenceMemory;
-  usedImpossible: Set<string>;
 };
 
 /* ------------------------------------------------------------
-   Emitter
+   Main
 ------------------------------------------------------------ */
 
-export function emitCaveNarration(
-  ctx: EmitCaveNarrationContext
-): {
-  text: string | null;
-  entropyAfter: number;
-} {
-  const {
-    node,
-    entropy,
-    tribe,
-    memory,
-    usedImpossible,
-  } = ctx;
+export function emitCaveNarration(ctx: CaveNarrationContext) {
+  const { node, entropy, tribe, memory } = ctx;
 
   const entropyBefore = entropy;
+
+  // 🔑 Convert Set → boolean for selector
+  const usedImpossible =
+    memory.usedImpossibleIds.size > 0;
 
   /* ----------------------------------------------------------
      Sentence selection
   ---------------------------------------------------------- */
 
-  const result: CaveSentenceResult =
-    selectCaveSentence(
-      node.nodeId,
-      entropyBefore,
-      tribe,
-      usedImpossible
-    );
+  const result = selectCaveSentence(
+    node.nodeId,
+    entropyBefore,
+    tribe,
+    usedImpossible
+  );
 
   /* ----------------------------------------------------------
-     Silence path (intentional)
+     Entropy update
   ---------------------------------------------------------- */
 
-  if (!result.sentence) {
-    const entropyAfter = applySentenceEntropy(
-      entropyBefore,
-      "silence",
-      memory
-    );
+  const entropyAfter = applySentenceEntropy(
+    entropyBefore,
+    result.sentence ? "sentence" : "silence",
+    memory
+  );
 
-    return {
-      text: null, // silence is NOT exported
-      entropyAfter,
-    };
+  /* ----------------------------------------------------------
+     Memory update
+  ---------------------------------------------------------- */
+
+  if (result.sentence) {
+    memory.usedSentenceIds.add(result.sentence.id);
+
+    if (result.usedImpossible) {
+      memory.usedImpossibleIds.add(result.sentence.id);
+    }
   }
-
-  /* ----------------------------------------------------------
-     Impossible sentence (one-time)
-  ---------------------------------------------------------- */
-
-  if (result.reason === "impossible-consumed") {
-    usedImpossible.add(result.sentence.id);
-  }
-
-  /* ----------------------------------------------------------
-     Apply entropy + scarring
-  ---------------------------------------------------------- */
-
-  const { text, entropyAfter } =
-    applySentenceEntropy(
-      entropyBefore,
-      "sentence",
-      memory,
-      result.sentence
-    );
 
   return {
-    text,
+    sentence: result.sentence,
+    entropyBefore,
     entropyAfter,
+    memory,
   };
 }
