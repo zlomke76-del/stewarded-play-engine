@@ -106,6 +106,30 @@ function resolveCaveNode(option: Option) {
 }
 
 // ------------------------------------------------------------
+// 🜂 Solace observation (one-line, non-authoritative)
+// ------------------------------------------------------------
+
+function deriveObservation(world?: any): string {
+  if (!world || world.nodeType !== "cave") {
+    return "Wind moves freely here, but stone nearby interrupts its flow.";
+  }
+
+  if (world.depth === 0) {
+    return "Air cools unevenly near the rock face, carrying the scent of damp stone.";
+  }
+
+  if (world.depth === 1) {
+    return "Sound dulls quickly here, swallowed by twisting stone and narrow air.";
+  }
+
+  if (world.state === "sacred") {
+    return "The chamber feels altered — as if presence, not shelter, defines it now.";
+  }
+
+  return "The stone closes in, holding traces of earlier passage.";
+}
+
+// ------------------------------------------------------------
 
 export default function CavemanPage() {
   const [state, setState] = useState<SessionState>(
@@ -120,20 +144,24 @@ export default function CavemanPage() {
     useState<Option | null>(null);
 
   // ----------------------------------------------------------
-  // Canon-derived location
+  // Canon-derived world
   // ----------------------------------------------------------
 
-  const currentLocation = useMemo(() => {
+  const lastWorld = useMemo(() => {
     const last = [...state.events]
       .reverse()
-      .find(
-        (e) =>
-          e.type === "OUTCOME" &&
-          typeof (e as any).payload?.world?.roomId === "string"
-      ) as any | undefined;
+      .find((e) => e.type === "OUTCOME") as any | undefined;
 
-    return last?.payload?.world?.roomId ?? "The Wilds";
+    return last?.payload?.world;
   }, [state.events]);
+
+  const currentLocation =
+    lastWorld?.roomId ?? "The Wilds";
+
+  const observation = useMemo(
+    () => deriveObservation(lastWorld),
+    [lastWorld]
+  );
 
   // ----------------------------------------------------------
   // Player intent
@@ -174,7 +202,6 @@ export default function CavemanPage() {
     const nextTurn = turn + 1;
     setTurn(nextTurn);
 
-    // 🔎 Detect last cave state
     const lastCaveEvent = [...state.events]
       .reverse()
       .find(
@@ -185,7 +212,6 @@ export default function CavemanPage() {
 
     const previousCave = lastCaveEvent?.payload?.world;
 
-    // 🔥 Solace signals (NORMALIZED)
     const fireUsed = Boolean(
       payload.description.toLowerCase().includes("fire") ||
         payload.audit.some((a) =>
@@ -207,12 +233,10 @@ export default function CavemanPage() {
           .includes("wait")
     );
 
-    // 🪨 Cave entry
     const caveEntry =
       selectedOption &&
       resolveCaveNode(selectedOption);
 
-    // 🪨 Cave evolution
     let evolvedState = previousCave?.state;
 
     if (previousCave) {
@@ -271,16 +295,6 @@ export default function CavemanPage() {
   }
 
   // ----------------------------------------------------------
-  // Share canon
-  // ----------------------------------------------------------
-
-  function handleShare() {
-    const canon = exportCanon(state.events);
-    navigator.clipboard.writeText(canon);
-    alert("Canon copied to clipboard.");
-  }
-
-  // ----------------------------------------------------------
   // UI
   // ----------------------------------------------------------
 
@@ -288,7 +302,11 @@ export default function CavemanPage() {
     <StewardedShell theme="dark">
       <ModeHeader
         title="Caveman — Survival (The Weave)"
-        onShare={handleShare}
+        onShare={() =>
+          navigator.clipboard.writeText(
+            exportCanon(state.events)
+          )
+        }
         roles={[
           { label: "Player", description: "Selects intent" },
           {
@@ -302,6 +320,10 @@ export default function CavemanPage() {
         <strong>{currentLocation}</strong>
       </CardSection>
 
+      <CardSection title="Solace Observes">
+        <p className="muted">{observation}</p>
+      </CardSection>
+
       <EnvironmentalPressurePanel turn={turn} />
       <SurvivalResourcePanel turn={turn} />
 
@@ -313,7 +335,9 @@ export default function CavemanPage() {
             autoResolve
             context={{
               optionDescription: selectedOption.description,
-              optionKind: inferOptionKind(selectedOption.description),
+              optionKind: inferOptionKind(
+                selectedOption.description
+              ),
             }}
             onRecord={handleAutoRecord}
           />
@@ -337,7 +361,9 @@ export default function CavemanPage() {
           <ul>
             {options.map((opt) => (
               <li key={opt.id}>
-                <button onClick={() => setSelectedOption(opt)}>
+                <button
+                  onClick={() => setSelectedOption(opt)}
+                >
                   {opt.description}
                 </button>
               </li>
