@@ -1,13 +1,13 @@
 // ------------------------------------------------------------
-// emitCaveNarration
+// Cave Narration Emitter
 // ------------------------------------------------------------
-// Single authoritative narration step for cave encounters.
-// Solace-only. Deterministic. No side effects.
+// Emits narrative text based on entropy, tribe perception,
+// and cave sentence availability.
+// Silence is intentional and NOT exported.
 // ------------------------------------------------------------
 
 import {
   applySentenceEntropy,
-  CaveEntropyState,
   SentenceMemory,
   TribeProfile,
 } from "./applySentenceEntropy";
@@ -17,146 +17,91 @@ import {
   CaveSentenceResult,
 } from "./selectCaveSentence";
 
-import { CaveNode } from "./WindscarCave";
+import type { CaveNode } from "./WindscarCave";
 
 /* ------------------------------------------------------------
    Types
 ------------------------------------------------------------ */
 
-export type CaveNarrationContext = {
-  caveNode: CaveNode;
-  entropy: CaveEntropyState;
-  memory: SentenceMemory;
+export type EmitCaveNarrationContext = {
+  node: CaveNode;
+  entropy: number;
   tribe: TribeProfile;
-
-  // environmental signals
-  turn: number;
-  fireUsed: boolean;
-  rested: boolean;
-};
-
-export type CaveNarrationResult = {
-  line?: string; // undefined = silence
-  kind: "sentence" | "omen" | "silence" | "impossible";
-  entropy: CaveEntropyState;
   memory: SentenceMemory;
-
-  // optional metadata (not exported to canon)
-  debug?: {
-    sentenceId?: string;
-    entropyBefore: number;
-    entropyAfter: number;
-  };
+  usedImpossible: Set<string>;
 };
 
 /* ------------------------------------------------------------
-   Core Function
+   Emitter
 ------------------------------------------------------------ */
 
 export function emitCaveNarration(
-  ctx: CaveNarrationContext
-): CaveNarrationResult {
+  ctx: EmitCaveNarrationContext
+): {
+  text: string | null;
+  entropyAfter: number;
+} {
   const {
-    caveNode,
+    node,
     entropy,
-    memory,
     tribe,
-    turn,
-    fireUsed,
-    rested,
+    memory,
+    usedImpossible,
   } = ctx;
 
-  const entropyBefore = entropy.value;
+  const entropyBefore = entropy;
 
   /* ----------------------------------------------------------
-     Decide narration mode
+     Sentence selection
   ---------------------------------------------------------- */
 
-  let mode: CaveNarrationResult["kind"] =
-    "sentence";
-
-  // Impossible line: one-time global destabilizer
-  if (
-    entropy.value >= 0.92 &&
-    !memory.impossibleUsed
-  ) {
-    mode = "impossible";
-  }
-  // Omen threshold
-  else if (
-    entropy.value >= 0.7 ||
-    caveNode.hazards.collapseRisk > 30
-  ) {
-    mode = "omen";
-  }
-  // Silence chance grows with familiarity
-  else if (
-    entropy.familiarity > 0.6 &&
-    Math.random() < 0.35
-  ) {
-    mode = "silence";
-  }
-
-  /* ----------------------------------------------------------
-     Sentence selection (if any)
-  ---------------------------------------------------------- */
-
-  let sentenceResult: CaveSentenceResult | null =
-    null;
-
-  if (mode !== "silence") {
-    sentenceResult = selectCaveSentence(
-      caveNode.nodeId,
-      entropy.value,
-      tribe
+  const result: CaveSentenceResult =
+    selectCaveSentence(
+      node.nodeId,
+      entropyBefore,
+      tribe,
+      usedImpossible
     );
+
+  /* ----------------------------------------------------------
+     Silence path (intentional)
+  ---------------------------------------------------------- */
+
+  if (!result.sentence) {
+    const entropyAfter = applySentenceEntropy(
+      entropyBefore,
+      "silence",
+      memory
+    );
+
+    return {
+      text: null, // silence is NOT exported
+      entropyAfter,
+    };
   }
 
   /* ----------------------------------------------------------
-     Apply entropy shift
+     Impossible sentence (one-time)
   ---------------------------------------------------------- */
 
-  const entropyEvent =
-    mode === "sentence" && sentenceResult
-      ? {
-          type: "sentence" as const,
-          sentenceId:
-            sentenceResult.sentenceId,
-        }
-      : { type: mode };
-
-  const updated = applySentenceEntropy(
-    entropy,
-    entropyEvent,
-    tribe,
-    memory
-  );
+  if (result.reason === "impossible-consumed") {
+    usedImpossible.add(result.sentence.id);
+  }
 
   /* ----------------------------------------------------------
-     Compose narration line
+     Apply entropy + scarring
   ---------------------------------------------------------- */
 
-  let line: string | undefined;
-
-  if (mode === "sentence" && sentenceResult) {
-    line = sentenceResult.text;
-  } else if (mode === "omen") {
-    line = sentenceResult?.text;
-  } else if (mode === "impossible") {
-    line = sentenceResult?.text;
-  }
-  // silence → no line returned
+  const { text, entropyAfter } =
+    applySentenceEntropy(
+      entropyBefore,
+      "sentence",
+      memory,
+      result.sentence
+    );
 
   return {
-    line,
-    kind: mode,
-    entropy: updated.entropy,
-    memory: updated.memory,
-    debug: {
-      sentenceId:
-        sentenceResult?.sentenceId,
-      entropyBefore,
-      entropyAfter: updated.entropy.value,
-    },
+    text,
+    entropyAfter,
   };
 }
