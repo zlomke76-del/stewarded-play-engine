@@ -1,23 +1,26 @@
 // ------------------------------------------------------------
-// Emit Cave Narration
+// Cave Narration Emitter
 // ------------------------------------------------------------
-// Orchestrates:
-// - Sentence selection
-// - Entropy application
-// - Impossible-line enforcement
+// Responsibilities:
+// - Select cave sentence OR silence
+// - Inject omen ladder (pre-collapse / pre-flood only)
+// - Apply sentence entropy + scar logic
+// - Respect tribe perception bias
+// - NEVER emit omens after collapse/flood
 // ------------------------------------------------------------
 
+import type { CaveNode } from "./WindscarCave";
+import { getCaveOmen } from "./omenLadder";
 import {
   applySentenceEntropy,
   SentenceMemory,
+  TribeProfile,
+  CaveEntropyState,
 } from "./applySentenceEntropy";
-
 import {
   selectCaveSentence,
-  TribeProfile,
+  CaveSentenceResult,
 } from "./selectCaveSentence";
-
-import type { CaveNode } from "./WindscarCave";
 
 /* ------------------------------------------------------------
    Types
@@ -25,39 +28,111 @@ import type { CaveNode } from "./WindscarCave";
 
 export type CaveNarrationContext = {
   node: CaveNode;
-  entropy: number;
-  tribe: TribeProfile;
+  entropy: CaveEntropyState;
   memory: SentenceMemory;
+  tribe: TribeProfile;
+  turn: number;
+
+  // Hard stop flags (canon-level)
+  collapsed?: boolean;
+  flooded?: boolean;
+};
+
+export type CaveNarrationResult = {
+  text: string | null; // null = silence
+  entropy: CaveEntropyState;
+  usedOmen: boolean;
 };
 
 /* ------------------------------------------------------------
-   Main
+   Perception Bias
 ------------------------------------------------------------ */
 
-export function emitCaveNarration(ctx: CaveNarrationContext) {
-  const { node, entropy, tribe, memory } = ctx;
+function omenThresholdModifier(
+  tribe: TribeProfile
+): number {
+  switch (tribe.role) {
+    case "elder":
+      return -15; // elders notice danger earlier
+    case "hunter":
+      return 0;
+    case "scout":
+      return -5;
+    default:
+      return 0;
+  }
+}
+
+/* ------------------------------------------------------------
+   Main Entry
+------------------------------------------------------------ */
+
+export function emitCaveNarration(
+  ctx: CaveNarrationContext
+): CaveNarrationResult {
+  const {
+    node,
+    entropy,
+    memory,
+    tribe,
+    collapsed,
+    flooded,
+  } = ctx;
 
   const entropyBefore = entropy;
 
-  // 🔒 One-time impossible latch
-  const usedImpossible = Boolean(
-    (memory as any).impossibleUsed
-  );
+  /* ----------------------------------------------------------
+     1️⃣ OMEN CHECK (BEFORE SENTENCE)
+     ---------------------------------------------------------- */
+
+  // Omens are suppressed permanently after failure
+  if (!collapsed && !flooded) {
+    const omen = getCaveOmen(node);
+
+    if (omen) {
+      const perceptionShift =
+        omenThresholdModifier(tribe);
+
+      const perceived =
+        node.hazards.collapseRisk +
+          (node.hazards.floodRisk ?? 0) / 2 +
+          perceptionShift >=
+        40 + omen.level * 10;
+
+      if (perceived) {
+        const entropyAfter = applySentenceEntropy(
+          entropyBefore,
+          "omen",
+          memory
+        );
+
+        return {
+          text: omen.line,
+          entropy: entropyAfter,
+          usedOmen: true,
+        };
+      }
+    }
+  }
 
   /* ----------------------------------------------------------
-     Sentence selection
-  ---------------------------------------------------------- */
+     2️⃣ SENTENCE SELECTION
+     ---------------------------------------------------------- */
 
-  const result = selectCaveSentence(
-    node.nodeId,
-    entropyBefore,
-    tribe,
-    usedImpossible
-  );
+  const usedImpossible =
+    memory.usedImpossible === true;
+
+  const result: CaveSentenceResult =
+    selectCaveSentence(
+      node.nodeId,
+      entropyBefore,
+      tribe,
+      usedImpossible
+    );
 
   /* ----------------------------------------------------------
-     Entropy update
-  ---------------------------------------------------------- */
+     3️⃣ ENTROPY + MEMORY UPDATE
+     ---------------------------------------------------------- */
 
   const entropyAfter = applySentenceEntropy(
     entropyBefore,
@@ -65,20 +140,27 @@ export function emitCaveNarration(ctx: CaveNarrationContext) {
     memory
   );
 
-  /* ----------------------------------------------------------
-     Memory update
-     (NO sentence ID tracking — scars only)
-  ---------------------------------------------------------- */
+  if (result.sentence) {
+    memory.usedSentenceIds.add(result.sentence.id);
 
-  if (result.usedImpossible) {
-    // 🔒 Irreversible global latch
-    (memory as any).impossibleUsed = true;
+    if (result.usedImpossible) {
+      memory.usedImpossible = true;
+    }
+
+    return {
+      text: result.sentence.text,
+      entropy: entropyAfter,
+      usedOmen: false,
+    };
   }
 
+  /* ----------------------------------------------------------
+     4️⃣ SILENCE (EXPORT WILL OMIT)
+     ---------------------------------------------------------- */
+
   return {
-    sentence: result.sentence,
-    entropyBefore,
-    entropyAfter,
-    memory,
+    text: null,
+    entropy: entropyAfter,
+    usedOmen: false,
   };
 }
