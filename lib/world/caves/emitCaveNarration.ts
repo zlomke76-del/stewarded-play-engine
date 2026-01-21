@@ -7,7 +7,11 @@
 // - Impossible-line enforcement
 // ------------------------------------------------------------
 
-import { applySentenceEntropy } from "./applySentenceEntropy";
+import {
+  applySentenceEntropy,
+  SentenceMemory,
+} from "./applySentenceEntropy";
+
 import {
   selectCaveSentence,
   TribeProfile,
@@ -18,11 +22,6 @@ import type { CaveNode } from "./WindscarCave";
 /* ------------------------------------------------------------
    Types
 ------------------------------------------------------------ */
-
-export type SentenceMemory = {
-  usedSentenceIds: Set<string>;
-  usedImpossibleIds: Set<string>;
-};
 
 export type CaveNarrationContext = {
   node: CaveNode;
@@ -40,7 +39,7 @@ export function emitCaveNarration(ctx: CaveNarrationContext) {
 
   const entropyBefore = entropy;
 
-  // 🔑 Convert Set → boolean for selector
+  // 🔑 Convert Set → boolean
   const usedImpossible =
     memory.usedImpossibleIds.size > 0;
 
