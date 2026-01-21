@@ -36,7 +36,7 @@ import { WindscarCave } from "@/lib/world/caves/WindscarCave";
 import { evolveCaveState } from "@/lib/world/caves/evolveCaveState";
 
 // ------------------------------------------------------------
-// Risk inference (INTENT-LEVEL, NOT OPTION-LEVEL)
+// Risk inference (language-only)
 // ------------------------------------------------------------
 
 type OptionKind =
@@ -45,8 +45,8 @@ type OptionKind =
   | "risky"
   | "contested";
 
-function inferOptionKind(text: string): OptionKind {
-  const t = text.toLowerCase();
+function inferOptionKind(description: string): OptionKind {
+  const t = description.toLowerCase();
 
   if (
     t.includes("attack") ||
@@ -67,10 +67,8 @@ function inferOptionKind(text: string): OptionKind {
 
   if (
     t.includes("risk") ||
-    t.includes("reckless") ||
-    t.includes("aggressive") ||
-    t.includes("injury") ||
-    t.includes("danger")
+    t.includes("sneak") ||
+    t.includes("steal")
   ) {
     return "risky";
   }
@@ -108,7 +106,7 @@ function resolveCaveNode(option: Option) {
 }
 
 // ------------------------------------------------------------
-// 🜂 Solace observation (one-line, non-authoritative)
+// 🜂 Solace observation (non-authoritative)
 // ------------------------------------------------------------
 
 function deriveObservation(world?: any): string {
@@ -139,10 +137,15 @@ export default function CavemanPage() {
   );
 
   const [turn, setTurn] = useState(0);
+
   const [command, setCommand] = useState("");
   const [options, setOptions] = useState<Option[] | null>(null);
   const [selectedOption, setSelectedOption] =
     useState<Option | null>(null);
+
+  // 🔒 NEW: keep resolution visible for one full cycle
+  const [resolutionLocked, setResolutionLocked] =
+    useState(false);
 
   // ----------------------------------------------------------
   // Canon-derived world
@@ -165,7 +168,7 @@ export default function CavemanPage() {
   );
 
   // ----------------------------------------------------------
-  // Player intent → Solace option selection
+  // Player intent
   // ----------------------------------------------------------
 
   function handleSubmitCommand() {
@@ -174,19 +177,20 @@ export default function CavemanPage() {
     const parsed = parseAction("player_1", command);
     const optionSet = generateOptions(parsed);
 
-    const resolved =
+    const resolved: Option[] =
       optionSet?.options?.length > 0
-        ? optionSet.options
-        : ([{
-            id: "fallback",
-            description: `Proceed cautiously: ${command}`,
-          }] as Option[]);
+        ? [...optionSet.options]
+        : [
+            {
+              id: crypto.randomUUID(),
+              category: "other",
+              description: `Proceed cautiously: ${command}`,
+            },
+          ];
 
-    // 🔑 Clone readonly → mutable
-    setOptions([...resolved]);
-
-    // 🔑 Solace auto-selects a viable option
+    setOptions(resolved);
     setSelectedOption(resolved[0]);
+    setResolutionLocked(true);
   }
 
   // ----------------------------------------------------------
@@ -200,6 +204,7 @@ export default function CavemanPage() {
       roll: number | null;
       dc: number;
       justification: string;
+      source: string;
     };
     audit: string[];
     world?: any;
@@ -238,10 +243,6 @@ export default function CavemanPage() {
           .includes("wait")
     );
 
-    const caveEntry =
-      selectedOption &&
-      resolveCaveNode(selectedOption);
-
     let evolvedState = previousCave?.state;
 
     if (previousCave) {
@@ -270,18 +271,7 @@ export default function CavemanPage() {
         payload: {
           ...payload,
           audit: [...payload.audit, "The Weave enforced"],
-          world: caveEntry
-            ? {
-                primary: "location",
-                roomId: caveEntry.nodeId,
-                caveId: caveEntry.caveId,
-                nodeType: "cave",
-                depth: caveEntry.depth,
-                traits: caveEntry.traits,
-                state: caveEntry.state,
-                turn: nextTurn,
-              }
-            : previousCave
+          world: previousCave
             ? {
                 ...previousCave,
                 state: evolvedState,
@@ -295,9 +285,13 @@ export default function CavemanPage() {
       })
     );
 
-    setCommand("");
-    setOptions(null);
-    setSelectedOption(null);
+    // 🔑 Delay cleanup so dice remain visible
+    setTimeout(() => {
+      setResolutionLocked(false);
+      setCommand("");
+      setOptions(null);
+      setSelectedOption(null);
+    }, 600);
   }
 
   // ----------------------------------------------------------
@@ -333,15 +327,17 @@ export default function CavemanPage() {
       <EnvironmentalPressurePanel turn={turn} />
       <SurvivalResourcePanel turn={turn} />
 
-      {selectedOption && (
-        <CardSection title="Last Turn">
+      {selectedOption && resolutionLocked && (
+        <CardSection title="Resolution">
           <ResolutionDraftPanel
             key={turn}
             role="arbiter"
             autoResolve
             context={{
               optionDescription: selectedOption.description,
-              optionKind: inferOptionKind(command),
+              optionKind: inferOptionKind(
+                selectedOption.description
+              ),
             }}
             onRecord={handleAutoRecord}
           />
