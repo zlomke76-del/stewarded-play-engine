@@ -143,9 +143,8 @@ export default function CavemanPage() {
   const [selectedOption, setSelectedOption] =
     useState<Option | null>(null);
 
-  // 🔒 NEW: keep resolution visible for one full cycle
-  const [resolutionLocked, setResolutionLocked] =
-    useState(false);
+  // 🔑 Resolution visibility is now decoupled from cleanup
+  const [showResolution, setShowResolution] = useState(false);
 
   // ----------------------------------------------------------
   // Canon-derived world
@@ -160,7 +159,7 @@ export default function CavemanPage() {
   }, [state.events]);
 
   const currentLocation =
-    lastWorld?.roomId ?? "The Wilds";
+.attach<lastWorld?.roomId ?? "The Wilds";
 
   const observation = useMemo(
     () => deriveObservation(lastWorld),
@@ -173,6 +172,9 @@ export default function CavemanPage() {
 
   function handleSubmitCommand() {
     if (!command.trim()) return;
+
+    // Hide previous resolution explicitly
+    setShowResolution(false);
 
     const parsed = parseAction("player_1", command);
     const optionSet = generateOptions(parsed);
@@ -190,7 +192,7 @@ export default function CavemanPage() {
 
     setOptions(resolved);
     setSelectedOption(resolved[0]);
-    setResolutionLocked(true);
+    setShowResolution(true);
   }
 
   // ----------------------------------------------------------
@@ -285,9 +287,8 @@ export default function CavemanPage() {
       })
     );
 
-    // 🔑 Delay cleanup so dice remain visible
+    // Clean up inputs ONLY — resolution remains visible
     setTimeout(() => {
-      setResolutionLocked(false);
       setCommand("");
       setOptions(null);
       setSelectedOption(null);
@@ -327,7 +328,7 @@ export default function CavemanPage() {
       <EnvironmentalPressurePanel turn={turn} />
       <SurvivalResourcePanel turn={turn} />
 
-      {selectedOption && resolutionLocked && (
+      {selectedOption && showResolution && (
         <CardSection title="Resolution">
           <ResolutionDraftPanel
             key={turn}
