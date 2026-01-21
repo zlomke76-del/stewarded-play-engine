@@ -5,31 +5,10 @@
 // Overhang → Tunnel → Deep Chamber
 // ------------------------------------------------------------
 
-export type CaveNodeState = "used" | "smoked" | "sacred";
-
-export type CaveHazards = {
-  collapseRisk: number; // 0–100
-  floodRisk?: number;   // 0–100
-};
-
-export type CaveNode = {
-  nodeId: string;
-  caveId: string;
-  name: string;
-  depth: 0 | 1 | 2;
-  traits: string[];
-  state: CaveNodeState;
-  hazards: CaveHazards;
-  connections: string[]; // nodeIds
-};
-
-export type CaveGraph = {
-  caveId: string;
-  title: string;
-  biome: "wilds";
-  nodes: Record<string, CaveNode>;
-  entryNodeId: string;
-};
+import type {
+  CaveGraph,
+  CaveNode,
+} from "./types";
 
 // ------------------------------------------------------------
 // Windscar Cave (Canonical Seed)
