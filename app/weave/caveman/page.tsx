@@ -6,8 +6,9 @@
 // Invariants:
 // - Player selects intent
 // - Solace resolves outcomes
+// - Canon is committed automatically
 // - Exactly ONE resolution per intent
-// - Canon advances only on human declaration
+// - Resolution persists until NEXT intent
 // ------------------------------------------------------------
 
 import { useMemo, useState } from "react";
@@ -39,7 +40,11 @@ import { evolveCaveState } from "@/lib/world/caves/evolveCaveState";
 // Risk inference (language-only)
 // ------------------------------------------------------------
 
-type OptionKind = "safe" | "environmental" | "risky" | "contested";
+type OptionKind =
+  | "safe"
+  | "environmental"
+  | "risky"
+  | "contested";
 
 function inferOptionKind(description: string): OptionKind {
   const t = description.toLowerCase();
@@ -104,14 +109,15 @@ export default function CavemanPage() {
   );
 
   const [turn, setTurn] = useState(0);
+
   const [command, setCommand] = useState("");
-
   const [options, setOptions] = useState<Option[] | null>(null);
-  const [selectedOption, setSelectedOption] = useState<Option | null>(null);
+  const [selectedOption, setSelectedOption] =
+    useState<Option | null>(null);
 
-  // 🔐 Intent latch — guarantees 1 resolution per intent
-  const [activeIntentId, setActiveIntentId] =
-    useState<string | null>(null);
+  // 🔒 Resolution stays mounted until NEXT intent
+  const [resolutionActive, setResolutionActive] =
+    useState(false);
 
   // ----------------------------------------------------------
   // Canon-derived world
@@ -139,7 +145,11 @@ export default function CavemanPage() {
 
   function handleSubmitCommand() {
     if (!command.trim()) return;
-    if (activeIntentId) return; // 🔒 block stacking intents
+
+    // 🔑 CLEAR PREVIOUS RESOLUTION *ONLY WHEN NEW INTENT IS COMMITTED*
+    setResolutionActive(false);
+    setOptions(null);
+    setSelectedOption(null);
 
     const parsed = parseAction("player_1", command);
     const optionSet = generateOptions(parsed);
@@ -155,15 +165,13 @@ export default function CavemanPage() {
             },
           ];
 
-    const intentId = crypto.randomUUID();
-
     setOptions(resolved);
     setSelectedOption(resolved[0]);
-    setActiveIntentId(intentId);
+    setResolutionActive(true);
   }
 
   // ----------------------------------------------------------
-  // Solace commits canon (EXACTLY ONCE)
+  // Solace commits canon (ONE TURN ONLY)
   // ----------------------------------------------------------
 
   function handleAutoRecord(payload: {
@@ -178,10 +186,48 @@ export default function CavemanPage() {
     audit: string[];
     world?: any;
   }) {
-    if (!activeIntentId) return; // 🔐 HARD STOP
-
     const nextTurn = turn + 1;
     setTurn(nextTurn);
+
+    const lastCaveEvent = [...state.events]
+      .reverse()
+      .find(
+        (e) =>
+          e.type === "OUTCOME" &&
+          (e as any).payload?.world?.nodeType === "cave"
+      ) as any | undefined;
+
+    const previousCave = lastCaveEvent?.payload?.world;
+
+    const fireUsed = payload.audit.some((a) =>
+      a.toLowerCase().includes("fire")
+    );
+
+    const successfulHunt =
+      payload.world?.resources?.foodDelta > 0;
+
+    const rested = selectedOption?.description
+      .toLowerCase()
+      .includes("rest");
+
+    let evolvedState = previousCave?.state;
+
+    if (previousCave) {
+      evolvedState = evolveCaveState(
+        {
+          caveId: previousCave.caveId,
+          nodeId: previousCave.roomId,
+          currentState: previousCave.state,
+          traits: previousCave.traits ?? [],
+        },
+        {
+          fireUsed,
+          successfulHunt,
+          rested,
+          turn: nextTurn,
+        }
+      );
+    }
 
     setState((prev) =>
       recordEvent(prev, {
@@ -192,21 +238,23 @@ export default function CavemanPage() {
         payload: {
           ...payload,
           audit: [...payload.audit, "The Weave enforced"],
-          world: {
-            ...payload.world,
-            turn: nextTurn,
-          },
+          world: previousCave
+            ? {
+                ...previousCave,
+                state: evolvedState,
+                turn: nextTurn,
+              }
+            : {
+                ...payload.world,
+                turn: nextTurn,
+              },
         },
       })
     );
 
-    // 🔑 Clear intent AFTER resolution
-    setTimeout(() => {
-      setActiveIntentId(null);
-      setCommand("");
-      setOptions(null);
-      setSelectedOption(null);
-    }, 600);
+    // ❌ NO TIMEOUT
+    // ❌ NO AUTO-CLEAR
+    // Resolution remains visible until next intent
   }
 
   // ----------------------------------------------------------
@@ -242,9 +290,10 @@ export default function CavemanPage() {
       <EnvironmentalPressurePanel turn={turn} />
       <SurvivalResourcePanel turn={turn} />
 
-      {selectedOption && activeIntentId && (
+      {selectedOption && resolutionActive && (
         <CardSection title="Resolution">
           <ResolutionDraftPanel
+            key={`resolution-${turn}`}
             role="arbiter"
             autoResolve
             context={{
@@ -264,12 +313,8 @@ export default function CavemanPage() {
           value={command}
           onChange={(e) => setCommand(e.target.value)}
           placeholder="HUNT, DEFEND, WAIT, SCOUT…"
-          disabled={Boolean(activeIntentId)}
         />
-        <button
-          onClick={handleSubmitCommand}
-          disabled={Boolean(activeIntentId)}
-        >
+        <button onClick={handleSubmitCommand}>
           Commit Intent
         </button>
       </CardSection>
