@@ -1,124 +1,118 @@
 // ------------------------------------------------------------
-// applySentenceEntropy
+// Sentence Entropy Engine
 // ------------------------------------------------------------
-// Governs narrative decay inside caves.
-// - Sentences age out
-// - Silence emerges
-// - Omens surface
-// - Impossible lines unlock once (globally)
+// Controls how cave narration decays, mutates, or falls silent.
 // ------------------------------------------------------------
-
-/* ------------------------------------------------------------
-   Rules (Authoritative)
------------------------------------------------------------- */
-
-export const CaveEntropyRules = {
-  // When silence begins to appear
-  silenceThreshold: 0.55,
-
-  // When impossible lines may appear
-  impossibleThreshold: 0.85,
-
-  // Base entropy added per sentence exposure
-  sentenceEntropyIncrement: 0.08,
-
-  // Additional entropy for omens
-  omenEntropyIncrement: 0.14,
-
-  // Scar tissue growth per reuse
-  scarIncrement: 1,
-
-  // After this many scars, text mutates
-  maxScarsBeforeMutation: 3,
-
-  // Absolute entropy ceiling
-  maxEntropy: 1.0,
-};
 
 /* ------------------------------------------------------------
    Types
 ------------------------------------------------------------ */
 
-export type EntropyEventType =
-  | "sentence"
-  | "omen"
-  | "silence"
-  | "impossible";
+export type TribeProfile = {
+  role: "hunter" | "elder" | "scout";
+  entropySensitivity: number; // elders > hunters
+};
 
-export type SentenceEntropyState = {
-  entropy: number;
+export type SentenceMemory = {
+  id: string;
+  text: string;
   scars: number;
-  mutated: boolean;
+  usedCount: number;
+  impossible?: boolean;
+};
+
+export type CaveEntropyState = {
+  entropy: number;
+  silence: boolean;
 };
 
 /* ------------------------------------------------------------
-   Core Entropy Application
+   Entropy Rules (Canonical)
+------------------------------------------------------------ */
+
+export const CaveEntropyRules = {
+  silenceThreshold: 12,
+  impossibleThreshold: 18,
+  scarIncrement: 1,
+  maxScarsBeforeMutation: 2,
+};
+
+/* ------------------------------------------------------------
+   Core Engine
 ------------------------------------------------------------ */
 
 export function applySentenceEntropy(
-  state: SentenceEntropyState,
-  event: EntropyEventType
-): SentenceEntropyState {
-  let entropyDelta = 0;
+  state: CaveEntropyState,
+  sentence: SentenceMemory,
+  tribe: TribeProfile
+): {
+  nextState: CaveEntropyState;
+  sentence: SentenceMemory;
+  suppressed: boolean;
+} {
+  const entropyGain =
+    tribe.entropySensitivity + 1;
 
-  switch (event) {
-    case "sentence":
-      entropyDelta =
-        CaveEntropyRules.sentenceEntropyIncrement;
-      break;
+  const nextEntropy =
+    state.entropy + entropyGain;
 
-    case "omen":
-      entropyDelta =
-        CaveEntropyRules.omenEntropyIncrement;
-      break;
-
-    case "impossible":
-      // Impossible lines permanently scar the cave
-      entropyDelta = 0.25;
-      break;
-
-    case "silence":
-      // Silence accelerates decay subtly
-      entropyDelta = 0.04;
-      break;
+  // 🔕 Silence overtakes narration
+  if (nextEntropy >= CaveEntropyRules.silenceThreshold) {
+    return {
+      nextState: {
+        entropy: nextEntropy,
+        silence: true,
+      },
+      sentence,
+      suppressed: true,
+    };
   }
 
-  const nextEntropy = Math.min(
-    CaveEntropyRules.maxEntropy,
-    state.entropy + entropyDelta
-  );
+  // 🩸 Scar the sentence
+  let nextSentence = { ...sentence };
+  nextSentence.usedCount += 1;
+  nextSentence.scars += CaveEntropyRules.scarIncrement;
 
-  const nextScars =
-    event === "sentence" || event === "omen"
-      ? state.scars + CaveEntropyRules.scarIncrement
-      : state.scars;
-
-  const mutated =
-    nextScars >=
-    CaveEntropyRules.maxScarsBeforeMutation;
+  // 🧬 Mutation instead of repetition
+  if (
+    nextSentence.scars >=
+    CaveEntropyRules.maxScarsBeforeMutation
+  ) {
+    nextSentence.text = mutateSentenceText(
+      nextSentence.text
+    );
+    nextSentence.scars = 0;
+  }
 
   return {
-    entropy: nextEntropy,
-    scars: nextScars,
-    mutated,
+    nextState: {
+      entropy: nextEntropy,
+      silence: false,
+    },
+    sentence: nextSentence,
+    suppressed: false,
   };
 }
 
 /* ------------------------------------------------------------
-   Entropy Queries
+   Sentence Mutation (Scar Tissue)
 ------------------------------------------------------------ */
 
-export function shouldBeSilent(
-  entropy: number
-): boolean {
-  return entropy >= CaveEntropyRules.silenceThreshold;
-}
+export function mutateSentenceText(
+  text: string
+): string {
+  // Minimal, unsettling mutations
+  if (text.includes("wind")) {
+    return text.replace("wind", "air");
+  }
 
-export function shouldTriggerImpossible(
-  entropy: number
-): boolean {
-  return (
-    entropy >=
-    CaveEntropyRules.impossibleThreshold
-  );
+  if (text.includes("sound")) {
+    return text.replace("sound", "absence");
+  }
+
+  if (text.includes("dark")) {
+    return text.replace("dark", "lightless");
+  }
+
+  return text + " (changed)";
 }
