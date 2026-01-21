@@ -1,43 +1,47 @@
 // ------------------------------------------------------------
-// Terminal Session Handler
+// Handle Terminal Session (AUTHORITATIVE)
 // ------------------------------------------------------------
-// Burial is final.
-// No turns, no narration, no recovery.
+// - Ends session via canonical OUTCOME event
+// - No mutation of SessionState shape
+// - Terminality is event-derived, not flag-based
 // ------------------------------------------------------------
 
 import type { SessionState } from "./SessionState";
+import { recordEvent } from "./SessionState";
 
 /* ------------------------------------------------------------
    Types
 ------------------------------------------------------------ */
 
-export type TerminalReason = "buried";
+export type TerminalOutcome =
+  | "buried"
+  | "starved"
+  | "frozen"
+  | "lost";
 
 /* ------------------------------------------------------------
-   Handler
+   Core Handler
 ------------------------------------------------------------ */
 
 export function handleTerminalSession(
   state: SessionState,
-  reason: TerminalReason,
+  outcome: TerminalOutcome,
   description: string
 ): SessionState {
-  // Idempotent — terminal stays terminal
-  if ((state as any).terminal === true) {
-    return state;
-  }
-
-  return {
-    ...state,
-
-    // 🔒 Hard terminal flag
-    terminal: true,
-
-    terminalReason: reason,
-
-    terminalDescription: description,
-
-    // 🔒 Freeze timeline
-    frozenAt: Date.now(),
-  };
+  return recordEvent(state, {
+    id: crypto.randomUUID(),
+    timestamp: Date.now(),
+    actor: "system",
+    type: "OUTCOME",
+    payload: {
+      terminal: true, // ✅ legal INSIDE payload
+      outcome,
+      description,
+      audit: ["Terminal state reached"],
+      world: {
+        primary: "terminal",
+        outcome,
+      },
+    },
+  });
 }
