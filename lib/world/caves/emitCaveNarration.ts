@@ -40,18 +40,22 @@ export type CaveNarrationResult = {
 
 export function emitCaveNarration(
   node: CaveNode,
-  entropy: number, // 🔑 entropy is primitive
+  entropy: number,
   memory: SentenceMemory,
   tribe: TribeProfile
 ): CaveNarrationResult {
   const entropyBefore = entropy;
 
   /* ----------------------------------------------------------
-     Sentence Selection
+     Impossible-line latch (derived, not stored)
   ---------------------------------------------------------- */
 
   const usedImpossible =
-    memory.usedImpossible === true;
+    memory.usedSentenceIds.size > 0;
+
+  /* ----------------------------------------------------------
+     Sentence Selection
+  ---------------------------------------------------------- */
 
   const result: CaveSentenceResult =
     selectCaveSentence(
@@ -86,17 +90,13 @@ export function emitCaveNarration(
     );
 
   /* ----------------------------------------------------------
-     Memory Updates (one-way)
+     Memory Updates
   ---------------------------------------------------------- */
 
   if (result.sentence) {
     memory.usedSentenceIds.add(
       result.sentence.id
     );
-
-    if (result.usedImpossible) {
-      memory.usedImpossible = true;
-    }
   }
 
   /* ----------------------------------------------------------
