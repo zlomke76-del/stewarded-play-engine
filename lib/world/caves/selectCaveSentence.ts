@@ -1,189 +1,181 @@
 // ------------------------------------------------------------
 // selectCaveSentence
 // ------------------------------------------------------------
-// Chooses a cave narration line based on:
-// - Node
-// - Entropy (0.0–1.0)
-// - Tribe perception bias
-// - Scar tissue mutation
-// - Wrong silence
-// - One-time impossible line
+// Chooses a cave sentence OR silence.
+// This function is AUTHORITATIVE for cave narration.
 // ------------------------------------------------------------
 
 import {
-  WindscarSentences,
-  CollapseOmens,
-  FloodOmens,
-  WrongSilenceLines,
-  ImpossibleLine,
   CaveEntropyRules,
-  CaveSentence,
-  CaveSense,
+  shouldBeSilent,
+  shouldTriggerImpossible,
+} from "./applySentenceEntropy";
+
+import {
+  getCaveSentencesForNode,
+  markImpossibleLineUsed,
+  hasImpossibleLineBeenUsed,
 } from "./WindscarCave.sentences";
+
+import type { CaveSentence } from "./WindscarCave.sentences";
 
 /* ------------------------------------------------------------
    Types
 ------------------------------------------------------------ */
 
 export type TribeProfile = {
-  role: "hunters" | "elders" | "mixed";
-  entropySensitivity: number; // 0.0 – 1.0
+  roles: Array<"hunter" | "gatherer" | "elder">;
 };
 
-export type SentenceMemory = {
-  scars: Record<string, number>; // sentenceId → count
-  impossibleUsed: boolean;
-};
-
-export type CaveNarrationResult =
-  | {
-      type: "sentence";
-      text: string;
-      sentenceId: string;
-      sense: CaveSense;
-    }
-  | {
-      type: "omen";
-      text: string;
-    }
-  | {
-      type: "silence";
-    }
-  | {
-      type: "impossible";
-      text: string;
-    };
+type SelectionResult =
+  | { type: "sentence"; sentence: CaveSentence }
+  | { type: "omen"; sentence: CaveSentence }
+  | { type: "impossible"; sentence: CaveSentence }
+  | { type: "silence" };
 
 /* ------------------------------------------------------------
-   Helpers
+   Perception Bias
 ------------------------------------------------------------ */
 
-function weightedRandom<T>(
-  items: T[],
-  weight: (item: T) => number
-): T | null {
-  const total = items.reduce(
-    (sum, i) => sum + Math.max(weight(i), 0),
-    0
-  );
-  if (total <= 0) return null;
+function perceptionWeight(
+  sentence: CaveSentence,
+  tribe: TribeProfile
+): number {
+  let weight = 1;
 
-  let roll = Math.random() * total;
-  for (const item of items) {
-    roll -= Math.max(weight(item), 0);
-    if (roll <= 0) return item;
+  for (const role of tribe.roles) {
+    if (role === "hunter" && sentence.sense === "sound") {
+      weight += 0.25;
+    }
+    if (role === "elder" && sentence.sense === "air") {
+      weight += 0.35;
+    }
+    if (role === "elder" && sentence.sense === "memory") {
+      weight += 0.45;
+    }
   }
-  return null;
-}
 
-function mutateSentence(text: string): string {
-  return text
-    .replace("the", "that")
-    .replace("here", "below")
-    .replace("air", "space")
-    .replace(".", "—again.");
+  return weight;
 }
 
 /* ------------------------------------------------------------
-   Core Function
+   Core Selection
 ------------------------------------------------------------ */
 
 export function selectCaveSentence(
   nodeId: string,
   entropy: number,
-  tribe: TribeProfile,
-  memory: SentenceMemory
-): CaveNarrationResult {
-  const pool = WindscarSentences[nodeId] ?? [];
+  tribeProfile: TribeProfile
+): SelectionResult {
+  const sentences =
+    getCaveSentencesForNode(nodeId);
 
-  const effectiveEntropy = Math.min(
-    1,
-    entropy * tribe.entropySensitivity
-  );
-
-  /* ----------------------------------------------------------
-     Impossible Line (Global, One-Time)
-  ---------------------------------------------------------- */
+  // ----------------------------------------------------------
+  // Impossible Line (GLOBAL, ONCE EVER)
+  // ----------------------------------------------------------
 
   if (
-    effectiveEntropy >= CaveEntropyRules.impossibleThreshold &&
-    !memory.impossibleUsed
+    shouldTriggerImpossible(entropy) &&
+    !hasImpossibleLineBeenUsed()
   ) {
-    memory.impossibleUsed = true;
-    return {
-      type: "impossible",
-      text: ImpossibleLine.text,
-    };
+    const impossible = sentences.find(
+      (s) => s.category === "impossible"
+    );
+
+    if (impossible) {
+      markImpossibleLineUsed(impossible.id);
+      return {
+        type: "impossible",
+        sentence: impossible,
+      };
+    }
   }
 
-  /* ----------------------------------------------------------
-     Wrong Silence
-  ---------------------------------------------------------- */
+  // ----------------------------------------------------------
+  // Silence (Wrong Silence Overrides Everything)
+  // ----------------------------------------------------------
 
-  if (effectiveEntropy >= CaveEntropyRules.silenceThreshold) {
-    if (Math.random() < 0.35) {
+  if (shouldBeSilent(entropy)) {
+    // Silence chance increases with entropy
+    const silenceChance = Math.min(
+      0.85,
+      (entropy - CaveEntropyRules.silenceThreshold) * 1.6
+    );
+
+    if (Math.random() < silenceChance) {
       return { type: "silence" };
     }
   }
 
-  /* ----------------------------------------------------------
-     Perception Bias
-  ---------------------------------------------------------- */
+  // ----------------------------------------------------------
+  // Candidate Pool
+  // ----------------------------------------------------------
 
-  const preferredSenses: CaveSense[] =
-    tribe.role === "hunters"
-      ? ["sound", "movement"]
-      : tribe.role === "elders"
-      ? ["air", "memory"]
-      : ["sound", "air", "movement", "memory"];
+  const candidates = sentences.filter(
+    (s) => s.category !== "impossible"
+  );
 
-  /* ----------------------------------------------------------
-     Sentence Selection
-  ---------------------------------------------------------- */
-
-  const candidate = weightedRandom(pool, (s) => {
-    const scars = memory.scars[s.id] ?? 0;
-
-    if (scars >= CaveEntropyRules.maxScarsBeforeMutation) {
-      return 0;
-    }
-
-    const senseBonus = preferredSenses.includes(s.sense)
-      ? 1.5
-      : 1;
-
-    const entropyPenalty =
-      effectiveEntropy < s.entropyCost ? 0.2 : 1;
-
-    return senseBonus * entropyPenalty;
-  });
-
-  if (!candidate) {
+  if (candidates.length === 0) {
     return { type: "silence" };
   }
 
-  /* ----------------------------------------------------------
-     Scar Tissue
-  ---------------------------------------------------------- */
+  // ----------------------------------------------------------
+  // Weighted Selection (Entropy + Perception)
+  // ----------------------------------------------------------
 
-  const scars = memory.scars[candidate.id] ?? 0;
-  memory.scars[candidate.id] = scars + 1;
+  let weighted: Array<{
+    sentence: CaveSentence;
+    weight: number;
+  }> = [];
 
-  if (
-    scars >= CaveEntropyRules.scarIncrement
-  ) {
-    return {
-      type: "sentence",
-      text: mutateSentence(candidate.text),
-      sentenceId: candidate.id,
-      sense: candidate.sense,
-    };
+  for (const s of candidates) {
+    const freshnessWeight =
+      Math.max(0.1, s.freshness);
+
+    const perception =
+      perceptionWeight(s, tribeProfile);
+
+    const entropyPenalty =
+      1 - Math.min(entropy, 0.9);
+
+    const finalWeight =
+      freshnessWeight *
+      perception *
+      entropyPenalty;
+
+    weighted.push({
+      sentence: s,
+      weight: finalWeight,
+    });
   }
 
-  return {
-    type: "sentence",
-    text: candidate.text,
-    sentenceId: candidate.id,
-    sense: candidate.sense,
-  };
+  const totalWeight = weighted.reduce(
+    (sum, w) => sum + w.weight,
+    0
+  );
+
+  if (totalWeight <= 0.01) {
+    return { type: "silence" };
+  }
+
+  // ----------------------------------------------------------
+  // Roll Selection
+  // ----------------------------------------------------------
+
+  let roll = Math.random() * totalWeight;
+
+  for (const entry of weighted) {
+    roll -= entry.weight;
+    if (roll <= 0) {
+      return {
+        type:
+          entry.sentence.category === "omen"
+            ? "omen"
+            : "sentence",
+        sentence: entry.sentence,
+      };
+    }
+  }
+
+  return { type: "silence" };
 }
