@@ -36,7 +36,7 @@ import { WindscarCave } from "@/lib/world/caves/WindscarCave";
 import { evolveCaveState } from "@/lib/world/caves/evolveCaveState";
 
 // ------------------------------------------------------------
-// Risk inference
+// Risk inference (Solace-only)
 // ------------------------------------------------------------
 
 type OptionKind =
@@ -106,7 +106,7 @@ function resolveCaveNode(option: Option) {
 }
 
 // ------------------------------------------------------------
-// 🜂 Solace observation (one-line, non-authoritative)
+// 🜂 Solace observation
 // ------------------------------------------------------------
 
 function deriveObservation(world?: any): string {
@@ -137,9 +137,7 @@ export default function CavemanPage() {
   );
 
   const [turn, setTurn] = useState(0);
-
   const [command, setCommand] = useState("");
-  const [options, setOptions] = useState<Option[] | null>(null);
   const [selectedOption, setSelectedOption] =
     useState<Option | null>(null);
 
@@ -164,7 +162,7 @@ export default function CavemanPage() {
   );
 
   // ----------------------------------------------------------
-  // Player intent
+  // Player intent → Solace decision
   // ----------------------------------------------------------
 
   function handleSubmitCommand() {
@@ -173,7 +171,7 @@ export default function CavemanPage() {
     const parsed = parseAction("player_1", command);
     const optionSet = generateOptions(parsed);
 
-    const resolved =
+    const resolvedOptions =
       optionSet?.options?.length > 0
         ? optionSet.options
         : ([{
@@ -181,7 +179,8 @@ export default function CavemanPage() {
             description: `Proceed cautiously: ${command}`,
           }] as Option[]);
 
-    setOptions([...resolved]);
+    // 🔒 Solace selects internally — player never sees branches
+    setSelectedOption(resolvedOptions[0]);
   }
 
   // ----------------------------------------------------------
@@ -291,7 +290,7 @@ export default function CavemanPage() {
     );
 
     setCommand("");
-    setOptions(null);
+    setSelectedOption(null);
   }
 
   // ----------------------------------------------------------
@@ -355,22 +354,6 @@ export default function CavemanPage() {
           Commit Intent
         </button>
       </CardSection>
-
-      {options && (
-        <CardSection title="Available Paths">
-          <ul>
-            {options.map((opt) => (
-              <li key={opt.id}>
-                <button
-                  onClick={() => setSelectedOption(opt)}
-                >
-                  {opt.description}
-                </button>
-              </li>
-            ))}
-          </ul>
-        </CardSection>
-      )}
 
       <WorldLedgerPanel events={state.events} />
       <Disclaimer />
