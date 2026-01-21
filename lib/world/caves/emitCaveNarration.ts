@@ -1,23 +1,20 @@
 // ------------------------------------------------------------
-// Cave Narration Emitter (AUTHORITATIVE)
+// Cave Narration Emitter
 // ------------------------------------------------------------
 // Entropy-driven narration + hazard binding
 // Forced exit / burial resolution
 // ------------------------------------------------------------
 
 import type { CaveNode } from "./WindscarCave";
-
 import {
   applySentenceEntropy,
   type SentenceMemory,
   type TribeProfile,
 } from "./applySentenceEntropy";
-
 import {
   selectCaveSentence,
   type CaveSentenceResult,
 } from "./selectCaveSentence";
-
 import { bindEntropyToHazards } from "./bindEntropyToHazards";
 import { resolveForcedExit } from "./resolveForcedExit";
 
@@ -29,21 +26,16 @@ export type CaveEntropyState = {
   value: number;
 };
 
-export type CaveNarrationResult =
-  | {
-      outcome: "continue";
-      text: string | null;
-      entropy: CaveEntropyState;
-      updatedNode: CaveNode;
-      hazardEvent: ReturnType<
-        typeof bindEntropyToHazards
-      >["triggeredEvent"];
-      suppressOmens: boolean;
-    }
-  | {
-      outcome: "buried";
-      description: string;
-    };
+export type CaveNarrationResult = {
+  text: string | null;
+  entropy: CaveEntropyState;
+  updatedNode: CaveNode;
+  hazardEvent: ReturnType<
+    typeof bindEntropyToHazards
+  >["triggeredEvent"];
+  suppressOmens: boolean;
+  forcedExit?: ReturnType<typeof resolveForcedExit>;
+};
 
 /* ------------------------------------------------------------
    Core Emitter
@@ -88,11 +80,8 @@ export function emitCaveNarration(
     memory
   );
 
-  const entropyAfterValue =
-    entropyResult.entropyAfter;
-
   const entropyAfter: CaveEntropyState = {
-    value: entropyAfterValue,
+    value: entropyResult.entropyAfter,
   };
 
   /* ----------------------------------------------------------
@@ -101,49 +90,30 @@ export function emitCaveNarration(
 
   const hazardBinding = bindEntropyToHazards(
     node,
-    entropyAfterValue
+    entropyAfter.value
   );
 
   /* ----------------------------------------------------------
-     Forced Exit / Burial Resolution
+     Forced Exit Resolution (FIXED CALL)
   ---------------------------------------------------------- */
 
+  let forcedExit:
+    | ReturnType<typeof resolveForcedExit>
+    | undefined;
+
   if (hazardBinding.triggeredEvent) {
-    const forcedExit = resolveForcedExit({
-      node,
-      hazardEvent:
-        hazardBinding.triggeredEvent,
-    });
-
-    if (forcedExit?.outcome === "buried") {
-      return {
-        outcome: "buried",
-        description:
-          forcedExit.description,
-      };
-    }
-
-    // partial collapse / flood → auto-ejection
-    if (forcedExit?.outcome === "ejected") {
-      return {
-        outcome: "continue",
-        text: forcedExit.description,
-        entropy: entropyAfter,
-        updatedNode:
-          hazardBinding.updatedNode,
-        hazardEvent:
-          hazardBinding.triggeredEvent,
-        suppressOmens: true,
-      };
-    }
+    forcedExit = resolveForcedExit(
+      node,                             // ✅ arg 1
+      hazardBinding.triggeredEvent,     // ✅ arg 2
+      tribe                             // ✅ arg 3
+    );
   }
 
   /* ----------------------------------------------------------
-     Normal Continuation
+     Final Output
   ---------------------------------------------------------- */
 
   return {
-    outcome: "continue",
     text: sentenceResult.sentence
       ? entropyResult.text
       : null,
@@ -153,5 +123,6 @@ export function emitCaveNarration(
       hazardBinding.triggeredEvent,
     suppressOmens:
       hazardBinding.suppressOmens,
+    forcedExit,
   };
 }
