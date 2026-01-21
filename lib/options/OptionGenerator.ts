@@ -63,21 +63,25 @@ export function generateOptions(
 ): OptionSet {
   const options: Option[] = [];
 
-  const raw = parsed.raw.toLowerCase();
-
   // ----------------------------------------------------------
-  // HARD STRUCTURAL ESCALATION (NON-EVALUATIVE)
-  //
-  // If an intent implies lethal force or large irreversible gain,
-  // at least one option MUST remain mechanically accountable.
+  // STRUCTURAL LETHALITY SIGNAL (NO TEXT INFERENCE)
   // ----------------------------------------------------------
 
   const impliesLethality =
-    raw.includes("kill") ||
-    raw.includes("attack") ||
-    raw.includes("fight") ||
-    raw.includes("slay") ||
-    raw.includes("hunt");
+    parsed.category === "combat" ||
+    parsed.category === "environment" ||
+    Boolean(
+      parsed.target &&
+        [
+          "mammoth",
+          "animal",
+          "beast",
+          "enemy",
+          "tribe",
+        ].some((t) =>
+          parsed.target.toLowerCase().includes(t)
+        )
+    );
 
   switch (parsed.category) {
     case "combat":
@@ -146,16 +150,14 @@ export function generateOptions(
   }
 
   // ----------------------------------------------------------
-  // INVARIANT ENFORCEMENT (STRUCTURAL, NOT ADVISORY)
+  // INVARIANT ENFORCEMENT
   //
-  // If the intent implies lethality, remove paths that would
-  // allow zero-risk resolution through narrative deferral.
+  // Lethal or high-impact intents may not collapse
+  // into zero-mechanics deferral.
   // ----------------------------------------------------------
 
   const finalOptions = impliesLethality
-    ? options.filter(
-        (o) => o.category !== "other"
-      )
+    ? options.filter((o) => o.category !== "other")
     : options;
 
   return {
