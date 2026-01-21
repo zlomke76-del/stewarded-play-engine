@@ -63,6 +63,22 @@ export function generateOptions(
 ): OptionSet {
   const options: Option[] = [];
 
+  const raw = parsed.raw.toLowerCase();
+
+  // ----------------------------------------------------------
+  // HARD STRUCTURAL ESCALATION (NON-EVALUATIVE)
+  //
+  // If an intent implies lethal force or large irreversible gain,
+  // at least one option MUST remain mechanically accountable.
+  // ----------------------------------------------------------
+
+  const impliesLethality =
+    raw.includes("kill") ||
+    raw.includes("attack") ||
+    raw.includes("fight") ||
+    raw.includes("slay") ||
+    raw.includes("hunt");
+
   switch (parsed.category) {
     case "combat":
       options.push(
@@ -75,24 +91,24 @@ export function generateOptions(
     case "magic":
       options.push(
         option("mechanical", "Treat as a spell or magical effect"),
-        option("narrative", "Interpret as a ritual or symbolic act"),
-        option("environmental", "Allow magic to affect the environment")
+        option("environmental", "Allow magic to affect the environment"),
+        option("narrative", "Interpret as a ritual or symbolic act")
       );
       break;
 
     case "influence":
       options.push(
         option("social", "Call for a social or influence check"),
-        option("narrative", "Allow roleplay to resolve the moment"),
-        option("mechanical", "Apply consequences without a roll")
+        option("mechanical", "Apply consequences without a roll"),
+        option("narrative", "Allow roleplay to resolve the moment")
       );
       break;
 
     case "investigation":
       options.push(
         option("mechanical", "Request an investigation or perception check"),
-        option("narrative", "Reveal partial or ambiguous information"),
-        option("environmental", "Change scene context based on findings")
+        option("environmental", "Change scene context based on findings"),
+        option("narrative", "Reveal partial or ambiguous information")
       );
       break;
 
@@ -107,8 +123,8 @@ export function generateOptions(
     case "interaction":
       options.push(
         option("mechanical", "Resolve via a simple interaction rule"),
-        option("narrative", "Allow freeform interaction"),
-        option("environmental", "Alter an object or location state")
+        option("environmental", "Alter an object or location state"),
+        option("narrative", "Allow freeform interaction")
       );
       break;
 
@@ -122,16 +138,29 @@ export function generateOptions(
 
     default:
       options.push(
-        option("narrative", "Clarify intent through roleplay"),
         option("mechanical", "Request clarification or a roll"),
+        option("narrative", "Clarify intent through roleplay"),
         option("other", "Defer resolution")
       );
       break;
   }
 
+  // ----------------------------------------------------------
+  // INVARIANT ENFORCEMENT (STRUCTURAL, NOT ADVISORY)
+  //
+  // If the intent implies lethality, remove paths that would
+  // allow zero-risk resolution through narrative deferral.
+  // ----------------------------------------------------------
+
+  const finalOptions = impliesLethality
+    ? options.filter(
+        (o) => o.category !== "other"
+      )
+    : options;
+
   return {
     context: buildContext(parsed),
-    options,
+    options: finalOptions,
   };
 }
 
@@ -168,10 +197,10 @@ function buildContext(parsed: ParsedAction): string {
 // This module MUST NOT:
 // - score options
 // - recommend options
-// - hide options
+// - hide options arbitrarily
 // - collapse options into a single path
 // - infer success or failure
 //
-// If an option ever sounds like advice,
-// the design has failed.
+// Structural accountability is allowed.
+// Evaluation is not.
 // ------------------------------------------------------------
