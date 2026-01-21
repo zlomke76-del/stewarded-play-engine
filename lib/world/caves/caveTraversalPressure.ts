@@ -1,85 +1,41 @@
 // ------------------------------------------------------------
 // Cave Traversal Pressure
 // ------------------------------------------------------------
-// Depth-based pressure model for caves.
-// Going deeper quietly worsens everything.
-// No UI. No events. Just gravity.
+// Computes traversal pressure based on depth, hazards,
+// and structural degradation.
 // ------------------------------------------------------------
 
-// 🔧 FIX: import CaveNode from WindscarCave
-import type { CaveNode } from "./WindscarCave";
+import type { CaveNode } from "./types";
 
 /* ------------------------------------------------------------
-   Types
+   Constants
 ------------------------------------------------------------ */
 
-export type CavePressureResult = {
-  pressureScore: number; // cumulative, abstract
-  hazardShift: {
-    collapseDelta?: number;
-    floodDelta?: number;
-  };
-  entropyDelta: number;
-  narrativeHint?: string;
-};
+const BASE_PRESSURE = 5;
 
 /* ------------------------------------------------------------
-   Depth Pressure Rules
+   Traversal Pressure
 ------------------------------------------------------------ */
 
-const DepthPressure = {
-  0: {
-    pressure: 0,
-    entropy: 0,
-    collapse: 0,
-    flood: 0,
-    hint: undefined,
-  },
+export function computeTraversalPressure(
+  node: CaveNode
+): number {
+  let pressure = BASE_PRESSURE;
 
-  1: {
-    pressure: 2,
-    entropy: 1,
-    collapse: 5,
-    flood: 0,
-    hint: "The cave answers sound more slowly here.",
-  },
+  // Depth increases strain
+  pressure += node.depth * 5;
 
-  2: {
-    pressure: 5,
-    entropy: 3,
-    collapse: 10,
-    flood: 8,
-    hint: "The cave no longer feels empty.",
-  },
-} as const;
+  // Structural risk contributes even if inert
+  pressure += Math.floor(
+    node.hazards.collapseRisk / 10
+  );
 
-/* ------------------------------------------------------------
-   Core Logic
------------------------------------------------------------- */
+  // Flood risk (if present)
+  if (node.hazards.floodRisk) {
+    pressure += Math.floor(
+      node.hazards.floodRisk / 15
+    );
+  }
 
-/**
- * Applies traversal pressure based on cave depth.
- * Called whenever the tribe occupies or remains in a cave node.
- */
-export function applyCaveTraversalPressure(
-  node: CaveNode,
-  priorPressure = 0
-): CavePressureResult {
-  const rule = DepthPressure[node.depth];
-
-  const pressureScore = priorPressure + rule.pressure;
-
-  const hazardShift = {
-    collapseDelta:
-      rule.collapse > 0 ? rule.collapse : undefined,
-    floodDelta:
-      rule.flood > 0 ? rule.flood : undefined,
-  };
-
-  return {
-    pressureScore,
-    hazardShift,
-    entropyDelta: rule.entropy,
-    narrativeHint: rule.hint,
-  };
+  return pressure;
 }
