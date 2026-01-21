@@ -47,11 +47,11 @@ export function emitCaveNarration(
   const entropyBefore = entropy;
 
   /* ----------------------------------------------------------
-     Impossible-line latch (derived, not stored)
+     Impossible-line latch (scar-derived ONLY)
   ---------------------------------------------------------- */
 
   const usedImpossible =
-    memory.usedSentenceIds.size > 0;
+    Object.keys(memory.scars).length > 0;
 
   /* ----------------------------------------------------------
      Sentence Selection
@@ -88,16 +88,6 @@ export function emitCaveNarration(
       node,
       entropyAfter.value
     );
-
-  /* ----------------------------------------------------------
-     Memory Updates
-  ---------------------------------------------------------- */
-
-  if (result.sentence) {
-    memory.usedSentenceIds.add(
-      result.sentence.id
-    );
-  }
 
   /* ----------------------------------------------------------
      Final Output
