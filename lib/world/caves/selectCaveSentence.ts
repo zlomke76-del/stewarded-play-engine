@@ -1,8 +1,11 @@
 // ------------------------------------------------------------
-// Cave Sentence Selection Engine
+// Cave Sentence Selection
 // ------------------------------------------------------------
-// Chooses a sentence based on cave node, entropy,
-// and tribe perception bias.
+// Chooses a sentence based on:
+// - Node
+// - Entropy
+// - Tribe perceptual bias
+// - Impossible-line constraints
 // ------------------------------------------------------------
 
 /* ------------------------------------------------------------
@@ -10,127 +13,116 @@
 ------------------------------------------------------------ */
 
 export type TribeProfile = {
-  role: "hunter" | "elder" | "scout";
+  role: "hunters" | "elders" | "general";
   entropySensitivity: number;
 };
 
-export type SentencePoolEntry = {
+export type CaveSentence = {
   id: string;
   text: string;
-  impossible?: boolean;
+  tags?: string[]; // e.g. ["sound", "air", "collapse"]
 };
 
 export type CaveSentenceResult = {
-  sentence: SentencePoolEntry | null;
-  reason:
-    | "selected"
-    | "silence"
-    | "impossible-consumed";
+  sentence?: CaveSentence;
+  usedImpossible: boolean;
 };
 
 /* ------------------------------------------------------------
-   Sentence Pools (Windscar — minimal seed)
+   Sentence Pools (node-scoped)
 ------------------------------------------------------------ */
 
-const WindscarSentencePools: Record<
-  string,
-  SentencePoolEntry[]
-> = {
+const SENTENCE_POOLS: Record<string, CaveSentence[]> = {
   "windscar-overhang": [
     {
-      id: "overhang-wind",
-      text:
-        "The wind skims the stone, never touching the ground.",
+      id: "wind-overhang-1",
+      text: "Wind moves strangely here, as if split by stone.",
+      tags: ["air"],
     },
     {
-      id: "overhang-wrong-silence",
-      text:
-        "There is a silence here that does not belong.",
-      impossible: true,
+      id: "wind-overhang-2",
+      text: "Loose gravel clicks once, then settles.",
+      tags: ["sound"],
     },
   ],
 
   "windscar-tunnel": [
     {
-      id: "tunnel-echo",
-      text:
-        "Each step returns as something smaller.",
+      id: "wind-tunnel-1",
+      text: "The tunnel breathes when no one moves.",
+      tags: ["air", "omen"],
+    },
+    {
+      id: "wind-tunnel-2",
+      text: "A drip echoes too far for its size.",
+      tags: ["sound"],
     },
   ],
 
   "windscar-deep-chamber": [
     {
-      id: "deep-damp",
-      text:
-        "Water gathers where light never argued.",
+      id: "wind-deep-1",
+      text: "The chamber feels older than the hill above it.",
+      tags: ["omen"],
     },
   ],
 };
 
 /* ------------------------------------------------------------
-   Selector
+   Impossible Line (global, one-time)
+------------------------------------------------------------ */
+
+let IMPOSSIBLE_USED = false;
+
+const IMPOSSIBLE_LINE: CaveSentence = {
+  id: "impossible-void",
+  text: "For a moment, the cave listens back.",
+};
+
+/* ------------------------------------------------------------
+   Selection Logic
 ------------------------------------------------------------ */
 
 export function selectCaveSentence(
   nodeId: string,
   entropy: number,
   tribe: TribeProfile,
-  usedImpossible: Set<string>
+  usedImpossible: boolean
 ): CaveSentenceResult {
-  const pool =
-    WindscarSentencePools[nodeId] ?? [];
-
-  if (pool.length === 0) {
+  // Impossible line: one-time, high entropy only
+  if (!IMPOSSIBLE_USED && entropy >= 14 && !usedImpossible) {
+    IMPOSSIBLE_USED = true;
     return {
-      sentence: null,
-      reason: "silence",
+      sentence: IMPOSSIBLE_LINE,
+      usedImpossible: true,
     };
   }
 
-  // Elders notice absence sooner
-  if (
-    tribe.role === "elder" &&
-    entropy > 10
-  ) {
-    return {
-      sentence: null,
-      reason: "silence",
-    };
+  const pool = SENTENCE_POOLS[nodeId] ?? [];
+  if (pool.length === 0) return { usedImpossible: false };
+
+  // Perception bias
+  let filtered = pool;
+
+  if (tribe.role === "hunters") {
+    filtered = pool.filter(
+      (s) => s.tags?.includes("sound") ?? false
+    );
   }
 
-  // Filter impossible lines already used
-  const available = pool.filter(
-    (s) =>
-      !s.impossible ||
-      !usedImpossible.has(s.id)
-  );
-
-  if (available.length === 0) {
-    return {
-      sentence: null,
-      reason: "silence",
-    };
+  if (tribe.role === "elders") {
+    filtered = pool.filter(
+      (s) => s.tags?.includes("air") ?? false
+    );
   }
 
-  // Low entropy → stable lines
-  const index =
-    entropy < 6
-      ? 0
-      : Math.floor(
-          Math.random() * available.length
-        );
+  if (filtered.length === 0) filtered = pool;
 
-  const chosen = available[index];
-
-  if (chosen.impossible) {
-    return {
-      sentence: chosen,
-      reason: "impossible-consumed",
-    };
-  }
+  const sentence =
+    filtered[Math.floor(Math.random() * filtered.length)];
 
   return {
-    sentence: chosen,
-    reason: "selected",
+    sentence,
+    usedImpossible: false,
   };
 }
