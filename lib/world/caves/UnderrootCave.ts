@@ -4,34 +4,13 @@
 // Second cave in migration chain:
 // Windscar → Underroot → Salt Hollow
 //
-// ⚠ Stub only — no hazards, no narration pools yet
+// ⚠ Stub only — narration + hazards will be layered later
 // ------------------------------------------------------------
 
-export type CaveNodeState = "used" | "smoked" | "sacred";
-
-export type CaveHazards = {
-  collapseRisk?: number;
-  floodRisk?: number;
-};
-
-export type CaveNode = {
-  nodeId: string;
-  caveId: string;
-  name: string;
-  depth: number;
-  traits: string[];
-  state: CaveNodeState;
-  hazards: CaveHazards;
-  connections: string[];
-};
-
-export type CaveGraph = {
-  caveId: string;
-  title: string;
-  biome: "wilds";
-  nodes: Record<string, CaveNode>;
-  entryNodeId: string;
-};
+import type {
+  CaveGraph,
+  CaveNode,
+} from "./types";
 
 /* ------------------------------------------------------------
    Underroot Cave (Stub)
@@ -59,7 +38,9 @@ export const UnderrootCave: CaveGraph = {
         "concealed",
       ],
       state: "used",
-      hazards: {}, // no hazards yet
+      hazards: {
+        collapseRisk: 0,     // ✅ REQUIRED (even if inert)
+      },
       connections: [
         "underroot-hollow",
       ],
@@ -79,7 +60,9 @@ export const UnderrootCave: CaveGraph = {
         "quiet",
       ],
       state: "used",
-      hazards: {}, // no hazards yet
+      hazards: {
+        collapseRisk: 0,     // ✅ REQUIRED
+      },
       connections: [
         "underroot-entry",
       ],
