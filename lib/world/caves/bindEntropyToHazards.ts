@@ -3,6 +3,7 @@
 // ------------------------------------------------------------
 // Governs irreversible cave events
 // Collapse / Flood trigger exactly once
+// Topology mutation is signaled, not executed here
 // ------------------------------------------------------------
 
 import type { CaveNode } from "./WindscarCave";
@@ -16,6 +17,8 @@ export type CaveHazardEvent =
       type: "collapse";
       severity: "partial" | "total";
       description: string;
+      blockedNodeIds: string[];
+      forcedExitNodeId?: string;
     }
   | {
       type: "flood";
@@ -52,28 +55,43 @@ export function bindEntropyToHazards(
   const updatedNode: CaveNode = {
     ...node,
     hazards: { ...node.hazards },
+    connections: [...node.connections],
   };
 
   /* ----------------------------------------------------------
-     Collapse Logic
+     Collapse Logic (Terminal)
   ---------------------------------------------------------- */
 
   if (
     updatedNode.hazards.collapseRisk > 0 &&
     entropy >= COLLAPSE_THRESHOLD
   ) {
+    const total = entropy > 90;
+
+    // All outgoing connections are now invalid
+    const blockedNodeIds = [...updatedNode.connections];
+
+    // Forced exit only if not surface
+    const forcedExitNodeId =
+      updatedNode.depth > 0
+        ? updatedNode.connections[0]
+        : undefined;
+
     triggeredEvent = {
       type: "collapse",
-      severity:
-        entropy > 90 ? "total" : "partial",
-      description:
-        entropy > 90
-          ? "The ceiling gives way without warning. Stone seals the dark."
-          : "A thunderous crack — dust and stone choke the passage.",
+      severity: total ? "total" : "partial",
+      description: total
+        ? "The ceiling gives way without warning. Stone seals the dark."
+        : "A thunderous crack — dust and stone choke the passage.",
+      blockedNodeIds,
+      forcedExitNodeId,
     };
 
-    // 🔒 Collapse is terminal
+    // 🔒 Collapse is terminal for this node
     updatedNode.hazards.collapseRisk = 0;
+    updatedNode.hazards.floodRisk = 0;
+    updatedNode.connections = [];
+
     suppressOmens = true;
 
     return {
@@ -84,25 +102,27 @@ export function bindEntropyToHazards(
   }
 
   /* ----------------------------------------------------------
-     Flood Logic (only if no collapse)
+     Flood Logic (Consumes Itself)
   ---------------------------------------------------------- */
 
   if (
-    updatedNode.hazards.floodRisk &&
+    typeof updatedNode.hazards.floodRisk === "number" &&
+    updatedNode.hazards.floodRisk > 0 &&
     entropy >= FLOOD_THRESHOLD
   ) {
+    const surge = entropy > 80;
+
     triggeredEvent = {
       type: "flood",
-      severity:
-        entropy > 80 ? "surge" : "slow",
-      description:
-        entropy > 80
-          ? "Cold water surges through the chamber, roaring and blind."
-          : "Water begins to creep along the stone floor.",
+      severity: surge ? "surge" : "slow",
+      description: surge
+        ? "Cold water surges through the chamber, roaring and blind."
+        : "Water begins to creep along the stone floor.",
     };
 
-    // 🔒 Flood consumes itself
+    // 🔒 Flood resolves once
     updatedNode.hazards.floodRisk = 0;
+
     suppressOmens = true;
 
     return {
