@@ -22,10 +22,6 @@ export type SentenceMemory = {
   scars: Record<string, number>;
 };
 
-export type CaveEntropyState = {
-  value: number;
-};
-
 /* ------------------------------------------------------------
    Perception & Sensitivity
 ------------------------------------------------------------ */
@@ -33,7 +29,7 @@ export type CaveEntropyState = {
 function perceptionBias(role: TribeRole): number {
   switch (role) {
     case "elders":
-      return -15; // notice danger earlier
+      return -15; // elders notice danger earlier
     case "hunters":
       return 0;
     default:
@@ -58,7 +54,7 @@ function entropySensitivity(role: TribeRole): number {
 
 export function emitCaveNarration(ctx: {
   node: CaveNode;
-  entropy: CaveEntropyState;
+  entropy: number; // 🔒 entropy is scalar
   tribe: TribeProfile;
   memory: SentenceMemory;
 }) {
@@ -70,7 +66,7 @@ export function emitCaveNarration(ctx: {
   };
 
   const entropyBefore =
-    entropy.value + perceptionBias(tribe.role);
+    entropy + perceptionBias(tribe.role);
 
   const usedImpossible =
     memory.usedImpossibleIds.size > 0;
@@ -87,18 +83,14 @@ export function emitCaveNarration(ctx: {
   );
 
   /* ----------------------------------------------------------
-     Entropy progression (FIXED)
+     Entropy progression
   ---------------------------------------------------------- */
 
-  const entropyValueAfter = applySentenceEntropy(
-    entropy.value,
+  const entropyAfter = applySentenceEntropy(
+    entropy,
     result.sentence ? "sentence" : "silence",
     memory
   );
-
-  const entropyAfter: CaveEntropyState = {
-    value: entropyValueAfter,
-  };
 
   /* ----------------------------------------------------------
      Memory mutation
