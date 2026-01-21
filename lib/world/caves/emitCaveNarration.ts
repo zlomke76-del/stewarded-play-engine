@@ -1,19 +1,22 @@
 // ------------------------------------------------------------
-// Cave Narration Emitter
+// Cave Narration Emitter (AUTHORITATIVE)
 // ------------------------------------------------------------
 // Entropy-driven narration + hazard binding
 // ------------------------------------------------------------
 
 import type { CaveNode } from "./WindscarCave";
+
 import {
   applySentenceEntropy,
   type SentenceMemory,
   type TribeProfile,
 } from "./applySentenceEntropy";
+
 import {
   selectCaveSentence,
   type CaveSentenceResult,
 } from "./selectCaveSentence";
+
 import { bindEntropyToHazards } from "./bindEntropyToHazards";
 
 /* ------------------------------------------------------------
@@ -40,14 +43,15 @@ export type CaveNarrationResult = {
 
 export function emitCaveNarration(
   node: CaveNode,
-  entropy: number,
+  entropy: number, // 🔑 entropy is ALWAYS a number here
   memory: SentenceMemory,
   tribe: TribeProfile
 ): CaveNarrationResult {
-  const entropyBefore = entropy;
+  const entropyBefore: number = entropy;
 
   /* ----------------------------------------------------------
-     Impossible-line latch (scar-derived ONLY)
+     Impossible-line latch
+     (scar-derived ONLY, never reset)
   ---------------------------------------------------------- */
 
   const usedImpossible =
@@ -75,19 +79,21 @@ export function emitCaveNarration(
     memory
   );
 
+  const entropyAfterValue: number =
+    entropyResult.entropyAfter;
+
   const entropyAfter: CaveEntropyState = {
-    value: entropyResult.entropyAfter,
+    value: entropyAfterValue,
   };
 
   /* ----------------------------------------------------------
      Bind Entropy → Hazards
   ---------------------------------------------------------- */
 
-  const hazardBinding =
-    bindEntropyToHazards(
-      node,
-      entropyAfter.value
-    );
+  const hazardBinding = bindEntropyToHazards(
+    node,
+    entropyAfterValue
+  );
 
   /* ----------------------------------------------------------
      Final Output
@@ -97,10 +103,14 @@ export function emitCaveNarration(
     text: result.sentence
       ? entropyResult.text
       : null,
+
     entropy: entropyAfter,
+
     updatedNode: hazardBinding.updatedNode,
+
     hazardEvent:
       hazardBinding.triggeredEvent,
+
     suppressOmens:
       hazardBinding.suppressOmens,
   };
