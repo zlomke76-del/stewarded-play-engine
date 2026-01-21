@@ -37,7 +37,7 @@ import { WindscarCave } from "@/lib/world/caves/WindscarCave";
 import { evolveCaveState } from "@/lib/world/caves/evolveCaveState";
 
 // ------------------------------------------------------------
-// Risk inference (language-only)
+// Risk inference (LANGUAGE-ONLY — retained, non-authoritative)
 // ------------------------------------------------------------
 
 type OptionKind =
@@ -46,7 +46,9 @@ type OptionKind =
   | "risky"
   | "contested";
 
-function inferOptionKind(description: string): OptionKind {
+function inferOptionKindFromText(
+  description: string
+): OptionKind {
   const t = description.toLowerCase();
 
   if (
@@ -78,7 +80,28 @@ function inferOptionKind(description: string): OptionKind {
 }
 
 // ------------------------------------------------------------
-// 🜂 Solace observation (non-authoritative)
+// Risk inference (STRUCTURAL — AUTHORITATIVE)
+// ------------------------------------------------------------
+
+function optionCategoryToKind(
+  category: Option["category"]
+): OptionKind {
+  switch (category) {
+    case "mechanical":
+      return "contested";
+    case "environmental":
+      return "environmental";
+    case "social":
+      return "risky";
+    case "narrative":
+    case "other":
+    default:
+      return "safe";
+  }
+}
+
+// ------------------------------------------------------------
+// 🜂 Solace observation (non-authoritative, descriptive only)
 // ------------------------------------------------------------
 
 function deriveObservation(world?: any): string {
@@ -102,6 +125,8 @@ function deriveObservation(world?: any): string {
 }
 
 // ------------------------------------------------------------
+// Page Component
+// ------------------------------------------------------------
 
 export default function CavemanPage() {
   const [state, setState] = useState<SessionState>(
@@ -115,7 +140,7 @@ export default function CavemanPage() {
   const [selectedOption, setSelectedOption] =
     useState<Option | null>(null);
 
-  // 🔒 Resolution stays mounted until NEXT intent
+  // 🔒 Resolution persists until NEXT intent
   const [resolutionActive, setResolutionActive] =
     useState(false);
 
@@ -126,7 +151,9 @@ export default function CavemanPage() {
   const lastWorld = useMemo(() => {
     const last = [...state.events]
       .reverse()
-      .find((e) => e.type === "OUTCOME") as any | undefined;
+      .find((e) => e.type === "OUTCOME") as
+      | any
+      | undefined;
 
     return last?.payload?.world;
   }, [state.events]);
@@ -140,13 +167,13 @@ export default function CavemanPage() {
   );
 
   // ----------------------------------------------------------
-  // Player intent
+  // Player intent → option generation
   // ----------------------------------------------------------
 
   function handleSubmitCommand() {
     if (!command.trim()) return;
 
-    // 🔑 CLEAR PREVIOUS RESOLUTION *ONLY WHEN NEW INTENT IS COMMITTED*
+    // Clear previous resolution ONLY when new intent is declared
     setResolutionActive(false);
     setOptions(null);
     setSelectedOption(null);
@@ -171,7 +198,7 @@ export default function CavemanPage() {
   }
 
   // ----------------------------------------------------------
-  // Solace commits canon (ONE TURN ONLY)
+  // Solace commits canon (ONE TURN PER INTENT)
   // ----------------------------------------------------------
 
   function handleAutoRecord(payload: {
@@ -194,21 +221,32 @@ export default function CavemanPage() {
       .find(
         (e) =>
           e.type === "OUTCOME" &&
-          (e as any).payload?.world?.nodeType === "cave"
+          (e as any).payload?.world?.nodeType ===
+            "cave"
       ) as any | undefined;
 
     const previousCave = lastCaveEvent?.payload?.world;
 
-    const fireUsed = payload.audit.some((a) =>
-      a.toLowerCase().includes("fire")
-    );
+    const fireUsed =
+      payload.audit.some((a) =>
+        a.toLowerCase().includes("fire")
+      ) ||
+      payload.description
+        .toLowerCase()
+        .includes("fire");
 
     const successfulHunt =
-      payload.world?.resources?.foodDelta > 0;
+      payload.world?.resources?.foodDelta &&
+      payload.world.resources.foodDelta > 0;
 
-    const rested = selectedOption?.description
-      .toLowerCase()
-      .includes("rest");
+    const rested = Boolean(
+      selectedOption?.description
+        .toLowerCase()
+        .includes("rest") ||
+        selectedOption?.description
+          .toLowerCase()
+          .includes("wait")
+    );
 
     let evolvedState = previousCave?.state;
 
@@ -252,9 +290,9 @@ export default function CavemanPage() {
       })
     );
 
-    // ❌ NO TIMEOUT
-    // ❌ NO AUTO-CLEAR
-    // Resolution remains visible until next intent
+    // NO timeout
+    // NO auto-clear
+    // Resolution remains until next intent
   }
 
   // ----------------------------------------------------------
@@ -297,9 +335,12 @@ export default function CavemanPage() {
             role="arbiter"
             autoResolve
             context={{
-              optionDescription: selectedOption.description,
-              optionKind: inferOptionKind(
-                selectedOption.description
+              optionDescription:
+                selectedOption.description,
+
+              // 🔑 STRUCTURAL RISK (authoritative)
+              optionKind: optionCategoryToKind(
+                selectedOption.category
               ),
             }}
             onRecord={handleAutoRecord}
@@ -324,3 +365,13 @@ export default function CavemanPage() {
     </StewardedShell>
   );
 }
+
+/* ------------------------------------------------------------
+   EOF
+   This file intentionally preserves:
+   - Narrative inference (non-authoritative)
+   - Structural risk (authoritative)
+   - Cave evolution logic
+   - Single-intent resolution
+   - Persistent dice visibility
+------------------------------------------------------------ */
