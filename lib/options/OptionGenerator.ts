@@ -64,24 +64,21 @@ export function generateOptions(
   const options: Option[] = [];
 
   // ----------------------------------------------------------
-  // STRUCTURAL LETHALITY SIGNAL (NO TEXT INFERENCE)
+  // STRUCTURAL LETHALITY SIGNAL (STRICT, NULL-SAFE)
   // ----------------------------------------------------------
+
+  const target = parsed.target?.toLowerCase() ?? "";
 
   const impliesLethality =
     parsed.category === "combat" ||
     parsed.category === "environment" ||
-    Boolean(
-      parsed.target &&
-        [
-          "mammoth",
-          "animal",
-          "beast",
-          "enemy",
-          "tribe",
-        ].some((t) =>
-          parsed.target.toLowerCase().includes(t)
-        )
-    );
+    [
+      "mammoth",
+      "animal",
+      "beast",
+      "enemy",
+      "tribe",
+    ].some((t) => target.includes(t));
 
   switch (parsed.category) {
     case "combat":
