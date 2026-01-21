@@ -5,6 +5,11 @@
 // Overhang → Tunnel → Deep Chamber
 // ------------------------------------------------------------
 
+export type {
+  CaveGraph,
+  CaveNode,
+} from "./types";
+
 import type {
   CaveGraph,
   CaveNode,
@@ -89,4 +94,3 @@ export const WindscarCave: CaveGraph = {
     },
   },
 };
-
