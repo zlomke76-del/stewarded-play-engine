@@ -2,165 +2,104 @@
 // Cave Narration Emitter
 // ------------------------------------------------------------
 // Responsibilities:
-// - Select cave sentence OR silence
-// - Inject omen ladder (pre-collapse / pre-flood only)
-// - Apply sentence entropy + scar logic
-// - Respect tribe perception bias
-// - NEVER emit omens after collapse/flood
+// - Select cave sentence (or silence)
+// - Apply entropy + perception bias
+// - Emit narration without leaking canon certainty
 // ------------------------------------------------------------
 
+import { selectCaveSentence } from "./selectCaveSentence";
+import { applySentenceEntropy } from "./applySentenceEntropy";
 import type { CaveNode } from "./WindscarCave";
-import { getCaveOmen } from "./omenLadder";
-import {
-  applySentenceEntropy,
-  SentenceMemory,
-  TribeProfile,
-  CaveEntropyState,
-} from "./applySentenceEntropy";
-import {
-  selectCaveSentence,
-  CaveSentenceResult,
-} from "./selectCaveSentence";
 
 /* ------------------------------------------------------------
    Types
 ------------------------------------------------------------ */
 
-export type CaveNarrationContext = {
-  node: CaveNode;
-  entropy: CaveEntropyState;
-  memory: SentenceMemory;
-  tribe: TribeProfile;
-  turn: number;
+export type TribeRole = "general" | "hunters" | "elders";
 
-  // Hard stop flags (canon-level)
-  collapsed?: boolean;
-  flooded?: boolean;
+export type TribeProfile = {
+  role: TribeRole;
 };
 
-export type CaveNarrationResult = {
-  text: string | null; // null = silence
-  entropy: CaveEntropyState;
-  usedOmen: boolean;
+export type SentenceMemory = {
+  usedSentenceIds: Set<string>;
+  usedImpossibleIds: Set<string>;
+  scars: Record<string, number>;
+};
+
+export type CaveEntropyState = {
+  value: number;
 };
 
 /* ------------------------------------------------------------
    Perception Bias
 ------------------------------------------------------------ */
 
-function omenThresholdModifier(
-  tribe: TribeProfile
-): number {
+function perceptionBias(tribe: TribeProfile): number {
   switch (tribe.role) {
-    case "elder":
+    case "elders":
       return -15; // elders notice danger earlier
-    case "hunter":
-      return 0;
-    case "scout":
-      return -5;
+    case "hunters":
+      return 0;   // baseline
+    case "general":
     default:
-      return 0;
+      return 5;   // general tribe notices later
   }
 }
 
 /* ------------------------------------------------------------
-   Main Entry
+   Emit Narration
 ------------------------------------------------------------ */
 
-export function emitCaveNarration(
-  ctx: CaveNarrationContext
-): CaveNarrationResult {
-  const {
-    node,
-    entropy,
-    memory,
-    tribe,
-    collapsed,
-    flooded,
-  } = ctx;
+export function emitCaveNarration(ctx: {
+  node: CaveNode;
+  entropy: CaveEntropyState;
+  tribe: TribeProfile;
+  memory: SentenceMemory;
+}) {
+  const { node, entropy, tribe, memory } = ctx;
 
-  const entropyBefore = entropy;
-
-  /* ----------------------------------------------------------
-     1️⃣ OMEN CHECK (BEFORE SENTENCE)
-     ---------------------------------------------------------- */
-
-  // Omens are suppressed permanently after failure
-  if (!collapsed && !flooded) {
-    const omen = getCaveOmen(node);
-
-    if (omen) {
-      const perceptionShift =
-        omenThresholdModifier(tribe);
-
-      const perceived =
-        node.hazards.collapseRisk +
-          (node.hazards.floodRisk ?? 0) / 2 +
-          perceptionShift >=
-        40 + omen.level * 10;
-
-      if (perceived) {
-        const entropyAfter = applySentenceEntropy(
-          entropyBefore,
-          "omen",
-          memory
-        );
-
-        return {
-          text: omen.line,
-          entropy: entropyAfter,
-          usedOmen: true,
-        };
-      }
-    }
-  }
-
-  /* ----------------------------------------------------------
-     2️⃣ SENTENCE SELECTION
-     ---------------------------------------------------------- */
+  const entropyBefore =
+    entropy.value + perceptionBias(tribe);
 
   const usedImpossible =
-    memory.usedImpossible === true;
-
-  const result: CaveSentenceResult =
-    selectCaveSentence(
-      node.nodeId,
-      entropyBefore,
-      tribe,
-      usedImpossible
-    );
+    memory.usedImpossibleIds.size > 0;
 
   /* ----------------------------------------------------------
-     3️⃣ ENTROPY + MEMORY UPDATE
-     ---------------------------------------------------------- */
+     Sentence selection
+  ---------------------------------------------------------- */
+
+  const result = selectCaveSentence(
+    node.nodeId,
+    entropyBefore,
+    tribe,
+    usedImpossible
+  );
+
+  /* ----------------------------------------------------------
+     Entropy progression
+  ---------------------------------------------------------- */
 
   const entropyAfter = applySentenceEntropy(
-    entropyBefore,
+    entropy,
     result.sentence ? "sentence" : "silence",
     memory
   );
+
+  /* ----------------------------------------------------------
+     Memory mutation
+  ---------------------------------------------------------- */
 
   if (result.sentence) {
     memory.usedSentenceIds.add(result.sentence.id);
 
     if (result.usedImpossible) {
-      memory.usedImpossible = true;
+      memory.usedImpossibleIds.add(result.sentence.id);
     }
-
-    return {
-      text: result.sentence.text,
-      entropy: entropyAfter,
-      usedOmen: false,
-    };
   }
 
-  /* ----------------------------------------------------------
-     4️⃣ SILENCE (EXPORT WILL OMIT)
-     ---------------------------------------------------------- */
-
   return {
-    text: null,
+    text: result.sentence?.text ?? null,
     entropy: entropyAfter,
-    usedOmen: false,
   };
 }
