@@ -19,6 +19,15 @@ export const CaveRegistry: Record<string, CaveGraph> = {
 };
 
 /* ------------------------------------------------------------
+   Migration Table
+------------------------------------------------------------ */
+
+export const CaveMigrationTable: Record<string, string | null> = {
+  "cave-windscar": "cave-underroot",
+  "cave-underroot": null, // terminal until Salt Hollow is introduced
+};
+
+/* ------------------------------------------------------------
    Helpers
 ------------------------------------------------------------ */
 
