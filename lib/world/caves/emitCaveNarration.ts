@@ -1,15 +1,13 @@
 // ------------------------------------------------------------
 // Cave Narration Emitter
 // ------------------------------------------------------------
-// Selects cave sentences, applies entropy,
-// binds hazards, and emits canonical narration
+// Entropy-driven narration + hazard binding
 // ------------------------------------------------------------
 
 import type { CaveNode } from "./WindscarCave";
 import {
   applySentenceEntropy,
   type SentenceMemory,
-  type CaveEntropyState,
   type TribeProfile,
 } from "./applySentenceEntropy";
 import {
@@ -21,6 +19,10 @@ import { bindEntropyToHazards } from "./bindEntropyToHazards";
 /* ------------------------------------------------------------
    Types
 ------------------------------------------------------------ */
+
+export type CaveEntropyState = {
+  value: number;
+};
 
 export type CaveNarrationResult = {
   text: string | null;
@@ -38,11 +40,11 @@ export type CaveNarrationResult = {
 
 export function emitCaveNarration(
   node: CaveNode,
-  entropy: CaveEntropyState,
+  entropy: number, // 🔑 entropy is primitive
   memory: SentenceMemory,
   tribe: TribeProfile
 ): CaveNarrationResult {
-  const entropyBefore = entropy.value;
+  const entropyBefore = entropy;
 
   /* ----------------------------------------------------------
      Sentence Selection
@@ -84,7 +86,7 @@ export function emitCaveNarration(
     );
 
   /* ----------------------------------------------------------
-     Memory Updates (One-way)
+     Memory Updates (one-way)
   ---------------------------------------------------------- */
 
   if (result.sentence) {
