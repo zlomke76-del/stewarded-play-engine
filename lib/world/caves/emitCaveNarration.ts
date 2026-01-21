@@ -2,7 +2,7 @@
 // Cave Narration Emitter
 // ------------------------------------------------------------
 // Entropy-driven narration + hazard binding
-// Forced exit + burial handling (graph-aware)
+// Forced exit + burial handling
 // ------------------------------------------------------------
 
 import type { CaveNode, CaveGraph } from "./WindscarCave";
@@ -21,35 +21,24 @@ import {
 import { bindEntropyToHazards } from "./bindEntropyToHazards";
 import { resolveForcedExit } from "./resolveForcedExit";
 
-// ------------------------------------------------------------
-// Types
-// ------------------------------------------------------------
-
-export type CaveEntropyState = {
-  value: number;
-};
+/* ------------------------------------------------------------
+   Types
+------------------------------------------------------------ */
 
 export type CaveNarrationResult = {
   text: string | null;
-  entropy: CaveEntropyState;
-
-  // Cave mutation
+  entropy: number;
   updatedNode: CaveNode;
-
-  // Hazard resolution
   hazardEvent: ReturnType<
     typeof bindEntropyToHazards
   >["triggeredEvent"];
-
   suppressOmens: boolean;
-
-  // Forced exit / terminal outcome
   forcedExit?: ReturnType<typeof resolveForcedExit>;
 };
 
-// ------------------------------------------------------------
-// Core Emitter (AUTHORITATIVE)
-// ------------------------------------------------------------
+/* ------------------------------------------------------------
+   Core Emitter
+------------------------------------------------------------ */
 
 export function emitCaveNarration(
   cave: CaveGraph,
@@ -89,9 +78,7 @@ export function emitCaveNarration(
     memory
   );
 
-  const entropyAfter: CaveEntropyState = {
-    value: entropyResult.entropyAfter,
-  };
+  const entropyAfter = entropyResult.entropyAfter;
 
   /* ----------------------------------------------------------
      Bind Entropy → Hazards
@@ -99,12 +86,11 @@ export function emitCaveNarration(
 
   const hazardBinding = bindEntropyToHazards(
     node,
-    entropyAfter.value
+    entropyAfter
   );
 
   /* ----------------------------------------------------------
      Forced Exit / Burial Resolution
-     (Graph-aware, 3-arg contract)
   ---------------------------------------------------------- */
 
   let forcedExit:
@@ -113,9 +99,9 @@ export function emitCaveNarration(
 
   if (hazardBinding.triggeredEvent) {
     forcedExit = resolveForcedExit(
-      cave,                         // CaveGraph
-      node.nodeId,                  // current location
-      hazardBinding.triggeredEvent  // collapse / flood
+      cave,                               // CaveGraph
+      node.nodeId,                       // current location
+      hazardBinding.triggeredEvent.type  // ✅ discriminator ONLY
     );
   }
 
@@ -132,11 +118,12 @@ export function emitCaveNarration(
 
     updatedNode: hazardBinding.updatedNode,
 
-    hazardEvent: hazardBinding.triggeredEvent,
+    hazardEvent:
+      hazardBinding.triggeredEvent,
 
-    suppressOmens: hazardBinding.suppressOmens,
+    suppressOmens:
+      hazardBinding.suppressOmens,
 
     forcedExit,
   };
 }
-
