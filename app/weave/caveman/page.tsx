@@ -182,7 +182,8 @@ export default function CavemanPage() {
             description: `Proceed cautiously: ${command}`,
           }] as Option[]);
 
-    setOptions(resolved);
+    // 🔑 Clone readonly → mutable
+    setOptions([...resolved]);
 
     // 🔑 Solace auto-selects a viable option
     setSelectedOption(resolved[0]);
