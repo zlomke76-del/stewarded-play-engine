@@ -1,39 +1,46 @@
 // ------------------------------------------------------------
 // Cave Narration Emitter
 // ------------------------------------------------------------
-// Entropy-driven narration + hazard binding
-// Forced exit + burial handling
+// Entropy-driven narration + hazard + migration resolution
 // ------------------------------------------------------------
 
 import type { CaveNode, CaveGraph } from "./WindscarCave";
-
 import {
   applySentenceEntropy,
   type SentenceMemory,
   type TribeProfile,
 } from "./applySentenceEntropy";
-
 import {
   selectCaveSentence,
   type CaveSentenceResult,
 } from "./selectCaveSentence";
-
-import { bindEntropyToHazards } from "./bindEntropyToHazards";
-import { resolveForcedExit } from "./resolveForcedExit";
+import {
+  bindEntropyToHazards,
+  type CaveHazardEvent,
+} from "./bindEntropyToHazards";
+import {
+  resolveCaveMigration,
+  type CaveMigrationResult,
+} from "./resolveCaveMigration";
 
 /* ------------------------------------------------------------
    Types
 ------------------------------------------------------------ */
 
+export type CaveEntropyState = {
+  value: number;
+};
+
 export type CaveNarrationResult = {
   text: string | null;
-  entropy: number;
+  entropy: CaveEntropyState;
+
   updatedNode: CaveNode;
-  hazardEvent: ReturnType<
-    typeof bindEntropyToHazards
-  >["triggeredEvent"];
+
+  hazardEvent: CaveHazardEvent;
   suppressOmens: boolean;
-  forcedExit?: ReturnType<typeof resolveForcedExit>;
+
+  migration: CaveMigrationResult | null;
 };
 
 /* ------------------------------------------------------------
@@ -50,7 +57,7 @@ export function emitCaveNarration(
   const entropyBefore = entropy;
 
   /* ----------------------------------------------------------
-     Impossible-line latch (scar-derived ONLY)
+     Impossible-line latch
   ---------------------------------------------------------- */
 
   const usedImpossible =
@@ -74,35 +81,43 @@ export function emitCaveNarration(
 
   const entropyResult = applySentenceEntropy(
     entropyBefore,
-    sentenceResult.sentence ? "sentence" : "silence",
+    sentenceResult.sentence
+      ? "sentence"
+      : "silence",
     memory
   );
 
-  const entropyAfter = entropyResult.entropyAfter;
+  const entropyAfter: CaveEntropyState = {
+    value: entropyResult.entropyAfter,
+  };
 
   /* ----------------------------------------------------------
      Bind Entropy → Hazards
   ---------------------------------------------------------- */
 
-  const hazardBinding = bindEntropyToHazards(
-    node,
-    entropyAfter
-  );
+  const hazardBinding =
+    bindEntropyToHazards(
+      node,
+      entropyAfter.value
+    );
 
   /* ----------------------------------------------------------
-     Forced Exit / Burial Resolution
+     Forced Migration Resolution
   ---------------------------------------------------------- */
 
-  let forcedExit:
-    | ReturnType<typeof resolveForcedExit>
-    | undefined;
+  let migration: CaveMigrationResult | null =
+    null;
 
   if (hazardBinding.triggeredEvent) {
-    forcedExit = resolveForcedExit(
-      cave,                               // CaveGraph
-      node.nodeId,                       // current location
-      hazardBinding.triggeredEvent.type  // ✅ discriminator ONLY
-    );
+    const migrationResult =
+      resolveCaveMigration(
+        cave,
+        hazardBinding.triggeredEvent
+      );
+
+    if (migrationResult.type === "migrate") {
+      migration = migrationResult;
+    }
   }
 
   /* ----------------------------------------------------------
@@ -116,7 +131,8 @@ export function emitCaveNarration(
 
     entropy: entropyAfter,
 
-    updatedNode: hazardBinding.updatedNode,
+    updatedNode:
+      hazardBinding.updatedNode,
 
     hazardEvent:
       hazardBinding.triggeredEvent,
@@ -124,6 +140,6 @@ export function emitCaveNarration(
     suppressOmens:
       hazardBinding.suppressOmens,
 
-    forcedExit,
+    migration,
   };
 }
