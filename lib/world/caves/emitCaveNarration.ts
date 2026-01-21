@@ -43,7 +43,7 @@ export type CaveNarrationResult = {
 
   suppressOmens: boolean;
 
-  // Forced exit / terminal
+  // Forced exit / terminal outcome
   forcedExit?: ReturnType<typeof resolveForcedExit>;
 };
 
@@ -61,8 +61,7 @@ export function emitCaveNarration(
   const entropyBefore = entropy;
 
   /* ----------------------------------------------------------
-     Impossible-line latch
-     (scar-based, one-way)
+     Impossible-line latch (scar-derived ONLY)
   ---------------------------------------------------------- */
 
   const usedImpossible =
@@ -81,7 +80,7 @@ export function emitCaveNarration(
     );
 
   /* ----------------------------------------------------------
-     Sentence Entropy Application
+     Apply Sentence Entropy
   ---------------------------------------------------------- */
 
   const entropyResult = applySentenceEntropy(
@@ -104,7 +103,8 @@ export function emitCaveNarration(
   );
 
   /* ----------------------------------------------------------
-     Forced Exit / Burial Resolution (GRAPH-AWARE)
+     Forced Exit / Burial Resolution
+     (Graph-aware, 3-arg contract)
   ---------------------------------------------------------- */
 
   let forcedExit:
@@ -113,10 +113,9 @@ export function emitCaveNarration(
 
   if (hazardBinding.triggeredEvent) {
     forcedExit = resolveForcedExit(
-      cave,                          // ✅ CaveGraph
-      node.nodeId,                   // ✅ current location
-      hazardBinding.triggeredEvent,  // ✅ collapse / flood
-      tribe                          // ✅ perception bias
+      cave,                         // CaveGraph
+      node.nodeId,                  // current location
+      hazardBinding.triggeredEvent  // collapse / flood
     );
   }
 
