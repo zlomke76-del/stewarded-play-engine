@@ -331,7 +331,7 @@ export default function CavemanPage() {
       {selectedOption && resolutionActive && (
         <CardSection title="Resolution">
           <ResolutionDraftPanel
-            key={`resolution-${turn}`}
+            key={`resolution-${selectedOption?.id}`}
             role="arbiter"
             autoResolve
             context={{
