@@ -1,118 +1,98 @@
 // ------------------------------------------------------------
-// emitCaveNarration
+// Cave Narration Emitter
 // ------------------------------------------------------------
-// Central cave narration engine
-// Binds entropy → hazards → silence / events
+// Selects cave sentences, applies entropy,
+// binds hazards, and emits canonical narration
 // ------------------------------------------------------------
 
 import type { CaveNode } from "./WindscarCave";
+import {
+  applySentenceEntropy,
+  type SentenceMemory,
+  type CaveEntropyState,
+  type TribeProfile,
+} from "./applySentenceEntropy";
+import {
+  selectCaveSentence,
+  type CaveSentenceResult,
+} from "./selectCaveSentence";
 import { bindEntropyToHazards } from "./bindEntropyToHazards";
-import { selectCaveSentence } from "./selectCaveSentence";
-import { applySentenceEntropy } from "./applySentenceEntropy";
 
 /* ------------------------------------------------------------
-   Types (LOCAL, AUTHORITATIVE)
------------------------------------------------------------- */
-
-export type TribeProfile = {
-  role: "general" | "hunters" | "elders";
-  entropySensitivity: number; // elders > hunters
-};
-
-export type CaveEntropyState = {
-  value: number;
-};
-
-export type SentenceMemory = {
-  scars: Record<string, number>;
-  usedSentenceIds: Set<string>;
-  usedImpossible: boolean;
-};
-
-/* ------------------------------------------------------------
-   Result
+   Types
 ------------------------------------------------------------ */
 
 export type CaveNarrationResult = {
-  text: string | null; // null = silence
+  text: string | null;
   entropy: CaveEntropyState;
   updatedNode: CaveNode;
-  hazardEvent?: {
-    type: "collapse" | "flood";
-    description: string;
-  };
+  hazardEvent: ReturnType<
+    typeof bindEntropyToHazards
+  >["triggeredEvent"];
+  suppressOmens: boolean;
 };
 
 /* ------------------------------------------------------------
-   Core Engine
+   Core Emitter
 ------------------------------------------------------------ */
 
-export function emitCaveNarration(params: {
-  node: CaveNode;
-  entropy: CaveEntropyState;
-  memory: SentenceMemory;
-  tribe: TribeProfile;
-}): CaveNarrationResult {
-  const { node, entropy, memory, tribe } = params;
-
+export function emitCaveNarration(
+  node: CaveNode,
+  entropy: CaveEntropyState,
+  memory: SentenceMemory,
+  tribe: TribeProfile
+): CaveNarrationResult {
   const entropyBefore = entropy.value;
 
   /* ----------------------------------------------------------
-     Sentence selection (pre-hazard)
+     Sentence Selection
   ---------------------------------------------------------- */
 
-  const sentenceResult = selectCaveSentence(
-    node.nodeId,
-    entropyBefore,
-    tribe,
-    memory.usedImpossible
-  );
+  const usedImpossible =
+    memory.usedImpossible === true;
+
+  const result: CaveSentenceResult =
+    selectCaveSentence(
+      node.nodeId,
+      entropyBefore,
+      tribe,
+      usedImpossible
+    );
 
   /* ----------------------------------------------------------
-     Entropy update
+     Apply Sentence Entropy
   ---------------------------------------------------------- */
 
-  const entropyAfterValue = applySentenceEntropy(
+  const entropyResult = applySentenceEntropy(
     entropyBefore,
-    sentenceResult.sentence ? "sentence" : "silence",
+    result.sentence ? "sentence" : "silence",
     memory
   );
 
   const entropyAfter: CaveEntropyState = {
-    value: entropyAfterValue,
+    value: entropyResult.entropyAfter,
   };
 
   /* ----------------------------------------------------------
-     Hazard binding (🔥 THIS IS THE KEY STEP)
+     Bind Entropy → Hazards
   ---------------------------------------------------------- */
 
-  const hazardBinding = bindEntropyToHazards(
-    node,
-    entropyAfterValue
-  );
-
-  /* ----------------------------------------------------------
-     Silence rules
-  ---------------------------------------------------------- */
-
-  // Suppress narration if:
-  // - hazard triggered
-  // - hazard binding demands silence
-  // - sentence was empty
-  const shouldSilence =
-    hazardBinding.suppressOmens ||
-    !sentenceResult.sentence;
-
-  /* ----------------------------------------------------------
-     Memory updates
-  ---------------------------------------------------------- */
-
-  if (sentenceResult.sentence) {
-    memory.usedSentenceIds.add(
-      sentenceResult.sentence.id
+  const hazardBinding =
+    bindEntropyToHazards(
+      node,
+      entropyAfter.value
     );
 
-    if (sentenceResult.usedImpossible) {
+  /* ----------------------------------------------------------
+     Memory Updates (One-way)
+  ---------------------------------------------------------- */
+
+  if (result.sentence) {
+    memory.usedSentenceIds.add(
+      result.sentence.id
+    );
+
+    if (result.usedImpossible) {
       memory.usedImpossible = true;
     }
   }
@@ -122,17 +102,14 @@ export function emitCaveNarration(params: {
   ---------------------------------------------------------- */
 
   return {
-    text: shouldSilence
-      ? null
-      : sentenceResult.sentence!.text,
+    text: result.sentence
+      ? entropyResult.text
+      : null,
     entropy: entropyAfter,
     updatedNode: hazardBinding.updatedNode,
-    hazardEvent: hazardBinding.triggeredEvent
-      ? {
-          type: hazardBinding.triggeredEvent.type,
-          description:
-            hazardBinding.triggeredEvent.description,
-        }
-      : undefined,
+    hazardEvent:
+      hazardBinding.triggeredEvent,
+    suppressOmens:
+      hazardBinding.suppressOmens,
   };
 }
