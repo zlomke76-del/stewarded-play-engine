@@ -36,7 +36,7 @@ import { WindscarCave } from "@/lib/world/caves/WindscarCave";
 import { evolveCaveState } from "@/lib/world/caves/evolveCaveState";
 
 // ------------------------------------------------------------
-// Risk inference (Solace-only)
+// Risk inference (INTENT-LEVEL, NOT OPTION-LEVEL)
 // ------------------------------------------------------------
 
 type OptionKind =
@@ -45,8 +45,8 @@ type OptionKind =
   | "risky"
   | "contested";
 
-function inferOptionKind(description: string): OptionKind {
-  const t = description.toLowerCase();
+function inferOptionKind(text: string): OptionKind {
+  const t = text.toLowerCase();
 
   if (
     t.includes("attack") ||
@@ -67,8 +67,10 @@ function inferOptionKind(description: string): OptionKind {
 
   if (
     t.includes("risk") ||
-    t.includes("sneak") ||
-    t.includes("steal")
+    t.includes("reckless") ||
+    t.includes("aggressive") ||
+    t.includes("injury") ||
+    t.includes("danger")
   ) {
     return "risky";
   }
@@ -106,7 +108,7 @@ function resolveCaveNode(option: Option) {
 }
 
 // ------------------------------------------------------------
-// 🜂 Solace observation
+// 🜂 Solace observation (one-line, non-authoritative)
 // ------------------------------------------------------------
 
 function deriveObservation(world?: any): string {
@@ -138,6 +140,7 @@ export default function CavemanPage() {
 
   const [turn, setTurn] = useState(0);
   const [command, setCommand] = useState("");
+  const [options, setOptions] = useState<Option[] | null>(null);
   const [selectedOption, setSelectedOption] =
     useState<Option | null>(null);
 
@@ -162,7 +165,7 @@ export default function CavemanPage() {
   );
 
   // ----------------------------------------------------------
-  // Player intent → Solace decision
+  // Player intent
   // ----------------------------------------------------------
 
   function handleSubmitCommand() {
@@ -171,7 +174,7 @@ export default function CavemanPage() {
     const parsed = parseAction("player_1", command);
     const optionSet = generateOptions(parsed);
 
-    const resolvedOptions =
+    const resolved =
       optionSet?.options?.length > 0
         ? optionSet.options
         : ([{
@@ -179,8 +182,7 @@ export default function CavemanPage() {
             description: `Proceed cautiously: ${command}`,
           }] as Option[]);
 
-    // 🔒 Solace selects internally — player never sees branches
-    setSelectedOption(resolvedOptions[0]);
+    setOptions([...resolved]);
   }
 
   // ----------------------------------------------------------
@@ -290,7 +292,7 @@ export default function CavemanPage() {
     );
 
     setCommand("");
-    setSelectedOption(null);
+    setOptions(null);
   }
 
   // ----------------------------------------------------------
@@ -334,9 +336,11 @@ export default function CavemanPage() {
             autoResolve
             context={{
               optionDescription: selectedOption.description,
-              optionKind: inferOptionKind(
-                selectedOption.description
-              ),
+
+              // 🔑 THE ONLY CHANGE:
+              // Risk is inferred from PLAYER INTENT,
+              // not from abstract option text
+              optionKind: inferOptionKind(command),
             }}
             onRecord={handleAutoRecord}
           />
