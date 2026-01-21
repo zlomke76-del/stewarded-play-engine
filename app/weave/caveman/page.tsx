@@ -129,14 +129,10 @@ export default function CavemanPage() {
       .find(
         (e) =>
           e.type === "OUTCOME" &&
-          typeof (e as any).payload?.world
-            ?.roomId === "string"
+          typeof (e as any).payload?.world?.roomId === "string"
       ) as any | undefined;
 
-    return (
-      last?.payload?.world?.roomId ??
-      "The Wilds"
-    );
+    return last?.payload?.world?.roomId ?? "The Wilds";
   }, [state.events]);
 
   // ----------------------------------------------------------
@@ -146,12 +142,8 @@ export default function CavemanPage() {
   function handleSubmitCommand() {
     if (!command.trim()) return;
 
-    const parsed = parseAction(
-      "player_1",
-      command
-    );
-    const optionSet =
-      generateOptions(parsed);
+    const parsed = parseAction("player_1", command);
+    const optionSet = generateOptions(parsed);
 
     const resolved =
       optionSet?.options?.length > 0
@@ -188,33 +180,32 @@ export default function CavemanPage() {
       .find(
         (e) =>
           e.type === "OUTCOME" &&
-          (e as any).payload?.world
-            ?.nodeType === "cave"
+          (e as any).payload?.world?.nodeType === "cave"
       ) as any | undefined;
 
-    const previousCave =
-      lastCaveEvent?.payload?.world;
+    const previousCave = lastCaveEvent?.payload?.world;
 
-    // 🔥 Solace signals
-    const fireUsed =
-      payload.description
-        .toLowerCase()
-        .includes("fire") ||
-      payload.audit.some((a) =>
-        a.toLowerCase().includes("fire")
-      );
+    // 🔥 Solace signals (NORMALIZED)
+    const fireUsed = Boolean(
+      payload.description.toLowerCase().includes("fire") ||
+        payload.audit.some((a) =>
+          a.toLowerCase().includes("fire")
+        )
+    );
 
-    const successfulHunt =
+    const successfulHunt = Boolean(
       payload.world?.resources?.foodDelta &&
-      payload.world.resources.foodDelta > 0;
+        payload.world.resources.foodDelta > 0
+    );
 
-    const rested =
+    const rested = Boolean(
       selectedOption?.description
         .toLowerCase()
         .includes("rest") ||
-      selectedOption?.description
-        .toLowerCase()
-        .includes("wait");
+        selectedOption?.description
+          .toLowerCase()
+          .includes("wait")
+    );
 
     // 🪨 Cave entry
     const caveEntry =
@@ -222,8 +213,7 @@ export default function CavemanPage() {
       resolveCaveNode(selectedOption);
 
     // 🪨 Cave evolution
-    let evolvedState =
-      previousCave?.state;
+    let evolvedState = previousCave?.state;
 
     if (previousCave) {
       evolvedState = evolveCaveState(
@@ -250,10 +240,7 @@ export default function CavemanPage() {
         type: "OUTCOME",
         payload: {
           ...payload,
-          audit: [
-            ...payload.audit,
-            "The Weave enforced",
-          ],
+          audit: [...payload.audit, "The Weave enforced"],
           world: caveEntry
             ? {
                 primary: "location",
@@ -279,7 +266,6 @@ export default function CavemanPage() {
       })
     );
 
-    // Reset forward inputs
     setCommand("");
     setOptions(null);
   }
@@ -304,55 +290,41 @@ export default function CavemanPage() {
         title="Caveman — Survival (The Weave)"
         onShare={handleShare}
         roles={[
-          {
-            label: "Player",
-            description: "Selects intent",
-          },
+          { label: "Player", description: "Selects intent" },
           {
             label: "Solace",
-            description:
-              "Interprets risk and commits canon",
+            description: "Interprets risk and commits canon",
           },
         ]}
       />
 
-      {/* ---------- CURRENT STATE ---------- */}
       <CardSection title="🌍 Current State">
         <strong>{currentLocation}</strong>
       </CardSection>
 
-      {/* ---------- PRESSURE / RESOURCES ---------- */}
       <EnvironmentalPressurePanel turn={turn} />
       <SurvivalResourcePanel turn={turn} />
 
-      {/* ---------- LAST TURN ---------- */}
       {selectedOption && (
         <CardSection title="Last Turn">
           <ResolutionDraftPanel
-            key={turn} // 🔑 forces progression
+            key={turn}
             role="arbiter"
             autoResolve
             context={{
-              optionDescription:
-                selectedOption.description,
-              optionKind:
-                inferOptionKind(
-                  selectedOption.description
-                ),
+              optionDescription: selectedOption.description,
+              optionKind: inferOptionKind(selectedOption.description),
             }}
             onRecord={handleAutoRecord}
           />
         </CardSection>
       )}
 
-      {/* ---------- NEW INTENT ---------- */}
       <CardSection title="Intent">
         <textarea
           rows={3}
           value={command}
-          onChange={(e) =>
-            setCommand(e.target.value)
-          }
+          onChange={(e) => setCommand(e.target.value)}
           placeholder="HUNT, DEFEND, WAIT, SCOUT…"
         />
         <button onClick={handleSubmitCommand}>
@@ -365,11 +337,7 @@ export default function CavemanPage() {
           <ul>
             {options.map((opt) => (
               <li key={opt.id}>
-                <button
-                  onClick={() =>
-                    setSelectedOption(opt)
-                  }
-                >
+                <button onClick={() => setSelectedOption(opt)}>
                   {opt.description}
                 </button>
               </li>
@@ -378,9 +346,7 @@ export default function CavemanPage() {
         </CardSection>
       )}
 
-      {/* ---------- LEDGER ---------- */}
       <WorldLedgerPanel events={state.events} />
-
       <Disclaimer />
     </StewardedShell>
   );
