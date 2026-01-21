@@ -1,11 +1,6 @@
 // ------------------------------------------------------------
 // Cave Narration Emitter
 // ------------------------------------------------------------
-// Responsibilities:
-// - Select cave sentence (or silence)
-// - Apply entropy + perception bias
-// - Emit narration without leaking canon certainty
-// ------------------------------------------------------------
 
 import { selectCaveSentence } from "./selectCaveSentence";
 import { applySentenceEntropy } from "./applySentenceEntropy";
@@ -32,30 +27,26 @@ export type CaveEntropyState = {
 };
 
 /* ------------------------------------------------------------
-   Perception & Entropy Sensitivity
+   Perception & Sensitivity
 ------------------------------------------------------------ */
 
-// Negative = notices danger earlier
 function perceptionBias(role: TribeRole): number {
   switch (role) {
     case "elders":
-      return -15;
+      return -15; // notice danger earlier
     case "hunters":
       return 0;
-    case "general":
     default:
       return 5;
   }
 }
 
-// Higher = more reactive to entropy changes
 function entropySensitivity(role: TribeRole): number {
   switch (role) {
     case "elders":
       return 1.4;
     case "hunters":
       return 1.0;
-    case "general":
     default:
       return 0.8;
   }
@@ -73,7 +64,6 @@ export function emitCaveNarration(ctx: {
 }) {
   const { node, entropy, tribe, memory } = ctx;
 
-  // 🔑 Complete the TribeProfile for sentence selection
   const sentenceTribeProfile = {
     role: tribe.role,
     entropySensitivity: entropySensitivity(tribe.role),
@@ -97,14 +87,18 @@ export function emitCaveNarration(ctx: {
   );
 
   /* ----------------------------------------------------------
-     Entropy progression
+     Entropy progression (FIXED)
   ---------------------------------------------------------- */
 
-  const entropyAfter = applySentenceEntropy(
-    entropy,
+  const entropyValueAfter = applySentenceEntropy(
+    entropy.value,
     result.sentence ? "sentence" : "silence",
     memory
   );
+
+  const entropyAfter: CaveEntropyState = {
+    value: entropyValueAfter,
+  };
 
   /* ----------------------------------------------------------
      Memory mutation
