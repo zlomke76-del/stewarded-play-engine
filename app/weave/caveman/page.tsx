@@ -143,7 +143,7 @@ export default function CavemanPage() {
   const [selectedOption, setSelectedOption] =
     useState<Option | null>(null);
 
-  // 🔑 Resolution visibility is now decoupled from cleanup
+  // 🔑 Resolution visibility decoupled from cleanup
   const [showResolution, setShowResolution] = useState(false);
 
   // ----------------------------------------------------------
@@ -159,7 +159,7 @@ export default function CavemanPage() {
   }, [state.events]);
 
   const currentLocation =
-.attach<lastWorld?.roomId ?? "The Wilds";
+    lastWorld?.roomId ?? "The Wilds";
 
   const observation = useMemo(
     () => deriveObservation(lastWorld),
