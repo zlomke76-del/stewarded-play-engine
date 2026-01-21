@@ -6,14 +6,15 @@
 // No UI. No events. Just gravity.
 // ------------------------------------------------------------
 
-import type { CaveNode } from "./WindscarCave.types";
+// 🔧 FIX: import CaveNode from WindscarCave
+import type { CaveNode } from "./WindscarCave";
 
 /* ------------------------------------------------------------
    Types
 ------------------------------------------------------------ */
 
 export type CavePressureResult = {
-  pressureScore: number; // abstract, cumulative
+  pressureScore: number; // cumulative, abstract
   hazardShift: {
     collapseDelta?: number;
     floodDelta?: number;
@@ -23,7 +24,7 @@ export type CavePressureResult = {
 };
 
 /* ------------------------------------------------------------
-   Constants
+   Depth Pressure Rules
 ------------------------------------------------------------ */
 
 const DepthPressure = {
@@ -58,32 +59,27 @@ const DepthPressure = {
 
 /**
  * Applies traversal pressure based on cave depth.
- * Called whenever the tribe occupies or moves within a cave node.
+ * Called whenever the tribe occupies or remains in a cave node.
  */
 export function applyCaveTraversalPressure(
   node: CaveNode,
   priorPressure = 0
 ): CavePressureResult {
-  const depthRule = DepthPressure[node.depth];
+  const rule = DepthPressure[node.depth];
 
-  const pressureScore =
-    priorPressure + depthRule.pressure;
+  const pressureScore = priorPressure + rule.pressure;
 
   const hazardShift = {
-    collapseDelta: depthRule.collapse
-      ? depthRule.collapse
-      : undefined,
-    floodDelta: depthRule.flood
-      ? depthRule.flood
-      : undefined,
+    collapseDelta:
+      rule.collapse > 0 ? rule.collapse : undefined,
+    floodDelta:
+      rule.flood > 0 ? rule.flood : undefined,
   };
-
-  const entropyDelta = depthRule.entropy;
 
   return {
     pressureScore,
     hazardShift,
-    entropyDelta,
-    narrativeHint: depthRule.hint,
+    entropyDelta: rule.entropy,
+    narrativeHint: rule.hint,
   };
 }
