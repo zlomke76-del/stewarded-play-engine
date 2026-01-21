@@ -39,9 +39,10 @@ export function emitCaveNarration(ctx: CaveNarrationContext) {
 
   const entropyBefore = entropy;
 
-  // 🔑 Convert Set → boolean
-  const usedImpossible =
-    memory.usedImpossibleIds.size > 0;
+  // 🔑 Canonical impossible latch (boolean, not Set)
+  const usedImpossible = Boolean(
+    (memory as any).impossibleUsed
+  );
 
   /* ----------------------------------------------------------
      Sentence selection
@@ -72,7 +73,8 @@ export function emitCaveNarration(ctx: CaveNarrationContext) {
     memory.usedSentenceIds.add(result.sentence.id);
 
     if (result.usedImpossible) {
-      memory.usedImpossibleIds.add(result.sentence.id);
+      // 🔒 One-way latch
+      (memory as any).impossibleUsed = true;
     }
   }
 
