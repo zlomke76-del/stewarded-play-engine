@@ -7,7 +7,8 @@ export type CaveNodeState =
   | "unused"
   | "used"
   | "collapsed"
-  | "flooded";
+  | "flooded"
+  | "sacred";
 
 export interface CaveHazards {
   collapseRisk: number;
