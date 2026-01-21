@@ -1,32 +1,34 @@
 // ------------------------------------------------------------
-// Shared Cave Types (Authoritative)
+// Canonical Cave Types
+// Single Source of Truth
 // ------------------------------------------------------------
 
-export type CaveNodeState = "used" | "smoked" | "sacred";
+export type CaveNodeState =
+  | "unused"
+  | "used"
+  | "collapsed"
+  | "flooded";
 
-export type CaveHazards = {
-  collapseRisk: number; // 0–100
-  floodRisk?: number;   // 0–100
-};
+export interface CaveHazards {
+  collapseRisk: number;
+  floodRisk?: number;
+}
 
-export type CaveNode = {
+export interface CaveNode {
   nodeId: string;
   caveId: string;
   name: string;
-
-  // IMPORTANT: unified for multi-cave worlds
   depth: number;
-
   traits: string[];
   state: CaveNodeState;
   hazards: CaveHazards;
   connections: string[];
-};
+}
 
-export type CaveGraph = {
+export interface CaveGraph {
   caveId: string;
   title: string;
-  biome: "wilds" | "underground" | "salt";
-  nodes: Record<string, CaveNode>;
+  biome: string;
   entryNodeId: string;
-};
+  nodes: Record<string, CaveNode>;
+}
