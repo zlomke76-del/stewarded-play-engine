@@ -165,7 +165,7 @@ export default function CavemanPage() {
   );
 
   // ----------------------------------------------------------
-  // Player intent
+  // Player intent → Solace option selection
   // ----------------------------------------------------------
 
   function handleSubmitCommand() {
@@ -182,7 +182,10 @@ export default function CavemanPage() {
             description: `Proceed cautiously: ${command}`,
           }] as Option[]);
 
-    setOptions([...resolved]);
+    setOptions(resolved);
+
+    // 🔑 Solace auto-selects a viable option
+    setSelectedOption(resolved[0]);
   }
 
   // ----------------------------------------------------------
@@ -293,6 +296,7 @@ export default function CavemanPage() {
 
     setCommand("");
     setOptions(null);
+    setSelectedOption(null);
   }
 
   // ----------------------------------------------------------
@@ -336,10 +340,6 @@ export default function CavemanPage() {
             autoResolve
             context={{
               optionDescription: selectedOption.description,
-
-              // 🔑 THE ONLY CHANGE:
-              // Risk is inferred from PLAYER INTENT,
-              // not from abstract option text
               optionKind: inferOptionKind(command),
             }}
             onRecord={handleAutoRecord}
