@@ -1,76 +1,63 @@
 // ------------------------------------------------------------
-// Cave Registry
+// Salt Hollow — Terminal Cave
 // ------------------------------------------------------------
-// Canonical cave lookup & migration base
+// Third cave in migration chain:
+// Windscar → Underroot → Salt Hollow
 // ------------------------------------------------------------
 
 import type { CaveGraph } from "./types";
 
-import { WindscarCave } from "./WindscarCave";
-import { UnderrootCave } from "./UnderrootCave";
-import { SaltHollowCave } from "./SaltHollowCave";
+// ------------------------------------------------------------
+// Salt Hollow Cave (Canonical Seed)
+// ------------------------------------------------------------
 
-/* ------------------------------------------------------------
-   Registry
------------------------------------------------------------- */
+export const SaltHollowCave: CaveGraph = {
+  caveId: "cave-salthollow",
+  title: "Salt Hollow",
+  biome: "wilds",
+  entryNodeId: "salthollow-entry",
 
-export const CaveRegistry: Record<string, CaveGraph> = {
-  [WindscarCave.caveId]: WindscarCave,
-  [UnderrootCave.caveId]: UnderrootCave,
-  [SaltHollowCave.caveId]: SaltHollowCave,
-};
-
-/* ------------------------------------------------------------
-   Migration Types
------------------------------------------------------------- */
-
-export type CaveMigrationReason =
-  | "collapse"
-  | "scarcity"
-  | "omen"
-  | "forced";
-
-export interface CaveMigration {
-  reason: CaveMigrationReason;
-  to: string;
-  description: string;
-}
-
-/* ------------------------------------------------------------
-   Migration Table
------------------------------------------------------------- */
-
-export const CaveMigrationTable: Record<
-  string,
-  CaveMigration[]
-> = {
-  "cave-windscar": [
-    {
-      reason: "collapse",
-      to: "cave-underroot",
-      description:
-        "The ceiling gives way. Smoke and dust force you deeper underground.",
+  nodes: {
+    // --------------------------------------------------------
+    // Depth 0 — Salt-Stained Threshold
+    // --------------------------------------------------------
+    "salthollow-entry": {
+      nodeId: "salthollow-entry",
+      caveId: "cave-salthollow",
+      name: "Salt-Stained Threshold",
+      depth: 0,
+      traits: [
+        "mineral-crust",
+        "dry",
+        "still-air",
+        "echo-muted",
+      ],
+      state: "used",
+      hazards: {
+        collapseRisk: 0,
+      },
+      connections: ["salthollow-basin"],
     },
-  ],
 
-  "cave-underroot": [
-    {
-      reason: "flood",
-      to: "cave-salthollow",
-      description:
-        "Water fills the root tunnels. Bitter air draws you toward a pale hollow beyond.",
+    // --------------------------------------------------------
+    // Depth 1 — White Basin
+    // --------------------------------------------------------
+    "salthollow-basin": {
+      nodeId: "salthollow-basin",
+      caveId: "cave-salthollow",
+      name: "White Basin",
+      depth: 1,
+      traits: [
+        "salt-bed",
+        "ritual-capable",
+        "preserving",
+        "bitter-air",
+      ],
+      state: "used",
+      hazards: {
+        collapseRisk: 5,
+      },
+      connections: ["salthollow-entry"],
     },
-  ],
-
-  "cave-salthollow": [], // terminal
+  },
 };
-
-/* ------------------------------------------------------------
-   Helpers
------------------------------------------------------------- */
-
-export function getCaveById(
-  caveId: string
-): CaveGraph | undefined {
-  return CaveRegistry[caveId];
-}
