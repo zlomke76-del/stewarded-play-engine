@@ -1,88 +1,111 @@
 // ------------------------------------------------------------
 // applySentenceEntropy
 // ------------------------------------------------------------
-// Governs how cave sentences age, scar, mutate, or disappear.
-// This file is AUTHORITATIVE for entropy math.
+// Governs narrative decay inside caves.
+// - Sentences age out
+// - Silence emerges
+// - Omens surface
+// - Impossible lines unlock once (globally)
 // ------------------------------------------------------------
 
-import type { CaveSentence } from "./WindscarCave.sentences";
-
 /* ------------------------------------------------------------
-   Entropy Rules (Canonical)
+   Rules (Authoritative)
 ------------------------------------------------------------ */
 
 export const CaveEntropyRules = {
-  // Base entropy added when a sentence is spoken
-  baseSentenceEntropy: 0.08,
-
-  // Above this, silence may occur instead of text
+  // When silence begins to appear
   silenceThreshold: 0.55,
 
-  // Above this, impossible lines may surface
-  impossibleThreshold: 0.92,
+  // When impossible lines may appear
+  impossibleThreshold: 0.85,
 
-  // How much scar accumulates per reuse
-  scarIncrement: 0.15,
+  // Base entropy added per sentence exposure
+  sentenceEntropyIncrement: 0.08,
 
-  // After this many scars, mutation is forced
+  // Additional entropy for omens
+  omenEntropyIncrement: 0.14,
+
+  // Scar tissue growth per reuse
+  scarIncrement: 1,
+
+  // After this many scars, text mutates
   maxScarsBeforeMutation: 3,
-} as const;
+
+  // Absolute entropy ceiling
+  maxEntropy: 1.0,
+};
 
 /* ------------------------------------------------------------
    Types
 ------------------------------------------------------------ */
 
+export type EntropyEventType =
+  | "sentence"
+  | "omen"
+  | "silence"
+  | "impossible";
+
 export type SentenceEntropyState = {
-  entropy: number;      // 0–1
+  entropy: number;
   scars: number;
-  lastUsedTurn?: number;
+  mutated: boolean;
 };
 
 /* ------------------------------------------------------------
-   Core Function
+   Core Entropy Application
 ------------------------------------------------------------ */
 
 export function applySentenceEntropy(
-  sentence: CaveSentence,
   state: SentenceEntropyState,
-  currentTurn: number,
-  kind: "sentence" | "omen" | "impossible"
+  event: EntropyEventType
 ): SentenceEntropyState {
   let entropyDelta = 0;
 
-  switch (kind) {
+  switch (event) {
     case "sentence":
-      entropyDelta = CaveEntropyRules.baseSentenceEntropy;
+      entropyDelta =
+        CaveEntropyRules.sentenceEntropyIncrement;
       break;
 
     case "omen":
-      entropyDelta = CaveEntropyRules.baseSentenceEntropy * 1.5;
+      entropyDelta =
+        CaveEntropyRules.omenEntropyIncrement;
       break;
 
     case "impossible":
-      entropyDelta = 1; // burns the system
+      // Impossible lines permanently scar the cave
+      entropyDelta = 0.25;
+      break;
+
+    case "silence":
+      // Silence accelerates decay subtly
+      entropyDelta = 0.04;
       break;
   }
 
   const nextEntropy = Math.min(
-    1,
-    state.entropy + entropyDelta * sentence.entropyWeight
+    CaveEntropyRules.maxEntropy,
+    state.entropy + entropyDelta
   );
 
   const nextScars =
-    state.lastUsedTurn !== undefined
+    event === "sentence" || event === "omen"
       ? state.scars + CaveEntropyRules.scarIncrement
       : state.scars;
+
+  const mutated =
+    nextScars >=
+    CaveEntropyRules.maxScarsBeforeMutation;
 
   return {
     entropy: nextEntropy,
     scars: nextScars,
-    lastUsedTurn: currentTurn,
+    mutated,
   };
 }
 
 /* ------------------------------------------------------------
-   Helpers
+   Entropy Queries
 ------------------------------------------------------------ */
 
 export function shouldBeSilent(
@@ -94,11 +117,8 @@ export function shouldBeSilent(
 export function shouldTriggerImpossible(
   entropy: number
 ): boolean {
-  return entropy >= CaveEntropyRules.impossibleThreshold;
-}
-
-export function shouldMutate(
-  scars: number
-): boolean {
-  return scars >= CaveEntropyRules.maxScarsBeforeMutation;
+  return (
+    entropy >=
+    CaveEntropyRules.impossibleThreshold
+  );
 }
