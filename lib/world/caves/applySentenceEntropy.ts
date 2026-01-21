@@ -1,49 +1,41 @@
 // ------------------------------------------------------------
 // applySentenceEntropy
 // ------------------------------------------------------------
-// Advances cave sentence entropy over time.
-// Called AFTER a narration event resolves.
+// Governs how cave sentences age, scar, mutate, or disappear.
+// This file is AUTHORITATIVE for entropy math.
 // ------------------------------------------------------------
 
-import { CaveEntropyRules } from "./WindscarCave.sentences";
+import type { CaveSentence } from "./WindscarCave.sentences";
+
+/* ------------------------------------------------------------
+   Entropy Rules (Canonical)
+------------------------------------------------------------ */
+
+export const CaveEntropyRules = {
+  // Base entropy added when a sentence is spoken
+  baseSentenceEntropy: 0.08,
+
+  // Above this, silence may occur instead of text
+  silenceThreshold: 0.55,
+
+  // Above this, impossible lines may surface
+  impossibleThreshold: 0.92,
+
+  // How much scar accumulates per reuse
+  scarIncrement: 0.15,
+
+  // After this many scars, mutation is forced
+  maxScarsBeforeMutation: 3,
+} as const;
 
 /* ------------------------------------------------------------
    Types
 ------------------------------------------------------------ */
 
-export type EntropyEvent =
-  | {
-      type: "sentence";
-      sentenceId: string;
-    }
-  | {
-      type: "silence";
-    }
-  | {
-      type: "omen";
-    }
-  | {
-      type: "impossible";
-    };
-
-export type TribeProfile = {
-  role: "hunters" | "elders" | "mixed";
-  entropySensitivity: number; // 0.0 – 1.0
-};
-
-export type SentenceMemory = {
-  scars: Record<string, number>;
-  impossibleUsed: boolean;
-};
-
-export type CaveEntropyState = {
-  value: number; // 0.0 – 1.0
-  familiarity: number; // 0.0 – 1.0 (how well-known this cave is)
-};
-
-export type UpdatedEntropyState = {
-  entropy: CaveEntropyState;
-  memory: SentenceMemory;
+export type SentenceEntropyState = {
+  entropy: number;      // 0–1
+  scars: number;
+  lastUsedTurn?: number;
 };
 
 /* ------------------------------------------------------------
@@ -51,116 +43,62 @@ export type UpdatedEntropyState = {
 ------------------------------------------------------------ */
 
 export function applySentenceEntropy(
-  current: CaveEntropyState,
-  event: EntropyEvent,
-  tribe: TribeProfile,
-  memory: SentenceMemory
-): UpdatedEntropyState {
+  sentence: CaveSentence,
+  state: SentenceEntropyState,
+  currentTurn: number,
+  kind: "sentence" | "omen" | "impossible"
+): SentenceEntropyState {
   let entropyDelta = 0;
 
-  /* ----------------------------------------------------------
-     Base entropy gain
-  ---------------------------------------------------------- */
-
-  switch (event.type) {
+  switch (kind) {
     case "sentence":
-      entropyDelta =
-        CaveEntropyRules.baseSentenceEntropy;
+      entropyDelta = CaveEntropyRules.baseSentenceEntropy;
       break;
 
     case "omen":
-      entropyDelta =
-        CaveEntropyRules.omenEntropy;
-      break;
-
-    case "silence":
-      entropyDelta =
-        CaveEntropyRules.silenceEntropy;
+      entropyDelta = CaveEntropyRules.baseSentenceEntropy * 1.5;
       break;
 
     case "impossible":
-      entropyDelta =
-        CaveEntropyRules.impossibleEntropy;
+      entropyDelta = 1; // burns the system
       break;
   }
 
-  /* ----------------------------------------------------------
-     Tribe sensitivity
-  ---------------------------------------------------------- */
-
-  entropyDelta *= tribe.entropySensitivity;
-
-  if (tribe.role === "elders") {
-    entropyDelta *= 1.25;
-  }
-
-  /* ----------------------------------------------------------
-     Familiarity dampening
-     (known caves stabilize… until they don’t)
-  ---------------------------------------------------------- */
-
-  const familiarityFactor =
-    1 - Math.min(current.familiarity, 0.8);
-
-  entropyDelta *= familiarityFactor;
-
-  /* ----------------------------------------------------------
-     Silence accelerates decay
-  ---------------------------------------------------------- */
-
-  if (event.type === "silence") {
-    current.familiarity += 0.02;
-  }
-
-  /* ----------------------------------------------------------
-     Sentence scar tissue
-  ---------------------------------------------------------- */
-
-  if (event.type === "sentence") {
-    memory.scars[event.sentenceId] =
-      (memory.scars[event.sentenceId] ?? 0) + 1;
-
-    if (
-      memory.scars[event.sentenceId] >=
-      CaveEntropyRules.maxScarsBeforeMutation
-    ) {
-      entropyDelta +=
-        CaveEntropyRules.scarEntropyBoost;
-    }
-  }
-
-  /* ----------------------------------------------------------
-     Impossible line destabilizes everything
-  ---------------------------------------------------------- */
-
-  if (event.type === "impossible") {
-    memory.impossibleUsed = true;
-    current.familiarity = Math.max(
-      current.familiarity - 0.2,
-      0
-    );
-  }
-
-  /* ----------------------------------------------------------
-     Clamp + advance
-  ---------------------------------------------------------- */
-
   const nextEntropy = Math.min(
     1,
-    Math.max(0, current.value + entropyDelta)
+    state.entropy + entropyDelta * sentence.entropyWeight
   );
 
-  const nextFamiliarity = Math.min(
-    1,
-    current.familiarity +
-      CaveEntropyRules.familiarityGain
-  );
+  const nextScars =
+    state.lastUsedTurn !== undefined
+      ? state.scars + CaveEntropyRules.scarIncrement
+      : state.scars;
 
   return {
-    entropy: {
-      value: nextEntropy,
-      familiarity: nextFamiliarity,
-    },
-    memory,
+    entropy: nextEntropy,
+    scars: nextScars,
+    lastUsedTurn: currentTurn,
   };
+}
+
+/* ------------------------------------------------------------
+   Helpers
+------------------------------------------------------------ */
+
+export function shouldBeSilent(
+  entropy: number
+): boolean {
+  return entropy >= CaveEntropyRules.silenceThreshold;
+}
+
+export function shouldTriggerImpossible(
+  entropy: number
+): boolean {
+  return entropy >= CaveEntropyRules.impossibleThreshold;
+}
+
+export function shouldMutate(
+  scars: number
+): boolean {
+  return scars >= CaveEntropyRules.maxScarsBeforeMutation;
 }
