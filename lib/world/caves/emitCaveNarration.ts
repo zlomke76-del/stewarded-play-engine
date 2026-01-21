@@ -1,111 +1,138 @@
 // ------------------------------------------------------------
-// Cave Narration Emitter
+// emitCaveNarration
+// ------------------------------------------------------------
+// Central cave narration engine
+// Binds entropy → hazards → silence / events
 // ------------------------------------------------------------
 
+import type { CaveNode } from "./WindscarCave";
+import { bindEntropyToHazards } from "./bindEntropyToHazards";
 import { selectCaveSentence } from "./selectCaveSentence";
 import { applySentenceEntropy } from "./applySentenceEntropy";
-import type { CaveNode } from "./WindscarCave";
 
 /* ------------------------------------------------------------
-   Types
+   Types (LOCAL, AUTHORITATIVE)
 ------------------------------------------------------------ */
 
-export type TribeRole = "general" | "hunters" | "elders";
-
 export type TribeProfile = {
-  role: TribeRole;
+  role: "general" | "hunters" | "elders";
+  entropySensitivity: number; // elders > hunters
+};
+
+export type CaveEntropyState = {
+  value: number;
 };
 
 export type SentenceMemory = {
-  usedSentenceIds: Set<string>;
-  usedImpossibleIds: Set<string>;
   scars: Record<string, number>;
+  usedSentenceIds: Set<string>;
+  usedImpossible: boolean;
 };
 
 /* ------------------------------------------------------------
-   Perception & Sensitivity
+   Result
 ------------------------------------------------------------ */
 
-function perceptionBias(role: TribeRole): number {
-  switch (role) {
-    case "elders":
-      return -15; // elders notice danger earlier
-    case "hunters":
-      return 0;
-    default:
-      return 5;
-  }
-}
-
-function entropySensitivity(role: TribeRole): number {
-  switch (role) {
-    case "elders":
-      return 1.4;
-    case "hunters":
-      return 1.0;
-    default:
-      return 0.8;
-  }
-}
+export type CaveNarrationResult = {
+  text: string | null; // null = silence
+  entropy: CaveEntropyState;
+  updatedNode: CaveNode;
+  hazardEvent?: {
+    type: "collapse" | "flood";
+    description: string;
+  };
+};
 
 /* ------------------------------------------------------------
-   Emit Narration
+   Core Engine
 ------------------------------------------------------------ */
 
-export function emitCaveNarration(ctx: {
+export function emitCaveNarration(params: {
   node: CaveNode;
-  entropy: number; // 🔒 entropy is scalar
-  tribe: TribeProfile;
+  entropy: CaveEntropyState;
   memory: SentenceMemory;
-}) {
-  const { node, entropy, tribe, memory } = ctx;
+  tribe: TribeProfile;
+}): CaveNarrationResult {
+  const { node, entropy, memory, tribe } = params;
 
-  const sentenceTribeProfile = {
-    role: tribe.role,
-    entropySensitivity: entropySensitivity(tribe.role),
-  };
-
-  const entropyBefore =
-    entropy + perceptionBias(tribe.role);
-
-  const usedImpossible =
-    memory.usedImpossibleIds.size > 0;
+  const entropyBefore = entropy.value;
 
   /* ----------------------------------------------------------
-     Sentence selection
+     Sentence selection (pre-hazard)
   ---------------------------------------------------------- */
 
-  const result = selectCaveSentence(
+  const sentenceResult = selectCaveSentence(
     node.nodeId,
     entropyBefore,
-    sentenceTribeProfile,
-    usedImpossible
+    tribe,
+    memory.usedImpossible
   );
 
   /* ----------------------------------------------------------
-     Entropy progression
+     Entropy update
   ---------------------------------------------------------- */
 
-  const entropyAfter = applySentenceEntropy(
-    entropy,
-    result.sentence ? "sentence" : "silence",
+  const entropyAfterValue = applySentenceEntropy(
+    entropyBefore,
+    sentenceResult.sentence ? "sentence" : "silence",
     memory
   );
 
+  const entropyAfter: CaveEntropyState = {
+    value: entropyAfterValue,
+  };
+
   /* ----------------------------------------------------------
-     Memory mutation
+     Hazard binding (🔥 THIS IS THE KEY STEP)
   ---------------------------------------------------------- */
 
-  if (result.sentence) {
-    memory.usedSentenceIds.add(result.sentence.id);
+  const hazardBinding = bindEntropyToHazards(
+    node,
+    entropyAfterValue
+  );
 
-    if (result.usedImpossible) {
-      memory.usedImpossibleIds.add(result.sentence.id);
+  /* ----------------------------------------------------------
+     Silence rules
+  ---------------------------------------------------------- */
+
+  // Suppress narration if:
+  // - hazard triggered
+  // - hazard binding demands silence
+  // - sentence was empty
+  const shouldSilence =
+    hazardBinding.suppressOmens ||
+    !sentenceResult.sentence;
+
+  /* ----------------------------------------------------------
+     Memory updates
+  ---------------------------------------------------------- */
+
+  if (sentenceResult.sentence) {
+    memory.usedSentenceIds.add(
+      sentenceResult.sentence.id
+    );
+
+    if (sentenceResult.usedImpossible) {
+      memory.usedImpossible = true;
     }
   }
 
+  /* ----------------------------------------------------------
+     Final Output
+  ---------------------------------------------------------- */
+
   return {
-    text: result.sentence?.text ?? null,
+    text: shouldSilence
+      ? null
+      : sentenceResult.sentence!.text,
     entropy: entropyAfter,
+    updatedNode: hazardBinding.updatedNode,
+    hazardEvent: hazardBinding.triggeredEvent
+      ? {
+          type: hazardBinding.triggeredEvent.type,
+          description:
+            hazardBinding.triggeredEvent.description,
+        }
+      : undefined,
   };
 }
