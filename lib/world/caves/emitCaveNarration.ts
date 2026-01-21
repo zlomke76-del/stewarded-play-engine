@@ -32,18 +32,32 @@ export type CaveEntropyState = {
 };
 
 /* ------------------------------------------------------------
-   Perception Bias
+   Perception & Entropy Sensitivity
 ------------------------------------------------------------ */
 
-function perceptionBias(tribe: TribeProfile): number {
-  switch (tribe.role) {
+// Negative = notices danger earlier
+function perceptionBias(role: TribeRole): number {
+  switch (role) {
     case "elders":
-      return -15; // elders notice danger earlier
+      return -15;
     case "hunters":
-      return 0;   // baseline
+      return 0;
     case "general":
     default:
-      return 5;   // general tribe notices later
+      return 5;
+  }
+}
+
+// Higher = more reactive to entropy changes
+function entropySensitivity(role: TribeRole): number {
+  switch (role) {
+    case "elders":
+      return 1.4;
+    case "hunters":
+      return 1.0;
+    case "general":
+    default:
+      return 0.8;
   }
 }
 
@@ -59,8 +73,14 @@ export function emitCaveNarration(ctx: {
 }) {
   const { node, entropy, tribe, memory } = ctx;
 
+  // 🔑 Complete the TribeProfile for sentence selection
+  const sentenceTribeProfile = {
+    role: tribe.role,
+    entropySensitivity: entropySensitivity(tribe.role),
+  };
+
   const entropyBefore =
-    entropy.value + perceptionBias(tribe);
+    entropy.value + perceptionBias(tribe.role);
 
   const usedImpossible =
     memory.usedImpossibleIds.size > 0;
@@ -72,7 +92,7 @@ export function emitCaveNarration(ctx: {
   const result = selectCaveSentence(
     node.nodeId,
     entropyBefore,
-    tribe,
+    sentenceTribeProfile,
     usedImpossible
   );
 
