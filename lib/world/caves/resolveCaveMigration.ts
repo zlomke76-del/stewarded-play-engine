@@ -6,6 +6,10 @@
 
 import type { CaveGraph } from "./WindscarCave";
 import type { CaveHazardEvent } from "./bindEntropyToHazards";
+import type {
+  CaveMigration,
+  CaveMigrationReason,
+} from "./caveRegistry";
 import {
   CaveMigrationTable,
   getCaveById,
@@ -20,7 +24,7 @@ export type CaveMigrationResult =
       type: "migrate";
       fromCaveId: string;
       toCaveId: string;
-      reason: "collapse" | "scarcity" | "omen" | "forced";
+      reason: CaveMigrationReason;
       description: string;
       destination: CaveGraph;
     }
@@ -55,7 +59,7 @@ export function resolveCaveMigration(
     };
   }
 
-  const migrations =
+  const migrations: CaveMigration[] =
     CaveMigrationTable[cave.caveId] ?? [];
 
   if (migrations.length === 0) {
