@@ -8,11 +8,11 @@
 export type {
   CaveGraph,
   CaveNode,
+  CaveNodeState,
 } from "./types";
 
 import type {
   CaveGraph,
-  CaveNode,
 } from "./types";
 
 // ------------------------------------------------------------
