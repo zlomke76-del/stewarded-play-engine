@@ -39,7 +39,7 @@ export function emitCaveNarration(ctx: CaveNarrationContext) {
 
   const entropyBefore = entropy;
 
-  // 🔑 Canonical impossible latch (boolean, not Set)
+  // 🔒 One-time impossible latch
   const usedImpossible = Boolean(
     (memory as any).impossibleUsed
   );
@@ -67,15 +67,12 @@ export function emitCaveNarration(ctx: CaveNarrationContext) {
 
   /* ----------------------------------------------------------
      Memory update
+     (NO sentence ID tracking — scars only)
   ---------------------------------------------------------- */
 
-  if (result.sentence) {
-    memory.usedSentenceIds.add(result.sentence.id);
-
-    if (result.usedImpossible) {
-      // 🔒 One-way latch
-      (memory as any).impossibleUsed = true;
-    }
+  if (result.usedImpossible) {
+    // 🔒 Irreversible global latch
+    (memory as any).impossibleUsed = true;
   }
 
   return {
