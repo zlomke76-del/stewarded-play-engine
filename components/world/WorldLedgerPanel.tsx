@@ -3,41 +3,45 @@
 // ------------------------------------------------------------
 // WorldLedgerPanel
 // ------------------------------------------------------------
-// Living Chronicle of Canonical Resolutions
-//
+// Canon Chronicle (ResolutionRun)
 // Purpose:
-// - Render Solace-authored canon from ResolutionRun
-// - Group entries by location when present
-// - Display dice as factual annotation only
-//
-// HARD RULE:
-// - This component NEVER rewrites narrative
+// - Render canonical SolaceResolution history (server-authoritative)
+// - Display narrative fields without rewriting
+// - Show dice as factual annotation only (no invention)
 // ------------------------------------------------------------
 
 import type { ResolutionRun } from "@/lib/solace/resolution.run";
+import type { SolaceResolution } from "@/lib/solace/solaceResolution.schema";
 import CardSection from "@/components/layout/CardSection";
-
-/* ------------------------------------------------------------
-   Props
------------------------------------------------------------- */
 
 type Props = {
   run: ResolutionRun;
 };
 
-/* ------------------------------------------------------------
-   Dice rendering (factual annotation only)
------------------------------------------------------------- */
+// ------------------------------------------------------------
+// Dice rendering (factual annotation only)
+// ------------------------------------------------------------
 
-function renderDice(resolution: any) {
-  const mech = resolution?.mechanical_resolution;
-  if (!mech) return null;
+function renderDice(r: SolaceResolution) {
+  const m: any = (r as any).mechanical_resolution;
 
-  const { roll, dc } = mech;
-  if (typeof roll !== "number" || typeof dc !== "number") return null;
+  if (!m || typeof m !== "object") return null;
 
-  const outcome = roll >= dc ? "Success" : "Setback";
+  const roll = typeof m.roll === "number" ? m.roll : null;
+  const dc = typeof m.dc === "number" ? m.dc : null;
+  const outcome = typeof m.outcome === "string" ? m.outcome : "no_roll";
 
+  // If canon says no roll, show that explicitly (still factual)
+  if (outcome === "no_roll" || roll === null || dc === null || dc === 0) {
+    return (
+      <div className="muted" style={{ marginTop: 6 }}>
+        🎲 No roll
+      </div>
+    );
+  }
+
+  // Outcome label is derived from roll vs dc, but does not override canonical outcome string.
+  // We surface both: roll vs dc AND canonical outcome token.
   return (
     <div className="muted" style={{ marginTop: 6 }}>
       🎲 d20 = {roll} vs DC {dc} — {outcome}
@@ -45,48 +49,29 @@ function renderDice(resolution: any) {
   );
 }
 
-/* ------------------------------------------------------------
-   Prologue / Epilogue (derived, not invented)
------------------------------------------------------------- */
+// ------------------------------------------------------------
+// Prologue / Epilogue (derived, not rewritten)
+// ------------------------------------------------------------
 
-function buildPrologue(count: number): string | null {
-  if (count === 0) return null;
+function buildPrologue(resolutions: SolaceResolution[]): string | null {
+  if (resolutions.length === 0) return null;
   return "The journey begins. The world listens.";
 }
 
-function buildEpilogue(count: number): string | null {
-  if (count === 0) return null;
+function buildEpilogue(resolutions: SolaceResolution[]): string | null {
+  if (resolutions.length === 0) return null;
   return "What has been done settles into memory. The world carries it forward.";
 }
 
-/* ------------------------------------------------------------
-   Component
------------------------------------------------------------- */
+// ------------------------------------------------------------
 
 export default function WorldLedgerPanel({ run }: Props) {
-  const resolutions = run.resolutions ?? [];
+  const resolutions: SolaceResolution[] = Array.isArray(run?.resolutions)
+    ? (run.resolutions as SolaceResolution[])
+    : [];
 
-  const byLocation = new Map<string, typeof resolutions>();
-  const global: typeof resolutions = [];
-
-  for (const r of resolutions) {
-    const location =
-      (r as any)?.world?.roomId ??
-      (r as any)?.world?.primary ??
-      null;
-
-    if (location) {
-      if (!byLocation.has(location)) {
-        byLocation.set(location, []);
-      }
-      byLocation.get(location)!.push(r);
-    } else {
-      global.push(r);
-    }
-  }
-
-  const prologue = buildPrologue(resolutions.length);
-  const epilogue = buildEpilogue(resolutions.length);
+  const prologue = buildPrologue(resolutions);
+  const epilogue = buildEpilogue(resolutions);
 
   return (
     <CardSection title="World Ledger">
@@ -100,36 +85,46 @@ export default function WorldLedgerPanel({ run }: Props) {
         </p>
       )}
 
-      {[...byLocation.entries()].map(([place, items]) => (
-        <div key={place} style={{ marginBottom: 24 }}>
-          <strong>📍 {place}</strong>
-          <ul>
-            {items.map((r, i) => (
-              <li key={i} style={{ marginBottom: 14 }}>
-                <pre style={{ whiteSpace: "pre-wrap", margin: 0 }}>
-                  {r.opening_signal}
-                </pre>
-                {renderDice(r)}
-              </li>
-            ))}
-          </ul>
-        </div>
-      ))}
+      {resolutions.length > 0 && (
+        <ol style={{ margin: 0, paddingLeft: 18 }}>
+          {resolutions.map((r, idx) => {
+            const opening =
+              typeof r.opening_signal === "string" && r.opening_signal.trim().length > 0
+                ? r.opening_signal
+                : "The moment resolves.";
 
-      {global.length > 0 && (
-        <>
-          <strong>🌍 Beyond Any Single Place</strong>
-          <ul>
-            {global.map((r, i) => (
-              <li key={i} style={{ marginBottom: 14 }}>
-                <pre style={{ whiteSpace: "pre-wrap", margin: 0 }}>
-                  {r.opening_signal}
-                </pre>
+            const frame = Array.isArray(r.situation_frame) ? r.situation_frame : [];
+            const process = Array.isArray(r.process) ? r.process : [];
+            const aftermath = Array.isArray(r.aftermath) ? r.aftermath : [];
+
+            return (
+              <li key={`${run.id}-turn-${idx}`} style={{ marginBottom: 14 }}>
+                <pre style={{ whiteSpace: "pre-wrap", margin: 0 }}>{opening}</pre>
+
+                {/* Canonical narrative fields — surfaced, not rewritten */}
+                {frame.length > 0 && (
+                  <div className="muted" style={{ marginTop: 6 }}>
+                    {frame.join(" ")}
+                  </div>
+                )}
+
+                {process.length > 0 && (
+                  <div className="muted" style={{ marginTop: 6 }}>
+                    {process.join(" ")}
+                  </div>
+                )}
+
+                {aftermath.length > 0 && (
+                  <div className="muted" style={{ marginTop: 6 }}>
+                    {aftermath.join(" ")}
+                  </div>
+                )}
+
                 {renderDice(r)}
               </li>
-            ))}
-          </ul>
-        </>
+            );
+          })}
+        </ol>
       )}
 
       {epilogue && (
