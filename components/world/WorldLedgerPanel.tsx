@@ -7,8 +7,8 @@
 //
 // Purpose:
 // - Render confirmed OUTCOME events as evolving history
-// - Compose narrative from facts already recorded
-// - Never invent state, outcomes, or causality
+// - Add session prologue and epilogue derived from canon
+// - Never invent facts, outcomes, or causality
 // ------------------------------------------------------------
 
 import type { SessionEvent } from "@/lib/session/SessionState";
@@ -45,12 +45,12 @@ function renderDice(payload: any) {
 }
 
 // ------------------------------------------------------------
-// Chronicle composer (NO NEW FACTS)
+// Chronicle line composer (NO NEW FACTS)
 // ------------------------------------------------------------
 
 function chronicleLine(payload: any): string {
   const actor = payload.actorLabel ?? "The party";
-  const intent = payload.intent ?? payload.description ?? "act";
+  const intent = payload.intent ?? payload.description ?? "take action";
   const dice = payload.dice;
 
   let outcome: "success" | "setback" | "failure" | "no_roll" = "no_roll";
@@ -74,6 +74,46 @@ function chronicleLine(payload: any): string {
 }
 
 // ------------------------------------------------------------
+// Prologue (derived from earliest canon only)
+// ------------------------------------------------------------
+
+function buildPrologue(outcomes: SessionEvent[]): string | null {
+  if (outcomes.length === 0) return null;
+
+  const first = outcomes[0];
+  const room = (first.payload as any)?.world?.roomId;
+
+  if (room) {
+    return `The journey begins in ${room}. The party steps forward, unaware of how the world will answer their choices.`;
+  }
+
+  return `The journey begins. The party steps forward into uncertainty.`;
+}
+
+// ------------------------------------------------------------
+// Epilogue (derived from final canon only)
+// ------------------------------------------------------------
+
+function buildEpilogue(outcomes: SessionEvent[]): string | null {
+  if (outcomes.length === 0) return null;
+
+  const last = outcomes[outcomes.length - 1];
+  const dice = (last.payload as any)?.dice;
+
+  if (!dice || typeof dice.roll !== "number" || typeof dice.dc !== "number") {
+    return `The tale settles into stillness. What was done now remains.`;
+  }
+
+  const success = dice.roll >= dice.dc;
+
+  if (success) {
+    return `Against resistance, the party endures. The world bears the mark of their passage.`;
+  }
+
+  return `The world does not yield easily. What was gained came at a cost, and the echoes linger.`;
+}
+
+// ------------------------------------------------------------
 
 export default function WorldLedgerPanel({ events }: Props) {
   const outcomes = events.filter((e) => e.type === "OUTCOME");
@@ -93,14 +133,23 @@ export default function WorldLedgerPanel({ events }: Props) {
     }
   }
 
+  const prologue = buildPrologue(outcomes);
+  const epilogue = buildEpilogue(outcomes);
+
   return (
     <CardSection title="World Ledger">
       {outcomes.length === 0 && (
         <p className="muted">No events have yet shaped the world.</p>
       )}
 
+      {prologue && (
+        <p style={{ marginBottom: 16 }}>
+          <em>{prologue}</em>
+        </p>
+      )}
+
       {[...byRoom.entries()].map(([room, events]) => (
-        <div key={room} style={{ marginBottom: 16 }}>
+        <div key={room} style={{ marginBottom: 18 }}>
           <strong>📍 {room}</strong>
           <ul>
             {events.map((e) => {
@@ -131,6 +180,12 @@ export default function WorldLedgerPanel({ events }: Props) {
             })}
           </ul>
         </>
+      )}
+
+      {epilogue && (
+        <p style={{ marginTop: 18 }}>
+          <em>{epilogue}</em>
+        </p>
       )}
     </CardSection>
   );
