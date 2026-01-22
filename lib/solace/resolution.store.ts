@@ -66,19 +66,28 @@ function buildChronicle(
     ? resolution.aftermath.join(" ")
     : "";
 
+  /**
+   * Outcome lines must:
+   * - Never negate intent
+   * - Signal consequence, not incompetence
+   * - Preserve authority and agency
+   * - Leave room for future pressure math
+   */
   let outcomeLine = "";
   switch (outcome) {
     case "success":
       outcomeLine =
-        "The attempt holds, and the balance of the world shifts.";
+        "The attempt holds, and the world yields without immediate cost.";
       break;
+
     case "setback":
       outcomeLine =
-        "The effort meets resistance, and the land pushes back.";
+        "The attempt takes hold, but not without cost. The world answers with resistance, introducing pressure and consequence.";
       break;
+
     case "no_roll":
       outcomeLine =
-        "Time advances without contest, and conditions persist.";
+        "Time advances without contest, and conditions persist unchanged.";
       break;
   }
 
