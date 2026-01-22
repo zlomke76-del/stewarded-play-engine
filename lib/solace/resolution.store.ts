@@ -1,144 +1,49 @@
 // ------------------------------------------------------------
-// Solace Resolution Store Adapter
+// Resolution Store Utilities
 // ------------------------------------------------------------
-// Ledger Persistence Layer (RPG MODE)
-//
 // Purpose:
-// - Persist SolaceResolution objects to canon
-// - Produce a living historical record at write-time
-// - Remain append-only and irreversible
-//
-// RPG Invariant:
-// - User intent is a fictional offer
-// - Solace reciprocates within the declared frame
-// - Dice price intent; they do not negate imagination
-// - No contradictions of established canon
+// - Extract legacy mechanical signals safely
+// - Never assume dice exist
 // ------------------------------------------------------------
 
 import type { SolaceResolution } from "./solaceResolution.schema";
-import { recordEvent, SessionState } from "@/lib/session/SessionState";
 
 // ------------------------------------------------------------
-// Legacy Outcome Detection (schema-safe)
+// Local Guards
 // ------------------------------------------------------------
 
-function extractLegacyOutcome(
-  mechanical: SolaceResolution["mechanical_resolution"]
-): {
-  roll?: number;
-  dc?: number;
-  outcome: "success" | "setback" | "no_roll";
+function hasDiceMechanics(
+  m: SolaceResolution["mechanical_resolution"]
+): m is {
+  roll: number;
+  dc: number;
+  outcome: string;
 } {
-  if (
-    mechanical &&
-    typeof (mechanical as any).roll === "number" &&
-    typeof (mechanical as any).dc === "number"
-  ) {
-    const roll = (mechanical as any).roll;
-    const dc = (mechanical as any).dc;
-
-    return {
-      roll,
-      dc,
-      outcome: roll >= dc ? "success" : "setback",
-    };
-  }
-
-  return { outcome: "no_roll" };
+  return (
+    typeof m === "object" &&
+    m !== null &&
+    "roll" in m &&
+    typeof (m as any).roll === "number"
+  );
 }
 
 // ------------------------------------------------------------
-// Chronicle Builder (RECIPROCAL FICTION, CANON-SAFE)
+// Public API
 // ------------------------------------------------------------
 
-function buildChronicle(resolution: SolaceResolution): string {
+export function extractLegacyOutcome(
+  resolution: SolaceResolution
+): {
+  roll: number;
+  dc: number;
+  outcome: string;
+} | null {
   const mech = resolution.mechanical_resolution;
 
-if (!hasDiceMechanics(mech)) {
-  return null; // or safe no-op
-}
-
-const { roll, dc, outcome } = mech;
-
-
-  const situation = resolution.situation_frame.join(" ");
-  const process = resolution.process.join(" ");
-  const aftermath = resolution.aftermath.join(" ");
-
-  let outcomeLine: string;
-
-  switch (outcome) {
-    case "success":
-      outcomeLine =
-        "The intent holds. The world yields enough for advantage to be secured.";
-      break;
-
-    case "setback":
-      outcomeLine =
-        "The intent takes shape, but not without cost. The world answers with resistance, adding pressure and consequence.";
-      break;
-
-    case "no_roll":
-    default:
-      outcomeLine =
-        "The moment passes without contest. Conditions remain unresolved.";
+  if (!hasDiceMechanics(mech)) {
+    return null;
   }
 
-  const diceLine =
-    roll !== undefined && dc !== undefined
-      ? `🎲 d20 = ${roll} vs DC ${dc} — ${
-          outcome === "success"
-            ? "Success"
-            : outcome === "setback"
-            ? "Setback"
-            : "No Roll"
-        }`
-      : "";
-
-  return [
-    situation,
-    process,
-    outcomeLine,
-    aftermath,
-    diceLine,
-  ]
-    .filter(Boolean)
-    .join("\n\n")
-    .replace(/\n{3,}/g, "\n\n")
-    .trim();
-}
-
-// ------------------------------------------------------------
-// Canon Store
-// ------------------------------------------------------------
-
-export function storeSolaceResolution(
-  state: SessionState,
-  resolution: SolaceResolution
-): SessionState {
-  const chronicle = buildChronicle(resolution);
-
-  const { roll, dc } = extractLegacyOutcome(
-    resolution.mechanical_resolution
-  );
-
-  return recordEvent(state, {
-    id: crypto.randomUUID(),
-    timestamp: Date.now(),
-    actor: "solace",
-    type: "OUTCOME",
-    payload: {
-      // Immutable narrative history (RPG canon)
-      description: chronicle,
-
-      // Structural resolution preserved for replay / audit
-      resolution,
-
-      // Optional factual dice (legacy-compatible)
-      dice:
-        roll !== undefined && dc !== undefined
-          ? { roll, dc }
-          : null,
-    },
-  });
+  const { roll, dc, outcome } = mech;
+  return { roll, dc, outcome };
 }
