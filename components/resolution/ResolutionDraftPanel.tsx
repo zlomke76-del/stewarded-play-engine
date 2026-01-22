@@ -7,6 +7,7 @@
 // - Drafted by Solace (non-authoritative)
 // - Dice are advisory only UNLESS autoResolve enabled
 // - Arbiter explicitly commits world state OR Solace auto-commits
+// - AFTER COMMIT: this panel must go silent
 // ------------------------------------------------------------
 
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -105,7 +106,6 @@ export default function ResolutionDraftPanel({
 }: Props) {
   const base = difficultyFor(context.optionKind);
 
-  // Bias applied here (never exposed directly)
   const dc = Math.max(base.dc + (tribeBias?.dcShift ?? 0), 0);
   const justification =
     base.justification +
@@ -125,10 +125,9 @@ export default function ResolutionDraftPanel({
     ...(tribeBias?.narrative ? [tribeBias.narrative] : []),
   ]);
 
-  // Prevent double-commit in strict / remount scenarios
+  // Hard authority gate
   const committedRef = useRef(false);
 
-  // Reset roll when context meaningfully changes
   useEffect(() => {
     setRoll(null);
     committedRef.current = false;
@@ -206,6 +205,11 @@ export default function ResolutionDraftPanel({
     onRecord,
   ]);
 
+  // 🔒 INVARIANT: once committed, this panel must go silent
+  if (committedRef.current) {
+    return null;
+  }
+
   /* ----------------------------------------------------------
      AUTO UI (DICE VISIBLE)
   ---------------------------------------------------------- */
@@ -227,7 +231,7 @@ export default function ResolutionDraftPanel({
           opacity: 0.95,
         }}
       >
-        <p className="muted">Solace weighs risk… fate turns…</p>
+        <p className="muted">Solace resolves the moment.</p>
 
         {roll !== null && (
           <p>
