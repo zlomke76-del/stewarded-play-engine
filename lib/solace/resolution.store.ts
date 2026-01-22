@@ -22,13 +22,21 @@ import {
 function buildChronicle(
   resolution: SolaceResolution
 ): string {
-  const dice = resolution.mechanical_resolution?.dice;
+  const mechanical = resolution.mechanical_resolution;
 
-  // Outcome is DERIVED, never stored
+  // ---- Dice extraction (type-safe, legacy-aware) ----
+  const dice =
+    mechanical &&
+    "dice" in mechanical &&
+    mechanical.dice &&
+    typeof mechanical.dice.roll === "number" &&
+    typeof mechanical.dice.dc === "number"
+      ? mechanical.dice
+      : null;
+
+  // ---- Outcome is DERIVED, never stored ----
   const outcome: "success" | "setback" | "no_roll" =
-    dice &&
-    typeof dice.roll === "number" &&
-    typeof dice.dc === "number"
+    dice
       ? dice.roll >= dice.dc
         ? "success"
         : "setback"
@@ -39,9 +47,7 @@ function buildChronicle(
       ? resolution.intent.trim()
       : "";
 
-  const situation = Array.isArray(
-    resolution.situation_frame
-  )
+  const situation = Array.isArray(resolution.situation_frame)
     ? resolution.situation_frame.join(" ")
     : "";
 
@@ -49,9 +55,7 @@ function buildChronicle(
     ? resolution.process.join(" ")
     : "";
 
-  const aftermath = Array.isArray(
-    resolution.aftermath
-  )
+  const aftermath = Array.isArray(resolution.aftermath)
     ? resolution.aftermath.join(" ")
     : "";
 
@@ -72,10 +76,9 @@ function buildChronicle(
       break;
   }
 
-  const diceLine =
-    dice && typeof dice.roll === "number"
-      ? ` (🎲 ${dice.roll} vs DC ${dice.dc})`
-      : "";
+  const diceLine = dice
+    ? ` (🎲 ${dice.roll} vs DC ${dice.dc})`
+    : "";
 
   return [
     intent,
@@ -100,6 +103,15 @@ export function storeSolaceResolution(
 ): SessionState {
   const chronicle = buildChronicle(resolution);
 
+  const mechanical = resolution.mechanical_resolution;
+
+  const dice =
+    mechanical &&
+    "dice" in mechanical &&
+    mechanical.dice
+      ? mechanical.dice
+      : null;
+
   return recordEvent(state, {
     id: crypto.randomUUID(),
     timestamp: Date.now(),
@@ -112,8 +124,8 @@ export function storeSolaceResolution(
       // Structural data preserved for audit / replay
       resolution,
 
-      // Canon facts only (no interpretation)
-      dice: resolution.mechanical_resolution?.dice,
+      // Canon facts only (legacy-safe)
+      dice,
       world: resolution.world ?? null,
     },
   });
