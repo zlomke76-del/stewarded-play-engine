@@ -2,11 +2,15 @@
 // Resolution Store Utilities
 // ------------------------------------------------------------
 // Purpose:
-// - Extract legacy mechanical signals safely
+// - Safely extract legacy mechanical outcomes
 // - Never assume dice exist
+// - Never widen authority beyond schema
 // ------------------------------------------------------------
 
-import type { SolaceResolution } from "./solaceResolution.schema";
+import type {
+  SolaceResolution,
+  LegacyMechanicalResolution,
+} from "./solaceResolution.schema";
 
 // ------------------------------------------------------------
 // Local Guards
@@ -14,17 +18,27 @@ import type { SolaceResolution } from "./solaceResolution.schema";
 
 function hasDiceMechanics(
   m: SolaceResolution["mechanical_resolution"]
-): m is {
+): m is LegacyMechanicalResolution & {
   roll: number;
   dc: number;
-  outcome: string;
 } {
-  return (
-    typeof m === "object" &&
-    m !== null &&
-    "roll" in m &&
-    typeof (m as any).roll === "number"
-  );
+  if (typeof m !== "object" || m === null) {
+    return false;
+  }
+
+  if (!("outcome" in m)) {
+    return false;
+  }
+
+  if (typeof (m as any).roll !== "number") {
+    return false;
+  }
+
+  if (typeof (m as any).dc !== "number") {
+    return false;
+  }
+
+  return true;
 }
 
 // ------------------------------------------------------------
@@ -36,7 +50,7 @@ export function extractLegacyOutcome(
 ): {
   roll: number;
   dc: number;
-  outcome: string;
+  outcome: LegacyMechanicalResolution["outcome"];
 } | null {
   const mech = resolution.mechanical_resolution;
 
