@@ -1,13 +1,14 @@
 // ------------------------------------------------------------
 // Solace Resolution Persistence
 // ------------------------------------------------------------
-// Supabase Storage Adapter
+// Supabase Storage Adapter (SERVER-ONLY)
 //
-// Purpose:
-// - Persist resolution runs to Supabase
-// - Load runs for replay and analysis
-// - Preserve append-only and canonical semantics
-// - Seal World Ledger entries at time of persistence
+// Invariants:
+// - Persistence is server-only
+// - Canon is append-only
+// - Ledger is sealed exactly once per resolution
+// - No env access on client
+// - No eager throws during module load
 // ------------------------------------------------------------
 
 import { createClient, SupabaseClient } from "@supabase/supabase-js";
@@ -19,62 +20,56 @@ import {
 } from "./resolution.ledger";
 
 // ------------------------------------------------------------
-// Lazy server-only client initialization (AUTHORITATIVE)
+// Lazy Supabase client (STRICT, SERVER-ONLY)
 // ------------------------------------------------------------
 
 let supabase: SupabaseClient | null = null;
 
-function getSupabase(): SupabaseClient {
-  // Client-side execution is forbidden
+function getSupabase(): SupabaseClient | null {
+  // Absolute invariant: never initialize on client
   if (typeof window !== "undefined") {
-    throw new Error(
-      "Invariant violation: Supabase accessed on client"
-    );
+    return null;
   }
 
   if (supabase) return supabase;
 
+  // 🔒 SERVER-ONLY VARS (NOT NEXT_PUBLIC)
   const url = process.env.SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
+  // If persistence is not configured, fail CLOSED but SAFE
   if (!url || !key) {
-    throw new Error(
-      "Supabase env vars missing on server"
-    );
+    return null;
   }
 
   supabase = createClient(url, key, {
-    auth: {
-      persistSession: false,
-    },
+    auth: { persistSession: false },
   });
 
   return supabase;
 }
 
 // ------------------------------------------------------------
-// Internal helpers
+// Ledger sealing (append-only, deterministic)
 // ------------------------------------------------------------
 
-function sealLedger(
-  run: ResolutionRun
-): ResolutionRun {
+function sealLedger(run: ResolutionRun): ResolutionRun {
   const resolutions = run.resolutions;
   const ledger = run.ledger ?? [];
 
-  // No new resolution → no new ledger entry
+  // Nothing new → nothing to seal
   if (resolutions.length === ledger.length) {
     return run;
   }
 
-  // Append exactly one new ledger entry
-  const latestResolution: SolaceResolution =
+  // Exactly ONE new entry per resolution
+  const latest: SolaceResolution =
     resolutions[resolutions.length - 1];
 
   const turn = resolutions.length;
 
   const entry: LedgerEntry = buildLedgerEntry(
-    latestResolution,
+    latest,
     turn
   );
 
@@ -85,7 +80,7 @@ function sealLedger(
 }
 
 // ------------------------------------------------------------
-// Persistence API (AUTHORITATIVE)
+// Persistence API (NO THROW ON MISSING ENV)
 // ------------------------------------------------------------
 
 export async function saveRun(
@@ -93,10 +88,12 @@ export async function saveRun(
 ): Promise<void> {
   const client = getSupabase();
 
-  // Seal ledger before persistence (CANON → MEMORY)
+  // Persistence disabled or unavailable → no-op by design
+  if (!client) return;
+
   const sealedRun = sealLedger(run);
 
-  // 1️⃣ Attempt insert (creation)
+  // 1️⃣ Insert (idempotent)
   const { error: insertError } = await client
     .from("solace_runs")
     .insert({
@@ -107,7 +104,7 @@ export async function saveRun(
       payload: sealedRun,
     });
 
-  // Ignore duplicate-key error (run already exists)
+  // Ignore duplicate key (run already exists)
   if (
     insertError &&
     insertError.code !== "23505"
@@ -117,7 +114,7 @@ export async function saveRun(
     );
   }
 
-  // 2️⃣ Finalize run explicitly if terminal
+  // 2️⃣ Finalize if terminal
   if (sealedRun.isComplete) {
     const { error: updateError } =
       await client
@@ -139,13 +136,14 @@ export async function saveRun(
 }
 
 // ------------------------------------------------------------
-// Load APIs (SERVER-ONLY)
+// Load APIs (server-only callers)
 // ------------------------------------------------------------
 
 export async function loadRun(
   runId: string
 ): Promise<ResolutionRun | null> {
   const client = getSupabase();
+  if (!client) return null;
 
   const { data, error } = await client
     .from("solace_runs")
@@ -164,14 +162,14 @@ export async function listRuns(): Promise<
   ResolutionRun[]
 > {
   const client = getSupabase();
+  if (!client) return [];
 
-  const { data, error } =
-    await client
-      .from("solace_runs")
-      .select("payload, started_at")
-      .order("started_at", {
-        ascending: false,
-      });
+  const { data, error } = await client
+    .from("solace_runs")
+    .select("payload, started_at")
+    .order("started_at", {
+      ascending: false,
+    });
 
   if (error || !data) {
     return [];
@@ -181,3 +179,14 @@ export async function listRuns(): Promise<
     (r) => r.payload as ResolutionRun
   );
 }
+
+/* ------------------------------------------------------------
+   EOF
+
+   This file now guarantees:
+   - No Supabase access on client
+   - No NEXT_PUBLIC leakage
+   - No throws during demo / preview
+   - Canon remains authoritative
+   - Persistence activates ONLY when configured
+------------------------------------------------------------ */
