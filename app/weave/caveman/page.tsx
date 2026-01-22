@@ -36,14 +36,20 @@ import Disclaimer from "@/components/layout/Disclaimer";
 import { WindscarCave } from "@/lib/world/caves/WindscarCave";
 import { evolveCaveState } from "@/lib/world/caves/evolveCaveState";
 
-// 🜂 Solace resolution pipeline
+// 🜂 Solace resolution run (canon ledger; requires canonical SolaceResolution)
 import {
   createRun,
   appendResolution,
 } from "@/lib/solace/resolution.run";
 
-import { saveRun } from "@/lib/solace/resolution.persistence";
+// Client draft builder (felt chance only; NOT canonical)
 import { buildClientResolution } from "@/lib/solace/client/buildResolution.client";
+
+// Server actions (authoritative)
+import {
+  runSolaceResolutionOnServer,
+  persistRunOnServer,
+} from "./actions";
 
 // ------------------------------------------------------------
 // Risk inference (LANGUAGE-ONLY — retained, non-authoritative)
@@ -220,7 +226,7 @@ export default function CavemanPage() {
   // Solace commits canon (ONE TURN PER INTENT)
   // ----------------------------------------------------------
 
-  function handleAutoRecord(payload: {
+  async function handleAutoRecord(payload: {
     description: string;
     dice: {
       mode: string;
@@ -310,20 +316,44 @@ export default function CavemanPage() {
       })
     );
 
-    // 2️⃣ ResolutionRun canon (durable)
+    // 2️⃣ Client draft (felt chance only; never canonical)
+    // (Retained for UI / display, but NOT appended to durable run)
+    buildClientResolution({
+      legacyPayload: payload,
+      turn: nextTurn,
+    });
+
+    // 3️⃣ Durable canon (server adjudicates → client appends)
     if (!run) return;
 
-      const draft = buildClientResolution({
-    legacyPayload: payload,
-    turn: nextTurn,
-  });
+    const optionKind = selectedOption
+      ? optionCategoryToKind(selectedOption.category)
+      : inferOptionKindFromText(payload.description);
 
-      // 🚫 Client drafts are NOT canonical.
-      // 🚫 Do NOT append to ResolutionRun here.
-      // Canon is committed server-side only.
+    // Minimal context feed — can be upgraded later to real derived resources
+    const context = {
+      food: 0,
+      stamina: 0,
+      fire: 0,
+      hasShelter: Boolean(previousCave),
+      hasFire: Boolean(fireUsed),
+      injuryLevel: "none" as const,
+    };
 
-      // Persist asynchronously; DB enforces immutability
-      saveRun(updated).catch(console.error);
+    const canonical = await runSolaceResolutionOnServer({
+      legacyPayload: payload,
+      turn: nextTurn,
+      optionKind,
+      context,
+    });
+
+    setRun((prevRun) => {
+      if (!prevRun) return prevRun;
+
+      const updated = appendResolution(prevRun, canonical);
+
+      // Persist server-side (authoritative)
+      persistRunOnServer(updated).catch(console.error);
 
       return updated;
     });
@@ -373,8 +403,7 @@ export default function CavemanPage() {
             role="arbiter"
             autoResolve
             context={{
-              optionDescription:
-                selectedOption.description,
+              optionDescription: selectedOption.description,
 
               // 🔑 STRUCTURAL RISK (authoritative)
               optionKind: optionCategoryToKind(
@@ -411,5 +440,5 @@ export default function CavemanPage() {
    - Structural risk (authoritative)
    - Cave evolution logic
    - Single-intent resolution
-   - Persistent dice visibility
+   - Persistent dice visibility (UI)
 ------------------------------------------------------------ */
