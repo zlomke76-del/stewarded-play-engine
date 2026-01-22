@@ -10,24 +10,20 @@
 import type { SolaceResolution } from "../solaceResolution.schema";
 
 // NOTE:
-// We intentionally accept `any` legacy payload here.
-// Structural correctness is enforced by shape, not trust.
+// The turn index is tracked by the run / ledger,
+// NOT embedded in SolaceResolution itself.
 
 export function buildClientResolution(input: {
   legacyPayload: any;
-  turn: number;
+  turn: number; // accepted for context, not embedded
 }): SolaceResolution {
   const legacy = input.legacyPayload ?? {};
 
   return {
     // --------------------------------------------------------
-    // Identity / turn
-    // --------------------------------------------------------
-    turn: input.turn,
-
-    // --------------------------------------------------------
     // Narrative signals (minimal but complete)
     // --------------------------------------------------------
+
     opening_signal:
       legacy.description ??
       "The moment resolves without ceremony.",
@@ -37,7 +33,8 @@ export function buildClientResolution(input: {
         "Conditions shift as the action concludes.",
     ],
 
-    pressures: legacy.audit?.length
+    pressures: Array.isArray(legacy.audit) &&
+      legacy.audit.length > 0
       ? [...legacy.audit].slice(0, 4)
       : ["Ambient pressure persists."],
 
@@ -54,8 +51,9 @@ export function buildClientResolution(input: {
       "The turn ends. The weave holds.",
 
     // --------------------------------------------------------
-    // Mechanical transparency (unchanged)
+    // Mechanical transparency (passthrough)
     // --------------------------------------------------------
+
     dice: legacy.dice ?? {
       mode: "none",
       roll: null,
@@ -69,8 +67,9 @@ export function buildClientResolution(input: {
       : [],
 
     // --------------------------------------------------------
-    // World snapshot (optional, passthrough)
+    // World snapshot (optional)
     // --------------------------------------------------------
+
     world: legacy.world ?? null,
   };
 }
