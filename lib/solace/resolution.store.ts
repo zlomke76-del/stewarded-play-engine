@@ -22,21 +22,6 @@ import {
 } from "@/lib/session/SessionState";
 
 // ------------------------------------------------------------
-// Type Guards (legacy-safe)
-// ------------------------------------------------------------
-
-function hasDice(
-  value: unknown
-): value is { roll: number; dc: number } {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    typeof (value as any).roll === "number" &&
-    typeof (value as any).dc === "number"
-  );
-}
-
-// ------------------------------------------------------------
 // Chronicle Builder (RECIPROCAL FICTION, CANON-SAFE)
 // ------------------------------------------------------------
 
@@ -45,11 +30,18 @@ function buildChronicle(
 ): string {
   const mechanical = resolution.mechanical_resolution;
 
+  // --------------------------------------------
+  // Dice extraction (LEGACY-SAFE, SCHEMA-CORRECT)
+  // --------------------------------------------
+
   const dice =
     mechanical &&
-    "dice" in mechanical &&
-    hasDice((mechanical as any).dice)
-      ? (mechanical as any).dice
+    typeof (mechanical as any).roll === "number" &&
+    typeof (mechanical as any).dc === "number"
+      ? {
+          roll: (mechanical as any).roll,
+          dc: (mechanical as any).dc,
+        }
       : null;
 
   // Outcome is DERIVED, never stored
@@ -62,12 +54,11 @@ function buildChronicle(
 
   /**
    * In RPG mode:
-   * - situation_frame describes the established fiction
-   * - process elaborates the attempted action
-   * - aftermath records consequences, gains, and pressures
+   * - situation_frame describes established fiction
+   * - process elaborates attempted action
+   * - aftermath records consequence and pressure
    *
-   * All three may contain imaginative content
-   * so long as they do not contradict prior canon.
+   * All may be imaginative, never contradictory.
    */
   const situation = Array.isArray(resolution.situation_frame)
     ? resolution.situation_frame.join(" ")
@@ -82,11 +73,10 @@ function buildChronicle(
     : "";
 
   /**
-   * Outcome lines must:
-   * - Respect agency
-   * - Never erase intent
-   * - Signal consequence proportional to dice
-   * - Preserve forward pressure
+   * Outcome language:
+   * - Never erases intent
+   * - Prices risk proportionally
+   * - Preserves forward pressure
    */
   let outcomeLine = "";
   switch (outcome) {
@@ -97,7 +87,7 @@ function buildChronicle(
 
     case "setback":
       outcomeLine =
-        "The intent takes hold, but not without cost. The world answers with resistance, adding pressure, exposure, or fragility.";
+        "The intent takes hold, but not without cost. The world answers with resistance, adding pressure or fragility.";
       break;
 
     case "no_roll":
@@ -107,7 +97,13 @@ function buildChronicle(
   }
 
   const diceLine = dice
-    ? ` 🎲 d${20} = ${dice.roll} vs DC ${dice.dc} — ${outcome === "success" ? "Success" : outcome === "setback" ? "Setback" : "No Roll"}`
+    ? `🎲 d20 = ${dice.roll} vs DC ${dice.dc} — ${
+        outcome === "success"
+          ? "Success"
+          : outcome === "setback"
+          ? "Setback"
+          : "No Roll"
+      }`
     : "";
 
   return [
@@ -135,11 +131,15 @@ export function storeSolaceResolution(
 
   const mechanical = resolution.mechanical_resolution;
 
+  // Canonical dice facts (for transparency only)
   const dice =
     mechanical &&
-    "dice" in mechanical &&
-    hasDice((mechanical as any).dice)
-      ? (mechanical as any).dice
+    typeof (mechanical as any).roll === "number" &&
+    typeof (mechanical as any).dc === "number"
+      ? {
+          roll: (mechanical as any).roll,
+          dc: (mechanical as any).dc,
+        }
       : null;
 
   return recordEvent(state, {
@@ -148,13 +148,13 @@ export function storeSolaceResolution(
     actor: "solace",
     type: "OUTCOME",
     payload: {
-      // Human-readable, immutable history (RPG canon)
+      // Human-readable, immutable RPG canon
       description: chronicle,
 
-      // Structural data preserved for audit / replay
+      // Structural resolution for audit / replay
       resolution,
 
-      // Canon facts only
+      // Mechanical facts only (no narration)
       dice,
     },
   });
