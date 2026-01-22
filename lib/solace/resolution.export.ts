@@ -10,6 +10,46 @@
 
 import type { SolaceResolution } from "./solaceResolution.schema";
 
+// ------------------------------------------------------------
+// Helpers
+// ------------------------------------------------------------
+
+function formatResolutionSummary(
+  r: SolaceResolution
+): string {
+  const m = r.mechanical_resolution as any;
+
+  if (
+    typeof m.roll === "number" &&
+    typeof m.dc === "number" &&
+    typeof m.outcome === "string"
+  ) {
+    return `Resolution: ${m.outcome}`;
+  }
+
+  return "Resolution: consequences applied";
+}
+
+function formatResolutionMarkdown(
+  r: SolaceResolution
+): string {
+  const m = r.mechanical_resolution as any;
+
+  if (
+    typeof m.roll === "number" &&
+    typeof m.dc === "number" &&
+    typeof m.outcome === "string"
+  ) {
+    return `**Resolution:** d20 ${m.roll} vs DC ${m.dc} — **${m.outcome}**`;
+  }
+
+  return `**Resolution:** consequences applied`;
+}
+
+// ------------------------------------------------------------
+// Exporters
+// ------------------------------------------------------------
+
 export function exportResolutionsAsJSON(
   resolutions: SolaceResolution[]
 ): string {
@@ -26,9 +66,8 @@ export function exportResolutionsAsText(
         r.opening_signal,
         ...r.situation_frame,
         ...r.process,
-        `Resolution: ${r.mechanical_resolution.outcome}`,
+        formatResolutionSummary(r),
         ...r.aftermath,
-        r.closure ?? "",
         "",
       ].join("\n");
     })
@@ -46,11 +85,9 @@ export function exportResolutionsAsMarkdown(
         "",
         r.situation_frame.map((l) => `> ${l}`).join("\n"),
         "",
-        `**Resolution:** d20 ${r.mechanical_resolution.roll} vs DC ${r.mechanical_resolution.dc} — **${r.mechanical_resolution.outcome}**`,
+        formatResolutionMarkdown(r),
         "",
         r.aftermath.map((l) => `- ${l}`).join("\n"),
-        "",
-        r.closure ? `_${r.closure}_` : "",
       ].join("\n");
     })
     .join("\n\n");
