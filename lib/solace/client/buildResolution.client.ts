@@ -2,21 +2,45 @@
 // CLIENT-SAFE RESOLUTION BUILDER
 // ------------------------------------------------------------
 // Purpose:
-// - Adapt legacy resolution payloads to SolaceResolution
-// - Browser-safe (no process.env, no Node APIs)
-// - STRICT schema conformance (no extra fields)
+// - Build a CLIENT-ONLY resolution draft
+// - Preserve felt chance (dice) for player trust
+// - NEVER claim canonical authority
 // ------------------------------------------------------------
 
-import type { SolaceResolution } from "../solaceResolution.schema";
+// IMPORTANT:
+// This file MUST NOT import SolaceResolution.
+// Client code does NOT construct canon.
+
+export type ClientResolutionDraft = {
+  opening_signal: string;
+  situation_frame: string[];
+  pressures: string[];
+  process: string[];
+  aftermath: string[];
+
+  // ----------------------------------------------------------
+  // CLIENT-ONLY TELEMETRY (never canonical)
+  // ----------------------------------------------------------
+  draftChance?: {
+    roll: number;
+    dc: number;
+    outcome:
+      | "success"
+      | "partial"
+      | "setback"
+      | "failure"
+      | "no_roll";
+  };
+};
 
 export function buildClientResolution(input: {
   legacyPayload: any;
   turn: number; // accepted but NOT embedded (ledger concern)
-}): SolaceResolution {
+}): ClientResolutionDraft {
   const legacy = input.legacyPayload ?? {};
 
   // ----------------------------------------------------------
-  // Mechanical resolution mapping
+  // Dice (FELT CHANCE — NOT AUTHORITY)
   // ----------------------------------------------------------
 
   const roll =
@@ -29,7 +53,7 @@ export function buildClientResolution(input: {
       ? legacy.dice.dc
       : 0;
 
-  const outcome: SolaceResolution["mechanical_resolution"]["outcome"] =
+  const outcome =
     legacy.dice?.mode === "none" || dc === 0
       ? "no_roll"
       : roll >= dc
@@ -39,7 +63,7 @@ export function buildClientResolution(input: {
       : "failure";
 
   // ----------------------------------------------------------
-  // Resolution assembly (STRICT)
+  // Draft Assembly (CLIENT-SAFE)
   // ----------------------------------------------------------
 
   return {
@@ -54,26 +78,26 @@ export function buildClientResolution(input: {
         : "Conditions are evaluated."
     ].slice(0, 2),
 
-    pressures: Array.isArray(legacy.audit) &&
+    pressures:
+      Array.isArray(legacy.audit) &&
       legacy.audit.length > 0
-      ? legacy.audit.slice(0, 4)
-      : ["Ambient conditions"],
+        ? legacy.audit.slice(0, 4)
+        : ["Ambient conditions"],
 
     process: [
       legacy.dice?.justification ??
         "Forces interact without interruption."
     ].slice(0, 3),
 
-    mechanical_resolution: {
-      roll,
-      dc,
-      outcome
-    },
-
     aftermath: [
       "The state of the world persists."
     ].slice(0, 3),
 
-    closure: null
+    // CLIENT-ONLY
+    draftChance: {
+      roll,
+      dc,
+      outcome
+    }
   };
 }
