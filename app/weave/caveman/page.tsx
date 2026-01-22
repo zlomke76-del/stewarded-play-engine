@@ -145,7 +145,14 @@ export default function CavemanPage() {
   const [turn, setTurn] = useState(0);
 
   // 🜂 Active resolution run (durable canon)
-  const [run, setRun] = useState(() => createRun());
+  // FIX: do NOT create during render/hydration
+  const [run, setRun] = useState<
+    ReturnType<typeof createRun> | null
+  >(null);
+
+  useEffect(() => {
+    setRun(createRun());
+  }, []);
 
   const [command, setCommand] = useState("");
   const [options, setOptions] = useState<Option[] | null>(null);
@@ -304,12 +311,16 @@ export default function CavemanPage() {
     );
 
     // 2️⃣ ResolutionRun canon (durable)
+    if (!run) return;
+
     const resolution = buildSolaceResolution({
       legacyPayload: payload,
       turn: nextTurn,
     });
 
     setRun((prevRun) => {
+      if (!prevRun) return prevRun;
+
       const updated = appendResolution(
         prevRun,
         resolution
@@ -399,8 +410,10 @@ export default function CavemanPage() {
 
 /* ------------------------------------------------------------
    EOF
-   This file now additionally enforces:
-   - ResolutionRun creation + append
-   - Durable canon persistence
-   - SessionState + Run dual-ledger alignment
+   This file intentionally preserves:
+   - Narrative inference (non-authoritative)
+   - Structural risk (authoritative)
+   - Cave evolution logic
+   - Single-intent resolution
+   - Persistent dice visibility
 ------------------------------------------------------------ */
