@@ -1,17 +1,9 @@
 // ------------------------------------------------------------
-// Solace Resolution Pipeline
+// Solace Resolution Pipeline (SERVER)
 // ------------------------------------------------------------
-// Scenario Selection + Mapping + Validation
+// Scenario + Validation (AUTHORITATIVE)
 //
-// Purpose:
-// - Assemble a SolaceResolution deterministically
-// - Select bounded scenario texture
-// - Validate before persistence or render
-//
-// This pipeline:
-// - Does NOT alter mechanics
-// - Does NOT decide outcomes
-// - Only composes already-authoritative data
+// MUST NOT be imported by client components
 // ------------------------------------------------------------
 
 import type { SolaceResolution } from "./solaceResolution.schema";
@@ -22,10 +14,6 @@ import {
 } from "./resolution.scenarios";
 import { mapLegacyResolutionToSolace } from "./resolution.mapper";
 
-// ------------------------------------------------------------
-// Scenario Selection
-// ------------------------------------------------------------
-
 export function selectScenarioTag(
   turn: number
 ): ScenarioTag {
@@ -33,21 +21,14 @@ export function selectScenarioTag(
     SCENARIO_LIBRARY
   ) as ScenarioTag[];
 
-  // Deterministic but varied: turn-based rotation
   return tags[turn % tags.length];
 }
 
-// ------------------------------------------------------------
-// Pipeline Assembly
-// ------------------------------------------------------------
-
-interface PipelineInput {
-  legacyPayload: any;
-  turn: number;
-}
-
 export function buildSolaceResolution(
-  input: PipelineInput
+  input: {
+    legacyPayload: any;
+    turn: number;
+  }
 ): SolaceResolution {
   const base = mapLegacyResolutionToSolace(
     input.legacyPayload
