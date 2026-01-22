@@ -131,7 +131,6 @@ export function storeSolaceResolution(
 
       // Canon facts only (legacy-safe)
       dice,
-      world: resolution.world ?? null,
     },
   });
 }
