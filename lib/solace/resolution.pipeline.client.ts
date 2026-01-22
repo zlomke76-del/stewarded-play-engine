@@ -15,7 +15,9 @@ import {
   SCENARIO_LIBRARY,
   ScenarioTag,
 } from "./resolution.scenarios";
-import { mapLegacyResolutionToSolace } from "./resolution.mapper";
+
+// ✅ Correct mapper import (matches server + existing export)
+import { mapToSolaceResolution } from "./resolution.mapper";
 
 // ------------------------------------------------------------
 // Scenario Selection (deterministic, safe)
@@ -41,7 +43,8 @@ export function buildSolaceResolutionClient(
     turn: number;
   }
 ): SolaceResolution {
-  const base = mapLegacyResolutionToSolace(
+  // ✅ Correct mapper usage
+  const base = mapToSolaceResolution(
     input.legacyPayload
   );
 
@@ -50,6 +53,7 @@ export function buildSolaceResolutionClient(
 
   return {
     ...base,
+
     situation_frame: [
       ...scenario.situation_lines,
       ...base.situation_frame,
@@ -71,3 +75,11 @@ export function buildSolaceResolutionClient(
     ].slice(0, 3),
   };
 }
+
+/* ------------------------------------------------------------
+   EOF
+   Client-only pipeline:
+   - No validation
+   - No authority
+   - No schema mutation
+------------------------------------------------------------ */
