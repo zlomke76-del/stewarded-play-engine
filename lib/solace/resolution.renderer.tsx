@@ -11,7 +11,7 @@
 // ------------------------------------------------------------
 
 import React from "react";
-import { SolaceResolution } from "./solaceResolution.schema";
+import type { SolaceResolution } from "./solaceResolution.schema";
 
 export type ResolutionVerbosity = "short" | "standard" | "rich";
 
@@ -76,11 +76,6 @@ export default function ResolutionRenderer({
             <p key={i}>{line}</p>
           ))}
         </div>
-      )}
-
-      {/* Closure */}
-      {resolution.closure && (
-        <p className="closure">{resolution.closure}</p>
       )}
     </div>
   );
