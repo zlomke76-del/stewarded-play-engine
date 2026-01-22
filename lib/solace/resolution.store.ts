@@ -54,11 +54,6 @@ function buildChronicle(
         : "setback"
       : "no_roll";
 
-  const intent =
-    typeof resolution.intent === "string"
-      ? resolution.intent.trim()
-      : "";
-
   const situation = Array.isArray(resolution.situation_frame)
     ? resolution.situation_frame.join(" ")
     : "";
@@ -92,7 +87,6 @@ function buildChronicle(
     : "";
 
   return [
-    intent,
     situation,
     process,
     outcomeLine + diceLine,
@@ -129,8 +123,13 @@ export function storeSolaceResolution(
     actor: "solace",
     type: "OUTCOME",
     payload: {
+      // Human-readable, immutable history
       description: chronicle,
+
+      // Structural data preserved for audit / replay
       resolution,
+
+      // Canon facts only (legacy-safe)
       dice,
       world: resolution.world ?? null,
     },
