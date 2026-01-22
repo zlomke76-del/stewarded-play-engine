@@ -43,7 +43,7 @@ import {
 } from "@/lib/solace/resolution.run";
 
 import { saveRun } from "@/lib/solace/resolution.persistence";
-import { buildSolaceResolution } from "@/lib/solace/resolution.pipeline";
+import { buildClientResolution } from "@/lib/solace/client/buildResolution.client";
 
 // ------------------------------------------------------------
 // Risk inference (LANGUAGE-ONLY — retained, non-authoritative)
@@ -313,10 +313,10 @@ export default function CavemanPage() {
     // 2️⃣ ResolutionRun canon (durable)
     if (!run) return;
 
-    const resolution = buildSolaceResolution({
-      legacyPayload: payload,
-      turn: nextTurn,
-    });
+    const resolution = buildClientResolution({
+  legacyPayload: payload,
+  turn: nextTurn,
+});
 
     setRun((prevRun) => {
       if (!prevRun) return prevRun;
