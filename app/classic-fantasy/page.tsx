@@ -128,8 +128,8 @@ export default function ClassicFantasyPage() {
 
   // ✅ CORRECT: createSession takes ONE argument in this repo
   const [state, setState] = useState<SessionState>(
-    createSession("classic-fantasy-session")
-  );
+  createSession("classic-fantasy-session", "classic-fantasy")
+);
 
   const [turn, setTurn] = useState(0);
 
