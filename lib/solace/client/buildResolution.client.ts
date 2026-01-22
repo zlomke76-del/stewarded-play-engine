@@ -3,25 +3,25 @@
 // ------------------------------------------------------------
 // Purpose:
 // - Convert legacy resolution payloads into a SolaceResolution
-// - Browser-safe (no process.env, no Node crypto, no assertions)
-// - Structural completeness ONLY (no validation, no judgment)
+// - Browser-safe (no process.env, no Node crypto)
+// - Structural completeness ONLY
 // ------------------------------------------------------------
 
 import type { SolaceResolution } from "../solaceResolution.schema";
 
 // NOTE:
-// The turn index is tracked by the run / ledger,
-// NOT embedded in SolaceResolution itself.
+// Turn is tracked by the ResolutionRun / ledger,
+// not embedded in SolaceResolution.
 
 export function buildClientResolution(input: {
   legacyPayload: any;
-  turn: number; // accepted for context, not embedded
+  turn: number; // accepted for context only
 }): SolaceResolution {
   const legacy = input.legacyPayload ?? {};
 
   return {
     // --------------------------------------------------------
-    // Narrative signals (minimal but complete)
+    // Narrative signals
     // --------------------------------------------------------
 
     opening_signal:
@@ -47,11 +47,8 @@ export function buildClientResolution(input: {
       "The consequences settle into the world.",
     ],
 
-    closing_signal:
-      "The turn ends. The weave holds.",
-
     // --------------------------------------------------------
-    // Mechanical transparency (passthrough)
+    // Mechanical transparency
     // --------------------------------------------------------
 
     dice: legacy.dice ?? {
@@ -67,7 +64,7 @@ export function buildClientResolution(input: {
       : [],
 
     // --------------------------------------------------------
-    // World snapshot (optional)
+    // World snapshot
     // --------------------------------------------------------
 
     world: legacy.world ?? null,
