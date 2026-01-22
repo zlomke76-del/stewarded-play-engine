@@ -7,10 +7,16 @@
 // - Persist resolution runs to Supabase
 // - Load runs for replay and analysis
 // - Preserve append-only and canonical semantics
+// - Seal World Ledger entries at time of persistence
 // ------------------------------------------------------------
 
 import { createClient, SupabaseClient } from "@supabase/supabase-js";
 import type { ResolutionRun } from "./resolution.run";
+import type { SolaceResolution } from "./solaceResolution.schema";
+import {
+  buildLedgerEntry,
+  LedgerEntry,
+} from "./resolution.ledger";
 
 // ------------------------------------------------------------
 // Lazy client initialization (CRITICAL)
@@ -38,6 +44,38 @@ function getSupabase(): SupabaseClient | null {
 }
 
 // ------------------------------------------------------------
+// Internal helpers
+// ------------------------------------------------------------
+
+function sealLedger(
+  run: ResolutionRun
+): ResolutionRun {
+  const resolutions = run.resolutions;
+  const ledger = run.ledger ?? [];
+
+  // No new resolution → no new ledger entry
+  if (resolutions.length === ledger.length) {
+    return run;
+  }
+
+  // Append exactly one new ledger entry
+  const latestResolution: SolaceResolution =
+    resolutions[resolutions.length - 1];
+
+  const turn = resolutions.length;
+
+  const entry: LedgerEntry = buildLedgerEntry(
+    latestResolution,
+    turn
+  );
+
+  return {
+    ...run,
+    ledger: [...ledger, entry],
+  };
+}
+
+// ------------------------------------------------------------
 // Persistence API
 // ------------------------------------------------------------
 
@@ -47,15 +85,18 @@ export async function saveRun(
   const client = getSupabase();
   if (!client) return; // client-side no-op
 
+  // Seal ledger before persistence (CANON → MEMORY)
+  const sealedRun = sealLedger(run);
+
   // 1️⃣ Attempt insert (creation)
   const { error: insertError } = await client
     .from("solace_runs")
     .insert({
-      id: run.id,
-      started_at: run.startedAt,
-      ended_at: run.endedAt ?? null,
-      is_complete: run.isComplete,
-      payload: run,
+      id: sealedRun.id,
+      started_at: sealedRun.startedAt,
+      ended_at: sealedRun.endedAt ?? null,
+      is_complete: sealedRun.isComplete,
+      payload: sealedRun,
     });
 
   // Ignore duplicate-key error (run already exists)
@@ -69,15 +110,17 @@ export async function saveRun(
   }
 
   // 2️⃣ Finalize run explicitly if terminal
-  if (run.isComplete) {
+  if (sealedRun.isComplete) {
     const { error: updateError } =
       await client
         .from("solace_runs")
         .update({
-          ended_at: run.endedAt ?? Date.now(),
+          ended_at:
+            sealedRun.endedAt ?? Date.now(),
           is_complete: true,
+          payload: sealedRun,
         })
-        .eq("id", run.id);
+        .eq("id", sealedRun.id);
 
     if (updateError) {
       throw new Error(
@@ -112,10 +155,13 @@ export async function listRuns(): Promise<
   const client = getSupabase();
   if (!client) return [];
 
-  const { data, error } = await client
-    .from("solace_runs")
-    .select("payload, started_at")
-    .order("started_at", { ascending: false });
+  const { data, error } =
+    await client
+      .from("solace_runs")
+      .select("payload, started_at")
+      .order("started_at", {
+        ascending: false,
+      });
 
   if (error || !data) {
     return [];
