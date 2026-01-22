@@ -29,7 +29,7 @@ function inferOutcome(
 ): InferredOutcome {
   const mech = resolution.mechanical_resolution as any;
 
-  // Explicit outcome if present (newer schema)
+  // Explicit outcome if present
   if (typeof mech?.outcome === "string") {
     return mech.outcome as InferredOutcome;
   }
@@ -68,19 +68,19 @@ export function buildLedgerEntry(
       break;
     case "setback":
       opening =
-        "The tribe presses forward, but the world does not fully yield.";
+        "The tribe presses forward, but the world resists their will.";
       break;
     case "failure":
       opening =
-        "The attempt breaks against the weight of the moment.";
+        "The attempt breaks under strain, and its cost is felt.";
       break;
     case "passage":
     default:
       opening =
-        "Time moves on, indifferent to intent.";
+        "Time passes without contest, and the balance subtly shifts.";
   }
 
-  // Situation — what was known at the time
+  // Situation — what was known
   const situation =
     resolution.situation_frame.length > 0
       ? ` ${resolution.situation_frame.join(
@@ -94,26 +94,20 @@ export function buildLedgerEntry(
       ? ` ${resolution.process.join(" ")}`
       : "";
 
-  // Pressures — memory of strain
-  const pressureNote =
+  // Pressure — mounting strain remembered
+  const pressure =
     resolution.pressures.length > 0
-      ? ` Pressure gathers: ${resolution.pressures.join(
+      ? ` Pressure gathers as ${resolution.pressures.join(
           " "
         )}`
       : "";
 
-  // Aftermath — lasting consequence
+  // Aftermath — lasting mark on the run
   const aftermath =
     resolution.aftermath.length > 0
-      ? ` In the wake of this turn, ${resolution.aftermath.join(
+      ? ` What follows is remembered: ${resolution.aftermath.join(
           " "
         )}`
-      : "";
-
-  // Closure — seal the record if present
-  const closure =
-    typeof resolution.closure === "string"
-      ? ` ${resolution.closure}`
       : "";
 
   return {
@@ -122,9 +116,8 @@ export function buildLedgerEntry(
       opening,
       situation,
       process,
-      pressureNote,
+      pressure,
       aftermath,
-      closure,
     ]
       .join("")
       .replace(/\s+/g, " ")
