@@ -151,7 +151,6 @@ export default function CavemanPage() {
   const [turn, setTurn] = useState(0);
 
   // 🜂 Active resolution run (durable canon)
-  // FIX: do NOT create during render/hydration
   const [run, setRun] = useState<
     ReturnType<typeof createRun> | null
   >(null);
@@ -170,7 +169,7 @@ export default function CavemanPage() {
     useState(false);
 
   // ----------------------------------------------------------
-  // Canon-derived world
+  // Canon-derived world (ephemeral UI truth)
   // ----------------------------------------------------------
 
   const lastWorld = useMemo(() => {
@@ -198,7 +197,6 @@ export default function CavemanPage() {
   function handleSubmitCommand() {
     if (!command.trim()) return;
 
-    // Clear previous resolution ONLY when new intent is declared
     setResolutionActive(false);
     setOptions(null);
     setSelectedOption(null);
@@ -316,21 +314,22 @@ export default function CavemanPage() {
       })
     );
 
-    // 2️⃣ Client draft (felt chance only; never canonical)
-    // (Retained for UI / display, but NOT appended to durable run)
+    // 2️⃣ Client draft (felt chance only)
     buildClientResolution({
       legacyPayload: payload,
       turn: nextTurn,
     });
 
-    // 3️⃣ Durable canon (server adjudicates → client appends)
+    // 3️⃣ Durable canon (SERVER AUTHORITATIVE)
     if (!run) return;
 
     const optionKind = selectedOption
       ? optionCategoryToKind(selectedOption.category)
       : inferOptionKindFromText(payload.description);
 
-    // Minimal context feed — can be upgraded later to real derived resources
+    // NOTE:
+    // These values are intentionally conservative.
+    // Advisory UI resources are NOT canonical.
     const context = {
       food: 0,
       stamina: 0,
@@ -351,16 +350,9 @@ export default function CavemanPage() {
       if (!prevRun) return prevRun;
 
       const updated = appendResolution(prevRun, canonical);
-
-      // Persist server-side (authoritative)
       persistRunOnServer(updated).catch(console.error);
-
       return updated;
     });
-
-    // NO timeout
-    // NO auto-clear
-    // Resolution remains until next intent
   }
 
   // ----------------------------------------------------------
@@ -404,8 +396,6 @@ export default function CavemanPage() {
             autoResolve
             context={{
               optionDescription: selectedOption.description,
-
-              // 🔑 STRUCTURAL RISK (authoritative)
               optionKind: optionCategoryToKind(
                 selectedOption.category
               ),
@@ -436,9 +426,9 @@ export default function CavemanPage() {
 /* ------------------------------------------------------------
    EOF
    This file intentionally preserves:
-   - Narrative inference (non-authoritative)
-   - Structural risk (authoritative)
+   - Advisory survival pressure (UI-only)
+   - Canonical authority (server-side only)
    - Cave evolution logic
    - Single-intent resolution
-   - Persistent dice visibility (UI)
+   - Persistent dice visibility (felt fairness)
 ------------------------------------------------------------ */
