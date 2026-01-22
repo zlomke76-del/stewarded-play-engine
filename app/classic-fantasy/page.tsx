@@ -324,7 +324,7 @@ export default function ClassicFantasyPage() {
       )}
 
       <NextActionHint state={state} />
-      <WorldLedgerPanel events={state.events} />
+      <WorldLedgerPanelLegacy events={state.events} />
 
       {epilogue && (
         <CardSection title="Epilogue">
