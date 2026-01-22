@@ -77,10 +77,12 @@ export function buildSolaceResolution(input: {
     injuryLevel?: "none" | "minor" | "major";
   };
 }): SolaceResolution {
-  // ✅ Correct mapper usage
-  const base = mapToSolaceResolution(
-    input.legacyPayload
-  );
+  // 🔑 Phase 1 change:
+  // Mapper now returns { resolution, world_delta }
+  const {
+    resolution: base,
+    world_delta,
+  } = mapToSolaceResolution(input.legacyPayload);
 
   const scenarioTag = selectScenarioTag(input.turn);
   const scenario = SCENARIO_LIBRARY[scenarioTag];
@@ -118,18 +120,22 @@ export function buildSolaceResolution(input: {
 
   const enriched: SolaceResolution = {
     ...resolved,
+
     situation_frame: [
       ...scenario.situation_lines,
       ...resolved.situation_frame,
     ].slice(0, 2),
+
     pressures: [
       ...scenario.pressure_lines,
       ...resolved.pressures,
     ].slice(0, 4),
+
     process: [
       ...scenario.process_lines,
       ...resolved.process,
     ].slice(0, 3),
+
     aftermath: [
       ...resolved.aftermath,
       ...scenario.aftermath_lines,
@@ -147,8 +153,7 @@ export function buildSolaceResolution(input: {
 
 /* ------------------------------------------------------------
    EOF
-   This file is authoritative and intentionally:
-   - Server-only
-   - Schema-bound
-   - Mapper-contract respecting
+   Authoritative
+   WorldDelta preserved upstream
+   Canon resolution explicit
 ------------------------------------------------------------ */
