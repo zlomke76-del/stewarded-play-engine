@@ -7,7 +7,6 @@
 // - Drafted by Solace (non-authoritative)
 // - Dice are advisory only UNLESS autoResolve enabled
 // - Arbiter explicitly commits world state OR Solace auto-commits
-// - AFTER COMMIT: this panel must go silent
 // ------------------------------------------------------------
 
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -31,7 +30,6 @@ type Props = {
   role: "arbiter";
   autoResolve?: boolean;
 
-  // Optional, invisible bias from tribe history / skills
   tribeBias?: {
     dcShift: number;
     narrative?: string;
@@ -41,7 +39,7 @@ type Props = {
     description: string;
     dice: {
       mode: DiceMode;
-      roll: number | null;
+      roll: number;
       dc: number;
       justification: string;
       source: RollSource;
@@ -64,21 +62,26 @@ type Props = {
 };
 
 /* ------------------------------------------------------------
-   Difficulty framing (language-only)
+   Difficulty framing (INVARIANT)
 ------------------------------------------------------------ */
 
 function difficultyFor(kind?: ResolutionContext["optionKind"]) {
   switch (kind) {
     case "safe":
-      return { dc: 0, justification: "Low immediate risk" };
+      // 🔑 FIX: Safe ≠ No Risk
+      return { dc: 4, justification: "Low risk, but not risk-free" };
+
     case "environmental":
       return { dc: 6, justification: "Environmental uncertainty" };
+
     case "risky":
       return { dc: 10, justification: "Meaningful risk involved" };
+
     case "contested":
       return { dc: 14, justification: "Active opposition expected" };
+
     default:
-      return { dc: 10, justification: "Outcome uncertain" };
+      return { dc: 6, justification: "Outcome uncertain" };
   }
 }
 
@@ -106,7 +109,7 @@ export default function ResolutionDraftPanel({
 }: Props) {
   const base = difficultyFor(context.optionKind);
 
-  const dc = Math.max(base.dc + (tribeBias?.dcShift ?? 0), 0);
+  const dc = Math.max(base.dc + (tribeBias?.dcShift ?? 0), 1);
   const justification =
     base.justification +
     (tribeBias?.dcShift ? " (shaped by tribal experience)" : "");
@@ -125,7 +128,6 @@ export default function ResolutionDraftPanel({
     ...(tribeBias?.narrative ? [tribeBias.narrative] : []),
   ]);
 
-  // Hard authority gate
   const committedRef = useRef(false);
 
   useEffect(() => {
@@ -134,8 +136,8 @@ export default function ResolutionDraftPanel({
   }, [context.optionDescription]);
 
   const draftDescription = useMemo(() => {
-    if (roll === null || dc === 0) {
-      return "The tribe moves cautiously, conserving strength.";
+    if (roll === null) {
+      return "The tribe prepares, weighing timing and position.";
     }
     if (roll >= dc) {
       return "The tribe acts decisively. Fortune favors them.";
@@ -156,10 +158,7 @@ export default function ResolutionDraftPanel({
 
     setRoll(r);
     setRollSource("auto");
-    setAudit((a) => [
-      ...a,
-      `Dice rolled (${diceMode}, auto): ${r}`,
-    ]);
+    setAudit((a) => [...a, `Dice rolled (${diceMode}, auto): ${r}`]);
   }, [autoResolve, roll, diceMode]);
 
   useEffect(() => {
@@ -205,33 +204,16 @@ export default function ResolutionDraftPanel({
     onRecord,
   ]);
 
-  // 🔒 INVARIANT: once committed, this panel must go silent
-  if (committedRef.current) {
-    return null;
-  }
-
   /* ----------------------------------------------------------
-     AUTO UI (DICE VISIBLE)
+     AUTO UI
   ---------------------------------------------------------- */
 
   if (autoResolve) {
-    const outcome =
-      roll === null || dc === 0
-        ? "No roll required"
-        : roll >= dc
-        ? "Success"
-        : "Setback";
+    const outcome = roll >= dc ? "Success" : "Setback";
 
     return (
-      <section
-        style={{
-          border: "1px dashed #666",
-          padding: 12,
-          marginTop: 12,
-          opacity: 0.95,
-        }}
-      >
-        <p className="muted">Solace resolves the moment.</p>
+      <section style={{ border: "1px dashed #666", padding: 12, marginTop: 12 }}>
+        <p className="muted">Solace weighs risk… fate turns…</p>
 
         {roll !== null && (
           <p>
@@ -250,10 +232,10 @@ export default function ResolutionDraftPanel({
   ---------------------------------------------------------- */
 
   function handleRecord() {
-    if (committedRef.current) return;
+    if (committedRef.current || roll === null) return;
     committedRef.current = true;
 
-    const success = roll !== null && roll >= dc;
+    const success = roll >= dc;
 
     onRecord({
       description: draftDescription,
@@ -291,10 +273,7 @@ export default function ResolutionDraftPanel({
           const r = Math.ceil(Math.random() * max);
           setRoll(r);
           setRollSource("auto");
-          setAudit((a) => [
-            ...a,
-            `Dice rolled (${diceMode}, auto): ${r}`,
-          ]);
+          setAudit((a) => [...a, `Dice rolled (${diceMode}, auto): ${r}`]);
         }}
       >
         Roll (Auto)
@@ -306,13 +285,19 @@ export default function ResolutionDraftPanel({
         </p>
       )}
 
-      {role === "arbiter" && (
-        <button onClick={handleRecord}>
-          Record Outcome
-        </button>
+      {role === "arbiter" && roll !== null && (
+        <button onClick={handleRecord}>Record Outcome</button>
       )}
 
       <p className="muted">{audit.join(" · ")}</p>
     </section>
   );
 }
+
+/* ------------------------------------------------------------
+   EOF
+   Invariants restored:
+   - Dice always roll
+   - Narrative never truncates
+   - Ledger remains factual
+------------------------------------------------------------ */
