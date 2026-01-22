@@ -3,11 +3,6 @@
 // ------------------------------------------------------------
 // Scenario + Validation (AUTHORITATIVE)
 //
-// Purpose:
-// - Transform legacy / draft payloads into canonical SolaceResolution
-// - Inject structural outcome bounds (OutcomeEnvelope)
-// - Allow Solace to adjudicate freely *within* those bounds
-//
 // MUST NOT be imported by client components
 // ------------------------------------------------------------
 
@@ -19,17 +14,37 @@ import {
 } from "./resolution.scenarios";
 import { mapLegacyResolutionToSolace } from "./resolution.mapper";
 
-// STRUCTURAL AUTHORITY
 import {
   buildOutcomeEnvelope,
   RiskSignals,
 } from "@/lib/solace/outcomes/OutcomeEnvelope";
 
-// INTERPRETIVE AUTHORITY (FIXED PATH)
 import { resolveWithinEnvelope } from "./resolution/resolveWithinEnvelope";
 
 // ------------------------------------------------------------
-// Scenario Selection (unchanged)
+// Helpers
+// ------------------------------------------------------------
+
+function extractResourceDeltas(
+  legacy: any
+): {
+  food?: number;
+  stamina?: number;
+  fire?: number;
+} {
+  if (!legacy || typeof legacy !== "object") return {};
+
+  const { food, stamina, fire } = legacy;
+
+  return {
+    food: typeof food === "number" ? food : undefined,
+    stamina: typeof stamina === "number" ? stamina : undefined,
+    fire: typeof fire === "number" ? fire : undefined,
+  };
+}
+
+// ------------------------------------------------------------
+// Scenario Selection
 // ------------------------------------------------------------
 
 export function selectScenarioTag(
@@ -43,17 +58,14 @@ export function selectScenarioTag(
 }
 
 // ------------------------------------------------------------
-// Canonical Resolution Builder (AUTHORITATIVE)
+// Canonical Resolution Builder
 // ------------------------------------------------------------
 
 export function buildSolaceResolution(input: {
   legacyPayload: any;
   turn: number;
-
-  // server-inferred
   riskSignals: RiskSignals;
   intentType: "rest" | "hunt" | "gather" | "travel" | "tend";
-
   context: {
     food: number;
     stamina: number;
@@ -63,24 +75,12 @@ export function buildSolaceResolution(input: {
     injuryLevel?: "none" | "minor" | "major";
   };
 }): SolaceResolution {
-  // ------------------------------------------------------------
-  // 1. Legacy → base SolaceResolution
-  // ------------------------------------------------------------
-
   const base = mapLegacyResolutionToSolace(
     input.legacyPayload
   );
 
-  // ------------------------------------------------------------
-  // 2. Scenario framing
-  // ------------------------------------------------------------
-
   const scenarioTag = selectScenarioTag(input.turn);
   const scenario = SCENARIO_LIBRARY[scenarioTag];
-
-  // ------------------------------------------------------------
-  // 3. Outcome Envelope (STRUCTURAL LIMITS)
-  // ------------------------------------------------------------
 
   const envelope = buildOutcomeEnvelope({
     signals: input.riskSignals,
@@ -92,10 +92,6 @@ export function buildSolaceResolution(input: {
     },
   });
 
-  // ------------------------------------------------------------
-  // 4. Solace adjudication (FREEDOM WITHIN BOUNDS)
-  // ------------------------------------------------------------
-
   const resolved = resolveWithinEnvelope({
     envelope,
     context: {
@@ -106,7 +102,9 @@ export function buildSolaceResolution(input: {
         fire: input.context.fire,
       },
     },
-    chosenDeltas: base.mechanical_resolution ?? {},
+    chosenDeltas: extractResourceDeltas(
+      base.mechanical_resolution
+    ),
     narration: {
       opening: base.opening_signal,
       frame: base.situation_frame.join(" "),
@@ -115,37 +113,25 @@ export function buildSolaceResolution(input: {
     },
   });
 
-  // ------------------------------------------------------------
-  // 5. Scenario enrichment (narrative-only)
-  // ------------------------------------------------------------
-
   const enriched: SolaceResolution = {
     ...resolved,
-
     situation_frame: [
       ...scenario.situation_lines,
       ...resolved.situation_frame,
     ].slice(0, 2),
-
     pressures: [
       ...scenario.pressure_lines,
       ...resolved.pressures,
     ].slice(0, 4),
-
     process: [
       ...scenario.process_lines,
       ...resolved.process,
     ].slice(0, 3),
-
     aftermath: [
       ...resolved.aftermath,
       ...scenario.aftermath_lines,
     ].slice(0, 3),
   };
-
-  // ------------------------------------------------------------
-  // 6. Final validation (HARD STOP)
-  // ------------------------------------------------------------
 
   if (!validateSolaceResolution(enriched)) {
     throw new Error(
