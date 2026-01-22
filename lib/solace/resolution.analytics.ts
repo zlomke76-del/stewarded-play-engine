@@ -18,6 +18,18 @@ export interface ResolutionAnalytics {
   deathCauses: Record<string, number>;
 }
 
+function hasOutcome(
+  m: SolaceResolution["mechanical_resolution"]
+): m is {
+  roll: number;
+  dc: number;
+  outcome: string;
+} {
+  return (
+    typeof (m as any).outcome === "string"
+  );
+}
+
 export function analyzeResolutions(
   resolutions: SolaceResolution[]
 ): ResolutionAnalytics {
@@ -29,21 +41,31 @@ export function analyzeResolutions(
   };
 
   for (const r of resolutions) {
+    // --------------------------------------------
     // Pressure frequency
+    // --------------------------------------------
     for (const p of r.pressures) {
       analytics.pressureFrequency[p] =
         (analytics.pressureFrequency[p] || 0) + 1;
     }
 
-    // Outcome counts
-    const outcome =
-      r.mechanical_resolution.outcome;
-    analytics.outcomeCounts[outcome] =
-      (analytics.outcomeCounts[outcome] || 0) + 1;
+    // --------------------------------------------
+    // Outcome counts (dice-only, observational)
+    // --------------------------------------------
+    let outcomeKey = "non_dice";
 
-    // Death cause detection (simple heuristic)
+    if (hasOutcome(r.mechanical_resolution)) {
+      outcomeKey = r.mechanical_resolution.outcome;
+    }
+
+    analytics.outcomeCounts[outcomeKey] =
+      (analytics.outcomeCounts[outcomeKey] || 0) + 1;
+
+    // --------------------------------------------
+    // Death cause detection (narrative heuristic)
+    // --------------------------------------------
     if (
-      outcome === "failure" &&
+      outcomeKey === "failure" &&
       r.aftermath.some((l) =>
         l.toLowerCase().includes("death")
       )
