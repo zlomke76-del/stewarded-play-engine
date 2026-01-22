@@ -1,12 +1,15 @@
 "use client";
 
 // ------------------------------------------------------------
-// WorldLedgerPanel — Living Chronicle
+// WorldLedgerPanel
 // ------------------------------------------------------------
-// Purpose:
-// - Render the run as a historical record
-// - Summarize intent + outcome into narrative memory
-// - Preserve transparency without killing the story
+// Living chronicle of the world
+//
+// Rules:
+// - Never invent new facts
+// - Never alter canon
+// - Compress intent + outcome into history
+// - Degrade safely if payload is thin
 // ------------------------------------------------------------
 
 import type { SessionEvent } from "@/lib/session/SessionState";
@@ -21,7 +24,7 @@ function renderDice(payload: any) {
   if (!dice) return null;
 
   const { mode, roll, dc } = dice;
-  if (roll === null || typeof dc !== "number") return null;
+  if (roll == null || typeof dc !== "number") return null;
 
   const outcome =
     dc === 0
@@ -31,88 +34,98 @@ function renderDice(payload: any) {
       : "setback";
 
   return (
-    <span className="muted" style={{ marginLeft: 8 }}>
+    <span className="muted" style={{ marginLeft: 6 }}>
       🎲 {mode} {roll} vs DC {dc} — {outcome}
     </span>
   );
 }
 
-function buildChronicleLine(payload: any): string {
-  const intent = payload?.intent;
-  const outcome = payload?.outcome;
-  const world = payload?.world;
+/**
+ * Build a living chronicle sentence from available facts.
+ * This NEVER introduces new state — it only compresses.
+ */
+function buildLedgerLine(payload: any): string {
+  const actor =
+    typeof payload.actor === "string"
+      ? payload.actor
+      : "The tribe";
 
-  let line = "";
+  const intent =
+    typeof payload.intent === "string"
+      ? payload.intent.trim()
+      : null;
 
-  // 1. Anchor on actor if present
-  if (typeof intent === "string" && intent.length > 0) {
-    // compress intent into past-tense memory
-    line += intent
-      .replace(/^Chieftain\s+/i, "Chieftain ")
-      .replace(/\.$/, "");
-  } else {
-    line += "The tribe acts";
+  const outcome =
+    typeof payload.outcome === "string"
+      ? payload.outcome
+      : null;
+
+  const room =
+    typeof payload?.world?.roomId === "string"
+      ? payload.world.roomId
+      : "the world";
+
+  // --- Ideal path: intent + outcome ---
+  if (intent && outcome) {
+    switch (outcome) {
+      case "success":
+        return `${actor} acts with purpose. What was attempted holds, and the balance shifts in ${room}.`;
+      case "setback":
+        return `${actor} presses forward, but the land resists. The effort costs them in ${room}.`;
+      case "failure":
+        return `${actor}'s attempt collapses under pressure. The world pushes back in ${room}.`;
+      default:
+        return `${actor} acts, and events unfold in ${room}.`;
+    }
   }
 
-  // 2. Outcome integration (no mechanics language)
-  switch (outcome) {
-    case "success":
-      line +=
-        ", and the land yields to their effort";
-      break;
-    case "setback":
-      line +=
-        ", but the land resists and demands a cost";
-      break;
-    case "failure":
-      line +=
-        ", and the attempt collapses under pressure";
-      break;
-    case "no_roll":
-      line +=
-        ". Time passes without challenge";
-      break;
-    default:
-      line +=
-        ", and the balance of the world shifts";
+  // --- Partial path: intent only ---
+  if (intent) {
+    return `${actor} attempts a course of action. The outcome is now written into the world.`;
   }
 
-  // 3. Spatial memory
-  if (world?.roomId) {
-    line += ` in ${world.roomId}`;
+  // --- Fallback: legacy description ---
+  if (typeof payload.description === "string") {
+    return payload.description;
   }
 
-  return line + ".";
+  // --- Absolute fallback ---
+  return "The world changes, and the record holds.";
 }
 
 export default function WorldLedgerPanel({ events }: Props) {
-  const outcomes = events.filter(
-    (e) => e.type === "OUTCOME"
-  );
+  const outcomes = events.filter((e) => e.type === "OUTCOME");
 
   const byRoom = new Map<string, SessionEvent[]>();
+  const global: SessionEvent[] = [];
 
   for (const e of outcomes) {
-    const room = (e.payload as any)?.world?.roomId ?? "The Wilds";
-    if (!byRoom.has(room)) byRoom.set(room, []);
-    byRoom.get(room)!.push(e);
+    const payload = e.payload as any;
+    const room = payload?.world?.roomId;
+
+    if (typeof room === "string") {
+      if (!byRoom.has(room)) byRoom.set(room, []);
+      byRoom.get(room)!.push(e);
+    } else {
+      global.push(e);
+    }
   }
 
   return (
     <CardSection title="World Ledger">
       {outcomes.length === 0 && (
-        <p className="muted">No history yet.</p>
+        <p className="muted">No history has yet been written.</p>
       )}
 
       {[...byRoom.entries()].map(([room, events]) => (
-        <div key={room} style={{ marginBottom: 18 }}>
+        <div key={room} style={{ marginBottom: 16 }}>
           <strong>{room}</strong>
           <ul>
             {events.map((e) => {
               const payload = e.payload as any;
               return (
-                <li key={e.id} style={{ marginBottom: 6 }}>
-                  {buildChronicleLine(payload)}
+                <li key={e.id}>
+                  {buildLedgerLine(payload)}
                   {renderDice(payload)}
                 </li>
               );
@@ -120,6 +133,23 @@ export default function WorldLedgerPanel({ events }: Props) {
           </ul>
         </div>
       ))}
+
+      {global.length > 0 && (
+        <>
+          <strong>Global</strong>
+          <ul>
+            {global.map((e) => {
+              const payload = e.payload as any;
+              return (
+                <li key={e.id}>
+                  {buildLedgerLine(payload)}
+                  {renderDice(payload)}
+                </li>
+              );
+            })}
+          </ul>
+        </>
+      )}
     </CardSection>
   );
 }
