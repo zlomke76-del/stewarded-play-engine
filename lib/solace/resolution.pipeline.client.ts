@@ -1,13 +1,8 @@
 // ------------------------------------------------------------
 // Solace Resolution Pipeline (CLIENT)
 // ------------------------------------------------------------
-// Scenario Selection + Mapping ONLY
-//
-// Guarantees:
-// - No validation
-// - No throws
-// - No Node assumptions
-// - Browser-safe at import time
+// Client-safe resolution shaping
+// WorldDelta is carried but NOT rendered here
 // ------------------------------------------------------------
 
 import type { SolaceResolution } from "./solaceResolution.schema";
@@ -16,11 +11,10 @@ import {
   ScenarioTag,
 } from "./resolution.scenarios";
 
-// ✅ Correct mapper import (matches server + existing export)
 import { mapToSolaceResolution } from "./resolution.mapper";
 
 // ------------------------------------------------------------
-// Scenario Selection (deterministic, safe)
+// Scenario Selection
 // ------------------------------------------------------------
 
 export function selectScenarioTag(
@@ -34,24 +28,28 @@ export function selectScenarioTag(
 }
 
 // ------------------------------------------------------------
-// Client Assembly (NO VALIDATION)
+// Client Resolution Builder
 // ------------------------------------------------------------
 
-export function buildSolaceResolutionClient(
-  input: {
-    legacyPayload: any;
-    turn: number;
-  }
-): SolaceResolution {
-  // ✅ Correct mapper usage
-  const base = mapToSolaceResolution(
-    input.legacyPayload
-  );
+export function buildClientSolaceResolution(input: {
+  legacyPayload: any;
+  turn: number;
+}): SolaceResolution {
+  // 🔑 Phase 1 change:
+  // Mapper now returns { resolution, world_delta }
+  const {
+    resolution: base,
+    world_delta,
+  } = mapToSolaceResolution(input.legacyPayload);
 
   const scenarioTag = selectScenarioTag(input.turn);
   const scenario = SCENARIO_LIBRARY[scenarioTag];
 
-  return {
+  // IMPORTANT:
+  // Client pipeline enriches NARRATIVE ONLY
+  // world_delta is preserved elsewhere (server / canon)
+
+  const enriched: SolaceResolution = {
     ...base,
 
     situation_frame: [
@@ -74,12 +72,13 @@ export function buildSolaceResolutionClient(
       ...scenario.aftermath_lines,
     ].slice(0, 3),
   };
+
+  return enriched;
 }
 
 /* ------------------------------------------------------------
    EOF
-   Client-only pipeline:
-   - No validation
-   - No authority
-   - No schema mutation
+   Client-safe
+   Narrative-only enrichment
+   WorldDelta handled upstream
 ------------------------------------------------------------ */
