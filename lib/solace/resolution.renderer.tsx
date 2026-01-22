@@ -44,6 +44,23 @@ function hasDice(
 }
 
 // ------------------------------------------------------------
+// Render Helpers
+// ------------------------------------------------------------
+
+function renderTextLines(
+  lines: readonly unknown[]
+) {
+  return lines
+    .filter(
+      (l): l is string =>
+        typeof l === "string"
+    )
+    .map((line, i) => (
+      <p key={i}>{line}</p>
+    ));
+}
+
+// ------------------------------------------------------------
 // Component
 // ------------------------------------------------------------
 
@@ -56,7 +73,8 @@ export default function ResolutionRenderer({
   resolution,
   verbosity = "standard",
 }: ResolutionRendererProps) {
-  const mechanics = resolution.mechanical_resolution;
+  const mechanics =
+    resolution.mechanical_resolution;
 
   return (
     <div className="solace-resolution">
@@ -69,10 +87,8 @@ export default function ResolutionRenderer({
       {(verbosity === "standard" ||
         verbosity === "rich") && (
         <div className="section situation">
-          {resolution.situation_frame.map(
-            (line, i) => (
-              <p key={i}>{line}</p>
-            )
+          {renderTextLines(
+            resolution.situation_frame
           )}
         </div>
       )}
@@ -80,13 +96,18 @@ export default function ResolutionRenderer({
       {/* Pressures */}
       {verbosity === "rich" && (
         <div className="section pressures">
-          <strong>Relevant pressures:</strong>
+          <strong>
+            Relevant pressures:
+          </strong>
           <ul>
-            {resolution.pressures.map(
-              (p, i) => (
-                <li key={i}>{p}</li>
+            {resolution.pressures
+              .filter(
+                (p): p is string =>
+                  typeof p === "string"
               )
-            )}
+              .map((p, i) => (
+                <li key={i}>{p}</li>
+              ))}
           </ul>
         </div>
       )}
@@ -95,10 +116,8 @@ export default function ResolutionRenderer({
       {(verbosity === "standard" ||
         verbosity === "rich") && (
         <div className="section process">
-          {resolution.process.map(
-            (line, i) => (
-              <p key={i}>{line}</p>
-            )
+          {renderTextLines(
+            resolution.process
           )}
         </div>
       )}
@@ -110,14 +129,18 @@ export default function ResolutionRenderer({
         {hasDice(mechanics) ? (
           <p>
             d20 rolled{" "}
-            <b>{mechanics.roll}</b> vs DC{" "}
-            <b>{mechanics.dc}</b> —{" "}
-            <b>{mechanics.outcome}</b>
+            <b>{mechanics.roll}</b> vs
+            DC <b>{mechanics.dc}</b>{" "}
+            —{" "}
+            <b>
+              {mechanics.outcome}
+            </b>
           </p>
         ) : (
           <p>
             <em>
-              No mechanical roll was invoked.
+              No mechanical roll was
+              invoked.
             </em>
           </p>
         )}
@@ -127,17 +150,16 @@ export default function ResolutionRenderer({
       {(verbosity === "standard" ||
         verbosity === "rich") && (
         <div className="section aftermath">
-          {resolution.aftermath.map(
-            (line, i) => (
-              <p key={i}>{line}</p>
-            )
+          {renderTextLines(
+            resolution.aftermath
           )}
         </div>
       )}
 
       {/* Closure */}
       {"closure" in resolution &&
-        resolution.closure && (
+        typeof resolution.closure ===
+          "string" && (
           <p className="closure">
             {resolution.closure}
           </p>
@@ -148,8 +170,8 @@ export default function ResolutionRenderer({
 
 /* ------------------------------------------------------------
    EOF
-   - UI narrows mechanics safely
-   - Dice shown only when real
-   - No schema assumptions
-   - No downstream breakage
+   - Handles unknown[] safely
+   - No schema changes
+   - No downstream edits
+   - Renderer is now future-proof
 ------------------------------------------------------------ */
