@@ -11,23 +11,46 @@
 
 import type { SolaceResolution } from "./solaceResolution.schema";
 
+// ------------------------------------------------------------
+// Types
+// ------------------------------------------------------------
+
+type DiceOutcome =
+  | "success"
+  | "partial"
+  | "setback"
+  | "failure"
+  | "no_roll";
+
+interface LegacyMechanicalResolution {
+  roll: number;
+  dc: number;
+  outcome: DiceOutcome;
+}
+
+// ------------------------------------------------------------
+// Type Guards
+// ------------------------------------------------------------
+
+function hasOutcome(
+  m: SolaceResolution["mechanical_resolution"]
+): m is LegacyMechanicalResolution {
+  return (
+    typeof (m as any).roll === "number" &&
+    typeof (m as any).dc === "number" &&
+    typeof (m as any).outcome === "string"
+  );
+}
+
+// ------------------------------------------------------------
+// Analytics
+// ------------------------------------------------------------
+
 export interface ResolutionAnalytics {
   totalTurns: number;
   pressureFrequency: Record<string, number>;
   outcomeCounts: Record<string, number>;
   deathCauses: Record<string, number>;
-}
-
-function hasOutcome(
-  m: SolaceResolution["mechanical_resolution"]
-): m is {
-  roll: number;
-  dc: number;
-  outcome: string;
-} {
-  return (
-    typeof (m as any).outcome === "string"
-  );
 }
 
 export function analyzeResolutions(
@@ -52,7 +75,8 @@ export function analyzeResolutions(
     // --------------------------------------------
     // Outcome counts (dice-only, observational)
     // --------------------------------------------
-    let outcomeKey = "non_dice";
+    let outcomeKey: DiceOutcome | "non_dice" =
+      "non_dice";
 
     if (hasOutcome(r.mechanical_resolution)) {
       outcomeKey = r.mechanical_resolution.outcome;
