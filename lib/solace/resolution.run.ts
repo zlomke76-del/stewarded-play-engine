@@ -17,18 +17,22 @@ import {
   assertNoPostDeathTurns,
 } from "./resolution.death";
 
+// ------------------------------------------------------------
+// Run Shape (AUTHORITATIVE)
+// ------------------------------------------------------------
+
 export interface ResolutionRun {
   id: string;
   startedAt: number;
   endedAt?: number;
 
-  // Canon
+  // Canon (append-only, ordered)
   resolutions: SolaceResolution[];
 
-  // Memory
+  // Memory (sealed at persistence boundary)
   ledger: LedgerEntry[];
 
-  // Terminal state (AUTHORITATIVE)
+  // Terminal state (single source of truth)
   isComplete: boolean;
 }
 
@@ -74,10 +78,10 @@ export function appendResolution(
   return {
     ...run,
 
-    // Canon grows
+    // Canon grows exactly once per turn
     resolutions: nextResolutions,
 
-    // Ledger is sealed later (persistence boundary)
+    // Ledger sealed later (persistence boundary)
     ledger: run.ledger,
 
     // Terminal flags
