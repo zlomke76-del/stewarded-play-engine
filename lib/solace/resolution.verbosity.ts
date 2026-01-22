@@ -19,7 +19,6 @@ export interface VerbosityConfig {
   showProcess: boolean;
   showMechanics: boolean;
   showAftermath: boolean;
-  showClosure: boolean;
 }
 
 export const VERBOSITY_PROFILES: Record<
@@ -33,7 +32,6 @@ export const VERBOSITY_PROFILES: Record<
     showProcess: false,
     showMechanics: true,
     showAftermath: false,
-    showClosure: false,
   },
 
   standard: {
@@ -43,7 +41,6 @@ export const VERBOSITY_PROFILES: Record<
     showProcess: true,
     showMechanics: true,
     showAftermath: true,
-    showClosure: true,
   },
 
   rich: {
@@ -53,7 +50,6 @@ export const VERBOSITY_PROFILES: Record<
     showProcess: true,
     showMechanics: true,
     showAftermath: true,
-    showClosure: true,
   },
 };
 
@@ -77,14 +73,10 @@ export function applyVerbosity(
       process: resolution.process,
     }),
     ...(cfg.showMechanics && {
-      mechanical_resolution:
-        resolution.mechanical_resolution,
+      mechanical_resolution: resolution.mechanical_resolution,
     }),
     ...(cfg.showAftermath && {
       aftermath: resolution.aftermath,
-    }),
-    ...(cfg.showClosure && {
-      closure: resolution.closure,
     }),
   };
 }
