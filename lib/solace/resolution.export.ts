@@ -8,7 +8,39 @@
 // - Preserve ordering and content
 // ------------------------------------------------------------
 
-import type { SolaceResolution } from "./solaceResolution.schema";
+import type {
+  SolaceResolution,
+  LegacyMechanicalResolution,
+} from "./solaceResolution.schema";
+
+// ------------------------------------------------------------
+// Local Guards
+// ------------------------------------------------------------
+
+function hasDiceMechanics(
+  m: SolaceResolution["mechanical_resolution"]
+): m is LegacyMechanicalResolution & {
+  roll: number;
+  dc: number;
+} {
+  if (typeof m !== "object" || m === null) {
+    return false;
+  }
+
+  if (!("outcome" in m)) {
+    return false;
+  }
+
+  if (typeof (m as any).roll !== "number") {
+    return false;
+  }
+
+  if (typeof (m as any).dc !== "number") {
+    return false;
+  }
+
+  return true;
+}
 
 // ------------------------------------------------------------
 // Helpers
@@ -17,13 +49,9 @@ import type { SolaceResolution } from "./solaceResolution.schema";
 function formatResolutionSummary(
   r: SolaceResolution
 ): string {
-  const m = r.mechanical_resolution as any;
+  const m = r.mechanical_resolution;
 
-  if (
-    typeof m.roll === "number" &&
-    typeof m.dc === "number" &&
-    typeof m.outcome === "string"
-  ) {
+  if (hasDiceMechanics(m)) {
     return `Resolution: ${m.outcome}`;
   }
 
@@ -33,13 +61,9 @@ function formatResolutionSummary(
 function formatResolutionMarkdown(
   r: SolaceResolution
 ): string {
-  const m = r.mechanical_resolution as any;
+  const m = r.mechanical_resolution;
 
-  if (
-    typeof m.roll === "number" &&
-    typeof m.dc === "number" &&
-    typeof m.outcome === "string"
-  ) {
+  if (hasDiceMechanics(m)) {
     return `**Resolution:** d20 ${m.roll} vs DC ${m.dc} — **${m.outcome}**`;
   }
 
