@@ -27,9 +27,6 @@ import ResolutionDraftPanel from "@/components/resolution/ResolutionDraftPanel";
 import NextActionHint from "@/components/NextActionHint";
 
 import WorldLedgerPanelLegacy from "@/components/world/WorldLedgerPanel.legacy";
-
-<WorldLedgerPanelLegacy events={state.events} />
-
 import DungeonPressurePanel from "@/components/world/DungeonPressurePanel";
 
 import StewardedShell from "@/components/layout/StewardedShell";
