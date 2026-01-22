@@ -22,11 +22,17 @@ import {
 function buildChronicle(
   resolution: SolaceResolution
 ): string {
-  const outcome =
-    resolution.mechanical_resolution?.outcome ??
-    "unknown";
-
   const dice = resolution.mechanical_resolution?.dice;
+
+  // Outcome is DERIVED, never stored
+  const outcome: "success" | "setback" | "no_roll" =
+    dice &&
+    typeof dice.roll === "number" &&
+    typeof dice.dc === "number"
+      ? dice.roll >= dice.dc
+        ? "success"
+        : "setback"
+      : "no_roll";
 
   const intent =
     typeof resolution.intent === "string"
@@ -60,17 +66,10 @@ function buildChronicle(
       outcomeLine =
         "The effort meets resistance, and the land pushes back.";
       break;
-    case "failure":
-      outcomeLine =
-        "The attempt collapses under pressure, and cost is paid.";
-      break;
     case "no_roll":
       outcomeLine =
         "Time advances without contest, and conditions persist.";
       break;
-    default:
-      outcomeLine =
-        "Events resolve, and the state of the world changes.";
   }
 
   const diceLine =
@@ -113,7 +112,7 @@ export function storeSolaceResolution(
       // Structural data preserved for audit / replay
       resolution,
 
-      // Convenience mirrors (no derivation later)
+      // Canon facts only (no interpretation)
       dice: resolution.mechanical_resolution?.dice,
       world: resolution.world ?? null,
     },
