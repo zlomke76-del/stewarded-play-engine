@@ -1,52 +1,43 @@
 // ------------------------------------------------------------
 // Solace Resolution Mapper
 // ------------------------------------------------------------
-// Legacy Payload → SolaceResolution Bridge
+// Legacy / internal payload → canonical SolaceResolution
 //
 // Purpose:
-// - Convert existing resolution payloads
-//   into the new structured SolaceResolution
-// - Preserve backward compatibility
+// - Normalize resolution outputs
+// - Enforce strict schema compliance
+// - No inference, no advice, no mutation
 // ------------------------------------------------------------
 
 import type { SolaceResolution } from "./solaceResolution.schema";
 
-interface LegacyResolutionPayload {
-  description: string;
-  dice: {
-    roll: number | null;
+export function mapToSolaceResolution(input: {
+  opening_signal: string;
+  situation_frame: string[];
+  pressures: string[];
+  process: string[];
+  mechanical_resolution: {
+    roll: number;
     dc: number;
-    mode: string;
-    justification?: string;
+    outcome: "success" | "partial" | "setback" | "failure" | "no_roll";
   };
-  audit?: string[];
-}
-
-export function mapLegacyResolutionToSolace(
-  legacy: LegacyResolutionPayload
-): SolaceResolution {
+  aftermath: string[];
+}): SolaceResolution {
   return {
-    opening_signal: "Solace resolves the exchange.",
-    situation_frame: [
-      "Conditions hold as the action unfolds."
-    ],
-    pressures: legacy.audit ?? [],
-    process: [
-      legacy.description
-    ],
+    opening_signal: input.opening_signal,
+
+    situation_frame: input.situation_frame.slice(0, 3),
+
+    pressures: input.pressures.slice(0, 4),
+
+    process: input.process.slice(0, 4),
+
     mechanical_resolution: {
-      roll: legacy.dice.roll ?? 0,
-      dc: legacy.dice.dc,
-      outcome:
-        legacy.dice.roll === null
-          ? "no_roll"
-          : legacy.dice.roll >= legacy.dice.dc
-          ? "success"
-          : "setback"
+      roll: input.mechanical_resolution.roll,
+      dc: input.mechanical_resolution.dc,
+      outcome: input.mechanical_resolution.outcome,
     },
-    aftermath: [
-      "The world absorbs the result."
-    ],
-    closure: "The Weave holds."
+
+    aftermath: input.aftermath.slice(0, 4),
   };
 }
