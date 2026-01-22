@@ -6,7 +6,6 @@
 // Purpose:
 // - Persist SolaceResolution objects to canon
 // - Produce a living historical record at write-time
-ال
 // - Remain append-only and irreversible
 // ------------------------------------------------------------
 
