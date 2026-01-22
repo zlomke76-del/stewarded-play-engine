@@ -17,19 +17,6 @@ import {
   assertNoPostDeathTurns,
 } from "./resolution.death";
 
-// ------------------------------------------------------------
-// Run Phase (AUTHORITATIVE)
-// ------------------------------------------------------------
-
-export enum RunPhase {
-  ACTIVE = "active",
-  TERMINAL = "terminal",
-}
-
-// ------------------------------------------------------------
-// Run Shape
-// ------------------------------------------------------------
-
 export interface ResolutionRun {
   id: string;
   startedAt: number;
@@ -41,8 +28,8 @@ export interface ResolutionRun {
   // Memory
   ledger: LedgerEntry[];
 
-  // Authority
-  phase: RunPhase;
+  // Terminal state (AUTHORITATIVE)
+  isComplete: boolean;
 }
 
 // ------------------------------------------------------------
@@ -55,22 +42,21 @@ export function createRun(): ResolutionRun {
     startedAt: Date.now(),
     resolutions: [],
     ledger: [],
-    phase: RunPhase.ACTIVE,
+    isComplete: false,
   };
 }
 
 // ------------------------------------------------------------
-// Canon Append (AUTHORITATIVE)
+// Canon Append
 // ------------------------------------------------------------
 
 export function appendResolution(
   run: ResolutionRun,
   resolution: SolaceResolution
 ): ResolutionRun {
-  // Hard authority gate
-  if (run.phase !== RunPhase.ACTIVE) {
+  if (run.isComplete) {
     throw new Error(
-      "Invariant violation: resolutions appended after terminal phase"
+      "Cannot append resolution: run is complete"
     );
   }
 
@@ -94,11 +80,8 @@ export function appendResolution(
     // Ledger is sealed later (persistence boundary)
     ledger: run.ledger,
 
-    // Phase transition (explicit, irreversible)
-    phase: terminal
-      ? RunPhase.TERMINAL
-      : RunPhase.ACTIVE,
-
+    // Terminal flags
+    isComplete: terminal,
     endedAt: terminal
       ? Date.now()
       : run.endedAt,
