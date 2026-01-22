@@ -7,8 +7,11 @@
 //
 // Purpose:
 // - Render confirmed OUTCOME events as evolving history
-// - Add session prologue and epilogue derived from canon
-// - Never invent facts, outcomes, or causality
+// - Display Solace-authored canon verbatim
+// - Show dice as factual annotation only
+//
+// HARD RULE:
+// - This component NEVER rewrites narrative
 // ------------------------------------------------------------
 
 import type { SessionEvent } from "@/lib/session/SessionState";
@@ -19,96 +22,45 @@ type Props = {
 };
 
 // ------------------------------------------------------------
-// Dice rendering (transparent, factual)
+// Dice rendering (factual annotation only)
 // ------------------------------------------------------------
 
 function renderDice(payload: any) {
   const dice = payload?.dice;
   if (!dice) return null;
 
-  const { mode, roll, dc } = dice;
+  const { roll, dc } = dice;
 
-  if (roll === null || typeof dc !== "number") return null;
+  if (typeof roll !== "number" || typeof dc !== "number") return null;
 
   const outcome =
-    dc === 0
-      ? "No roll required"
-      : roll >= dc
-      ? "Success"
-      : "Setback";
+    roll >= dc ? "Success" : "Setback";
 
   return (
-    <span className="muted" style={{ marginLeft: 6 }}>
-      🎲 {mode} {roll} vs DC {dc} — {outcome}
-    </span>
+    <div className="muted" style={{ marginTop: 6 }}>
+      🎲 d20 = {roll} vs DC {dc} — {outcome}
+    </div>
   );
 }
 
 // ------------------------------------------------------------
-// Chronicle line composer (NO NEW FACTS)
-// ------------------------------------------------------------
-
-function chronicleLine(payload: any): string {
-  const actor = payload.actorLabel ?? "The party";
-  const intent = payload.intent ?? payload.description ?? "take action";
-  const dice = payload.dice;
-
-  let outcome: "success" | "setback" | "no_roll" = "no_roll";
-
-  if (dice && typeof dice.roll === "number" && typeof dice.dc === "number") {
-    outcome = dice.roll >= dice.dc ? "success" : "setback";
-  }
-
-  switch (outcome) {
-    case "success":
-      return `${actor} press forward and prevail. ${intent}`;
-    case "setback":
-      return `${actor} advance, but resistance slows or redirects their progress. ${intent}`;
-    case "no_roll":
-      return `${actor} move through a quiet moment. ${intent}`;
-    default:
-      return `${actor} act. ${intent}`;
-  }
-}
-
-// ------------------------------------------------------------
-// Prologue (derived from earliest canon only)
+// Prologue (derived, not invented)
 // ------------------------------------------------------------
 
 function buildPrologue(outcomes: SessionEvent[]): string | null {
   if (outcomes.length === 0) return null;
 
-  const first = outcomes[0];
-  const room = (first.payload as any)?.world?.roomId;
-
-  if (room) {
-    return `The journey begins in ${room}. The party steps forward, unaware of how the world will answer their choices.`;
-  }
-
-  return `The journey begins. The party steps forward into uncertainty.`;
+  return `The journey begins in the wilds. The world waits to answer the choices made.`;
 }
 
 // ------------------------------------------------------------
-// Epilogue (derived from final canon only)
+// Epilogue (derived, not rewritten)
 // ------------------------------------------------------------
 
 function buildEpilogue(outcomes: SessionEvent[]): string | null {
   if (outcomes.length === 0) return null;
 
-  const last = outcomes[outcomes.length - 1];
-  const dice = (last.payload as any)?.dice;
-
-  if (!dice || typeof dice.roll !== "number" || typeof dice.dc !== "number") {
-    return `The tale settles into stillness. What was done now remains.`;
-  }
-
-  const success = dice.roll >= dice.dc;
-
-  if (success) {
-    return `Against resistance, the party endures. The world bears the mark of their passage.`;
-  }
-
-  return `The world does not yield easily. What was gained came at a cost, and the echoes linger.`;
+  return `What has been done now settles into memory. The world carries it forward.`;
 }
 
 // ------------------------------------------------------------
@@ -147,14 +99,16 @@ export default function WorldLedgerPanel({ events }: Props) {
       )}
 
       {[...byRoom.entries()].map(([room, events]) => (
-        <div key={room} style={{ marginBottom: 18 }}>
+        <div key={room} style={{ marginBottom: 24 }}>
           <strong>📍 {room}</strong>
           <ul>
             {events.map((e) => {
               const payload = e.payload as any;
               return (
-                <li key={e.id}>
-                  {chronicleLine(payload)}
+                <li key={e.id} style={{ marginBottom: 14 }}>
+                  <pre style={{ whiteSpace: "pre-wrap", margin: 0 }}>
+                    {payload.description}
+                  </pre>
                   {renderDice(payload)}
                 </li>
               );
@@ -170,8 +124,10 @@ export default function WorldLedgerPanel({ events }: Props) {
             {global.map((e) => {
               const payload = e.payload as any;
               return (
-                <li key={e.id}>
-                  {chronicleLine(payload)}
+                <li key={e.id} style={{ marginBottom: 14 }}>
+                  <pre style={{ whiteSpace: "pre-wrap", margin: 0 }}>
+                    {payload.description}
+                  </pre>
                   {renderDice(payload)}
                 </li>
               );
