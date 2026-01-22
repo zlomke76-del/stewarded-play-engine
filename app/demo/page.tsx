@@ -99,8 +99,8 @@ export default function DemoPage() {
   const role: "arbiter" = "arbiter";
 
   const [state, setState] = useState<SessionState>(
-    createSession("demo-session")
-  );
+  createSession("demo-session", "demo")
+);
 
   const [dmMode, setDmMode] = useState<DMMode>("solace-neutral");
   const [campaignSeed, setCampaignSeed] = useState("");
