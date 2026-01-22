@@ -11,7 +11,7 @@
 // - Resolution persists until NEXT intent
 // ------------------------------------------------------------
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import {
   createSession,
   recordEvent,
@@ -35,6 +35,15 @@ import Disclaimer from "@/components/layout/Disclaimer";
 // 🪨 Cave system
 import { WindscarCave } from "@/lib/world/caves/WindscarCave";
 import { evolveCaveState } from "@/lib/world/caves/evolveCaveState";
+
+// 🜂 Solace resolution pipeline
+import {
+  createRun,
+  appendResolution,
+} from "@/lib/solace/resolution.run";
+
+import { saveRun } from "@/lib/solace/resolution.persistence";
+import { buildSolaceResolution } from "@/lib/solace/resolution.pipeline";
 
 // ------------------------------------------------------------
 // Risk inference (LANGUAGE-ONLY — retained, non-authoritative)
@@ -134,6 +143,9 @@ export default function CavemanPage() {
   );
 
   const [turn, setTurn] = useState(0);
+
+  // 🜂 Active resolution run (durable canon)
+  const [run, setRun] = useState(() => createRun());
 
   const [command, setCommand] = useState("");
   const [options, setOptions] = useState<Option[] | null>(null);
@@ -267,6 +279,7 @@ export default function CavemanPage() {
       );
     }
 
+    // 1️⃣ SessionState canon (UI / ephemeral)
     setState((prev) =>
       recordEvent(prev, {
         id: crypto.randomUUID(),
@@ -289,6 +302,24 @@ export default function CavemanPage() {
         },
       })
     );
+
+    // 2️⃣ ResolutionRun canon (durable)
+    const resolution = buildSolaceResolution({
+      legacyPayload: payload,
+      turn: nextTurn,
+    });
+
+    setRun((prevRun) => {
+      const updated = appendResolution(
+        prevRun,
+        resolution
+      );
+
+      // Persist asynchronously; DB enforces immutability
+      saveRun(updated).catch(console.error);
+
+      return updated;
+    });
 
     // NO timeout
     // NO auto-clear
@@ -331,7 +362,7 @@ export default function CavemanPage() {
       {selectedOption && resolutionActive && (
         <CardSection title="Resolution">
           <ResolutionDraftPanel
-            key={`resolution-${selectedOption?.id}`}
+            key={`resolution-${selectedOption.id}`}
             role="arbiter"
             autoResolve
             context={{
@@ -368,10 +399,8 @@ export default function CavemanPage() {
 
 /* ------------------------------------------------------------
    EOF
-   This file intentionally preserves:
-   - Narrative inference (non-authoritative)
-   - Structural risk (authoritative)
-   - Cave evolution logic
-   - Single-intent resolution
-   - Persistent dice visibility
+   This file now additionally enforces:
+   - ResolutionRun creation + append
+   - Durable canon persistence
+   - SessionState + Run dual-ledger alignment
 ------------------------------------------------------------ */
