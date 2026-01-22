@@ -12,7 +12,9 @@ import {
   SCENARIO_LIBRARY,
   ScenarioTag,
 } from "./resolution.scenarios";
-import { mapLegacyResolutionToSolace } from "./resolution.mapper";
+
+// ✅ Correct, canonical mapper import
+import { mapToSolaceResolution } from "./resolution.mapper";
 
 import {
   buildOutcomeEnvelope,
@@ -75,7 +77,8 @@ export function buildSolaceResolution(input: {
     injuryLevel?: "none" | "minor" | "major";
   };
 }): SolaceResolution {
-  const base = mapLegacyResolutionToSolace(
+  // ✅ Correct mapper usage
+  const base = mapToSolaceResolution(
     input.legacyPayload
   );
 
@@ -141,3 +144,11 @@ export function buildSolaceResolution(input: {
 
   return enriched;
 }
+
+/* ------------------------------------------------------------
+   EOF
+   This file is authoritative and intentionally:
+   - Server-only
+   - Schema-bound
+   - Mapper-contract respecting
+------------------------------------------------------------ */
