@@ -417,7 +417,7 @@ export default function CavemanPage() {
         </button>
       </CardSection>
 
-      <WorldLedgerPanel />
+      {run && <WorldLedgerPanel run={run} />}
       <Disclaimer />
     </StewardedShell>
   );
