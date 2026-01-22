@@ -52,9 +52,14 @@ function extractLegacyOutcome(
 // ------------------------------------------------------------
 
 function buildChronicle(resolution: SolaceResolution): string {
-  const { roll, dc, outcome } = extractLegacyOutcome(
-    resolution.mechanical_resolution
-  );
+  const mech = resolution.mechanical_resolution;
+
+if (!hasDiceMechanics(mech)) {
+  return null; // or safe no-op
+}
+
+const { roll, dc, outcome } = mech;
+
 
   const situation = resolution.situation_frame.join(" ");
   const process = resolution.process.join(" ");
