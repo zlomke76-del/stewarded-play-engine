@@ -68,18 +68,13 @@ type Props = {
 function difficultyFor(kind?: ResolutionContext["optionKind"]) {
   switch (kind) {
     case "safe":
-      // 🔑 FIX: Safe ≠ No Risk
       return { dc: 4, justification: "Low risk, but not risk-free" };
-
     case "environmental":
       return { dc: 6, justification: "Environmental uncertainty" };
-
     case "risky":
       return { dc: 10, justification: "Meaningful risk involved" };
-
     case "contested":
       return { dc: 14, justification: "Active opposition expected" };
-
     default:
       return { dc: 6, justification: "Outcome uncertain" };
   }
@@ -139,10 +134,9 @@ export default function ResolutionDraftPanel({
     if (roll === null) {
       return "The tribe prepares, weighing timing and position.";
     }
-    if (roll >= dc) {
-      return "The tribe acts decisively. Fortune favors them.";
-    }
-    return "The attempt falters. The land pushes back.";
+    return roll >= dc
+      ? "The tribe acts decisively. Fortune favors them."
+      : "The attempt falters. The land pushes back.";
   }, [roll, dc]);
 
   /* ----------------------------------------------------------
@@ -153,9 +147,7 @@ export default function ResolutionDraftPanel({
     if (!autoResolve) return;
     if (roll !== null) return;
 
-    const max = diceMax(diceMode);
-    const r = Math.ceil(Math.random() * max);
-
+    const r = Math.ceil(Math.random() * diceMax(diceMode));
     setRoll(r);
     setRollSource("auto");
     setAudit((a) => [...a, `Dice rolled (${diceMode}, auto): ${r}`]);
@@ -209,20 +201,24 @@ export default function ResolutionDraftPanel({
   ---------------------------------------------------------- */
 
   if (autoResolve) {
+    if (roll === null) {
+      return (
+        <section style={{ border: "1px dashed #666", padding: 12, marginTop: 12 }}>
+          <p className="muted">Solace weighs risk…</p>
+        </section>
+      );
+    }
+
     const outcome = roll >= dc ? "Success" : "Setback";
 
     return (
       <section style={{ border: "1px dashed #666", padding: 12, marginTop: 12 }}>
         <p className="muted">Solace weighs risk… fate turns…</p>
-
-        {roll !== null && (
-          <p>
-            🎲 <strong>{diceMode}</strong> rolled{" "}
-            <strong>{roll}</strong> vs DC{" "}
-            <strong>{dc}</strong> —{" "}
-            <strong>{outcome}</strong>
-          </p>
-        )}
+        <p>
+          🎲 <strong>{diceMode}</strong> rolled{" "}
+          <strong>{roll}</strong> vs DC{" "}
+          <strong>{dc}</strong> — <strong>{outcome}</strong>
+        </p>
       </section>
     );
   }
@@ -269,8 +265,7 @@ export default function ResolutionDraftPanel({
 
       <button
         onClick={() => {
-          const max = diceMax(diceMode);
-          const r = Math.ceil(Math.random() * max);
+          const r = Math.ceil(Math.random() * diceMax(diceMode));
           setRoll(r);
           setRollSource("auto");
           setAudit((a) => [...a, `Dice rolled (${diceMode}, auto): ${r}`]);
@@ -296,8 +291,7 @@ export default function ResolutionDraftPanel({
 
 /* ------------------------------------------------------------
    EOF
-   Invariants restored:
-   - Dice always roll
-   - Narrative never truncates
-   - Ledger remains factual
+   - Build-safe
+   - Dice invariant preserved
+   - No silent outcomes
 ------------------------------------------------------------ */
