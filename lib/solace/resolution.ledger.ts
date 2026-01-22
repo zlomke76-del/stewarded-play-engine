@@ -2,9 +2,15 @@
 // Solace World Ledger Chronicle
 // ------------------------------------------------------------
 // Purpose:
-// - Convert canonical resolutions into living history
-// - Add texture, causality, and memory
-// - NEVER introduce new facts or state
+// - Record remembered history, not events or mechanics
+// - Collapse intent + resolution into living narrative memory
+// - Preserve continuity across turns
+//
+// HARD CONSTRAINTS:
+// - NO new facts
+// - NO new actors
+// - NO new state
+// - Uses ONLY SolaceResolution fields
 // ------------------------------------------------------------
 
 import type { SolaceResolution } from "./solaceResolution.schema";
@@ -15,37 +21,30 @@ export interface LedgerEntry {
 }
 
 // ------------------------------------------------------------
-// Outcome Inference (TYPE-SAFE)
+// Tone Inference (schema-safe)
 // ------------------------------------------------------------
 
-type InferredOutcome =
-  | "success"
-  | "setback"
-  | "failure"
+type ChronicleTone =
+  | "advance"
+  | "resistance"
+  | "collapse"
   | "passage";
 
-function inferOutcome(
+function inferTone(
   resolution: SolaceResolution
-): InferredOutcome {
-  const mech = resolution.mechanical_resolution as any;
+): ChronicleTone {
+  const mech: any = resolution.mechanical_resolution;
 
-  // Explicit outcome if present
-  if (typeof mech?.outcome === "string") {
-    return mech.outcome as InferredOutcome;
-  }
-
-  // Roll-based inference (legacy-safe)
   if (
     typeof mech?.roll === "number" &&
     typeof mech?.dc === "number"
   ) {
-    if (mech.roll >= mech.dc) return "success";
+    if (mech.roll >= mech.dc) return "advance";
     if (mech.roll >= mech.dc - 2)
-      return "setback";
-    return "failure";
+      return "resistance";
+    return "collapse";
   }
 
-  // No contest occurred
   return "passage";
 }
 
@@ -57,69 +56,86 @@ export function buildLedgerEntry(
   resolution: SolaceResolution,
   turn: number
 ): LedgerEntry {
-  const outcome = inferOutcome(resolution);
+  const tone = inferTone(resolution);
 
-  // Opening — historical framing
-  let opening: string;
-  switch (outcome) {
-    case "success":
-      opening =
-        "The tribe’s choice holds, and the land answers in kind.";
+  // ---- SUBJECT (WHO ACTED) ----
+  // We treat opening_signal as Solace’s canonical understanding
+  // of the player’s declared intent — NOT raw player text.
+  const actor =
+    resolution.opening_signal?.trim() ||
+    "The tribe acts";
+
+  // ---- WORLD RESPONSE (HOW IT MET THEM) ----
+  let worldResponse: string;
+  switch (tone) {
+    case "advance":
+      worldResponse =
+        "The land yields enough for their effort to take hold.";
       break;
-    case "setback":
-      opening =
-        "The tribe presses forward, but the world resists their will.";
+    case "resistance":
+      worldResponse =
+        "The land resists, slowing progress and taxing resolve.";
       break;
-    case "failure":
-      opening =
-        "The attempt breaks under strain, and its cost is felt.";
+    case "collapse":
+      worldResponse =
+        "The land does not give. What was attempted fails to endure.";
       break;
     case "passage":
     default:
-      opening =
-        "Time passes without contest, and the balance subtly shifts.";
+      worldResponse =
+        "Nothing intervenes, yet time presses forward all the same.";
   }
 
-  // Situation — what was known
+  // ---- CONTEXTUAL MEMORY ----
+  // Situation is remembered, not restated
   const situation =
     resolution.situation_frame.length > 0
-      ? ` ${resolution.situation_frame.join(
+      ? ` At the time, ${resolution.situation_frame.join(
           " "
         )}`
       : "";
 
-  // Process — what unfolded
-  const process =
+  // ---- ACTION FLOW (INTENT RESOLVED INTO HISTORY) ----
+  // This is where intent becomes story
+  const actionFlow =
     resolution.process.length > 0
-      ? ` ${resolution.process.join(" ")}`
+      ? ` Their actions unfold as follows: ${resolution.process.join(
+          " "
+        )}`
       : "";
 
-  // Pressure — mounting strain remembered
+  // ---- PRESSURE AS CONTINUING FORCE ----
   const pressure =
     resolution.pressures.length > 0
-      ? ` Pressure gathers as ${resolution.pressures.join(
+      ? ` Even as this concludes, the world applies pressure: ${resolution.pressures.join(
           " "
         )}`
       : "";
 
-  // Aftermath — lasting mark on the run
-  const aftermath =
+  // ---- CONSEQUENCE MEMORY ----
+  // What the tribe carries into the next turn
+  const consequence =
     resolution.aftermath.length > 0
-      ? ` What follows is remembered: ${resolution.aftermath.join(
+      ? ` What remains after is this: ${resolution.aftermath.join(
           " "
         )}`
       : "";
+
+  // ---- TURN ANCHOR ----
+  const turnAnchor = `Turn ${turn}.`;
 
   return {
     turn,
     text: [
-      opening,
+      turnAnchor,
+      actor + ".",
+      worldResponse,
       situation,
-      process,
+      actionFlow,
       pressure,
-      aftermath,
+      consequence,
     ]
-      .join("")
+      .join(" ")
       .replace(/\s+/g, " ")
       .trim(),
   };
