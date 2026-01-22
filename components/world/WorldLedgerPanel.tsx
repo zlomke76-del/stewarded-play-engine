@@ -1,140 +1,129 @@
 "use client";
 
 // ------------------------------------------------------------
-// WorldLedgerPanel
+// WorldLedgerPanel (CANONICAL)
 // ------------------------------------------------------------
-// Living Chronicle of Canonical Events
+// Living Chronicle of Canonical Solace Resolutions
 //
-// Purpose:
-// - Render confirmed OUTCOME events as evolving history
-// - Display Solace-authored canon verbatim
-// - Show dice as factual annotation only
-//
-// HARD RULE:
-// - This component NEVER rewrites narrative
+// HARD RULES:
+// - Renders ONLY SolaceResolution (server-authoritative)
+// - Never consumes SessionState draft prose
+// - Never rewrites or embellishes narration
+// - Dice are factual annotation only
 // ------------------------------------------------------------
 
-import type { SessionEvent } from "@/lib/session/SessionState";
+import type { ResolutionRun } from "@/lib/solace/resolution.run";
+import type { SolaceResolution } from "@/lib/solace/solaceResolution.schema";
 import CardSection from "@/components/layout/CardSection";
 
+/* ------------------------------------------------------------
+   Props
+------------------------------------------------------------ */
+
 type Props = {
-  events: readonly SessionEvent[];
+  run: ResolutionRun | null;
 };
 
-// ------------------------------------------------------------
-// Dice rendering (factual annotation only)
-// ------------------------------------------------------------
+/* ------------------------------------------------------------
+   Dice rendering (annotation only)
+------------------------------------------------------------ */
 
-function renderDice(payload: any) {
-  const dice = payload?.dice;
-  if (!dice) return null;
+function renderDice(
+  resolution: SolaceResolution
+) {
+  const m = resolution.mechanical_resolution as any;
 
-  const { roll, dc } = dice;
-
-  if (typeof roll !== "number" || typeof dc !== "number") return null;
+  if (
+    typeof m?.roll !== "number" ||
+    typeof m?.dc !== "number"
+  ) {
+    return null;
+  }
 
   const outcome =
-    roll >= dc ? "Success" : "Setback";
+    m.roll >= m.dc ? "Success" : "Setback";
 
   return (
     <div className="muted" style={{ marginTop: 6 }}>
-      🎲 d20 = {roll} vs DC {dc} — {outcome}
+      🎲 d20 = {m.roll} vs DC {m.dc} —{" "}
+      <strong>{outcome}</strong>
     </div>
   );
 }
 
-// ------------------------------------------------------------
-// Prologue (derived, not invented)
-// ------------------------------------------------------------
+/* ------------------------------------------------------------
+   Prologue / Epilogue (derived, not invented)
+------------------------------------------------------------ */
 
-function buildPrologue(outcomes: SessionEvent[]): string | null {
-  if (outcomes.length === 0) return null;
+function buildPrologue(
+  resolutions: SolaceResolution[]
+): string | null {
+  if (resolutions.length === 0) return null;
 
-  return `The journey begins in the wilds. The world waits to answer the choices made.`;
+  return "The journey begins. The world listens.";
 }
 
-// ------------------------------------------------------------
-// Epilogue (derived, not rewritten)
-// ------------------------------------------------------------
+function buildEpilogue(
+  resolutions: SolaceResolution[]
+): string | null {
+  if (resolutions.length === 0) return null;
 
-function buildEpilogue(outcomes: SessionEvent[]): string | null {
-  if (outcomes.length === 0) return null;
-
-  return `What has been done now settles into memory. The world carries it forward.`;
+  return "What has been done settles into memory. The world carries it forward.";
 }
 
-// ------------------------------------------------------------
+/* ------------------------------------------------------------
+   Component
+------------------------------------------------------------ */
 
-export default function WorldLedgerPanel({ events }: Props) {
-  const outcomes = events.filter((e) => e.type === "OUTCOME");
-
-  const byRoom = new Map<string, SessionEvent[]>();
-  const global: SessionEvent[] = [];
-
-  for (const e of outcomes) {
-    const payload = e.payload as any;
-    const room = payload?.world?.roomId;
-
-    if (room) {
-      if (!byRoom.has(room)) byRoom.set(room, []);
-      byRoom.get(room)!.push(e);
-    } else {
-      global.push(e);
-    }
+export default function WorldLedgerPanel({
+  run,
+}: Props) {
+  if (!run || run.resolutions.length === 0) {
+    return (
+      <CardSection title="World Ledger">
+        <p className="muted">
+          No events have yet shaped the world.
+        </p>
+      </CardSection>
+    );
   }
 
-  const prologue = buildPrologue(outcomes);
-  const epilogue = buildEpilogue(outcomes);
+  const { resolutions } = run;
+
+  const prologue = buildPrologue(resolutions);
+  const epilogue = buildEpilogue(resolutions);
 
   return (
     <CardSection title="World Ledger">
-      {outcomes.length === 0 && (
-        <p className="muted">No events have yet shaped the world.</p>
-      )}
-
       {prologue && (
         <p style={{ marginBottom: 16 }}>
           <em>{prologue}</em>
         </p>
       )}
 
-      {[...byRoom.entries()].map(([room, events]) => (
-        <div key={room} style={{ marginBottom: 24 }}>
-          <strong>📍 {room}</strong>
-          <ul>
-            {events.map((e) => {
-              const payload = e.payload as any;
-              return (
-                <li key={e.id} style={{ marginBottom: 14 }}>
-                  <pre style={{ whiteSpace: "pre-wrap", margin: 0 }}>
-                    {payload.description}
-                  </pre>
-                  {renderDice(payload)}
-                </li>
-              );
-            })}
-          </ul>
-        </div>
-      ))}
+      <ol style={{ paddingLeft: 18 }}>
+        {resolutions.map((r, idx) => (
+          <li
+            key={idx}
+            style={{ marginBottom: 20 }}
+          >
+            <pre
+              style={{
+                whiteSpace: "pre-wrap",
+                margin: 0,
+              }}
+            >
+{r.opening_signal}
 
-      {global.length > 0 && (
-        <>
-          <strong>🌍 Beyond Any Single Place</strong>
-          <ul>
-            {global.map((e) => {
-              const payload = e.payload as any;
-              return (
-                <li key={e.id} style={{ marginBottom: 14 }}>
-                  <pre style={{ whiteSpace: "pre-wrap", margin: 0 }}>
-                    {payload.description}
-                  </pre>
-                  {renderDice(payload)}
-                </li>
-              );
-            })}
-          </ul>
-        </>
-      )}
+{r.process.join(" ")}
+
+{r.aftermath.join(" ")}
+            </pre>
+
+            {renderDice(r)}
+          </li>
+        ))}
+      </ol>
 
       {epilogue && (
         <p style={{ marginTop: 18 }}>
