@@ -30,12 +30,15 @@ export interface ResolutionTimelineEntry {
 }
 
 // ------------------------------------------------------------
-// Type Guard
+// Type Guard (CORRECT)
 // ------------------------------------------------------------
 
 function hasOutcome(
   m: SolaceResolution["mechanical_resolution"]
-): m is { outcome: Outcome } {
+): m is Extract<
+  SolaceResolution["mechanical_resolution"],
+  { outcome: Outcome }
+> {
   return (
     typeof (m as any)?.outcome === "string"
   );
