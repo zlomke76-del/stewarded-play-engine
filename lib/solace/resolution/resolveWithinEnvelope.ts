@@ -1,10 +1,18 @@
 // ------------------------------------------------------------
 // resolveWithinEnvelope — Interpretive Authority
-// Solace chooses meaning INSIDE the envelope
-// Never modifies bounds, never exceeds them
+// Phase 1: Preserve authorship internally, flatten at boundary
 // ------------------------------------------------------------
 
 import { OutcomeEnvelope } from "@/lib/solace/outcomes/OutcomeEnvelope";
+
+// ------------------------------------------------------------
+// Narrative Atom (INTERNAL ONLY — Phase 1)
+// ------------------------------------------------------------
+
+type NarrativeAtom = {
+  text: string;
+  role: "intent" | "world" | "consequence";
+};
 
 // Canonical resolution shape MUST already exist in your system.
 // This function assumes SolaceResolution is authoritative and strict.
@@ -50,7 +58,7 @@ export function resolveWithinEnvelope(input: {
   const { envelope, chosenDeltas } = input;
 
   // ------------------------------------------------------------
-  // HARD BOUNDARY ENFORCEMENT
+  // HARD BOUNDARY ENFORCEMENT (UNCHANGED)
   // ------------------------------------------------------------
 
   enforceBounds("food", chosenDeltas.food, envelope.resourceDeltas.food);
@@ -62,21 +70,75 @@ export function resolveWithinEnvelope(input: {
   enforceBounds("fire", chosenDeltas.fire, envelope.resourceDeltas.fire);
 
   // ------------------------------------------------------------
-  // Construct Canonical Resolution
+  // Phase 1: Construct Narrative Atoms (NO INFERENCE)
+  // ------------------------------------------------------------
+
+  const intentAtoms: NarrativeAtom[] = [
+    {
+      text: input.narration.opening,
+      role: "intent",
+    },
+    {
+      text: input.narration.frame,
+      role: "intent",
+    },
+    {
+      text: input.narration.process,
+      role: "intent",
+    },
+  ].filter(a => a.text && a.text.trim().length > 0);
+
+  const worldAtoms: NarrativeAtom[] = [
+    {
+      text: envelope.riskProfile,
+      role: "world",
+    },
+  ].filter(a => a.text && a.text.trim().length > 0);
+
+  const consequenceAtoms: NarrativeAtom[] = [
+    {
+      text: input.narration.aftermath,
+      role: "consequence",
+    },
+  ].filter(a => a.text && a.text.trim().length > 0);
+
+  // ------------------------------------------------------------
+  // Boundary Collapse (Phase 1)
+  // IMPORTANT: We flatten ONLY here, preserving ordering
+  // ------------------------------------------------------------
+
+  const situation_frame = intentAtoms
+    .filter(a => a.role === "intent")
+    .map(a => a.text)
+    .join(" ");
+
+  const process = intentAtoms
+    .filter(a => a.role === "intent")
+    .map(a => a.text)
+    .join(" ");
+
+  const pressures = worldAtoms.map(a => a.text);
+
+  const aftermath = consequenceAtoms
+    .map(a => a.text)
+    .join(" ");
+
+  // ------------------------------------------------------------
+  // Construct Canonical Resolution (UNCHANGED SHAPE)
   // ------------------------------------------------------------
 
   return {
     opening_signal: input.narration.opening,
-    situation_frame: input.narration.frame,
-    pressures: [envelope.riskProfile],
-    process: input.narration.process,
+    situation_frame,
+    pressures,
+    process,
     mechanical_resolution: {
       foodDelta: chosenDeltas.food,
       staminaDelta: chosenDeltas.stamina,
       fireDelta: chosenDeltas.fire,
       appliedRecoveryCap: envelope.recoveryCaps?.staminaMax,
     },
-    aftermath: input.narration.aftermath,
+    aftermath,
   };
 }
 
