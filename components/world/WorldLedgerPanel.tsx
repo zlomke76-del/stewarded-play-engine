@@ -1,11 +1,12 @@
 "use client";
 
 // ------------------------------------------------------------
-// WorldLedgerPanel
+// WorldLedgerPanel — Living Chronicle
 // ------------------------------------------------------------
-// Read-only world state viewer
-// Groups outcomes by room / map ID
-// Displays resolved dice transparently
+// Purpose:
+// - Render the run as a historical record
+// - Summarize intent + outcome into narrative memory
+// - Preserve transparency without killing the story
 // ------------------------------------------------------------
 
 import type { SessionEvent } from "@/lib/session/SessionState";
@@ -20,56 +21,98 @@ function renderDice(payload: any) {
   if (!dice) return null;
 
   const { mode, roll, dc } = dice;
-
   if (roll === null || typeof dc !== "number") return null;
 
   const outcome =
     dc === 0
-      ? "No roll required"
+      ? "no contest"
       : roll >= dc
-      ? "Success"
-      : "Setback";
+      ? "success"
+      : "setback";
 
   return (
-    <span className="muted" style={{ marginLeft: 6 }}>
+    <span className="muted" style={{ marginLeft: 8 }}>
       🎲 {mode} {roll} vs DC {dc} — {outcome}
     </span>
   );
 }
 
+function buildChronicleLine(payload: any): string {
+  const intent = payload?.intent;
+  const outcome = payload?.outcome;
+  const world = payload?.world;
+
+  let line = "";
+
+  // 1. Anchor on actor if present
+  if (typeof intent === "string" && intent.length > 0) {
+    // compress intent into past-tense memory
+    line += intent
+      .replace(/^Chieftain\s+/i, "Chieftain ")
+      .replace(/\.$/, "");
+  } else {
+    line += "The tribe acts";
+  }
+
+  // 2. Outcome integration (no mechanics language)
+  switch (outcome) {
+    case "success":
+      line +=
+        ", and the land yields to their effort";
+      break;
+    case "setback":
+      line +=
+        ", but the land resists and demands a cost";
+      break;
+    case "failure":
+      line +=
+        ", and the attempt collapses under pressure";
+      break;
+    case "no_roll":
+      line +=
+        ". Time passes without challenge";
+      break;
+    default:
+      line +=
+        ", and the balance of the world shifts";
+  }
+
+  // 3. Spatial memory
+  if (world?.roomId) {
+    line += ` in ${world.roomId}`;
+  }
+
+  return line + ".";
+}
+
 export default function WorldLedgerPanel({ events }: Props) {
-  const outcomes = events.filter((e) => e.type === "OUTCOME");
+  const outcomes = events.filter(
+    (e) => e.type === "OUTCOME"
+  );
 
   const byRoom = new Map<string, SessionEvent[]>();
-  const global: SessionEvent[] = [];
 
   for (const e of outcomes) {
-    const payload = e.payload as any;
-    const room = payload?.world?.roomId;
-
-    if (room) {
-      if (!byRoom.has(room)) byRoom.set(room, []);
-      byRoom.get(room)!.push(e);
-    } else {
-      global.push(e);
-    }
+    const room = (e.payload as any)?.world?.roomId ?? "The Wilds";
+    if (!byRoom.has(room)) byRoom.set(room, []);
+    byRoom.get(room)!.push(e);
   }
 
   return (
     <CardSection title="World Ledger">
       {outcomes.length === 0 && (
-        <p className="muted">No world changes recorded yet.</p>
+        <p className="muted">No history yet.</p>
       )}
 
       {[...byRoom.entries()].map(([room, events]) => (
-        <div key={room} style={{ marginBottom: 14 }}>
-          <strong>Room {room}</strong>
+        <div key={room} style={{ marginBottom: 18 }}>
+          <strong>{room}</strong>
           <ul>
             {events.map((e) => {
               const payload = e.payload as any;
               return (
-                <li key={e.id}>
-                  {String(payload.description)}
+                <li key={e.id} style={{ marginBottom: 6 }}>
+                  {buildChronicleLine(payload)}
                   {renderDice(payload)}
                 </li>
               );
@@ -77,23 +120,6 @@ export default function WorldLedgerPanel({ events }: Props) {
           </ul>
         </div>
       ))}
-
-      {global.length > 0 && (
-        <>
-          <strong>Global</strong>
-          <ul>
-            {global.map((e) => {
-              const payload = e.payload as any;
-              return (
-                <li key={e.id}>
-                  {String(payload.description)}
-                  {renderDice(payload)}
-                </li>
-              );
-            })}
-          </ul>
-        </>
-      )}
     </CardSection>
   );
 }
