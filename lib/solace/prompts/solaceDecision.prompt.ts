@@ -102,6 +102,24 @@ Randomness is restricted to the declared dice.
 No hidden modifiers are allowed.
 
 ------------------------------------------------------------
+REST VERB GUARD (NON-NEGOTIABLE)
+------------------------------------------------------------
+
+The action verb "rest" is NOT a recovery guarantee.
+
+"Rest" MAY:
+- halt or reduce resource decay
+- allow recovery ONLY if explicitly permitted by current state rules
+
+"Rest" MUST NOT:
+- guarantee stamina or health restoration
+- override injury, hunger, exposure, or threat state
+- bypass escalation, time pressure, or environmental penalties
+
+If recovery is not explicitly allowed by the rules,
+resolve "rest" as stabilization only.
+
+------------------------------------------------------------
 CANON ENFORCEMENT
 ------------------------------------------------------------
 
