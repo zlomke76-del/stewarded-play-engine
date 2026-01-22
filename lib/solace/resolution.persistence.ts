@@ -19,27 +19,36 @@ import {
 } from "./resolution.ledger";
 
 // ------------------------------------------------------------
-// Lazy client initialization (CRITICAL)
+// Lazy server-only client initialization (AUTHORITATIVE)
 // ------------------------------------------------------------
 
 let supabase: SupabaseClient | null = null;
 
-function getSupabase(): SupabaseClient | null {
-  // Client-side: persistence is disabled
+function getSupabase(): SupabaseClient {
+  // Client-side execution is forbidden
   if (typeof window !== "undefined") {
-    return null;
+    throw new Error(
+      "Invariant violation: Supabase accessed on client"
+    );
   }
 
   if (supabase) return supabase;
 
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  const url = process.env.SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
   if (!url || !key) {
-    throw new Error("Supabase env vars missing on server");
+    throw new Error(
+      "Supabase env vars missing on server"
+    );
   }
 
-  supabase = createClient(url, key);
+  supabase = createClient(url, key, {
+    auth: {
+      persistSession: false,
+    },
+  });
+
   return supabase;
 }
 
@@ -76,14 +85,13 @@ function sealLedger(
 }
 
 // ------------------------------------------------------------
-// Persistence API
+// Persistence API (AUTHORITATIVE)
 // ------------------------------------------------------------
 
 export async function saveRun(
   run: ResolutionRun
 ): Promise<void> {
   const client = getSupabase();
-  if (!client) return; // client-side no-op
 
   // Seal ledger before persistence (CANON → MEMORY)
   const sealedRun = sealLedger(run);
@@ -131,14 +139,13 @@ export async function saveRun(
 }
 
 // ------------------------------------------------------------
-// Load APIs
+// Load APIs (SERVER-ONLY)
 // ------------------------------------------------------------
 
 export async function loadRun(
   runId: string
 ): Promise<ResolutionRun | null> {
   const client = getSupabase();
-  if (!client) return null;
 
   const { data, error } = await client
     .from("solace_runs")
@@ -157,7 +164,6 @@ export async function listRuns(): Promise<
   ResolutionRun[]
 > {
   const client = getSupabase();
-  if (!client) return [];
 
   const { data, error } =
     await client
