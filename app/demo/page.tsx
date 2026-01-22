@@ -319,7 +319,7 @@ export default function DemoPage() {
 
       <NextActionHint state={state} />
 
-      <WorldLedgerPanel events={state.events} />
+      <WorldLedgerPanelLegacy events={state.events} />
 
       <CardSection
         title="Canon (Confirmed Narrative)"
