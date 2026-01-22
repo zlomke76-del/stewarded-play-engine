@@ -13,7 +13,39 @@
 import React from "react";
 import type { SolaceResolution } from "./solaceResolution.schema";
 
-export type ResolutionVerbosity = "short" | "standard" | "rich";
+export type ResolutionVerbosity =
+  | "short"
+  | "standard"
+  | "rich";
+
+// ------------------------------------------------------------
+// Type Guards
+// ------------------------------------------------------------
+
+type Outcome =
+  | "success"
+  | "partial"
+  | "setback"
+  | "failure"
+  | "no_roll";
+
+function hasDice(
+  m: SolaceResolution["mechanical_resolution"]
+): m is {
+  roll: number;
+  dc: number;
+  outcome: Outcome;
+} {
+  return (
+    typeof (m as any).roll === "number" &&
+    typeof (m as any).dc === "number" &&
+    typeof (m as any).outcome === "string"
+  );
+}
+
+// ------------------------------------------------------------
+// Component
+// ------------------------------------------------------------
 
 interface ResolutionRendererProps {
   resolution: SolaceResolution;
@@ -24,17 +56,24 @@ export default function ResolutionRenderer({
   resolution,
   verbosity = "standard",
 }: ResolutionRendererProps) {
+  const mechanics = resolution.mechanical_resolution;
+
   return (
     <div className="solace-resolution">
       {/* Opening Signal */}
-      <p className="opening">{resolution.opening_signal}</p>
+      <p className="opening">
+        {resolution.opening_signal}
+      </p>
 
       {/* Situation Frame */}
-      {(verbosity === "standard" || verbosity === "rich") && (
+      {(verbosity === "standard" ||
+        verbosity === "rich") && (
         <div className="section situation">
-          {resolution.situation_frame.map((line, i) => (
-            <p key={i}>{line}</p>
-          ))}
+          {resolution.situation_frame.map(
+            (line, i) => (
+              <p key={i}>{line}</p>
+            )
+          )}
         </div>
       )}
 
@@ -43,40 +82,74 @@ export default function ResolutionRenderer({
         <div className="section pressures">
           <strong>Relevant pressures:</strong>
           <ul>
-            {resolution.pressures.map((p, i) => (
-              <li key={i}>{p}</li>
-            ))}
+            {resolution.pressures.map(
+              (p, i) => (
+                <li key={i}>{p}</li>
+              )
+            )}
           </ul>
         </div>
       )}
 
       {/* Process */}
-      {(verbosity === "standard" || verbosity === "rich") && (
+      {(verbosity === "standard" ||
+        verbosity === "rich") && (
         <div className="section process">
-          {resolution.process.map((line, i) => (
-            <p key={i}>{line}</p>
-          ))}
+          {resolution.process.map(
+            (line, i) => (
+              <p key={i}>{line}</p>
+            )
+          )}
         </div>
       )}
 
       {/* Mechanical Resolution */}
       <div className="section mechanics">
         <strong>Resolution:</strong>
-        <p>
-          d20 rolled <b>{resolution.mechanical_resolution.roll}</b> vs DC{" "}
-          <b>{resolution.mechanical_resolution.dc}</b> —{" "}
-          <b>{resolution.mechanical_resolution.outcome}</b>
-        </p>
+
+        {hasDice(mechanics) ? (
+          <p>
+            d20 rolled{" "}
+            <b>{mechanics.roll}</b> vs DC{" "}
+            <b>{mechanics.dc}</b> —{" "}
+            <b>{mechanics.outcome}</b>
+          </p>
+        ) : (
+          <p>
+            <em>
+              No mechanical roll was invoked.
+            </em>
+          </p>
+        )}
       </div>
 
       {/* Aftermath */}
-      {(verbosity === "standard" || verbosity === "rich") && (
+      {(verbosity === "standard" ||
+        verbosity === "rich") && (
         <div className="section aftermath">
-          {resolution.aftermath.map((line, i) => (
-            <p key={i}>{line}</p>
-          ))}
+          {resolution.aftermath.map(
+            (line, i) => (
+              <p key={i}>{line}</p>
+            )
+          )}
         </div>
       )}
+
+      {/* Closure */}
+      {"closure" in resolution &&
+        resolution.closure && (
+          <p className="closure">
+            {resolution.closure}
+          </p>
+        )}
     </div>
   );
 }
+
+/* ------------------------------------------------------------
+   EOF
+   - UI narrows mechanics safely
+   - Dice shown only when real
+   - No schema assumptions
+   - No downstream breakage
+------------------------------------------------------------ */
