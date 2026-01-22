@@ -1,68 +1,84 @@
 // ------------------------------------------------------------
-// Solace Resolution Death Handling
+// Resolution Death Invariants
 // ------------------------------------------------------------
-// Explicit Terminal-State Logic
-//
 // Purpose:
 // - Detect terminal resolutions
-// - Enforce end-of-run invariants
-// - Keep death mechanical and silent
+// - Enforce no turns after death
+// - Death is narrative-authoritative, not mechanical
 // ------------------------------------------------------------
 
 import type { SolaceResolution } from "./solaceResolution.schema";
 
-export interface DeathRecord {
-  turn: number;
-  cause: string;
-  resolution: SolaceResolution;
+// ------------------------------------------------------------
+// Helpers
+// ------------------------------------------------------------
+
+function aftermathSignalsDeath(
+  aftermath: string[]
+): boolean {
+  return aftermath.some((l) =>
+    l.toLowerCase().includes("death")
+  );
 }
 
+function hasDiceFailure(
+  m: SolaceResolution["mechanical_resolution"]
+): boolean {
+  return (
+    typeof (m as any).outcome === "string" &&
+    (m as any).outcome === "failure"
+  );
+}
+
+// ------------------------------------------------------------
+// Public API
+// ------------------------------------------------------------
+
+/**
+ * A resolution is terminal if death is explicitly present.
+ * Dice failure may support the interpretation, but does not
+ * decide death on its own.
+ */
 export function isTerminalResolution(
   resolution: SolaceResolution
 ): boolean {
-  return (
-    resolution.mechanical_resolution.outcome ===
-      "failure" &&
-    resolution.aftermath.some((l) =>
-      l.toLowerCase().includes("death")
-    )
-  );
-}
-
-export function extractDeathRecord(
-  resolutions: SolaceResolution[]
-): DeathRecord | null {
-  for (let i = 0; i < resolutions.length; i++) {
-    const r = resolutions[i];
-    if (isTerminalResolution(r)) {
-      const causeLine =
-        r.aftermath.find((l) =>
-          l.toLowerCase().includes("death")
-        ) ?? "death";
-
-      return {
-        turn: i + 1,
-        cause: causeLine,
-        resolution: r,
-      };
-    }
+  // Narrative authority first
+  if (aftermathSignalsDeath(resolution.aftermath)) {
+    return true;
   }
-  return null;
+
+  // Optional legacy support signal
+  if (
+    hasDiceFailure(resolution.mechanical_resolution) &&
+    resolution.aftermath.length > 0
+  ) {
+    return true;
+  }
+
+  return false;
 }
 
+/**
+ * Enforce that no resolutions occur after death.
+ */
 export function assertNoPostDeathTurns(
   resolutions: SolaceResolution[]
-) {
-  const deathIndex = resolutions.findIndex(
-    isTerminalResolution
-  );
+): void {
+  let deathIndex = -1;
+
+  for (let i = 0; i < resolutions.length; i++) {
+    if (isTerminalResolution(resolutions[i])) {
+      deathIndex = i;
+      break;
+    }
+  }
 
   if (
     deathIndex !== -1 &&
     deathIndex < resolutions.length - 1
   ) {
     throw new Error(
-      "Invariant violation: turns recorded after terminal death"
+      "Invariant violation: resolutions appended after death"
     );
   }
 }
