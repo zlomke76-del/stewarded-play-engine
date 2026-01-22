@@ -58,7 +58,7 @@ export function resolveWithinEnvelope(input: {
   const { envelope, chosenDeltas } = input;
 
   // ------------------------------------------------------------
-  // HARD BOUNDARY ENFORCEMENT (UNCHANGED)
+  // HARD BOUNDARY ENFORCEMENT
   // ------------------------------------------------------------
 
   enforceBounds("food", chosenDeltas.food, envelope.resourceDeltas.food);
@@ -77,54 +77,42 @@ export function resolveWithinEnvelope(input: {
     {
       text: input.narration.opening,
       role: "intent",
-    },
+    } as const,
     {
       text: input.narration.frame,
       role: "intent",
-    },
+    } as const,
     {
       text: input.narration.process,
       role: "intent",
-    },
-  ].filter(a => a.text && a.text.trim().length > 0);
+    } as const,
+  ].filter((a) => a.text && a.text.trim().length > 0);
 
   const worldAtoms: NarrativeAtom[] = [
     {
       text: envelope.riskProfile,
       role: "world",
-    },
-  ].filter(a => a.text && a.text.trim().length > 0);
+    } as const,
+  ].filter((a) => a.text && a.text.trim().length > 0);
 
   const consequenceAtoms: NarrativeAtom[] = [
     {
       text: input.narration.aftermath,
       role: "consequence",
-    },
-  ].filter(a => a.text && a.text.trim().length > 0);
+    } as const,
+  ].filter((a) => a.text && a.text.trim().length > 0);
 
   // ------------------------------------------------------------
   // Boundary Collapse (Phase 1)
-  // IMPORTANT: We flatten ONLY here, preserving ordering
   // ------------------------------------------------------------
 
-  const situation_frame = intentAtoms
-    .filter(a => a.role === "intent")
-    .map(a => a.text)
-    .join(" ");
-
-  const process = intentAtoms
-    .filter(a => a.role === "intent")
-    .map(a => a.text)
-    .join(" ");
-
-  const pressures = worldAtoms.map(a => a.text);
-
-  const aftermath = consequenceAtoms
-    .map(a => a.text)
-    .join(" ");
+  const situation_frame = intentAtoms.map((a) => a.text).join(" ");
+  const process = intentAtoms.map((a) => a.text).join(" ");
+  const pressures = worldAtoms.map((a) => a.text);
+  const aftermath = consequenceAtoms.map((a) => a.text).join(" ");
 
   // ------------------------------------------------------------
-  // Construct Canonical Resolution (UNCHANGED SHAPE)
+  // Construct Canonical Resolution
   // ------------------------------------------------------------
 
   return {
