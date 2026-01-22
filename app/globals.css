@@ -2,6 +2,10 @@
   max-width: 900px;
   margin: 0 auto;
   padding: 24px;
+
+  /* 🔑 CRITICAL FIX */
+  min-height: 100vh;
+  overflow-y: auto;
 }
 
 .demo-header {
