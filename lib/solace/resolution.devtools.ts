@@ -13,13 +13,38 @@
 import type { SolaceResolution } from "./solaceResolution.schema";
 
 // ------------------------------------------------------------
+// Helpers
+// ------------------------------------------------------------
+
+function hasDiceMechanics(
+  m: SolaceResolution["mechanical_resolution"]
+): m is {
+  roll: number;
+  dc: number;
+  outcome:
+    | "success"
+    | "partial"
+    | "setback"
+    | "failure"
+    | "no_roll";
+} {
+  return (
+    typeof (m as any).roll === "number" &&
+    typeof (m as any).dc === "number" &&
+    typeof (m as any).outcome === "string"
+  );
+}
+
+// ------------------------------------------------------------
 // Invariant Assertions
 // ------------------------------------------------------------
 
 export function assertResolutionInvariants(
   resolution: SolaceResolution
 ) {
-  // No advice keywords
+  // ------------------------------------------
+  // No advisory language
+  // ------------------------------------------
   const forbidden = [
     "should",
     "try",
@@ -29,7 +54,9 @@ export function assertResolutionInvariants(
     "recommend",
   ];
 
-  const textBlob = JSON.stringify(resolution).toLowerCase();
+  const textBlob = JSON.stringify(
+    resolution
+  ).toLowerCase();
 
   for (const word of forbidden) {
     if (textBlob.includes(word)) {
@@ -39,13 +66,23 @@ export function assertResolutionInvariants(
     }
   }
 
+  // ------------------------------------------
   // Numbers appear only in mechanical_resolution
+  // ------------------------------------------
   const numericLeak =
     resolution.opening_signal.match(/\d/) ||
-    resolution.situation_frame.some((l) => /\d/.test(l)) ||
-    resolution.pressures.some((l) => /\d/.test(l)) ||
-    resolution.process.some((l) => /\d/.test(l)) ||
-    resolution.aftermath.some((l) => /\d/.test(l));
+    resolution.situation_frame.some((l) =>
+      /\d/.test(l)
+    ) ||
+    resolution.pressures.some((l) =>
+      /\d/.test(l)
+    ) ||
+    resolution.process.some((l) =>
+      /\d/.test(l)
+    ) ||
+    resolution.aftermath.some((l) =>
+      /\d/.test(l)
+    );
 
   if (numericLeak) {
     throw new Error(
@@ -53,15 +90,20 @@ export function assertResolutionInvariants(
     );
   }
 
-  // Outcome sanity
-  if (
-    resolution.mechanical_resolution.outcome ===
-      "no_roll" &&
-    resolution.mechanical_resolution.dc !== 0
-  ) {
-    throw new Error(
-      "Invariant violation: no_roll outcome with non-zero DC"
-    );
+  // ------------------------------------------
+  // Dice outcome sanity (legacy only)
+  // ------------------------------------------
+  const m = resolution.mechanical_resolution;
+
+  if (hasDiceMechanics(m)) {
+    if (
+      m.outcome === "no_roll" &&
+      m.dc !== 0
+    ) {
+      throw new Error(
+        "Invariant violation: no_roll outcome with non-zero DC"
+      );
+    }
   }
 }
 
