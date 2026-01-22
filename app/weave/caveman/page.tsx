@@ -313,18 +313,14 @@ export default function CavemanPage() {
     // 2️⃣ ResolutionRun canon (durable)
     if (!run) return;
 
-    const resolution = buildClientResolution({
-  legacyPayload: payload,
-  turn: nextTurn,
-});
+      const draft = buildClientResolution({
+    legacyPayload: payload,
+    turn: nextTurn,
+  });
 
-    setRun((prevRun) => {
-      if (!prevRun) return prevRun;
-
-      const updated = appendResolution(
-        prevRun,
-        resolution
-      );
+      // 🚫 Client drafts are NOT canonical.
+      // 🚫 Do NOT append to ResolutionRun here.
+      // Canon is committed server-side only.
 
       // Persist asynchronously; DB enforces immutability
       saveRun(updated).catch(console.error);
