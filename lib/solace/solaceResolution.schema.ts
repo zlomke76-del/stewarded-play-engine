@@ -4,9 +4,14 @@
 // Canonical, append-only resolution record
 // ------------------------------------------------------------
 
+// Legacy mechanical outcomes.
+// NOTE:
+// - roll and dc are nullable by design
+// - narrative-only and no_roll turns are valid historical states
+// - authority over meaning remains downstream (envelope)
 export type LegacyMechanicalResolution = {
-  roll: number;
-  dc: number;
+  roll: number | null;
+  dc: number | null;
   outcome:
     | "success"
     | "partial"
@@ -15,6 +20,10 @@ export type LegacyMechanicalResolution = {
     | "no_roll";
 };
 
+// Outcome deltas applied to world state.
+// NOTE:
+// - These are derived effects, not rolls
+// - Presence does not imply mechanical authority
 export type OutcomeMechanicalResolution = {
   foodDelta?: number;
   staminaDelta?: number;
@@ -22,9 +31,17 @@ export type OutcomeMechanicalResolution = {
   appliedRecoveryCap?: number;
 };
 
+// MechanicalResolution is intentionally a union:
+// - Legacy mechanics (possibly no_roll)
+// - Outcome-only deltas
+// Absence of rolls is a valid, representable state
 export type MechanicalResolution =
   | LegacyMechanicalResolution
   | OutcomeMechanicalResolution;
+
+// ------------------------------------------------------------
+// SolaceResolution (Canonical Ledger Entry)
+// ------------------------------------------------------------
 
 export type SolaceResolution = {
   opening_signal: string;
