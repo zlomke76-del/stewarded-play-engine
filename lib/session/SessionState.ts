@@ -15,6 +15,7 @@ export type SessionId = string;
 export type ActorId = string;
 export type SceneId = string;
 export type EventId = string;
+export type TribeId = string;
 
 /* ------------------------------------------------------------
    Core Concepts
@@ -27,7 +28,7 @@ export type EventId = string;
 export interface SessionEvent {
   id: EventId;
   timestamp: number;
-  actor: ActorId | "system";
+  actor: ActorId | "system" | "solace";
   type: string;
   payload: Record<string, unknown>;
 }
@@ -44,6 +45,15 @@ export interface PendingChange {
 }
 
 /**
+ * Tribe identity is canonical session truth.
+ * It is NOT narration and MUST NOT be inferred.
+ */
+export interface TribeIdentity {
+  id: TribeId;
+  name: string;
+}
+
+/**
  * SessionState is a snapshot derived from events.
  * It does not contain logic for deciding outcomes.
  */
@@ -51,13 +61,16 @@ export interface SessionState {
   sessionId: SessionId;
   sceneId: SceneId | null;
 
+  // Canonical identity
+  tribe: TribeIdentity;
+
   // Canonical event log (append-only)
   events: readonly SessionEvent[];
 
   // Unconfirmed changes awaiting human approval
   pending: readonly PendingChange[];
 
-  // Arbitrary tags for facilitators (threat, tension, time pressure)
+  // Arbitrary facilitator tags (threat, tension, time pressure)
   flags: readonly string[];
 
   // Session lifecycle
@@ -69,10 +82,22 @@ export interface SessionState {
    Creation
 ------------------------------------------------------------ */
 
-export function createSession(sessionId: SessionId): SessionState {
+/**
+ * Create a new session with immutable tribe identity.
+ */
+export function createSession(
+  sessionId: SessionId,
+  tribeName: string
+): SessionState {
   return {
     sessionId,
     sceneId: null,
+
+    tribe: {
+      id: crypto.randomUUID(),
+      name: tribeName,
+    },
+
     events: [],
     pending: [],
     flags: [],
@@ -85,7 +110,9 @@ export function createSession(sessionId: SessionId): SessionState {
    Read Operations (Safe)
 ------------------------------------------------------------ */
 
-export function getEvents(state: SessionState): readonly SessionEvent[] {
+export function getEvents(
+  state: SessionState
+): readonly SessionEvent[] {
   return state.events;
 }
 
@@ -93,6 +120,12 @@ export function getPendingChanges(
   state: SessionState
 ): readonly PendingChange[] {
   return state.pending;
+}
+
+export function getTribe(
+  state: SessionState
+): TribeIdentity {
+  return state.tribe;
 }
 
 /* ------------------------------------------------------------
@@ -122,9 +155,14 @@ export function confirmChange(
   changeId: string,
   confirmedBy: ActorId
 ): SessionState {
-  const change = state.pending.find((c) => c.id === changeId);
+  const change = state.pending.find(
+    (c) => c.id === changeId
+  );
+
   if (!change) {
-    throw new Error(`Pending change not found: ${changeId}`);
+    throw new Error(
+      `Pending change not found: ${changeId}`
+    );
   }
 
   const event: SessionEvent = {
@@ -141,7 +179,9 @@ export function confirmChange(
   return {
     ...state,
     events: [...state.events, event],
-    pending: state.pending.filter((c) => c.id !== changeId),
+    pending: state.pending.filter(
+      (c) => c.id !== changeId
+    ),
   };
 }
 
