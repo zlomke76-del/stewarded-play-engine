@@ -3,13 +3,12 @@
 // ------------------------------------------------------------
 // WorldLedgerPanel
 // ------------------------------------------------------------
-// Living chronicle of the world
+// Living Chronicle of Canonical Events
 //
-// Rules:
-// - Never invent new facts
-// - Never alter canon
-// - Compress intent + outcome into history
-// - Degrade safely if payload is thin
+// Purpose:
+// - Render confirmed OUTCOME events as evolving history
+// - Compose narrative from facts already recorded
+// - Never invent state, outcomes, or causality
 // ------------------------------------------------------------
 
 import type { SessionEvent } from "@/lib/session/SessionState";
@@ -19,19 +18,24 @@ type Props = {
   events: readonly SessionEvent[];
 };
 
+// ------------------------------------------------------------
+// Dice rendering (transparent, factual)
+// ------------------------------------------------------------
+
 function renderDice(payload: any) {
   const dice = payload?.dice;
   if (!dice) return null;
 
   const { mode, roll, dc } = dice;
-  if (roll == null || typeof dc !== "number") return null;
+
+  if (roll === null || typeof dc !== "number") return null;
 
   const outcome =
     dc === 0
-      ? "no contest"
+      ? "No roll required"
       : roll >= dc
-      ? "success"
-      : "setback";
+      ? "Success"
+      : "Setback";
 
   return (
     <span className="muted" style={{ marginLeft: 6 }}>
@@ -40,58 +44,36 @@ function renderDice(payload: any) {
   );
 }
 
-/**
- * Build a living chronicle sentence from available facts.
- * This NEVER introduces new state — it only compresses.
- */
-function buildLedgerLine(payload: any): string {
-  const actor =
-    typeof payload.actor === "string"
-      ? payload.actor
-      : "The tribe";
+// ------------------------------------------------------------
+// Chronicle composer (NO NEW FACTS)
+// ------------------------------------------------------------
 
-  const intent =
-    typeof payload.intent === "string"
-      ? payload.intent.trim()
-      : null;
+function chronicleLine(payload: any): string {
+  const actor = payload.actorLabel ?? "The party";
+  const intent = payload.intent ?? payload.description ?? "act";
+  const dice = payload.dice;
 
-  const outcome =
-    typeof payload.outcome === "string"
-      ? payload.outcome
-      : null;
+  let outcome: "success" | "setback" | "failure" | "no_roll" = "no_roll";
 
-  const room =
-    typeof payload?.world?.roomId === "string"
-      ? payload.world.roomId
-      : "the world";
-
-  // --- Ideal path: intent + outcome ---
-  if (intent && outcome) {
-    switch (outcome) {
-      case "success":
-        return `${actor} acts with purpose. What was attempted holds, and the balance shifts in ${room}.`;
-      case "setback":
-        return `${actor} presses forward, but the land resists. The effort costs them in ${room}.`;
-      case "failure":
-        return `${actor}'s attempt collapses under pressure. The world pushes back in ${room}.`;
-      default:
-        return `${actor} acts, and events unfold in ${room}.`;
-    }
+  if (dice && typeof dice.roll === "number" && typeof dice.dc === "number") {
+    outcome = dice.roll >= dice.dc ? "success" : "setback";
   }
 
-  // --- Partial path: intent only ---
-  if (intent) {
-    return `${actor} attempts a course of action. The outcome is now written into the world.`;
+  switch (outcome) {
+    case "success":
+      return `${actor} press forward and prevail. ${intent}`;
+    case "setback":
+      return `${actor} advance, but resistance slows their progress. ${intent}`;
+    case "failure":
+      return `${actor} are driven back by harsh consequence. ${intent}`;
+    case "no_roll":
+      return `${actor} move through a quiet moment. ${intent}`;
+    default:
+      return `${actor} act. ${intent}`;
   }
-
-  // --- Fallback: legacy description ---
-  if (typeof payload.description === "string") {
-    return payload.description;
-  }
-
-  // --- Absolute fallback ---
-  return "The world changes, and the record holds.";
 }
+
+// ------------------------------------------------------------
 
 export default function WorldLedgerPanel({ events }: Props) {
   const outcomes = events.filter((e) => e.type === "OUTCOME");
@@ -103,7 +85,7 @@ export default function WorldLedgerPanel({ events }: Props) {
     const payload = e.payload as any;
     const room = payload?.world?.roomId;
 
-    if (typeof room === "string") {
+    if (room) {
       if (!byRoom.has(room)) byRoom.set(room, []);
       byRoom.get(room)!.push(e);
     } else {
@@ -114,18 +96,18 @@ export default function WorldLedgerPanel({ events }: Props) {
   return (
     <CardSection title="World Ledger">
       {outcomes.length === 0 && (
-        <p className="muted">No history has yet been written.</p>
+        <p className="muted">No events have yet shaped the world.</p>
       )}
 
       {[...byRoom.entries()].map(([room, events]) => (
         <div key={room} style={{ marginBottom: 16 }}>
-          <strong>{room}</strong>
+          <strong>📍 {room}</strong>
           <ul>
             {events.map((e) => {
               const payload = e.payload as any;
               return (
                 <li key={e.id}>
-                  {buildLedgerLine(payload)}
+                  {chronicleLine(payload)}
                   {renderDice(payload)}
                 </li>
               );
@@ -136,13 +118,13 @@ export default function WorldLedgerPanel({ events }: Props) {
 
       {global.length > 0 && (
         <>
-          <strong>Global</strong>
+          <strong>🌍 Beyond Any Single Place</strong>
           <ul>
             {global.map((e) => {
               const payload = e.payload as any;
               return (
                 <li key={e.id}>
-                  {buildLedgerLine(payload)}
+                  {chronicleLine(payload)}
                   {renderDice(payload)}
                 </li>
               );
