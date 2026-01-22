@@ -13,6 +13,10 @@ import type { SolaceResolution } from "./solaceResolution.schema";
 // Helpers
 // ------------------------------------------------------------
 
+/**
+ * Narrative death detection.
+ * Death must be explicit in aftermath text.
+ */
 function aftermathSignalsDeath(
   aftermath: string[]
 ): boolean {
@@ -21,13 +25,23 @@ function aftermathSignalsDeath(
   );
 }
 
+/**
+ * Legacy mechanical support signal ONLY.
+ * This must never assume dice exist.
+ * Outcome may exist without roll/DC.
+ */
 function hasDiceFailure(
   m: SolaceResolution["mechanical_resolution"]
 ): boolean {
-  return (
-    typeof (m as any).outcome === "string" &&
-    (m as any).outcome === "failure"
-  );
+  if (
+    typeof m !== "object" ||
+    m === null ||
+    !("outcome" in m)
+  ) {
+    return false;
+  }
+
+  return (m as any).outcome === "failure";
 }
 
 // ------------------------------------------------------------
@@ -36,8 +50,10 @@ function hasDiceFailure(
 
 /**
  * A resolution is terminal if death is explicitly present.
- * Dice failure may support the interpretation, but does not
- * decide death on its own.
+ *
+ * Narrative authority is primary.
+ * Mechanical failure may SUPPORT interpretation,
+ * but can never decide death on its own.
  */
 export function isTerminalResolution(
   resolution: SolaceResolution
@@ -60,6 +76,7 @@ export function isTerminalResolution(
 
 /**
  * Enforce that no resolutions occur after death.
+ * Canon must halt cleanly once death is recorded.
  */
 export function assertNoPostDeathTurns(
   resolutions: SolaceResolution[]
