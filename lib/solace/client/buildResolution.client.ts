@@ -2,71 +2,78 @@
 // CLIENT-SAFE RESOLUTION BUILDER
 // ------------------------------------------------------------
 // Purpose:
-// - Convert legacy resolution payloads into a SolaceResolution
-// - Browser-safe (no process.env, no Node crypto)
-// - Structural completeness ONLY
+// - Adapt legacy resolution payloads to SolaceResolution
+// - Browser-safe (no process.env, no Node APIs)
+// - STRICT schema conformance (no extra fields)
 // ------------------------------------------------------------
 
 import type { SolaceResolution } from "../solaceResolution.schema";
 
-// NOTE:
-// Turn is tracked by the ResolutionRun / ledger,
-// not embedded in SolaceResolution.
-
 export function buildClientResolution(input: {
   legacyPayload: any;
-  turn: number; // accepted for context only
+  turn: number; // accepted but NOT embedded (ledger concern)
 }): SolaceResolution {
   const legacy = input.legacyPayload ?? {};
 
-  return {
-    // --------------------------------------------------------
-    // Narrative signals
-    // --------------------------------------------------------
+  // ----------------------------------------------------------
+  // Mechanical resolution mapping
+  // ----------------------------------------------------------
 
+  const roll =
+    typeof legacy.dice?.roll === "number"
+      ? legacy.dice.roll
+      : 0;
+
+  const dc =
+    typeof legacy.dice?.dc === "number"
+      ? legacy.dice.dc
+      : 0;
+
+  const outcome: SolaceResolution["mechanical_resolution"]["outcome"] =
+    legacy.dice?.mode === "none" || dc === 0
+      ? "no_roll"
+      : roll >= dc
+      ? "success"
+      : roll >= dc - 2
+      ? "partial"
+      : "failure";
+
+  // ----------------------------------------------------------
+  // Resolution assembly (STRICT)
+  // ----------------------------------------------------------
+
+  return {
     opening_signal:
-      legacy.description ??
-      "The moment resolves without ceremony.",
+      typeof legacy.description === "string"
+        ? legacy.description
+        : "The moment resolves.",
 
     situation_frame: [
-      legacy.description ??
-        "Conditions shift as the action concludes.",
-    ],
+      typeof legacy.description === "string"
+        ? legacy.description
+        : "Conditions are evaluated."
+    ].slice(0, 2),
 
     pressures: Array.isArray(legacy.audit) &&
       legacy.audit.length > 0
-      ? [...legacy.audit].slice(0, 4)
-      : ["Ambient pressure persists."],
+      ? legacy.audit.slice(0, 4)
+      : ["Ambient conditions"],
 
     process: [
       legacy.dice?.justification ??
-        "Events unfold according to circumstance.",
-    ],
+        "Forces interact without interruption."
+    ].slice(0, 3),
 
-    aftermath: [
-      "The consequences settle into the world.",
-    ],
-
-    // --------------------------------------------------------
-    // Mechanical transparency
-    // --------------------------------------------------------
-
-    dice: legacy.dice ?? {
-      mode: "none",
-      roll: null,
-      dc: 0,
-      justification: "No mechanical resolution required.",
-      source: "default",
+    mechanical_resolution: {
+      roll,
+      dc,
+      outcome
     },
 
-    audit: Array.isArray(legacy.audit)
-      ? legacy.audit
-      : [],
+    aftermath: [
+      "The state of the world persists."
+    ].slice(0, 3),
 
-    // --------------------------------------------------------
-    // World snapshot
-    // --------------------------------------------------------
-
-    world: legacy.world ?? null,
+    closure: null
   };
 }
