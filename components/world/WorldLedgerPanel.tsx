@@ -53,7 +53,7 @@ function chronicleLine(payload: any): string {
   const intent = payload.intent ?? payload.description ?? "take action";
   const dice = payload.dice;
 
-  let outcome: "success" | "setback" | "failure" | "no_roll" = "no_roll";
+  let outcome: "success" | "setback" | "no_roll" = "no_roll";
 
   if (dice && typeof dice.roll === "number" && typeof dice.dc === "number") {
     outcome = dice.roll >= dice.dc ? "success" : "setback";
@@ -63,9 +63,7 @@ function chronicleLine(payload: any): string {
     case "success":
       return `${actor} press forward and prevail. ${intent}`;
     case "setback":
-      return `${actor} advance, but resistance slows their progress. ${intent}`;
-    case "failure":
-      return `${actor} are driven back by harsh consequence. ${intent}`;
+      return `${actor} advance, but resistance slows or redirects their progress. ${intent}`;
     case "no_roll":
       return `${actor} move through a quiet moment. ${intent}`;
     default:
