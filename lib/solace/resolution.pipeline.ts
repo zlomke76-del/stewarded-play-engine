@@ -19,14 +19,14 @@ import {
 } from "./resolution.scenarios";
 import { mapLegacyResolutionToSolace } from "./resolution.mapper";
 
-// NEW — structural authority
+// STRUCTURAL AUTHORITY
 import {
   buildOutcomeEnvelope,
   RiskSignals,
 } from "@/lib/solace/outcomes/OutcomeEnvelope";
 
-// NEW — interpretive authority
-import { resolveWithinEnvelope } from "./resolveWithinEnvelope";
+// INTERPRETIVE AUTHORITY (FIXED PATH)
+import { resolveWithinEnvelope } from "./resolution/resolveWithinEnvelope";
 
 // ------------------------------------------------------------
 // Scenario Selection (unchanged)
@@ -50,11 +50,10 @@ export function buildSolaceResolution(input: {
   legacyPayload: any;
   turn: number;
 
-  // NEW — contextual signals (server-inferred)
+  // server-inferred
   riskSignals: RiskSignals;
   intentType: "rest" | "hunt" | "gather" | "travel" | "tend";
 
-  // NEW — current pressures
   context: {
     food: number;
     stamina: number;
@@ -65,7 +64,7 @@ export function buildSolaceResolution(input: {
   };
 }): SolaceResolution {
   // ------------------------------------------------------------
-  // 1. Map legacy payload → base SolaceResolution
+  // 1. Legacy → base SolaceResolution
   // ------------------------------------------------------------
 
   const base = mapLegacyResolutionToSolace(
@@ -73,14 +72,14 @@ export function buildSolaceResolution(input: {
   );
 
   // ------------------------------------------------------------
-  // 2. Select scenario framing (unchanged)
+  // 2. Scenario framing
   // ------------------------------------------------------------
 
   const scenarioTag = selectScenarioTag(input.turn);
   const scenario = SCENARIO_LIBRARY[scenarioTag];
 
   // ------------------------------------------------------------
-  // 3. Construct Outcome Envelope (STRUCTURAL AUTHORITY)
+  // 3. Outcome Envelope (STRUCTURAL LIMITS)
   // ------------------------------------------------------------
 
   const envelope = buildOutcomeEnvelope({
@@ -94,7 +93,7 @@ export function buildSolaceResolution(input: {
   });
 
   // ------------------------------------------------------------
-  // 4. Solace adjudicates INSIDE the envelope
+  // 4. Solace adjudication (FREEDOM WITHIN BOUNDS)
   // ------------------------------------------------------------
 
   const resolved = resolveWithinEnvelope({
@@ -107,11 +106,7 @@ export function buildSolaceResolution(input: {
         fire: input.context.fire,
       },
     },
-
-    // These deltas must already be chosen by Solace reasoning
-    // (never by client, never by math tables)
     chosenDeltas: base.mechanical_resolution ?? {},
-
     narration: {
       opening: base.opening_signal,
       frame: base.situation_frame.join(" "),
@@ -121,7 +116,7 @@ export function buildSolaceResolution(input: {
   });
 
   // ------------------------------------------------------------
-  // 5. Scenario enrichment (narrative only, unchanged)
+  // 5. Scenario enrichment (narrative-only)
   // ------------------------------------------------------------
 
   const enriched: SolaceResolution = {
