@@ -25,18 +25,16 @@ const supabase = createClient(
 /**
  * saveRun
  *
- * Creates or updates a run record.
- * This function MUST NOT silently overwrite canon.
- *
- * Expected table behavior:
- * - id is PRIMARY KEY
- * - payload is JSONB
- * - RLS enforced
+ * Canonical behavior:
+ * - INSERT once (run creation)
+ * - UPDATE only to finalize (ended_at / is_complete)
+ * - NEVER overwrite payload
  */
 export async function saveRun(
   run: ResolutionRun
 ): Promise<void> {
-  const { error } = await supabase
+  // 1️⃣ Attempt insert (creation)
+  const { error: insertError } = await supabase
     .from("solace_runs")
     .insert({
       id: run.id,
@@ -44,17 +42,19 @@ export async function saveRun(
       ended_at: run.endedAt ?? null,
       is_complete: run.isComplete,
       payload: run,
-    })
-    .onConflict("id")
-    .ignore();
+    });
 
-  if (error) {
+  // Ignore duplicate-key error (run already exists)
+  if (
+    insertError &&
+    insertError.code !== "23505"
+  ) {
     throw new Error(
-      `Failed to persist run: ${error.message}`
+      `Failed to insert run: ${insertError.message}`
     );
   }
 
-  // If the run already exists, update ONLY terminal fields
+  // 2️⃣ Finalize run explicitly if terminal
   if (run.isComplete) {
     const { error: updateError } =
       await supabase
