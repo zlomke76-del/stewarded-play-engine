@@ -101,7 +101,7 @@ function buildPrologue(events: readonly any[]): string | null {
 
   return `The journey begins in ${prettyRoomName(
     room
-  )}. The path ahead is unwritten, and every choice will leave its mark.`;
+  )}. The world is quiet, but it will not remain so.`;
 }
 
 function buildEpilogue(events: readonly any[]): string | null {
@@ -116,9 +116,9 @@ function buildEpilogue(events: readonly any[]): string | null {
     last.payload?.world?.roomId ??
     "the depths beyond";
 
-  return `The tale closes in ${prettyRoomName(
+  return `Here, in ${prettyRoomName(
     room
-  )}. What was done cannot be undone, and the world now remembers.`;
+  )}, the tale rests. What was done is now part of the world.`;
 }
 
 // ------------------------------------------------------------
@@ -126,9 +126,9 @@ function buildEpilogue(events: readonly any[]): string | null {
 export default function ClassicFantasyPage() {
   const role: "arbiter" = "arbiter";
 
-  // ✅ FIX: createSession requires a second argument in the current repo
+  // ✅ CORRECT: createSession takes ONE argument in this repo
   const [state, setState] = useState<SessionState>(
-    createSession("classic-fantasy-session", null)
+    createSession("classic-fantasy-session")
   );
 
   const [turn, setTurn] = useState(0);
@@ -197,22 +197,6 @@ export default function ClassicFantasyPage() {
       primary?: string;
       roomId?: string;
       scope?: "local" | "regional" | "global";
-
-      lock?: {
-        state: "locked" | "unlocked";
-        keyId?: string;
-      };
-
-      trap?: {
-        id: string;
-        state: "armed" | "sprung" | "disarmed";
-        effect?: string;
-      };
-
-      alert?: {
-        level: "none" | "suspicious" | "alerted";
-        source?: string;
-      };
     };
   }) {
     const nextTurn = turn + 1;
@@ -275,7 +259,6 @@ export default function ClassicFantasyPage() {
         </CardSection>
       )}
 
-      {/* ---------- LOCATION ---------- */}
       <CardSection title="📍 Current Location">
         <p>
           <strong>{prettyRoomName(currentRoomId)}</strong>
@@ -285,7 +268,6 @@ export default function ClassicFantasyPage() {
         </p>
       </CardSection>
 
-      {/* ---------- DUNGEON PRESSURE (ADVISORY ONLY) ---------- */}
       <DungeonPressurePanel
         turn={turn}
         currentRoomId={currentRoomId}
@@ -293,7 +275,6 @@ export default function ClassicFantasyPage() {
         parsedCommand={parsed}
       />
 
-      {/* ---------- COMMAND ---------- */}
       <CardSection title="Command">
         <textarea
           rows={3}
