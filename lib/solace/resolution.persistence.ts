@@ -9,32 +9,46 @@
 // - Preserve append-only and canonical semantics
 // ------------------------------------------------------------
 
-import { createClient } from "@supabase/supabase-js";
+import { createClient, SupabaseClient } from "@supabase/supabase-js";
 import type { ResolutionRun } from "./resolution.run";
 
-const supabaseUrl =
-  process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const supabaseAnonKey =
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+// ------------------------------------------------------------
+// Lazy client initialization (CRITICAL)
+// ------------------------------------------------------------
 
-const supabase = createClient(
-  supabaseUrl,
-  supabaseAnonKey
-);
+let supabase: SupabaseClient | null = null;
 
-/**
- * saveRun
- *
- * Canonical behavior:
- * - INSERT once (run creation)
- * - UPDATE only to finalize (ended_at / is_complete)
- * - NEVER overwrite payload
- */
+function getSupabase(): SupabaseClient | null {
+  // Client-side: persistence is disabled
+  if (typeof window !== "undefined") {
+    return null;
+  }
+
+  if (supabase) return supabase;
+
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+  if (!url || !key) {
+    throw new Error("Supabase env vars missing on server");
+  }
+
+  supabase = createClient(url, key);
+  return supabase;
+}
+
+// ------------------------------------------------------------
+// Persistence API
+// ------------------------------------------------------------
+
 export async function saveRun(
   run: ResolutionRun
 ): Promise<void> {
+  const client = getSupabase();
+  if (!client) return; // client-side no-op
+
   // 1️⃣ Attempt insert (creation)
-  const { error: insertError } = await supabase
+  const { error: insertError } = await client
     .from("solace_runs")
     .insert({
       id: run.id,
@@ -57,7 +71,7 @@ export async function saveRun(
   // 2️⃣ Finalize run explicitly if terminal
   if (run.isComplete) {
     const { error: updateError } =
-      await supabase
+      await client
         .from("solace_runs")
         .update({
           ended_at: run.endedAt ?? Date.now(),
@@ -73,15 +87,13 @@ export async function saveRun(
   }
 }
 
-/**
- * loadRun
- *
- * Loads a single run by ID.
- */
 export async function loadRun(
   runId: string
 ): Promise<ResolutionRun | null> {
-  const { data, error } = await supabase
+  const client = getSupabase();
+  if (!client) return null;
+
+  const { data, error } = await client
     .from("solace_runs")
     .select("payload")
     .eq("id", runId)
@@ -94,15 +106,13 @@ export async function loadRun(
   return data.payload as ResolutionRun;
 }
 
-/**
- * listRuns
- *
- * Returns runs ordered by start time (most recent first).
- */
 export async function listRuns(): Promise<
   ResolutionRun[]
 > {
-  const { data, error } = await supabase
+  const client = getSupabase();
+  if (!client) return [];
+
+  const { data, error } = await client
     .from("solace_runs")
     .select("payload, started_at")
     .order("started_at", { ascending: false });
