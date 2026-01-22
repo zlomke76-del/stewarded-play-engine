@@ -85,12 +85,50 @@ function prettyRoomName(roomId?: string) {
 }
 
 // ------------------------------------------------------------
+// Canon-Derived Prologue / Epilogue
+// ------------------------------------------------------------
+
+function buildPrologue(events: readonly any[]): string | null {
+  const firstOutcome = events.find(
+    (e) => e.type === "OUTCOME"
+  ) as any | undefined;
+
+  if (!firstOutcome) return null;
+
+  const room =
+    firstOutcome.payload?.world?.roomId ??
+    "an unknown place";
+
+  return `The journey begins in ${prettyRoomName(
+    room
+  )}. The path ahead is unwritten, and every choice will leave its mark.`;
+}
+
+function buildEpilogue(events: readonly any[]): string | null {
+  const outcomes = events.filter(
+    (e) => e.type === "OUTCOME"
+  );
+
+  if (outcomes.length < 2) return null;
+
+  const last = outcomes[outcomes.length - 1] as any;
+  const room =
+    last.payload?.world?.roomId ??
+    "the depths beyond";
+
+  return `The tale closes in ${prettyRoomName(
+    room
+  )}. What was done cannot be undone, and the world now remembers.`;
+}
+
+// ------------------------------------------------------------
 
 export default function ClassicFantasyPage() {
   const role: "arbiter" = "arbiter";
 
+  // ✅ FIX: createSession requires a second argument in the current repo
   const [state, setState] = useState<SessionState>(
-    createSession("classic-fantasy-session")
+    createSession("classic-fantasy-session", null)
   );
 
   const [turn, setTurn] = useState(0);
@@ -116,6 +154,16 @@ export default function ClassicFantasyPage() {
 
     return last?.payload?.world?.roomId;
   }, [state.events]);
+
+  const prologue = useMemo(
+    () => buildPrologue(state.events),
+    [state.events]
+  );
+
+  const epilogue = useMemo(
+    () => buildEpilogue(state.events),
+    [state.events]
+  );
 
   // ----------------------------------------------------------
   // Player issues command
@@ -221,6 +269,12 @@ export default function ClassicFantasyPage() {
         ]}
       />
 
+      {prologue && (
+        <CardSection title="Prologue">
+          <p>{prologue}</p>
+        </CardSection>
+      )}
+
       {/* ---------- LOCATION ---------- */}
       <CardSection title="📍 Current Location">
         <p>
@@ -232,12 +286,12 @@ export default function ClassicFantasyPage() {
       </CardSection>
 
       {/* ---------- DUNGEON PRESSURE (ADVISORY ONLY) ---------- */}
-    <DungeonPressurePanel
-      turn={turn}
-      currentRoomId={currentRoomId}
-      events={state.events}
-      parsedCommand={parsed}
-    />
+      <DungeonPressurePanel
+        turn={turn}
+        currentRoomId={currentRoomId}
+        events={state.events}
+        parsedCommand={parsed}
+      />
 
       {/* ---------- COMMAND ---------- */}
       <CardSection title="Command">
@@ -289,33 +343,13 @@ export default function ClassicFantasyPage() {
       )}
 
       <NextActionHint state={state} />
-
       <WorldLedgerPanel events={state.events} />
 
-      <CardSection
-        title="Canon (Confirmed World State)"
-        className="canon"
-      >
-        {state.events.filter(
-          (e) => e.type === "OUTCOME"
-        ).length === 0 ? (
-          <p className="muted">
-            No confirmed outcomes yet.
-          </p>
-        ) : (
-          <ul>
-            {state.events
-              .filter((e) => e.type === "OUTCOME")
-              .map((event) => (
-                <li key={event.id}>
-                  {String(
-                    (event as any).payload.description
-                  )}
-                </li>
-              ))}
-          </ul>
-        )}
-      </CardSection>
+      {epilogue && (
+        <CardSection title="Epilogue">
+          <p>{epilogue}</p>
+        </CardSection>
+      )}
 
       <Disclaimer />
     </StewardedShell>
