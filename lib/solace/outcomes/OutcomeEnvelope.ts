@@ -1,12 +1,18 @@
 // ------------------------------------------------------------
-// OutcomeEnvelope — Canonical Resolution Bounds
-// Server-only, non-deterministic
+// OutcomeEnvelope — Structural Authority
+// Defines what MAY happen, never what DOES happen
+// Server-only. Immutable once constructed.
 // ------------------------------------------------------------
 
-export type ResourceDelta = {
-  food?: { min: number; max: number };
-  stamina?: { min: number; max: number };
-  fire?: { min: number; max: number };
+export type ResourceDeltaRange = {
+  min: number;
+  max: number;
+};
+
+export type ResourceDeltas = {
+  food?: ResourceDeltaRange;
+  stamina?: ResourceDeltaRange;
+  fire?: ResourceDeltaRange;
 };
 
 export type RecoveryCaps = {
@@ -14,14 +20,14 @@ export type RecoveryCaps = {
 };
 
 export type OutcomeEnvelope = {
-  riskProfile: "low" | "medium" | "high";
-  resourceDeltas: ResourceDelta;
-  recoveryCaps?: RecoveryCaps;
-  secondaryEffectsAllowed: boolean;
+  readonly riskProfile: "low" | "medium" | "high";
+  readonly resourceDeltas: ResourceDeltas;
+  readonly recoveryCaps?: RecoveryCaps;
+  readonly secondaryEffectsAllowed: boolean;
 };
 
 // ------------------------------------------------------------
-// Risk Signal Input (inferred, not declared)
+// Risk Signals (inferred, never declared by client)
 // ------------------------------------------------------------
 
 export type RiskSignals = {
@@ -33,79 +39,78 @@ export type RiskSignals = {
 };
 
 // ------------------------------------------------------------
-// Envelope Builder (authoritative bounds only)
+// Envelope Construction (Structural Judgment Only)
 // ------------------------------------------------------------
 
-export function buildOutcomeEnvelope(
-  signals: RiskSignals,
+export function buildOutcomeEnvelope(input: {
+  signals: RiskSignals;
+  intentType: "rest" | "hunt" | "gather" | "travel" | "tend";
   context: {
     hasShelter: boolean;
     hasFire: boolean;
     injuryLevel?: "none" | "minor" | "major";
-    intentType: "rest" | "hunt" | "gather" | "travel" | "tend";
-  }
-): OutcomeEnvelope {
-  const signalCount = Object.values(signals).filter(Boolean).length;
+  };
+}): OutcomeEnvelope {
+  const signalCount = Object.values(input.signals).filter(Boolean).length;
 
-  let riskProfile: OutcomeEnvelope["riskProfile"] =
+  const riskProfile: OutcomeEnvelope["riskProfile"] =
     signalCount <= 1 ? "low" : signalCount <= 3 ? "medium" : "high";
 
-  // Base envelopes — these are ADMISSIBLE RANGES, not outcomes
   switch (riskProfile) {
     case "low":
-      return {
+      return Object.freeze({
         riskProfile,
         resourceDeltas: {
           stamina:
-            context.intentType === "rest"
+            input.intentType === "rest"
               ? { min: 1, max: 4 }
               : { min: 0, max: 2 },
           food:
-            context.intentType === "gather"
+            input.intentType === "gather"
               ? { min: 0, max: 2 }
               : undefined,
         },
-        recoveryCaps: injuryCap(context.injuryLevel),
+        recoveryCaps: injuryCap(input.context.injuryLevel),
         secondaryEffectsAllowed: false,
-      };
+      });
 
     case "medium":
-      return {
+      return Object.freeze({
         riskProfile,
         resourceDeltas: {
           stamina: { min: -1, max: 3 },
           food:
-            context.intentType === "hunt"
+            input.intentType === "hunt"
               ? { min: -1, max: 5 }
               : undefined,
           fire:
-            context.intentType === "tend"
+            input.intentType === "tend"
               ? { min: 0, max: 2 }
               : undefined,
         },
-        recoveryCaps: injuryCap(context.injuryLevel),
+        recoveryCaps: injuryCap(input.context.injuryLevel),
         secondaryEffectsAllowed: true,
-      };
+      });
 
     case "high":
-      return {
+      return Object.freeze({
         riskProfile,
         resourceDeltas: {
           stamina: { min: -4, max: 5 },
           food:
-            context.intentType === "hunt"
+            input.intentType === "hunt"
               ? { min: -3, max: 10 }
               : undefined,
           fire: { min: -2, max: 3 },
         },
-        recoveryCaps: injuryCap(context.injuryLevel),
+        recoveryCaps: injuryCap(input.context.injuryLevel),
         secondaryEffectsAllowed: true,
-      };
+      });
   }
 }
 
 // ------------------------------------------------------------
-// Injury Caps — limits recovery, not current state
+// Injury Caps — Limit Recovery, Not Current State
 // ------------------------------------------------------------
 
 function injuryCap(
