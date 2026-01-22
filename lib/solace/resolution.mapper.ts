@@ -39,7 +39,7 @@ export type WorldDelta = {
   signals?: string[];
 
   losses?: {
-    party?: string; // named subgroup
+    party?: string;
     count: number;
   }[];
 };
@@ -53,24 +53,36 @@ export function mapToSolaceResolution(input: {
   situation_frame: string[];
   pressures: string[];
   process: string[];
-  mechanical_resolution: {
-    roll: number;
-    dc: number;
-    outcome: "success" | "partial" | "setback" | "failure" | "no_roll";
+  mechanical_resolution?: {
+    roll?: number;
+    dc?: number;
+    outcome?: "success" | "partial" | "setback" | "failure" | "no_roll";
   };
   aftermath: string[];
 
-  // NEW: optional structured hints from upstream Solace reasoning
-  // (still non-authoritative until Arbiter pass later)
+  // Optional structured hints (non-authoritative)
   world_hints?: Partial<WorldDelta>;
 }): {
   resolution: SolaceResolution;
   world_delta: WorldDelta;
 } {
-  const { roll, dc, outcome } = input.mechanical_resolution;
+  // ------------------------------------------------------------
+  // SAFE mechanical normalization (NO assumptions)
+  // ------------------------------------------------------------
+
+  const mech = input.mechanical_resolution;
+
+  const roll =
+    typeof mech?.roll === "number" ? mech.roll : null;
+
+  const dc =
+    typeof mech?.dc === "number" ? mech.dc : null;
+
+  const outcome =
+    mech?.outcome ?? "no_roll";
 
   // ------------------------------------------------------------
-  // World Delta Derivation (STRICT, MECHANICAL)
+  // World Delta Derivation (MECHANICAL ONLY)
   // ------------------------------------------------------------
 
   const world_delta: WorldDelta = {
@@ -79,17 +91,28 @@ export function mapToSolaceResolution(input: {
     losses: [],
   };
 
-  // Success / Setback interpretation rules
-  if (roll >= dc) {
-    // SUCCESS: gains without cost
-    world_delta.territory = { claimed: "current_location" };
-    world_delta.pressure = { decrease: 1, source: "decisive action" };
-  } else {
-    // SETBACK: gains with pressure, no nullification
-    world_delta.pressure = { increase: 1, source: "environmental resistance" };
+  // Only derive pressure/territory if a real roll occurred
+  if (roll !== null && dc !== null) {
+    if (roll >= dc) {
+      world_delta.territory = {
+        claimed: "current_location",
+      };
+      world_delta.pressure = {
+        decrease: 1,
+        source: "decisive action",
+      };
+    } else {
+      world_delta.pressure = {
+        increase: 1,
+        source: "environmental resistance",
+      };
+    }
   }
 
-  // Merge any upstream hints (guarded, never overriding mechanics)
+  // ------------------------------------------------------------
+  // Merge upstream hints (guarded, non-authoritative)
+  // ------------------------------------------------------------
+
   if (input.world_hints) {
     if (input.world_hints.resources) {
       world_delta.resources = {
@@ -118,7 +141,7 @@ export function mapToSolaceResolution(input: {
   }
 
   // ------------------------------------------------------------
-  // Canonical Resolution (Narrative-agnostic)
+  // Canonical Resolution (schema-safe)
   // ------------------------------------------------------------
 
   const resolution: SolaceResolution = {
