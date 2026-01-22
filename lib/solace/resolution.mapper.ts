@@ -3,11 +3,11 @@
 // ------------------------------------------------------------
 // Legacy / internal payload → canonical SolaceResolution + WorldDelta
 //
-// Purpose:
-// - Normalize resolution outputs
-// - Enforce strict schema compliance
-// - Derive WORLD EFFECTS explicitly (no prose inference)
-// - Mapper MAY translate intent → effects, but MAY NOT invent facts
+// Invariants:
+// - Missing fields are VALID
+// - Mapper normalizes only
+// - Never destructure optional data
+// - Never assume arrays exist
 // ------------------------------------------------------------
 
 import type { SolaceResolution } from "./solaceResolution.schema";
@@ -29,15 +29,12 @@ export type WorldDelta = {
   };
 
   discoveries?: string[];
-
   pressure?: {
     increase?: number;
     decrease?: number;
     source?: string;
   };
-
   signals?: string[];
-
   losses?: {
     party?: string;
     count: number;
@@ -45,32 +42,28 @@ export type WorldDelta = {
 };
 
 // ------------------------------------------------------------
+// Helpers
+// ------------------------------------------------------------
+
+function safeArray(
+  value: unknown
+): string[] {
+  return Array.isArray(value) ? value : [];
+}
+
+// ------------------------------------------------------------
 // Mapper
 // ------------------------------------------------------------
 
-export function mapToSolaceResolution(input: {
-  opening_signal: string;
-  situation_frame: string[];
-  pressures: string[];
-  process: string[];
-  mechanical_resolution?: {
-    roll?: number;
-    dc?: number;
-    outcome?: "success" | "partial" | "setback" | "failure" | "no_roll";
-  };
-  aftermath: string[];
-
-  // Optional structured hints (non-authoritative)
-  world_hints?: Partial<WorldDelta>;
-}): {
+export function mapToSolaceResolution(input: any): {
   resolution: SolaceResolution;
   world_delta: WorldDelta;
 } {
-  // ------------------------------------------------------------
-  // SAFE mechanical normalization (NO assumptions)
-  // ------------------------------------------------------------
+  // ----------------------------------------------------------
+  // SAFE mechanical normalization
+  // ----------------------------------------------------------
 
-  const mech = input.mechanical_resolution;
+  const mech = input?.mechanical_resolution;
 
   const roll =
     typeof mech?.roll === "number" ? mech.roll : null;
@@ -79,19 +72,16 @@ export function mapToSolaceResolution(input: {
     typeof mech?.dc === "number" ? mech.dc : null;
 
   const outcome =
-    mech?.outcome ?? "no_roll";
+    typeof mech?.outcome === "string"
+      ? mech.outcome
+      : "no_roll";
 
-  // ------------------------------------------------------------
-  // World Delta Derivation (MECHANICAL ONLY)
-  // ------------------------------------------------------------
+  // ----------------------------------------------------------
+  // World Delta (mechanics only)
+  // ----------------------------------------------------------
 
-  const world_delta: WorldDelta = {
-    discoveries: [],
-    signals: [],
-    losses: [],
-  };
+  const world_delta: WorldDelta = {};
 
-  // Only derive pressure/territory if a real roll occurred
   if (roll !== null && dc !== null) {
     if (roll >= dc) {
       world_delta.territory = {
@@ -109,49 +99,27 @@ export function mapToSolaceResolution(input: {
     }
   }
 
-  // ------------------------------------------------------------
-  // Merge upstream hints (guarded, non-authoritative)
-  // ------------------------------------------------------------
-
-  if (input.world_hints) {
-    if (input.world_hints.resources) {
-      world_delta.resources = {
-        ...world_delta.resources,
-        ...input.world_hints.resources,
-      };
-    }
-
-    if (input.world_hints.discoveries) {
-      world_delta.discoveries?.push(
-        ...input.world_hints.discoveries
-      );
-    }
-
-    if (input.world_hints.signals) {
-      world_delta.signals?.push(
-        ...input.world_hints.signals
-      );
-    }
-
-    if (input.world_hints.losses) {
-      world_delta.losses?.push(
-        ...input.world_hints.losses
-      );
-    }
-  }
-
-  // ------------------------------------------------------------
-  // Canonical Resolution (schema-safe)
-  // ------------------------------------------------------------
+  // ----------------------------------------------------------
+  // Canonical Resolution (ALL FIELDS GUARDED)
+  // ----------------------------------------------------------
 
   const resolution: SolaceResolution = {
-    opening_signal: input.opening_signal,
+    opening_signal:
+      typeof input?.opening_signal === "string"
+        ? input.opening_signal
+        : "The moment resolves.",
 
-    situation_frame: input.situation_frame.slice(0, 3),
+    situation_frame: safeArray(
+      input?.situation_frame
+    ).slice(0, 3),
 
-    pressures: input.pressures.slice(0, 4),
+    pressures: safeArray(
+      input?.pressures
+    ).slice(0, 4),
 
-    process: input.process.slice(0, 4),
+    process: safeArray(
+      input?.process
+    ).slice(0, 4),
 
     mechanical_resolution: {
       roll,
@@ -159,7 +127,9 @@ export function mapToSolaceResolution(input: {
       outcome,
     },
 
-    aftermath: input.aftermath.slice(0, 4),
+    aftermath: safeArray(
+      input?.aftermath
+    ).slice(0, 4),
   };
 
   return {
