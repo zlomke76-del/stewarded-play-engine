@@ -10,36 +10,77 @@
 
 import type { SolaceResolution } from "./solaceResolution.schema";
 
+// ------------------------------------------------------------
+// Types
+// ------------------------------------------------------------
+
+type Outcome =
+  | "success"
+  | "partial"
+  | "setback"
+  | "failure"
+  | "no_roll";
+
 export interface ResolutionMetrics {
   survivalLength: number;
   entropyScore: number;
   pressureLoad: number;
-  outcomeDistribution: Record<string, number>;
+  outcomeDistribution: Record<Outcome, number>;
 }
+
+// ------------------------------------------------------------
+// Type Guard
+// ------------------------------------------------------------
+
+function hasOutcome(
+  m: SolaceResolution["mechanical_resolution"]
+): m is {
+  roll: number;
+  dc: number;
+  outcome: Outcome;
+} {
+  return (
+    typeof (m as any).outcome === "string"
+  );
+}
+
+// ------------------------------------------------------------
+// Metrics Computation
+// ------------------------------------------------------------
 
 export function computeMetrics(
   resolutions: SolaceResolution[]
 ): ResolutionMetrics {
-  const outcomeDistribution: Record<string, number> = {};
+  const outcomeDistribution: Record<Outcome, number> =
+    {
+      success: 0,
+      partial: 0,
+      setback: 0,
+      failure: 0,
+      no_roll: 0,
+    };
+
   let pressureLoad = 0;
 
   for (const r of resolutions) {
-    const outcome =
-      r.mechanical_resolution.outcome;
-
-    outcomeDistribution[outcome] =
-      (outcomeDistribution[outcome] || 0) + 1;
-
     pressureLoad += r.pressures.length;
+
+    if (hasOutcome(r.mechanical_resolution)) {
+      const outcome =
+        r.mechanical_resolution.outcome;
+
+      outcomeDistribution[outcome] += 1;
+    }
   }
 
   const survivalLength = resolutions.length;
 
-  // Simple entropy proxy:
-  // more mixed outcomes + more pressures = higher entropy
-  const uniqueOutcomes = Object.keys(
+  // Entropy proxy:
+  // - diversity of outcomes
+  // - accumulated pressure exposure
+  const uniqueOutcomes = Object.values(
     outcomeDistribution
-  ).length;
+  ).filter((v) => v > 0).length;
 
   const entropyScore =
     uniqueOutcomes * pressureLoad;
@@ -51,3 +92,11 @@ export function computeMetrics(
     outcomeDistribution,
   };
 }
+
+/* ------------------------------------------------------------
+   EOF
+   Notes:
+   - No assumptions about mechanical variants
+   - No schema mutation
+   - One narrowing point prevents cascading errors
+------------------------------------------------------------ */
