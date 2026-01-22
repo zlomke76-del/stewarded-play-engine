@@ -14,13 +14,38 @@
 import type { SolaceResolution } from "./solaceResolution.schema";
 
 // ------------------------------------------------------------
+// Helpers
+// ------------------------------------------------------------
+
+function hasDiceMechanics(
+  m: SolaceResolution["mechanical_resolution"]
+): m is {
+  roll: number;
+  dc: number;
+  outcome:
+    | "success"
+    | "partial"
+    | "setback"
+    | "failure"
+    | "no_roll";
+} {
+  return (
+    typeof (m as any).roll === "number" &&
+    typeof (m as any).dc === "number" &&
+    typeof (m as any).outcome === "string"
+  );
+}
+
+// ------------------------------------------------------------
 // Guardrail Checks
 // ------------------------------------------------------------
 
 export function enforceGuardrails(
   resolution: SolaceResolution
 ) {
+  // ----------------------------------------------------------
   // Guardrail 1: No advisory language
+  // ----------------------------------------------------------
   const forbiddenPhrases = [
     "should",
     "try",
@@ -41,13 +66,23 @@ export function enforceGuardrails(
     }
   }
 
+  // ----------------------------------------------------------
   // Guardrail 2: No mechanics outside mechanical_resolution
+  // ----------------------------------------------------------
   const leak =
     /\d/.test(resolution.opening_signal) ||
-    resolution.situation_frame.some((l) => /\d/.test(l)) ||
-    resolution.pressures.some((l) => /\d/.test(l)) ||
-    resolution.process.some((l) => /\d/.test(l)) ||
-    resolution.aftermath.some((l) => /\d/.test(l));
+    resolution.situation_frame.some((l) =>
+      /\d/.test(l)
+    ) ||
+    resolution.pressures.some((l) =>
+      /\d/.test(l)
+    ) ||
+    resolution.process.some((l) =>
+      /\d/.test(l)
+    ) ||
+    resolution.aftermath.some((l) =>
+      /\d/.test(l)
+    );
 
   if (leak) {
     throw new Error(
@@ -55,28 +90,32 @@ export function enforceGuardrails(
     );
   }
 
-  // Guardrail 3: no_roll consistency
-  if (
-    resolution.mechanical_resolution.outcome ===
-      "no_roll" &&
-    resolution.mechanical_resolution.dc !== 0
-  ) {
-    throw new Error(
-      "Guardrail violation: no_roll outcome with non-zero DC"
-    );
+  // ----------------------------------------------------------
+  // Guardrail 3: Dice consistency (legacy only)
+  // ----------------------------------------------------------
+  const m = resolution.mechanical_resolution;
+
+  if (hasDiceMechanics(m)) {
+    if (
+      m.outcome === "no_roll" &&
+      m.dc !== 0
+    ) {
+      throw new Error(
+        "Guardrail violation: no_roll outcome with non-zero DC"
+      );
+    }
   }
 
-  // Guardrail 4: Closure must not advise
+  // ----------------------------------------------------------
+  // Guardrail 4: No closure (schema invariant)
+  // ----------------------------------------------------------
+  // closure is intentionally not part of SolaceResolution.
+  // Its presence anywhere is a hard violation.
   if (
-    resolution.closure &&
-    forbiddenPhrases.some((p) =>
-      resolution.closure!
-        .toLowerCase()
-        .includes(p)
-    )
+    "closure" in (resolution as any)
   ) {
     throw new Error(
-      "Guardrail violation: advisory language in closure"
+      "Guardrail violation: deprecated field 'closure' detected"
     );
   }
 }
