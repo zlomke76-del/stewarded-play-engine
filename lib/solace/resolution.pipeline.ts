@@ -13,7 +13,7 @@ import {
   ScenarioTag,
 } from "./resolution.scenarios";
 
-// Canonical mapper
+// Canonical mapper (NO authority)
 import { mapToSolaceResolution } from "./resolution.mapper";
 
 import {
@@ -38,6 +38,37 @@ export function selectScenarioTag(
 }
 
 // ------------------------------------------------------------
+// WorldDelta → Envelope Delta Projection
+// ------------------------------------------------------------
+// This is the ONLY allowed boundary crossing.
+// WorldDelta is broader than what the envelope accepts.
+// ------------------------------------------------------------
+
+function projectWorldDeltaToEnvelopeDeltas(
+  delta: unknown
+): {
+  food?: number;
+  stamina?: number;
+  fire?: number;
+} {
+  if (!delta || typeof delta !== "object") {
+    return {};
+  }
+
+  const d = delta as any;
+
+  return {
+    food: typeof d.food === "number" ? d.food : undefined,
+    stamina:
+      typeof d.stamina === "number"
+        ? d.stamina
+        : undefined,
+    fire:
+      typeof d.fire === "number" ? d.fire : undefined,
+  };
+}
+
+// ------------------------------------------------------------
 // Canonical Resolution Builder
 // ------------------------------------------------------------
 
@@ -45,7 +76,12 @@ export function buildSolaceResolution(input: {
   legacyPayload: any;
   turn: number;
   riskSignals: RiskSignals;
-  intentType: "rest" | "hunt" | "gather" | "travel" | "tend";
+  intentType:
+    | "rest"
+    | "hunt"
+    | "gather"
+    | "travel"
+    | "tend";
   context: {
     food: number;
     stamina: number;
@@ -56,7 +92,7 @@ export function buildSolaceResolution(input: {
   };
 }): SolaceResolution {
   // ----------------------------------------------------------
-  // Phase 1 — Legacy normalization (NO authority here)
+  // Phase 1 — Legacy normalization (NO authority)
   // ----------------------------------------------------------
 
   const {
@@ -91,6 +127,7 @@ export function buildSolaceResolution(input: {
 
   const resolved = resolveWithinEnvelope({
     envelope,
+
     context: {
       narrativeIntent: base.opening_signal,
       currentState: {
@@ -100,10 +137,13 @@ export function buildSolaceResolution(input: {
       },
     },
 
-    // 🔑 CRITICAL FIX:
-    // world_delta is the ONLY valid source of deltas here.
-    // base.mechanical_resolution may not exist and must never be read.
-    chosenDeltas: world_delta ?? {},
+    // 🔒 INVARIANT:
+    // WorldDelta is authoritative,
+    // but only its projected form may enter the envelope.
+    chosenDeltas:
+      projectWorldDeltaToEnvelopeDeltas(
+        world_delta
+      ),
 
     narration: {
       opening: base.opening_signal,
@@ -160,8 +200,9 @@ export function buildSolaceResolution(input: {
    Invariants preserved:
    - Envelope owns mechanics
    - Mapper never grants authority
+   - WorldDelta never crosses unprojected
    - No optional field is destructured
-   - RPG intent is reciprocated, not negated
-   - Canon remains append-only and auditable
+   - Canon is append-only and auditable
+   - Future mechanics remain extensible
 
 ------------------------------------------------------------ */
