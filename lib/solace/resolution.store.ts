@@ -6,6 +6,7 @@
 // Purpose:
 // - Persist SolaceResolution objects to canon
 // - Produce a living historical record at write-time
+ال
 // - Remain append-only and irreversible
 // ------------------------------------------------------------
 
@@ -16,6 +17,21 @@ import {
 } from "@/lib/session/SessionState";
 
 // ------------------------------------------------------------
+// Type Guards (legacy-safe)
+// ------------------------------------------------------------
+
+function hasDice(
+  value: unknown
+): value is { roll: number; dc: number } {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    typeof (value as any).roll === "number" &&
+    typeof (value as any).dc === "number"
+  );
+}
+
+// ------------------------------------------------------------
 // Chronicle Builder (NO NEW FACTS)
 // ------------------------------------------------------------
 
@@ -24,17 +40,14 @@ function buildChronicle(
 ): string {
   const mechanical = resolution.mechanical_resolution;
 
-  // ---- Dice extraction (type-safe, legacy-aware) ----
   const dice =
     mechanical &&
     "dice" in mechanical &&
-    mechanical.dice &&
-    typeof mechanical.dice.roll === "number" &&
-    typeof mechanical.dice.dc === "number"
-      ? mechanical.dice
+    hasDice((mechanical as any).dice)
+      ? (mechanical as any).dice
       : null;
 
-  // ---- Outcome is DERIVED, never stored ----
+  // Outcome is DERIVED, never stored
   const outcome: "success" | "setback" | "no_roll" =
     dice
       ? dice.roll >= dice.dc
@@ -59,7 +72,6 @@ function buildChronicle(
     ? resolution.aftermath.join(" ")
     : "";
 
-  // Outcome framing — structural, not dramatic
   let outcomeLine = "";
   switch (outcome) {
     case "success":
@@ -108,8 +120,8 @@ export function storeSolaceResolution(
   const dice =
     mechanical &&
     "dice" in mechanical &&
-    mechanical.dice
-      ? mechanical.dice
+    hasDice((mechanical as any).dice)
+      ? (mechanical as any).dice
       : null;
 
   return recordEvent(state, {
@@ -118,13 +130,8 @@ export function storeSolaceResolution(
     actor: "solace",
     type: "OUTCOME",
     payload: {
-      // Human-readable, immutable history
       description: chronicle,
-
-      // Structural data preserved for audit / replay
       resolution,
-
-      // Canon facts only (legacy-safe)
       dice,
       world: resolution.world ?? null,
     },
