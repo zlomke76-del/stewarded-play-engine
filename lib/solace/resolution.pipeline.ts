@@ -13,7 +13,7 @@ import {
   ScenarioTag,
 } from "./resolution.scenarios";
 
-// ✅ Correct, canonical mapper import
+// Canonical mapper
 import { mapToSolaceResolution } from "./resolution.mapper";
 
 import {
@@ -22,28 +22,6 @@ import {
 } from "@/lib/solace/outcomes/OutcomeEnvelope";
 
 import { resolveWithinEnvelope } from "./resolution/resolveWithinEnvelope";
-
-// ------------------------------------------------------------
-// Helpers
-// ------------------------------------------------------------
-
-function extractResourceDeltas(
-  legacy: any
-): {
-  food?: number;
-  stamina?: number;
-  fire?: number;
-} {
-  if (!legacy || typeof legacy !== "object") return {};
-
-  const { food, stamina, fire } = legacy;
-
-  return {
-    food: typeof food === "number" ? food : undefined,
-    stamina: typeof stamina === "number" ? stamina : undefined,
-    fire: typeof fire === "number" ? fire : undefined,
-  };
-}
 
 // ------------------------------------------------------------
 // Scenario Selection
@@ -77,15 +55,25 @@ export function buildSolaceResolution(input: {
     injuryLevel?: "none" | "minor" | "major";
   };
 }): SolaceResolution {
-  // 🔑 Phase 1 change:
-  // Mapper now returns { resolution, world_delta }
+  // ----------------------------------------------------------
+  // Phase 1 — Legacy normalization (NO authority here)
+  // ----------------------------------------------------------
+
   const {
     resolution: base,
     world_delta,
   } = mapToSolaceResolution(input.legacyPayload);
 
+  // ----------------------------------------------------------
+  // Phase 2 — Scenario context
+  // ----------------------------------------------------------
+
   const scenarioTag = selectScenarioTag(input.turn);
   const scenario = SCENARIO_LIBRARY[scenarioTag];
+
+  // ----------------------------------------------------------
+  // Phase 3 — Outcome envelope (STRUCTURAL LIMITS)
+  // ----------------------------------------------------------
 
   const envelope = buildOutcomeEnvelope({
     signals: input.riskSignals,
@@ -97,6 +85,10 @@ export function buildSolaceResolution(input: {
     },
   });
 
+  // ----------------------------------------------------------
+  // Phase 4 — Interpretive authority (Solace)
+  // ----------------------------------------------------------
+
   const resolved = resolveWithinEnvelope({
     envelope,
     context: {
@@ -107,9 +99,12 @@ export function buildSolaceResolution(input: {
         fire: input.context.fire,
       },
     },
-    chosenDeltas: extractResourceDeltas(
-      base.mechanical_resolution
-    ),
+
+    // 🔑 CRITICAL FIX:
+    // world_delta is the ONLY valid source of deltas here.
+    // base.mechanical_resolution may not exist and must never be read.
+    chosenDeltas: world_delta ?? {},
+
     narration: {
       opening: base.opening_signal,
       frame: base.situation_frame.join(" "),
@@ -117,6 +112,10 @@ export function buildSolaceResolution(input: {
       aftermath: base.aftermath.join(" "),
     },
   });
+
+  // ----------------------------------------------------------
+  // Phase 5 — Scenario enrichment (bounded, non-authoritative)
+  // ----------------------------------------------------------
 
   const enriched: SolaceResolution = {
     ...resolved,
@@ -142,6 +141,10 @@ export function buildSolaceResolution(input: {
     ].slice(0, 3),
   };
 
+  // ----------------------------------------------------------
+  // Phase 6 — Validation (NON-NEGOTIABLE)
+  // ----------------------------------------------------------
+
   if (!validateSolaceResolution(enriched)) {
     throw new Error(
       "Invalid SolaceResolution produced by pipeline"
@@ -153,7 +156,12 @@ export function buildSolaceResolution(input: {
 
 /* ------------------------------------------------------------
    EOF
-   Authoritative
-   WorldDelta preserved upstream
-   Canon resolution explicit
+
+   Invariants preserved:
+   - Envelope owns mechanics
+   - Mapper never grants authority
+   - No optional field is destructured
+   - RPG intent is reciprocated, not negated
+   - Canon remains append-only and auditable
+
 ------------------------------------------------------------ */
