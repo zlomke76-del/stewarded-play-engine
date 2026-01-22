@@ -145,8 +145,8 @@ function deriveObservation(world?: any): string {
 
 export default function CavemanPage() {
   const [state, setState] = useState<SessionState>(
-    createSession("caveman-session")
-  );
+  createSession("demo-session", "demo")
+);
 
   const [turn, setTurn] = useState(0);
 
