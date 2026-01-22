@@ -16,95 +16,79 @@
 // ------------------------------------------------------------
 
 import type { SolaceResolution } from "./solaceResolution.schema";
-import {
-  recordEvent,
-  SessionState,
-} from "@/lib/session/SessionState";
+import { recordEvent, SessionState } from "@/lib/session/SessionState";
+
+// ------------------------------------------------------------
+// Legacy Outcome Detection (schema-safe)
+// ------------------------------------------------------------
+
+function extractLegacyOutcome(
+  mechanical: SolaceResolution["mechanical_resolution"]
+): {
+  roll?: number;
+  dc?: number;
+  outcome: "success" | "setback" | "no_roll";
+} {
+  if (
+    mechanical &&
+    typeof (mechanical as any).roll === "number" &&
+    typeof (mechanical as any).dc === "number"
+  ) {
+    const roll = (mechanical as any).roll;
+    const dc = (mechanical as any).dc;
+
+    return {
+      roll,
+      dc,
+      outcome: roll >= dc ? "success" : "setback",
+    };
+  }
+
+  return { outcome: "no_roll" };
+}
 
 // ------------------------------------------------------------
 // Chronicle Builder (RECIPROCAL FICTION, CANON-SAFE)
 // ------------------------------------------------------------
 
-function buildChronicle(
-  resolution: SolaceResolution
-): string {
-  const mechanical = resolution.mechanical_resolution;
+function buildChronicle(resolution: SolaceResolution): string {
+  const { roll, dc, outcome } = extractLegacyOutcome(
+    resolution.mechanical_resolution
+  );
 
-  // --------------------------------------------
-  // Dice extraction (LEGACY-SAFE, SCHEMA-CORRECT)
-  // --------------------------------------------
+  const situation = resolution.situation_frame.join(" ");
+  const process = resolution.process.join(" ");
+  const aftermath = resolution.aftermath.join(" ");
 
-  const dice =
-    mechanical &&
-    typeof (mechanical as any).roll === "number" &&
-    typeof (mechanical as any).dc === "number"
-      ? {
-          roll: (mechanical as any).roll,
-          dc: (mechanical as any).dc,
-        }
-      : null;
+  let outcomeLine: string;
 
-  // Outcome is DERIVED, never stored
-  const outcome: "success" | "setback" | "no_roll" =
-    dice
-      ? dice.roll >= dice.dc
-        ? "success"
-        : "setback"
-      : "no_roll";
-
-  /**
-   * In RPG mode:
-   * - situation_frame describes established fiction
-   * - process elaborates attempted action
-   * - aftermath records consequence and pressure
-   *
-   * All may be imaginative, never contradictory.
-   */
-  const situation = Array.isArray(resolution.situation_frame)
-    ? resolution.situation_frame.join(" ")
-    : "";
-
-  const process = Array.isArray(resolution.process)
-    ? resolution.process.join(" ")
-    : "";
-
-  const aftermath = Array.isArray(resolution.aftermath)
-    ? resolution.aftermath.join(" ")
-    : "";
-
-  /**
-   * Outcome language:
-   * - Never erases intent
-   * - Prices risk proportionally
-   * - Preserves forward pressure
-   */
-  let outcomeLine = "";
   switch (outcome) {
     case "success":
       outcomeLine =
-        "The intent lands cleanly. The world yields, and advantage is secured.";
+        "The intent holds. The world yields enough for advantage to be secured.";
       break;
 
     case "setback":
       outcomeLine =
-        "The intent takes hold, but not without cost. The world answers with resistance, adding pressure or fragility.";
+        "The intent takes shape, but not without cost. The world answers with resistance, adding pressure and consequence.";
       break;
 
     case "no_roll":
+    default:
       outcomeLine =
-        "The moment passes without contest. Conditions hold, unresolved.";
-      break;
+        "The moment passes without contest. Conditions remain unresolved.";
   }
 
-  const diceLine = dice
-    ? `🎲 d20 = ${dice.roll} vs DC ${dice.dc} — ${
-        outcome === "success"
-          ? "Success"
-          : outcome === "setback"
-          ? "Setback"
-          : "No Roll"
-      }`
-    : "";
+  const diceLine =
+    roll !== undefined && dc !== undefined
+      ? `🎲 d20 = ${roll} vs DC ${dc} — ${
+          outcome === "success"
+            ? "Success"
+            : outcome === "setback"
+            ? "Setback"
+            : "No Roll"
+        }`
+      : "";
 
   return [
     situation,
@@ -129,18 +113,9 @@ export function storeSolaceResolution(
 ): SessionState {
   const chronicle = buildChronicle(resolution);
 
-  const mechanical = resolution.mechanical_resolution;
-
-  // Canonical dice facts (for transparency only)
-  const dice =
-    mechanical &&
-    typeof (mechanical as any).roll === "number" &&
-    typeof (mechanical as any).dc === "number"
-      ? {
-          roll: (mechanical as any).roll,
-          dc: (mechanical as any).dc,
-        }
-      : null;
+  const { roll, dc } = extractLegacyOutcome(
+    resolution.mechanical_resolution
+  );
 
   return recordEvent(state, {
     id: crypto.randomUUID(),
@@ -148,14 +123,17 @@ export function storeSolaceResolution(
     actor: "solace",
     type: "OUTCOME",
     payload: {
-      // Human-readable, immutable RPG canon
+      // Immutable narrative history (RPG canon)
       description: chronicle,
 
-      // Structural resolution for audit / replay
+      // Structural resolution preserved for replay / audit
       resolution,
 
-      // Mechanical facts only (no narration)
-      dice,
+      // Optional factual dice (legacy-compatible)
+      dice:
+        roll !== undefined && dc !== undefined
+          ? { roll, dc }
+          : null,
     },
   });
 }
