@@ -1,12 +1,18 @@
 // ------------------------------------------------------------
 // Solace Resolution Store Adapter
 // ------------------------------------------------------------
-// Ledger Persistence Layer
+// Ledger Persistence Layer (RPG MODE)
 //
 // Purpose:
 // - Persist SolaceResolution objects to canon
 // - Produce a living historical record at write-time
 // - Remain append-only and irreversible
+//
+// RPG Invariant:
+// - User intent is a fictional offer
+// - Solace reciprocates within the declared frame
+// - Dice price intent; they do not negate imagination
+// - No contradictions of established canon
 // ------------------------------------------------------------
 
 import type { SolaceResolution } from "./solaceResolution.schema";
@@ -31,7 +37,7 @@ function hasDice(
 }
 
 // ------------------------------------------------------------
-// Chronicle Builder (NO NEW FACTS)
+// Chronicle Builder (RECIPROCAL FICTION, CANON-SAFE)
 // ------------------------------------------------------------
 
 function buildChronicle(
@@ -54,6 +60,15 @@ function buildChronicle(
         : "setback"
       : "no_roll";
 
+  /**
+   * In RPG mode:
+   * - situation_frame describes the established fiction
+   * - process elaborates the attempted action
+   * - aftermath records consequences, gains, and pressures
+   *
+   * All three may contain imaginative content
+   * so long as they do not contradict prior canon.
+   */
   const situation = Array.isArray(resolution.situation_frame)
     ? resolution.situation_frame.join(" ")
     : "";
@@ -68,42 +83,43 @@ function buildChronicle(
 
   /**
    * Outcome lines must:
-   * - Never negate intent
-   * - Signal consequence, not incompetence
-   * - Preserve authority and agency
-   * - Leave room for future pressure math
+   * - Respect agency
+   * - Never erase intent
+   * - Signal consequence proportional to dice
+   * - Preserve forward pressure
    */
   let outcomeLine = "";
   switch (outcome) {
     case "success":
       outcomeLine =
-        "The attempt holds, and the world yields without immediate cost.";
+        "The intent lands cleanly. The world yields, and advantage is secured.";
       break;
 
     case "setback":
       outcomeLine =
-        "The attempt takes hold, but not without cost. The world answers with resistance, introducing pressure and consequence.";
+        "The intent takes hold, but not without cost. The world answers with resistance, adding pressure, exposure, or fragility.";
       break;
 
     case "no_roll":
       outcomeLine =
-        "Time advances without contest, and conditions persist unchanged.";
+        "The moment passes without contest. Conditions hold, unresolved.";
       break;
   }
 
   const diceLine = dice
-    ? ` (🎲 ${dice.roll} vs DC ${dice.dc})`
+    ? ` 🎲 d${20} = ${dice.roll} vs DC ${dice.dc} — ${outcome === "success" ? "Success" : outcome === "setback" ? "Setback" : "No Roll"}`
     : "";
 
   return [
     situation,
     process,
-    outcomeLine + diceLine,
+    outcomeLine,
     aftermath,
+    diceLine,
   ]
     .filter(Boolean)
-    .join(" ")
-    .replace(/\s+/g, " ")
+    .join("\n\n")
+    .replace(/\n{3,}/g, "\n\n")
     .trim();
 }
 
@@ -132,13 +148,13 @@ export function storeSolaceResolution(
     actor: "solace",
     type: "OUTCOME",
     payload: {
-      // Human-readable, immutable history
+      // Human-readable, immutable history (RPG canon)
       description: chronicle,
 
       // Structural data preserved for audit / replay
       resolution,
 
-      // Canon facts only (legacy-safe)
+      // Canon facts only
       dice,
     },
   });
