@@ -10,12 +10,50 @@
 
 import type { SolaceResolution } from "./solaceResolution.schema";
 
+// ------------------------------------------------------------
+// Types
+// ------------------------------------------------------------
+
+type DiceOutcome =
+  | "success"
+  | "partial"
+  | "setback"
+  | "failure"
+  | "no_roll";
+
+// ------------------------------------------------------------
+// Helpers
+// ------------------------------------------------------------
+
+function hasDiceOutcome(
+  r: SolaceResolution
+): r is SolaceResolution & {
+  mechanical_resolution: {
+    roll: number;
+    dc: number;
+    outcome: DiceOutcome;
+  };
+} {
+  const m = r.mechanical_resolution as any;
+  return (
+    typeof m.roll === "number" &&
+    typeof m.dc === "number" &&
+    typeof m.outcome === "string"
+  );
+}
+
+// ------------------------------------------------------------
+// Filters
+// ------------------------------------------------------------
+
 export function filterByOutcome(
   resolutions: SolaceResolution[],
-  outcome: SolaceResolution["mechanical_resolution"]["outcome"]
+  outcome: DiceOutcome
 ): SolaceResolution[] {
   return resolutions.filter(
-    (r) => r.mechanical_resolution.outcome === outcome
+    (r) =>
+      hasDiceOutcome(r) &&
+      r.mechanical_resolution.outcome === outcome
   );
 }
 
