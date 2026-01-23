@@ -82,38 +82,55 @@ export function resolveWithinEnvelope(input: {
   // ----------------------------------------------------------
 
   const intentAtoms: NarrativeAtom[] = [
-    ...input.narration.frame.map((text) => ({
-      text,
-      role: "intent" as const,
-    })),
-    ...input.narration.process.map((text) => ({
-      text,
-      role: "intent" as const,
-    })),
+    ...input.narration.frame.map(
+      (text): NarrativeAtom => ({
+        text,
+        role: "intent",
+      })
+    ),
+    ...input.narration.process.map(
+      (text): NarrativeAtom => ({
+        text,
+        role: "intent",
+      })
+    ),
   ].filter((a) => a.text && a.text.trim().length > 0);
 
   const worldAtoms: NarrativeAtom[] = [
     {
-      text: envelope.riskProfile,
+      text: String(envelope.riskProfile),
       role: "world",
     },
   ].filter((a) => a.text && a.text.trim().length > 0);
 
-  const consequenceAtoms: NarrativeAtom[] = input.narration.aftermath
-    .map((text) => ({
-      text,
-      role: "consequence" as const,
-    }))
-    .filter((a) => a.text && a.text.trim().length > 0);
+  const consequenceAtoms: NarrativeAtom[] =
+    input.narration.aftermath
+      .map(
+        (text): NarrativeAtom => ({
+          text,
+          role: "consequence",
+        })
+      )
+      .filter(
+        (a) => a.text && a.text.trim().length > 0
+      );
 
   // ----------------------------------------------------------
-  // Boundary Collapse (Phase 1 — ARRAY SAFE)
+  // Boundary Collapse (ARRAY SAFE)
   // ----------------------------------------------------------
 
-  const situation_frame = intentAtoms.map((a) => a.text);
-  const process = intentAtoms.map((a) => a.text);
-  const pressures = worldAtoms.map((a) => a.text);
-  const aftermath = consequenceAtoms.map((a) => a.text);
+  const situation_frame = intentAtoms.map(
+    (a) => a.text
+  );
+  const process = intentAtoms.map(
+    (a) => a.text
+  );
+  const pressures = worldAtoms.map(
+    (a) => a.text
+  );
+  const aftermath = consequenceAtoms.map(
+    (a) => a.text
+  );
 
   // ----------------------------------------------------------
   // Construct Canonical Resolution
@@ -130,7 +147,8 @@ export function resolveWithinEnvelope(input: {
       foodDelta: chosenDeltas.food,
       staminaDelta: chosenDeltas.stamina,
       fireDelta: chosenDeltas.fire,
-      appliedRecoveryCap: envelope.recoveryCaps?.staminaMax,
+      appliedRecoveryCap:
+        envelope.recoveryCaps?.staminaMax,
     },
 
     aftermath,
