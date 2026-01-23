@@ -1,6 +1,6 @@
 // ------------------------------------------------------------
 // resolveWithinEnvelope — Interpretive Authority
-// Phase 1: Preserve authorship internally, flatten at boundary
+// Phase 1: Preserve authorship internally, flattening forbidden
 // ------------------------------------------------------------
 
 import { OutcomeEnvelope } from "@/lib/solace/outcomes/OutcomeEnvelope";
@@ -14,21 +14,25 @@ type NarrativeAtom = {
   role: "intent" | "world" | "consequence";
 };
 
-// Canonical resolution shape MUST already exist in your system.
-// This function assumes SolaceResolution is authoritative and strict.
+// ------------------------------------------------------------
+// Canonical Resolution Shape (AUTHORITATIVE)
+// ------------------------------------------------------------
 
 export type SolaceResolution = {
   opening_signal: string;
-  situation_frame: string;
+
+  situation_frame: string[];
   pressures: string[];
-  process: string;
+  process: string[];
+
   mechanical_resolution: {
     foodDelta?: number;
     staminaDelta?: number;
     fireDelta?: number;
     appliedRecoveryCap?: number;
   };
-  aftermath: string;
+
+  aftermath: string[];
 };
 
 type ResolutionContext = {
@@ -40,6 +44,10 @@ type ResolutionContext = {
   };
 };
 
+// ------------------------------------------------------------
+// Interpretive Authority
+// ------------------------------------------------------------
+
 export function resolveWithinEnvelope(input: {
   envelope: OutcomeEnvelope;
   context: ResolutionContext;
@@ -50,16 +58,16 @@ export function resolveWithinEnvelope(input: {
   };
   narration: {
     opening: string;
-    frame: string;
-    process: string;
-    aftermath: string;
+    frame: string[];
+    process: string[];
+    aftermath: string[];
   };
 }): SolaceResolution {
   const { envelope, chosenDeltas } = input;
 
-  // ------------------------------------------------------------
+  // ----------------------------------------------------------
   // HARD BOUNDARY ENFORCEMENT
-  // ------------------------------------------------------------
+  // ----------------------------------------------------------
 
   enforceBounds("food", chosenDeltas.food, envelope.resourceDeltas.food);
   enforceBounds(
@@ -69,63 +77,62 @@ export function resolveWithinEnvelope(input: {
   );
   enforceBounds("fire", chosenDeltas.fire, envelope.resourceDeltas.fire);
 
-  // ------------------------------------------------------------
+  // ----------------------------------------------------------
   // Phase 1: Construct Narrative Atoms (NO INFERENCE)
-  // ------------------------------------------------------------
+  // ----------------------------------------------------------
 
   const intentAtoms: NarrativeAtom[] = [
-    {
-      text: input.narration.opening,
-      role: "intent",
-    } as const,
-    {
-      text: input.narration.frame,
-      role: "intent",
-    } as const,
-    {
-      text: input.narration.process,
-      role: "intent",
-    } as const,
+    ...input.narration.frame.map((text) => ({
+      text,
+      role: "intent" as const,
+    })),
+    ...input.narration.process.map((text) => ({
+      text,
+      role: "intent" as const,
+    })),
   ].filter((a) => a.text && a.text.trim().length > 0);
 
   const worldAtoms: NarrativeAtom[] = [
     {
       text: envelope.riskProfile,
       role: "world",
-    } as const,
+    },
   ].filter((a) => a.text && a.text.trim().length > 0);
 
-  const consequenceAtoms: NarrativeAtom[] = [
-    {
-      text: input.narration.aftermath,
-      role: "consequence",
-    } as const,
-  ].filter((a) => a.text && a.text.trim().length > 0);
+  const consequenceAtoms: NarrativeAtom[] = input.narration.aftermath
+    .map((text) => ({
+      text,
+      role: "consequence" as const,
+    }))
+    .filter((a) => a.text && a.text.trim().length > 0);
 
-  // ------------------------------------------------------------
-  // Boundary Collapse (Phase 1)
-  // ------------------------------------------------------------
+  // ----------------------------------------------------------
+  // Boundary Collapse (Phase 1 — ARRAY SAFE)
+  // ----------------------------------------------------------
 
-  const situation_frame = intentAtoms.map((a) => a.text).join(" ");
-  const process = intentAtoms.map((a) => a.text).join(" ");
+  const situation_frame = intentAtoms.map((a) => a.text);
+  const process = intentAtoms.map((a) => a.text);
   const pressures = worldAtoms.map((a) => a.text);
-  const aftermath = consequenceAtoms.map((a) => a.text).join(" ");
+  const aftermath = consequenceAtoms.map((a) => a.text);
 
-  // ------------------------------------------------------------
+  // ----------------------------------------------------------
   // Construct Canonical Resolution
-  // ------------------------------------------------------------
+  // ----------------------------------------------------------
 
   return {
     opening_signal: input.narration.opening,
+
     situation_frame,
     pressures,
     process,
+
     mechanical_resolution: {
       foodDelta: chosenDeltas.food,
       staminaDelta: chosenDeltas.stamina,
       fireDelta: chosenDeltas.fire,
       appliedRecoveryCap: envelope.recoveryCaps?.staminaMax,
     },
+
     aftermath,
   };
 }
