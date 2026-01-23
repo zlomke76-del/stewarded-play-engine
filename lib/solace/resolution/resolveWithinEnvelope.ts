@@ -83,16 +83,18 @@ export function resolveWithinEnvelope(input: {
 
   const intentAtoms: NarrativeAtom[] = [
     ...input.narration.frame.map(
-      (text): NarrativeAtom => ({
-        text,
-        role: "intent",
-      })
+      (text): NarrativeAtom =>
+        ({
+          text,
+          role: "intent",
+        } satisfies NarrativeAtom)
     ),
     ...input.narration.process.map(
-      (text): NarrativeAtom => ({
-        text,
-        role: "intent",
-      })
+      (text): NarrativeAtom =>
+        ({
+          text,
+          role: "intent",
+        } satisfies NarrativeAtom)
     ),
   ].filter((a) => a.text && a.text.trim().length > 0);
 
@@ -100,16 +102,17 @@ export function resolveWithinEnvelope(input: {
     {
       text: String(envelope.riskProfile),
       role: "world",
-    },
+    } as NarrativeAtom,
   ].filter((a) => a.text && a.text.trim().length > 0);
 
   const consequenceAtoms: NarrativeAtom[] =
     input.narration.aftermath
       .map(
-        (text): NarrativeAtom => ({
-          text,
-          role: "consequence",
-        })
+        (text): NarrativeAtom =>
+          ({
+            text,
+            role: "consequence",
+          } satisfies NarrativeAtom)
       )
       .filter(
         (a) => a.text && a.text.trim().length > 0
