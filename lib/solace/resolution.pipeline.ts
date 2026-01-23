@@ -22,6 +22,7 @@ import {
 } from "@/lib/solace/outcomes/OutcomeEnvelope";
 
 import { resolveWithinEnvelope } from "./resolution/resolveWithinEnvelope";
+import { enforceGuardrails } from "./resolution.guardrails";
 
 // ------------------------------------------------------------
 // Scenario Selection
@@ -124,6 +125,10 @@ export function buildSolaceResolution(input: {
   // ----------------------------------------------------------
   // Phase 4 — Interpretive authority (Solace)
   // ----------------------------------------------------------
+  // 🔒 INVARIANT:
+  // Narrative remains semantic arrays.
+  // No flattening, no joins, no formatting.
+  // ----------------------------------------------------------
 
   const resolved = resolveWithinEnvelope({
     envelope,
@@ -137,9 +142,6 @@ export function buildSolaceResolution(input: {
       },
     },
 
-    // 🔒 INVARIANT:
-    // WorldDelta is authoritative,
-    // but only its projected form may enter the envelope.
     chosenDeltas:
       projectWorldDeltaToEnvelopeDeltas(
         world_delta
@@ -147,9 +149,9 @@ export function buildSolaceResolution(input: {
 
     narration: {
       opening: base.opening_signal,
-      frame: base.situation_frame.join(" "),
-      process: base.process.join(" "),
-      aftermath: base.aftermath.join(" "),
+      frame: base.situation_frame,
+      process: base.process,
+      aftermath: base.aftermath,
     },
   });
 
@@ -182,7 +184,7 @@ export function buildSolaceResolution(input: {
   };
 
   // ----------------------------------------------------------
-  // Phase 6 — Validation (NON-NEGOTIABLE)
+  // Phase 6 — Validation & Guardrails (NON-NEGOTIABLE)
   // ----------------------------------------------------------
 
   if (!validateSolaceResolution(enriched)) {
@@ -191,6 +193,8 @@ export function buildSolaceResolution(input: {
     );
   }
 
+  enforceGuardrails(enriched);
+
   return enriched;
 }
 
@@ -198,11 +202,12 @@ export function buildSolaceResolution(input: {
    EOF
 
    Invariants preserved:
+   - Canonical narrative shape is string[]
+   - No narrative flattening inside /lib/solace
    - Envelope owns mechanics
    - Mapper never grants authority
    - WorldDelta never crosses unprojected
-   - No optional field is destructured
+   - Guardrails enforce runtime integrity
    - Canon is append-only and auditable
-   - Future mechanics remain extensible
 
 ------------------------------------------------------------ */
