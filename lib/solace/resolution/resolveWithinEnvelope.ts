@@ -45,6 +45,43 @@ type ResolutionContext = {
 };
 
 // ------------------------------------------------------------
+// Scene Synthesis (BOUNDED COGNITION)
+// ------------------------------------------------------------
+// Purpose:
+// - Render the world perceptibly (no images available)
+// - No advice, no optimization, no goals
+// - Physical causality only
+// ------------------------------------------------------------
+
+function synthesizeProcessNarration(input: {
+  subject: string;
+  frame: string[];
+  pressures: string[];
+}): string[] {
+  const lines: string[] = [];
+
+  if (input.frame.length > 0) {
+    lines.push(
+      `${input.subject} moves through ${input.frame.join(
+        ", "
+      )}, forcing closer spacing and shorter steps.`
+    );
+  }
+
+  if (input.pressures.length > 0) {
+    lines.push(
+      `The ground resists easy passage, narrowing paths and breaking stride.`
+    );
+  }
+
+  lines.push(
+    `Progress continues, but movement here costs more effort than before.`
+  );
+
+  return lines;
+}
+
+// ------------------------------------------------------------
 // Interpretive Authority
 // ------------------------------------------------------------
 
@@ -81,29 +118,22 @@ export function resolveWithinEnvelope(input: {
   // Phase 1: Construct Narrative Atoms (NO INFERENCE)
   // ----------------------------------------------------------
 
-  const intentAtoms: NarrativeAtom[] = [
-    ...input.narration.frame.map(
+  const intentAtoms: NarrativeAtom[] = input.narration.frame
+    .map(
       (text): NarrativeAtom =>
         ({
           text,
           role: "intent",
         } satisfies NarrativeAtom)
-    ),
-    ...input.narration.process.map(
-      (text): NarrativeAtom =>
-        ({
-          text,
-          role: "intent",
-        } satisfies NarrativeAtom)
-    ),
-  ].filter((a) => a.text && a.text.trim().length > 0);
+    )
+    .filter((a) => a.text && a.text.trim().length > 0);
 
   const worldAtoms: NarrativeAtom[] = [
     {
       text: String(envelope.riskProfile),
       role: "world",
     } as NarrativeAtom,
-  ].filter((a) => a.text && a.text.trim().length > 0);
+  ];
 
   const consequenceAtoms: NarrativeAtom[] =
     input.narration.aftermath
@@ -114,26 +144,23 @@ export function resolveWithinEnvelope(input: {
             role: "consequence",
           } satisfies NarrativeAtom)
       )
-      .filter(
-        (a) => a.text && a.text.trim().length > 0
-      );
+      .filter((a) => a.text && a.text.trim().length > 0);
 
   // ----------------------------------------------------------
-  // Boundary Collapse (ARRAY SAFE)
+  // Phase 2: Scene Synthesis (THIS IS THE FIX)
+  // ----------------------------------------------------------
+  // Solace is allowed to THINK here:
+  // - about space
+  // - about bodies
+  // - about resistance
+  // She is NOT allowed to advise or plan.
   // ----------------------------------------------------------
 
-  const situation_frame = intentAtoms.map(
-    (a) => a.text
-  );
-  const process = intentAtoms.map(
-    (a) => a.text
-  );
-  const pressures = worldAtoms.map(
-    (a) => a.text
-  );
-  const aftermath = consequenceAtoms.map(
-    (a) => a.text
-  );
+  const process = synthesizeProcessNarration({
+    subject: "The Ugh Tribe",
+    frame: input.narration.frame,
+    pressures: worldAtoms.map((a) => a.text),
+  });
 
   // ----------------------------------------------------------
   // Construct Canonical Resolution
@@ -142,8 +169,8 @@ export function resolveWithinEnvelope(input: {
   return {
     opening_signal: input.narration.opening,
 
-    situation_frame,
-    pressures,
+    situation_frame: intentAtoms.map((a) => a.text),
+    pressures: worldAtoms.map((a) => a.text),
     process,
 
     mechanical_resolution: {
@@ -154,7 +181,7 @@ export function resolveWithinEnvelope(input: {
         envelope.recoveryCaps?.staminaMax,
     },
 
-    aftermath,
+    aftermath: consequenceAtoms.map((a) => a.text),
   };
 }
 
