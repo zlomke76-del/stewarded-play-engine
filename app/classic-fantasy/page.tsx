@@ -6,8 +6,8 @@
 //
 // Invariants:
 // - Player issues commands
-// - Solace drafts (non-authoritative)
-// - Dice are advisory only
+// - Solace narrates dice outcomes
+// - Dice decide fate
 // - Arbiter records canon
 // - Dungeon pressure is visible but NEVER acts
 // ------------------------------------------------------------
@@ -26,7 +26,7 @@ import { exportCanon } from "@/lib/export/exportCanon";
 import ResolutionDraftAdvisoryPanel from "@/components/resolution/ResolutionDraftAdvisoryPanel";
 import NextActionHint from "@/components/NextActionHint";
 
-import WorldLedgerPanelAdvisory from "@/components/world/WorldLedgerPanelAdvisory";
+import WorldLedgerPanelLegacy from "@/components/world/WorldLedgerPanel.legacy";
 import DungeonPressurePanel from "@/components/world/DungeonPressurePanel";
 
 import StewardedShell from "@/components/layout/StewardedShell";
@@ -77,7 +77,6 @@ function inferOptionKind(description: string): OptionKind {
   return "safe";
 }
 
-// Friendly room naming (fallback only)
 function prettyRoomName(roomId?: string) {
   if (!roomId) return "Unknown";
   if (roomId.startsWith("room-")) return "Stone Hallway";
@@ -85,7 +84,7 @@ function prettyRoomName(roomId?: string) {
 }
 
 // ------------------------------------------------------------
-// Canon-Derived Prologue / Epilogue
+// Canon framing
 // ------------------------------------------------------------
 
 function buildPrologue(events: readonly any[]): string | null {
@@ -143,7 +142,7 @@ export default function ClassicFantasyPage() {
     useState<Option | null>(null);
 
   // ----------------------------------------------------------
-  // Derive current room from last recorded outcome
+  // Current location
   // ----------------------------------------------------------
 
   const currentRoomId = useMemo(() => {
@@ -170,7 +169,7 @@ export default function ClassicFantasyPage() {
   );
 
   // ----------------------------------------------------------
-  // Player issues command
+  // Player command
   // ----------------------------------------------------------
 
   function handleSubmitCommand() {
@@ -188,33 +187,27 @@ export default function ClassicFantasyPage() {
   }
 
   // ----------------------------------------------------------
-  // Solace silently selects option (non-ranking)
+  // Solace facilitator — deterministic, non-ranking
   // ----------------------------------------------------------
 
   useEffect(() => {
     if (!options || options.length === 0) return;
-
     setSelectedOption(options[0]);
   }, [options]);
 
   // ----------------------------------------------------------
-  // Arbiter records canon (TURN ADVANCES HERE)
+  // Arbiter records canon (UPDATED SIGNATURE)
   // ----------------------------------------------------------
 
   function handleRecord(payload: {
     description: string;
     dice: {
       mode: string;
-      roll: number | null;
+      roll: number;
       dc: number;
-      justification: string;
+      source: "manual" | "solace";
     };
     audit: string[];
-    world?: {
-      primary?: string;
-      roomId?: string;
-      scope?: "local" | "regional" | "global";
-    };
   }) {
     const nextTurn = turn + 1;
     setTurn(nextTurn);
@@ -226,10 +219,13 @@ export default function ClassicFantasyPage() {
         actor: "arbiter",
         type: "OUTCOME",
         payload: {
-          ...payload,
+          description: payload.description,
+          dice: payload.dice,
+          audit: payload.audit,
           world: {
-            ...payload.world,
+            roomId: currentRoomId,
             turn: nextTurn,
+            scope: "local",
           },
         },
       })
@@ -237,7 +233,7 @@ export default function ClassicFantasyPage() {
   }
 
   // ----------------------------------------------------------
-  // Share canon
+  // Share
   // ----------------------------------------------------------
 
   function handleShare() {
@@ -256,19 +252,16 @@ export default function ClassicFantasyPage() {
         title="Classic Fantasy — Resolution"
         onShare={handleShare}
         roles={[
-          {
-            label: "Player",
-            description: "Issues commands",
-          },
+          { label: "Player", description: "Issues commands" },
           {
             label: "Solace",
             description:
-              "Drafts procedural outcomes (non-authoritative)",
+              "Narrates dice outcomes (non-authoritative)",
           },
           {
             label: "Arbiter",
             description:
-              "Applies world state changes and records canon",
+              "Commits outcomes to the world",
           },
         ]}
       />
@@ -280,15 +273,7 @@ export default function ClassicFantasyPage() {
       )}
 
       <CardSection title="📍 Current Location">
-        <p>
-          <strong>
-            {prettyRoomName(currentRoomId)}
-          </strong>
-        </p>
-        <p className="muted">
-          Canon location derived from last recorded
-          outcome.
-        </p>
+        <strong>{prettyRoomName(currentRoomId)}</strong>
       </CardSection>
 
       <DungeonPressurePanel
@@ -318,8 +303,6 @@ export default function ClassicFantasyPage() {
         </CardSection>
       )}
 
-      {/* OPTIONS INTENTIONALLY HIDDEN — SOLACE FACILITATES */}
-
       {selectedOption && (
         <ResolutionDraftAdvisoryPanel
           role={role}
@@ -335,10 +318,7 @@ export default function ClassicFantasyPage() {
       )}
 
       <NextActionHint state={state} />
-
-      <WorldLedgerPanelAdvisory
-        events={state.events}
-      />
+      <WorldLedgerPanelLegacy events={state.events} />
 
       {epilogue && (
         <CardSection title="Epilogue">
