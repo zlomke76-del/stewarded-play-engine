@@ -162,6 +162,10 @@ export default function DemoPage() {
     useState<InitialTable | null>(null);
   const [tableAccepted, setTableAccepted] = useState(false);
 
+  // 🔹 ADDITIVE: editable DM draft of table text
+  const [initialTableDraft, setInitialTableDraft] =
+    useState<string>("");
+
   const [playerInput, setPlayerInput] = useState("");
   const [parsed, setParsed] = useState<any>(null);
   const [options, setOptions] = useState<Option[] | null>(null);
@@ -176,7 +180,26 @@ export default function DemoPage() {
     if (dmMode !== "solace-neutral") return;
     if (initialTable) return;
 
-    setInitialTable(generateInitialTable());
+    const table = generateInitialTable();
+    setInitialTable(table);
+
+    // 🔹 Seed editable draft (non-canonical)
+    setInitialTableDraft(
+      [
+        table.openingFrame,
+        "",
+        `Traits: ${table.locationTraits.join(", ")}`,
+        "",
+        ...table.latentFactions.map(
+          (f) =>
+            `${f.name} — ${f.desire} (${f.pressure})`
+        ),
+        "",
+        `Oddity: ${table.environmentalOddities.join(", ")}`,
+        "",
+        `Hook: ${table.dormantHooks.join(", ")}`,
+      ].join("\n")
+    );
   }, [dmMode, initialTable]);
 
   // ----------------------------------------------------------
@@ -268,14 +291,13 @@ export default function DemoPage() {
       {dmMode === "solace-neutral" &&
         initialTable &&
         !tableAccepted && (
-          <CardSection title="Initial Table (Solace)">
+          <CardSection title="Initial Table (Solace — Editable)">
+            {/* Existing rendered structure (unchanged) */}
             <p>{initialTable.openingFrame}</p>
 
             <p className="muted">
               Traits:{" "}
-              {initialTable.locationTraits.join(
-                ", "
-              )}
+              {initialTable.locationTraits.join(", ")}
             </p>
 
             <ul>
@@ -298,17 +320,45 @@ export default function DemoPage() {
 
             <p className="muted">
               Hook:{" "}
-              {initialTable.dormantHooks.join(
-                ", "
-              )}
+              {initialTable.dormantHooks.join(", ")}
             </p>
 
-            <button
-              onClick={() =>
-                setInitialTable(
-                  generateInitialTable()
-                )
+            {/* 🔹 ADDITIVE: DM-editable narrative draft */}
+            <label className="muted">
+              DM Notes / Editable Table Framing
+            </label>
+            <textarea
+              rows={8}
+              style={{ width: "100%" }}
+              value={initialTableDraft}
+              onChange={(e) =>
+                setInitialTableDraft(e.target.value)
               }
+            />
+
+            <button
+              onClick={() => {
+                const t = generateInitialTable();
+                setInitialTable(t);
+                setInitialTableDraft(
+                  [
+                    t.openingFrame,
+                    "",
+                    `Traits: ${t.locationTraits.join(", ")}`,
+                    "",
+                    ...t.latentFactions.map(
+                      (f) =>
+                        `${f.name} — ${f.desire} (${f.pressure})`
+                    ),
+                    "",
+                    `Oddity: ${t.environmentalOddities.join(
+                      ", "
+                    )}`,
+                    "",
+                    `Hook: ${t.dormantHooks.join(", ")}`,
+                  ].join("\n")
+                );
+              }}
             >
               Regenerate
             </button>{" "}
