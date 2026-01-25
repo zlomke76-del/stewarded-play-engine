@@ -1,135 +1,192 @@
 // ------------------------------------------------------------
 // CreativeNarrator.ts
 // ------------------------------------------------------------
-// Creative Engine (NON-AUTHORITATIVE)
+// Creative-only narration engine (NON-AUTHORITATIVE)
 //
 // Purpose:
-// - Generate flavorful narration ONLY
+// - Generate rich, varied narration for outcomes
+// - Use intent + margin as signal, not instruction
 // - Never decide outcomes
-// - Never alter facts
-// - Never touch session state
+// - Never mutate state
+// - Never override humans
 //
-// Input: confirmed facts + dice margin
-// Output: prose only
+// This is flavor. Dice still rule.
 // ------------------------------------------------------------
 
-export type NarrativeLens =
-  | "grounded"
-  | "grim"
-  | "heroic"
-  | "weird";
+/* ------------------------------------------------------------
+   Types
+------------------------------------------------------------ */
 
-export interface CreativeInput {
+export type NarrativeLens =
+  | "heroic"
+  | "grim"
+  | "mysterious"
+  | "grounded";
+
+export interface NarrationInput {
   intentText: string;
   margin: number; // roll - dc
-  lens: NarrativeLens;
+  lens?: NarrativeLens;
+  seed?: number;
 }
 
-export function generateNarration(
-  input: CreativeInput
-): string {
-  const { intentText, margin, lens } = input;
-  const t = intentText.toLowerCase();
+/* ------------------------------------------------------------
+   Deterministic RNG (seeded, optional)
+------------------------------------------------------------ */
 
-  const stealth = /stealth|sneak|scout|hide/.test(t);
-  const magic = /spell|cantrip|detect|murmur/.test(t);
-  const martial = /sword|blade|ready|guard/.test(t);
+function seededRandom(seed: number) {
+  let t = seed + 0x6d2b79f5;
+  return () => {
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function pick<T>(arr: T[], rand: () => number): T {
+  return arr[Math.floor(rand() * arr.length)];
+}
+
+/* ------------------------------------------------------------
+   Core Generator
+------------------------------------------------------------ */
+
+export function generateNarration({
+  intentText,
+  margin,
+  lens = "heroic",
+  seed,
+}: NarrationInput): string {
+  const rand =
+    seed !== undefined
+      ? seededRandom(seed)
+      : Math.random;
+
+  const intent = intentText.toLowerCase();
+
+  const stealth = /stealth|sneak|scout|hide|shadow/.test(
+    intent
+  );
+  const magic = /spell|cantrip|detect|murmur|ritual/.test(
+    intent
+  );
+  const martial = /sword|blade|grip|ready|guard/.test(
+    intent
+  );
+
+  // --------------------------------------------
+  // Outcome tier
+  // --------------------------------------------
+
+  let tier: "triumph" | "success" | "mixed" | "fail" | "disaster";
+
+  if (margin >= 8) tier = "triumph";
+  else if (margin >= 3) tier = "success";
+  else if (margin >= 0) tier = "mixed";
+  else if (margin >= -4) tier = "fail";
+  else tier = "disaster";
+
+  // --------------------------------------------
+  // Phrase banks
+  // --------------------------------------------
+
+  const openings = {
+    triumph: [
+      "Everything clicks at once.",
+      "For a heartbeat, the world cooperates.",
+      "This is one of those rare moments where nothing resists.",
+    ],
+    success: [
+      "The plan holds.",
+      "Things unfold as hoped.",
+      "The execution is clean enough to matter.",
+    ],
+    mixed: [
+      "It works — but only barely.",
+      "The margin is thin.",
+      "You succeed, though not comfortably.",
+    ],
+    fail: [
+      "Something slips.",
+      "A small error ripples outward.",
+      "The environment resists your intentions.",
+    ],
+    disaster: [
+      "Multiple things go wrong at once.",
+      "The situation unravels fast.",
+      "Control is lost almost immediately.",
+    ],
+  };
+
+  const stealthLines = [
+    "Footsteps fade where they shouldn’t.",
+    "A shadow moves where no one should be standing.",
+    "Silence stretches, then tightens.",
+  ];
+
+  const magicLines = [
+    "The magic reveals absence — not safety.",
+    "Your senses brush against something watching back.",
+    "The spell hums, incomplete but suggestive.",
+  ];
+
+  const martialLines = [
+    "Hands tighten on weapons.",
+    "Steel shifts, just slightly too loud.",
+    "Instinct pulls you toward readiness.",
+  ];
+
+  const closings = {
+    triumph: [
+      "You gain more than you expected.",
+      "Momentum is fully yours.",
+    ],
+    success: [
+      "You remain in control.",
+      "Nothing presses you — yet.",
+    ],
+    mixed: [
+      "You’re aware how close that was.",
+      "This will matter later.",
+    ],
+    fail: [
+      "You are no longer certain you’re unseen.",
+      "Attention has been drawn.",
+    ],
+    disaster: [
+      "You are reacting now, not choosing.",
+      "Whatever comes next won’t wait.",
+    ],
+  };
+
+  // --------------------------------------------
+  // Assembly
+  // --------------------------------------------
 
   const lines: string[] = [];
 
-  // ----------------------------------------------------------
-  // Margin bands (FACT-LOCKED)
-  // ----------------------------------------------------------
+  lines.push(pick(openings[tier], rand));
 
-  if (margin >= 6) {
-    lines.push(
-      pick(lens, [
-        "Everything clicks into place.",
-        "Timing and silence align.",
-        "The moment bends in your favor.",
-      ])
-    );
-    if (stealth)
-      lines.push(
-        pick(lens, [
-          "You pass through the space like a rumor.",
-          "No one looks twice — if they look at all.",
-        ])
-      );
-  } else if (margin >= 3) {
-    lines.push(
-      pick(lens, [
-        "The plan holds together cleanly.",
-        "You advance without drawing attention.",
-      ])
-    );
-    if (magic)
-      lines.push(
-        pick(lens, [
-          "The spell reveals absence, not comfort.",
-          "Magic confirms what *isn't* there.",
-        ])
-      );
-  } else if (margin >= 0) {
-    lines.push(
-      pick(lens, [
-        "It works — narrowly.",
-        "You feel how close this came to unraveling.",
-      ])
-    );
-  } else if (margin >= -2) {
-    lines.push(
-      pick(lens, [
-        "Something slips.",
-        "A small error ripples outward.",
-      ])
-    );
-    if (stealth)
-      lines.push(
-        pick(lens, [
-          "A sound travels farther than intended.",
-          "Stone answers where it shouldn’t.",
-        ])
-      );
-  } else if (margin >= -5) {
-    lines.push(
-      pick(lens, [
-        "The plan breaks under pressure.",
-        "Control starts to slip away.",
-      ])
-    );
-    if (martial)
-      lines.push(
-        pick(lens, [
-          "Hands tighten on weapons too late.",
-          "Steel feels heavier than it should.",
-        ])
-      );
-  } else {
-    lines.push(
-      pick(lens, [
-        "Everything falls apart at once.",
-        "The moment turns against you completely.",
-      ])
-    );
-    lines.push(
-      pick(lens, [
-        "You’re reacting now, not choosing.",
-        "Instinct replaces planning.",
-      ])
-    );
-  }
+  if (stealth && rand() > 0.3)
+    lines.push(pick(stealthLines, rand));
+  if (magic && rand() > 0.3)
+    lines.push(pick(magicLines, rand));
+  if (martial && rand() > 0.3)
+    lines.push(pick(martialLines, rand));
+
+  lines.push(pick(closings[tier], rand));
 
   return lines.join(" ");
 }
 
 /* ------------------------------------------------------------
-   Utilities
+   HARD BANS (By Design)
 ------------------------------------------------------------ */
-
-function pick(lens: NarrativeLens, options: string[]): string {
-  // deterministic-ish but varied
-  const seed =
-    lens.length + options[0].length;
-  return options[seed % options.length];
-}
+// - No state access
+// - No dice rolling
+// - No authority
+// - No outcome determination
+// - No session memory
+//
+// This engine speaks only when invited.
+// ------------------------------------------------------------
