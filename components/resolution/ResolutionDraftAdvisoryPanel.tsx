@@ -3,11 +3,11 @@
 // ------------------------------------------------------------
 // ResolutionDraftAdvisoryPanel
 // ------------------------------------------------------------
-// Authority contract (HUMAN-ARBITER):
-// - Solace drafts only (non-authoritative)
-// - Dice decide outcome
-// - Solace narrates strain on the PLAN, not player failure
-// - Human Arbiter explicitly records canon
+// Authority contract:
+// - Dice decide success/failure
+// - Solace narrates consequences-in-motion
+// - Narration derives from PLAYER INTENT
+// - Human Arbiter commits canon
 // ------------------------------------------------------------
 
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -20,7 +20,7 @@ type DiceMode = "d4" | "d6" | "d8" | "d10" | "d12" | "d20";
 type RollSource = "manual" | "solace";
 
 export type ResolutionContext = {
-  optionDescription: string;
+  optionDescription: string; // RAW player intent
   optionKind?: "safe" | "environmental" | "risky" | "contested";
 };
 
@@ -40,7 +40,7 @@ type Props = {
 };
 
 /* ------------------------------------------------------------
-   Difficulty framing (advisory)
+   Difficulty (advisory only)
 ------------------------------------------------------------ */
 
 function difficultyFor(kind?: ResolutionContext["optionKind"]) {
@@ -59,22 +59,28 @@ function difficultyFor(kind?: ResolutionContext["optionKind"]) {
 }
 
 /* ------------------------------------------------------------
-   Intent analysis
+   Intent + party analysis
 ------------------------------------------------------------ */
 
 function analyzeIntent(text: string) {
   const t = text.toLowerCase();
 
   return {
-    stealth: t.includes("stealth") || t.includes("sneak") || t.includes("scout"),
-    magic: t.includes("spell") || t.includes("cantrip") || t.includes("detect"),
-    force: t.includes("attack") || t.includes("grip") || t.includes("ready"),
-    caution: t.includes("careful") || t.includes("quiet") || t.includes("if clear"),
+    stealth: /stealth|sneak|scout|hide|quiet/.test(t),
+    magic: /cantrip|spell|detect|murmur|ritual/.test(t),
+    blessing: /bless|prayer|divine/.test(t),
+    martial: /grip|sword|ready|guard|fight/.test(t),
+
+    characters: {
+      cragHack: /crag hack/.test(t),
+      resurrector: /resurrector/.test(t),
+      titi: /titi/.test(t),
+    },
   };
 }
 
 /* ------------------------------------------------------------
-   Narrative synthesis
+   Narrative engine
 ------------------------------------------------------------ */
 
 function narrateOutcome(
@@ -83,34 +89,141 @@ function narrateOutcome(
   dc: number
 ): string {
   const margin = roll - dc;
-  const intentShape = analyzeIntent(intent);
+  const shape = analyzeIntent(intent);
 
-  // SUCCESS — clean or strong
-  if (margin >= 3) {
-    return "The plan unfolds cleanly. Each role holds, and the path ahead opens without resistance.";
-  }
+  const lines: string[] = [];
 
-  if (margin >= 0) {
-    return "The plan holds, though only just. Small adjustments keep things quiet — for now.";
-  }
+  // ---------- EXTREME SUCCESS ----------
+  if (margin >= 6) {
+    lines.push(
+      "Everything aligns perfectly. The timing, spacing, and silence all cooperate."
+    );
 
-  // FAILURE — strain, not stupidity
-  if (margin >= -2) {
-    if (intentShape.stealth) {
-      return "The formation stays tight, but something feels off. Sound carries farther than expected, and caution slows the advance.";
+    if (shape.stealth) {
+      lines.push(
+        "Your movement leaves no trace — even chance seems to look the other way."
+      );
     }
-    if (intentShape.magic) {
-      return "The magic hums uncertainly, offering no clear warning — absence of certainty becomes its own risk.";
+
+    if (shape.characters.cragHack) {
+      lines.push(
+        "Crag Hack never needs to draw steel. The threat dissolves before it can form."
+      );
     }
-    return "The approach meets resistance from the environment itself. Progress slows under growing tension.";
+
+    if (shape.characters.resurrector) {
+      lines.push(
+        "The cantrip confirms what you hoped: nothing watches, nothing waits."
+      );
+    }
+
+    lines.push(
+      "Momentum is yours. You’re ahead of the world, not reacting to it."
+    );
   }
 
-  // HARD FAILURE
-  if (intentShape.stealth) {
-    return "Movement betrays you — not loudly, but unmistakably. The plan fractures at its edges as attention shifts your way.";
+  // ---------- STRONG SUCCESS ----------
+  else if (margin >= 3) {
+    lines.push(
+      "The plan executes cleanly. Each role holds, each signal lands."
+    );
+
+    if (shape.stealth) {
+      lines.push(
+        "Sound and shadow cooperate just enough to keep you unseen."
+      );
+    }
+
+    if (shape.blessing) {
+      lines.push(
+        "Titi’s quiet blessing settles in at exactly the right moment."
+      );
+    }
+
+    lines.push(
+      "You move forward without drawing attention — but you know luck won’t always be this kind."
+    );
   }
 
-  return "The plan collapses under pressure. What should have been controlled becomes exposed, forcing immediate decisions.";
+  // ---------- NARROW SUCCESS ----------
+  else if (margin >= 0) {
+    lines.push(
+      "It works — but not comfortably. The plan bends under its own complexity."
+    );
+
+    if (shape.magic) {
+      lines.push(
+        "The magic offers no warning, only the absence of alarm."
+      );
+    }
+
+    lines.push(
+      "You advance, aware that one more misstep would have changed everything."
+    );
+  }
+
+  // ---------- SOFT FAILURE ----------
+  else if (margin >= -2) {
+    lines.push(
+      "The plan holds together, but friction creeps in."
+    );
+
+    if (shape.stealth) {
+      lines.push(
+        "Footsteps carry farther than expected. A shutter shifts somewhere nearby."
+      );
+    }
+
+    lines.push(
+      "Nothing breaks — yet — but the margin for error shrinks."
+    );
+  }
+
+  // ---------- HARD FAILURE ----------
+  else if (margin >= -5) {
+    lines.push(
+      "Something goes wrong. Not loudly — but unmistakably."
+    );
+
+    if (shape.characters.cragHack) {
+      lines.push(
+        "Crag Hack tightens his grip, realizing too late that steel may be needed."
+      );
+    }
+
+    if (shape.magic) {
+      lines.push(
+        "The cantrip falters, offering no clarity when it matters most."
+      );
+    }
+
+    lines.push(
+      "The environment pushes back. You’re no longer invisible — only unconfirmed."
+    );
+  }
+
+  // ---------- CATASTROPHIC ----------
+  else {
+    lines.push(
+      "The plan fractures the moment it meets reality."
+    );
+
+    lines.push(
+      "Multiple elements fail at once — timing, silence, and positioning unravel together."
+    );
+
+    if (shape.characters.titi) {
+      lines.push(
+        "Titi’s blessing lands too late to prevent the fallout."
+      );
+    }
+
+    lines.push(
+      "You’re exposed, reacting instead of choosing. Consequences begin stacking."
+    );
+  }
+
+  return lines.join(" ");
 }
 
 /* ------------------------------------------------------------ */
@@ -124,7 +237,7 @@ export default function ResolutionDraftAdvisoryPanel({
 
   const [diceMode, setDiceMode] = useState<DiceMode>("d20");
   const [roll, setRoll] = useState<number | null>(null);
-  const [manualRoll, setManualRoll] = useState<string>("");
+  const [manualRoll, setManualRoll] = useState("");
 
   const committedRef = useRef(false);
 
@@ -136,8 +249,7 @@ export default function ResolutionDraftAdvisoryPanel({
 
   function rollDice() {
     const max = parseInt(diceMode.slice(1), 10);
-    const r = Math.ceil(Math.random() * max);
-    setRoll(r);
+    setRoll(Math.ceil(Math.random() * max));
   }
 
   function acceptManualRoll() {
@@ -149,7 +261,7 @@ export default function ResolutionDraftAdvisoryPanel({
   const narration =
     roll !== null
       ? narrateOutcome(context.optionDescription, roll, dc)
-      : "The moment stretches as fate waits on the dice.";
+      : "The moment stretches. Everyone waits on the dice.";
 
   function handleRecord() {
     if (roll === null || committedRef.current) return;
@@ -171,9 +283,7 @@ export default function ResolutionDraftAdvisoryPanel({
     <section style={{ border: "1px dashed #666", padding: 16 }}>
       <h3>Resolution Draft</h3>
 
-      <p className="muted">
-        Difficulty {dc} — Dice decide outcome
-      </p>
+      <p className="muted">Difficulty {dc}</p>
 
       <label>
         Dice:
