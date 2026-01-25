@@ -57,6 +57,10 @@ type InitialTable = {
   dormantHooks: string[];
 };
 
+// Keep local dice types aligned with ResolutionDraftAdvisoryPanel
+type DiceMode = "d4" | "d6" | "d8" | "d10" | "d12" | "d20";
+type RollSource = "manual" | "solace";
+
 // ------------------------------------------------------------
 // Random helpers (deterministic per load, different each time)
 // ------------------------------------------------------------
@@ -65,7 +69,47 @@ function pick<T>(arr: T[]) {
   return arr[Math.floor(Math.random() * arr.length)];
 }
 
+function pickManyUnique<T>(arr: T[], count: number): T[] {
+  const pool = [...arr];
+  const out: T[] = [];
+  while (pool.length > 0 && out.length < count) {
+    const idx = Math.floor(Math.random() * pool.length);
+    out.push(pool.splice(idx, 1)[0]);
+  }
+  return out;
+}
+
 function generateInitialTable(): InitialTable {
+  const factionNames = [
+    "The Whisperers",
+    "The Vaultwardens",
+    "The Ash Circle",
+    "The Night Ledger",
+    "The Bell-Silent",
+    "The Cobble Court",
+  ];
+
+  const desires = [
+    "control what sleeps below",
+    "seal the vaults forever",
+    "profit from forbidden knowledge",
+    "redeem an ancient failure",
+    "expose the truth no matter the cost",
+    "keep the city calm at any price",
+  ];
+
+  const pressures = [
+    "time is running out",
+    "someone is leaking secrets",
+    "an old oath is failing",
+    "a rival faction is moving first",
+    "witnesses keep vanishing",
+    "the city above is starting to notice",
+  ];
+
+  const factionCount = pick([2, 3, 3]); // bias slightly toward 3
+  const chosenNames = pickManyUnique(factionNames, factionCount);
+
   return {
     openingFrame: pick([
       "A low fog coils between narrow streets as evening bells fade.",
@@ -77,21 +121,11 @@ function generateInitialTable(): InitialTable {
       pick(["crowded", "echoing", "claustrophobic", "uneasily quiet"]),
       pick(["ancient stone", "rotting wood", "slick cobblestone"]),
     ],
-    latentFactions: [
-      {
-        name: pick(["The Whisperers", "The Vaultwardens", "The Ash Circle"]),
-        desire: pick([
-          "control what sleeps below",
-          "seal the vaults forever",
-          "profit from forbidden knowledge",
-        ]),
-        pressure: pick([
-          "time is running out",
-          "someone is leaking secrets",
-          "an old oath is failing",
-        ]),
-      },
-    ],
+    latentFactions: chosenNames.map((name) => ({
+      name,
+      desire: pick(desires),
+      pressure: pick(pressures),
+    })),
     environmentalOddities: [
       pick([
         "Lantern flames gutter without wind",
@@ -108,6 +142,65 @@ function generateInitialTable(): InitialTable {
       ]),
     ],
   };
+}
+
+// ------------------------------------------------------------
+// Table narration renderer (NON-CANONICAL)
+// - Uses ONLY provided table signals
+// - Adds connective tissue / table-play voice
+// - Does NOT add new facts (no new NPCs, no new places, no new events)
+// ------------------------------------------------------------
+
+function renderInitialTableNarration(t: InitialTable): string {
+  const [traitA, traitB] = t.locationTraits;
+  const oddity = t.environmentalOddities[0] ?? "Something feels off";
+  const hook = t.dormantHooks[0] ?? "A sign repeats";
+  const factions = t.latentFactions;
+
+  const lines: string[] = [];
+
+  // Opening (keep the exact first line, then make it playable)
+  lines.push(t.openingFrame);
+
+  // Traits become sensory framing (no new facts; just voice)
+  lines.push(
+    `The place feels ${traitA}, and the air carries the stink of ${traitB}.`
+  );
+
+  // Oddity becomes immediate table tension
+  if (/footsteps echo twice/i.test(oddity)) {
+    lines.push(
+      "Every step answers itself — once, then again — like the street remembers you a beat too late."
+    );
+  } else if (/lantern/i.test(oddity.toLowerCase())) {
+    lines.push(
+      "Lanternlight can’t decide what it wants to be — steady one second, starving the next."
+    );
+  } else if (/absorb sound/i.test(oddity.toLowerCase())) {
+    lines.push(
+      "Sound doesn’t travel right. Words die early, like the walls are swallowing them."
+    );
+  } else if (/whispers/i.test(oddity.toLowerCase())) {
+    lines.push(
+      "You keep catching whispers at the edge of hearing — not loud enough to understand, not quiet enough to ignore."
+    );
+  } else {
+    lines.push(`${oddity}.`);
+  }
+
+  // Factions (multiple) — presented as pressure vectors
+  if (factions.length > 0) {
+    lines.push("There are pressures under the surface:");
+    factions.forEach((f) => {
+      lines.push(`• ${f.name} want to ${f.desire} — but ${f.pressure}.`);
+    });
+  }
+
+  // Hook as the “why now”
+  lines.push(`${hook}.`);
+  lines.push("That repetition feels deliberate. And it feels recent.");
+
+  return lines.join("\n\n");
 }
 
 // ------------------------------------------------------------
@@ -162,9 +255,8 @@ export default function DemoPage() {
     useState<InitialTable | null>(null);
   const [tableAccepted, setTableAccepted] = useState(false);
 
-  // 🔹 ADDITIVE: editable DM draft of table text
-  const [initialTableDraft, setInitialTableDraft] =
-    useState<string>("");
+  // Editable narration buffer (DM-controlled)
+  const [tableDraftText, setTableDraftText] = useState("");
 
   const [playerInput, setPlayerInput] = useState("");
   const [parsed, setParsed] = useState<any>(null);
@@ -180,27 +272,43 @@ export default function DemoPage() {
     if (dmMode !== "solace-neutral") return;
     if (initialTable) return;
 
-    const table = generateInitialTable();
-    setInitialTable(table);
-
-    // 🔹 Seed editable draft (non-canonical)
-    setInitialTableDraft(
-      [
-        table.openingFrame,
-        "",
-        `Traits: ${table.locationTraits.join(", ")}`,
-        "",
-        ...table.latentFactions.map(
-          (f) =>
-            `${f.name} — ${f.desire} (${f.pressure})`
-        ),
-        "",
-        `Oddity: ${table.environmentalOddities.join(", ")}`,
-        "",
-        `Hook: ${table.dormantHooks.join(", ")}`,
-      ].join("\n")
-    );
+    setInitialTable(generateInitialTable());
   }, [dmMode, initialTable]);
+
+  // ----------------------------------------------------------
+  // When table exists, generate playable narration (once),
+  // then allow DM edits.
+  // ----------------------------------------------------------
+
+  const renderedTableNarration = useMemo(() => {
+    if (!initialTable) return "";
+    return renderInitialTableNarration(initialTable);
+  }, [initialTable]);
+
+  useEffect(() => {
+    if (!initialTable) return;
+
+    // Seed editable draft only if empty (no overwriting DM edits)
+    if (tableDraftText.trim() === "") {
+      setTableDraftText(renderedTableNarration);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialTable, renderedTableNarration]);
+
+  // ----------------------------------------------------------
+  // If user switches to HUMAN DM mode:
+  // - don’t block play behind the table gate
+  // - but still allow “Solace setup” as convenience
+  // ----------------------------------------------------------
+
+  useEffect(() => {
+    if (dmMode === "human") {
+      setTableAccepted(true);
+    } else {
+      // In Solace mode, gate applies again until accepted
+      setTableAccepted(false);
+    }
+  }, [dmMode]);
 
   // ----------------------------------------------------------
   // Player submits action
@@ -235,10 +343,10 @@ export default function DemoPage() {
   function handleRecord(payload: {
     description: string;
     dice: {
-      mode: string;
+      mode: DiceMode;
       roll: number;
       dc: number;
-      source: "manual" | "solace";
+      source: RollSource;
     };
     audit: string[];
   }) {
@@ -287,92 +395,165 @@ export default function DemoPage() {
         ]}
       />
 
+      {/* FACILITATION MODE (NO DELETIONS — ADDED CONTROL) */}
+      <CardSection title="Facilitation Mode">
+        <label>
+          <input
+            type="radio"
+            checked={dmMode === "human"}
+            onChange={() => setDmMode("human")}
+          />{" "}
+          Human DM (options visible + editable setup)
+        </label>
+        <br />
+        <label>
+          <input
+            type="radio"
+            checked={dmMode === "solace-neutral"}
+            onChange={() => setDmMode("solace-neutral")}
+          />{" "}
+          Solace (Neutral Facilitator)
+        </label>
+      </CardSection>
+
       {/* INITIAL TABLE GATE */}
       {dmMode === "solace-neutral" &&
         initialTable &&
         !tableAccepted && (
-          <CardSection title="Initial Table (Solace — Editable)">
-            {/* Existing rendered structure (unchanged) */}
-            <p>{initialTable.openingFrame}</p>
-
-            <p className="muted">
-              Traits:{" "}
-              {initialTable.locationTraits.join(", ")}
+          <CardSection title="Initial Table (Solace)">
+            {/* DM-EDITABLE, TABLE-PLAYABLE NARRATION */}
+            <p className="muted" style={{ marginBottom: 8 }}>
+              Table-play narration (editable before start):
             </p>
-
-            <ul>
-              {initialTable.latentFactions.map(
-                (f, i) => (
-                  <li key={i}>
-                    <strong>{f.name}</strong> —{" "}
-                    {f.desire} ({f.pressure})
-                  </li>
-                )
-              )}
-            </ul>
-
-            <p className="muted">
-              Oddity:{" "}
-              {initialTable.environmentalOddities.join(
-                ", "
-              )}
-            </p>
-
-            <p className="muted">
-              Hook:{" "}
-              {initialTable.dormantHooks.join(", ")}
-            </p>
-
-            {/* 🔹 ADDITIVE: DM-editable narrative draft */}
-            <label className="muted">
-              DM Notes / Editable Table Framing
-            </label>
             <textarea
-              rows={8}
+              rows={10}
+              value={tableDraftText}
+              onChange={(e) => setTableDraftText(e.target.value)}
               style={{ width: "100%" }}
-              value={initialTableDraft}
-              onChange={(e) =>
-                setInitialTableDraft(e.target.value)
-              }
             />
 
-            <button
-              onClick={() => {
-                const t = generateInitialTable();
-                setInitialTable(t);
-                setInitialTableDraft(
-                  [
-                    t.openingFrame,
-                    "",
-                    `Traits: ${t.locationTraits.join(", ")}`,
-                    "",
-                    ...t.latentFactions.map(
-                      (f) =>
-                        `${f.name} — ${f.desire} (${f.pressure})`
-                    ),
-                    "",
-                    `Oddity: ${t.environmentalOddities.join(
-                      ", "
-                    )}`,
-                    "",
-                    `Hook: ${t.dormantHooks.join(", ")}`,
-                  ].join("\n")
-                );
-              }}
-            >
-              Regenerate
-            </button>{" "}
-            <button
-              onClick={() => setTableAccepted(true)}
-            >
-              Accept Table
-            </button>
+            {/* Keep the raw table visible, but not as the primary “start” */}
+            <details style={{ marginTop: 12 }}>
+              <summary className="muted">Show underlying table signals</summary>
+              <div style={{ marginTop: 10 }}>
+                <p>{initialTable.openingFrame}</p>
+
+                <p className="muted">
+                  Traits:{" "}
+                  {initialTable.locationTraits.join(", ")}
+                </p>
+
+                <ul>
+                  {initialTable.latentFactions.map((f, i) => (
+                    <li key={i}>
+                      <strong>{f.name}</strong> — {f.desire} ({f.pressure})
+                    </li>
+                  ))}
+                </ul>
+
+                <p className="muted">
+                  Oddity:{" "}
+                  {initialTable.environmentalOddities.join(", ")}
+                </p>
+
+                <p className="muted">
+                  Hook:{" "}
+                  {initialTable.dormantHooks.join(", ")}
+                </p>
+              </div>
+            </details>
+
+            <div style={{ marginTop: 10 }}>
+              <button
+                onClick={() => {
+                  const next = generateInitialTable();
+                  setInitialTable(next);
+                  setTableDraftText(renderInitialTableNarration(next));
+                }}
+              >
+                Regenerate
+              </button>{" "}
+              <button onClick={() => setTableAccepted(true)}>
+                Accept Table
+              </button>
+            </div>
           </CardSection>
         )}
 
+      {/* HUMAN DM: optional Solace setup helper (EDITABLE) */}
+      {dmMode === "human" && (
+        <CardSection title="Solace Setup Helper (Optional)">
+          <p className="muted" style={{ marginTop: 0 }}>
+            If you want a fast-start table, generate one, edit it, then run the game.
+          </p>
+
+          {!initialTable ? (
+            <button
+              onClick={() => {
+                const next = generateInitialTable();
+                setInitialTable(next);
+                setTableDraftText(renderInitialTableNarration(next));
+              }}
+            >
+              Generate Table
+            </button>
+          ) : (
+            <>
+              <textarea
+                rows={10}
+                value={tableDraftText}
+                onChange={(e) => setTableDraftText(e.target.value)}
+                style={{ width: "100%" }}
+              />
+
+              <details style={{ marginTop: 12 }}>
+                <summary className="muted">Show underlying table signals</summary>
+                <div style={{ marginTop: 10 }}>
+                  <p>{initialTable.openingFrame}</p>
+
+                  <p className="muted">
+                    Traits:{" "}
+                    {initialTable.locationTraits.join(", ")}
+                  </p>
+
+                  <ul>
+                    {initialTable.latentFactions.map((f, i) => (
+                      <li key={i}>
+                        <strong>{f.name}</strong> — {f.desire} ({f.pressure})
+                      </li>
+                    ))}
+                  </ul>
+
+                  <p className="muted">
+                    Oddity:{" "}
+                    {initialTable.environmentalOddities.join(", ")}
+                  </p>
+
+                  <p className="muted">
+                    Hook:{" "}
+                    {initialTable.dormantHooks.join(", ")}
+                  </p>
+                </div>
+              </details>
+
+              <div style={{ marginTop: 10 }}>
+                <button
+                  onClick={() => {
+                    const next = generateInitialTable();
+                    setInitialTable(next);
+                    setTableDraftText(renderInitialTableNarration(next));
+                  }}
+                >
+                  Regenerate
+                </button>
+              </div>
+            </>
+          )}
+        </CardSection>
+      )}
+
       {/* BLOCK PLAY UNTIL ACCEPTED */}
-      {dmMode === "solace-neutral" &&
-        !tableAccepted && <Disclaimer />}
+      {dmMode === "solace-neutral" && !tableAccepted && <Disclaimer />}
 
       {/* GAME FLOW */}
       {(dmMode === "human" || tableAccepted) && (
