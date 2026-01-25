@@ -143,7 +143,19 @@ export default function DemoPage() {
   }
 
   // ----------------------------------------------------------
-  // Option selection → Solace draft
+  // Solace silently selects when facilitator
+  // ----------------------------------------------------------
+
+  useEffect(() => {
+    if (dmMode !== "solace-neutral") return;
+    if (!options || options.length === 0) return;
+
+    // Deterministic, non-ranking choice
+    setSelectedOption(options[0]);
+  }, [dmMode, options]);
+
+  // ----------------------------------------------------------
+  // Human option selection
   // ----------------------------------------------------------
 
   function handleSelectOption(option: Option) {
@@ -285,7 +297,8 @@ export default function DemoPage() {
         </CardSection>
       )}
 
-      {options && (
+      {/* OPTIONS — HUMAN DM ONLY */}
+      {options && dmMode === "human" && (
         <CardSection title="Possible Options (No Ranking)">
           <ul>
             {options.map((opt) => (
@@ -318,7 +331,6 @@ export default function DemoPage() {
       )}
 
       <NextActionHint state={state} />
-
       <WorldLedgerPanelLegacy events={state.events} />
 
       <CardSection
