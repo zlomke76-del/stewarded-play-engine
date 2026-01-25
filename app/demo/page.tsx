@@ -25,7 +25,7 @@ import { exportCanon } from "@/lib/export/exportCanon";
 
 import ResolutionDraftAdvisoryPanel from "@/components/resolution/ResolutionDraftAdvisoryPanel";
 import NextActionHint from "@/components/NextActionHint";
-import WorldLedgerPanelLegacy from "@/components/world/WorldLedgerPanel.legacy";
+import WorldLedgerPanelAdvisory from "@/components/world/WorldLedgerPanelAdvisory";
 import DungeonPressurePanel from "@/components/world/DungeonPressurePanel";
 
 import StewardedShell from "@/components/layout/StewardedShell";
@@ -331,7 +331,10 @@ export default function DemoPage() {
       )}
 
       <NextActionHint state={state} />
-      <WorldLedgerPanelLegacy events={state.events} />
+
+      <WorldLedgerPanelAdvisory
+        events={state.events}
+      />
 
       <CardSection
         title="Canon (Confirmed Narrative)"
