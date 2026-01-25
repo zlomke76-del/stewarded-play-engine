@@ -23,7 +23,7 @@ import { parseAction } from "@/lib/parser/ActionParser";
 import { generateOptions, Option } from "@/lib/options/OptionGenerator";
 import { exportCanon } from "@/lib/export/exportCanon";
 
-import ResolutionDraftPanel from "@/components/resolution/ResolutionDraftPanel";
+import ResolutionDraftAdvisoryPanel from "@/components/resolution/ResolutionDraftAdvisoryPanel";
 import NextActionHint from "@/components/NextActionHint";
 import WorldLedgerPanelLegacy from "@/components/world/WorldLedgerPanel.legacy";
 import DungeonPressurePanel from "@/components/world/DungeonPressurePanel";
@@ -99,8 +99,8 @@ export default function DemoPage() {
   const role: "arbiter" = "arbiter";
 
   const [state, setState] = useState<SessionState>(
-  createSession("demo-session", "demo")
-);
+    createSession("demo-session", "demo")
+  );
 
   const [dmMode, setDmMode] = useState<DMMode>("solace-neutral");
   const [campaignSeed, setCampaignSeed] = useState("");
@@ -304,7 +304,7 @@ export default function DemoPage() {
       )}
 
       {selectedOption && (
-        <ResolutionDraftPanel
+        <ResolutionDraftAdvisoryPanel
           role={role}
           context={{
             optionDescription:
