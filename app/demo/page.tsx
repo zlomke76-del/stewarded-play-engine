@@ -6,13 +6,13 @@
 //
 // Invariants:
 // - Player declares intent
-// - Solace narrates dice outcomes (non-authoritative)
+// - Solace prepares initial table (non-canonical)
 // - Dice decide fate
+// - Solace narrates outcomes (non-authoritative)
 // - Arbiter commits canon
-// - Audit ribbon always visible
 // ------------------------------------------------------------
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   createSession,
   recordEvent,
@@ -45,23 +45,73 @@ type OptionKind =
   | "risky"
   | "contested";
 
-type DiceMode = "d4" | "d6" | "d8" | "d10" | "d12" | "d20";
+type InitialTable = {
+  openingFrame: string;
+  locationTraits: string[];
+  latentFactions: {
+    name: string;
+    desire: string;
+    pressure: string;
+  }[];
+  environmentalOddities: string[];
+  dormantHooks: string[];
+};
 
 // ------------------------------------------------------------
-// Framing helpers
+// Random helpers (deterministic per load, different each time)
 // ------------------------------------------------------------
 
-function generateFraming(seed: string): string {
-  return (
-    `You arrive at the edge of a small settlement as dusk settles in. ` +
-    `Lantern light flickers through misty air. ` +
-    (seed ? `Rumors speak of ${seed}. ` : "") +
-    `Nothing has happened yet. The world waits.`
-  );
+function pick<T>(arr: T[]) {
+  return arr[Math.floor(Math.random() * arr.length)];
+}
+
+function generateInitialTable(): InitialTable {
+  return {
+    openingFrame: pick([
+      "A low fog coils between narrow streets as evening bells fade.",
+      "Rain-dark stone reflects lanternlight in uneasy patterns.",
+      "Voices echo where they shouldn’t, carrying fragments of argument.",
+      "The city hums, unaware of the pressure building beneath it.",
+    ]),
+    locationTraits: [
+      pick(["crowded", "echoing", "claustrophobic", "uneasily quiet"]),
+      pick(["ancient stone", "rotting wood", "slick cobblestone"]),
+    ],
+    latentFactions: [
+      {
+        name: pick(["The Whisperers", "The Vaultwardens", "The Ash Circle"]),
+        desire: pick([
+          "control what sleeps below",
+          "seal the vaults forever",
+          "profit from forbidden knowledge",
+        ]),
+        pressure: pick([
+          "time is running out",
+          "someone is leaking secrets",
+          "an old oath is failing",
+        ]),
+      },
+    ],
+    environmentalOddities: [
+      pick([
+        "Lantern flames gutter without wind",
+        "Stone walls seem to absorb sound",
+        "Whispers surface near old drains",
+        "Footsteps echo twice",
+      ]),
+    ],
+    dormantHooks: [
+      pick([
+        "A name scratched into stone repeats across districts",
+        "A missing city clerk last seen near the underways",
+        "A sealed door recently disturbed",
+      ]),
+    ],
+  };
 }
 
 // ------------------------------------------------------------
-// Difficulty inference (language-only, advisory)
+// Difficulty inference (language-only)
 // ------------------------------------------------------------
 
 function inferOptionKind(description: string): OptionKind {
@@ -106,8 +156,11 @@ export default function DemoPage() {
   );
 
   const [dmMode, setDmMode] = useState<DMMode>("solace-neutral");
-  const [campaignSeed, setCampaignSeed] = useState("");
-  const [framing, setFraming] = useState<string | null>(null);
+
+  // Initial Table Gate
+  const [initialTable, setInitialTable] =
+    useState<InitialTable | null>(null);
+  const [tableAccepted, setTableAccepted] = useState(false);
 
   const [playerInput, setPlayerInput] = useState("");
   const [parsed, setParsed] = useState<any>(null);
@@ -115,23 +168,19 @@ export default function DemoPage() {
   const [selectedOption, setSelectedOption] =
     useState<Option | null>(null);
 
-  const canonStarted = state.events.some(
-    (e) => e.type === "OUTCOME"
-  );
-
   // ----------------------------------------------------------
-  // Framing (Solace-neutral only, pre-canon)
+  // Generate table ONCE per session in Solace mode
   // ----------------------------------------------------------
 
   useEffect(() => {
     if (dmMode !== "solace-neutral") return;
-    if (canonStarted) return;
+    if (initialTable) return;
 
-    setFraming(generateFraming(campaignSeed));
-  }, [dmMode, campaignSeed, canonStarted]);
+    setInitialTable(generateInitialTable());
+  }, [dmMode, initialTable]);
 
   // ----------------------------------------------------------
-  // Player submits intent
+  // Player submits action
   // ----------------------------------------------------------
 
   function handlePlayerAction() {
@@ -153,26 +202,23 @@ export default function DemoPage() {
     if (dmMode !== "solace-neutral") return;
     if (!options || options.length === 0) return;
 
-    // Deterministic, non-ranking facilitator choice
     setSelectedOption(options[0]);
   }, [dmMode, options]);
 
   // ----------------------------------------------------------
-  // Arbiter records canon (type-safe, guarded)
+  // Record canon
   // ----------------------------------------------------------
 
   function handleRecord(payload: {
     description: string;
     dice: {
-      mode: DiceMode;
+      mode: string;
       roll: number;
       dc: number;
       source: "manual" | "solace";
     };
     audit: string[];
   }) {
-    if (!payload.description.trim()) return;
-
     setState((prev) =>
       recordEvent(prev, {
         id: crypto.randomUUID(),
@@ -189,8 +235,9 @@ export default function DemoPage() {
   // ----------------------------------------------------------
 
   function shareCanon() {
-    const canon = exportCanon(state.events);
-    navigator.clipboard.writeText(canon);
+    navigator.clipboard.writeText(
+      exportCanon(state.events)
+    );
     alert("Canon copied to clipboard.");
   }
 
@@ -208,126 +255,145 @@ export default function DemoPage() {
           {
             label: "Solace",
             description:
-              "Narrates dice outcomes (non-authoritative)",
+              "Prepares the table and narrates outcomes",
           },
           {
             label: "Arbiter",
-            description: "Commits outcomes to canon",
+            description: "Commits canon",
           },
         ]}
       />
 
-      <DungeonPressurePanel
-        turn={state.events.filter(
-          (e) => e.type === "OUTCOME"
-        ).length}
-        events={state.events}
-      />
+      {/* INITIAL TABLE GATE */}
+      {dmMode === "solace-neutral" &&
+        initialTable &&
+        !tableAccepted && (
+          <CardSection title="Initial Table (Solace)">
+            <p>{initialTable.openingFrame}</p>
 
-      <CardSection title="Facilitation Mode">
-        <label>
-          <input
-            type="radio"
-            checked={dmMode === "human"}
-            onChange={() => setDmMode("human")}
-          />{" "}
-          Human DM
-        </label>
-        <br />
-        <label>
-          <input
-            type="radio"
-            checked={dmMode === "solace-neutral"}
-            onChange={() => setDmMode("solace-neutral")}
-          />{" "}
-          Solace (Neutral Facilitator)
-        </label>
-
-        {dmMode === "solace-neutral" && (
-          <>
-            <br />
-            <label>
-              Campaign seed:{" "}
-              <input
-                value={campaignSeed}
-                onChange={(e) =>
-                  setCampaignSeed(e.target.value)
-                }
-                placeholder="Optional world hook"
-              />
-            </label>
-          </>
-        )}
-      </CardSection>
-
-      <CardSection title="Session Start">
-        {framing ? (
-          <>
             <p className="muted">
-              Facilitator framing (non-canonical):
+              Traits:{" "}
+              {initialTable.locationTraits.join(
+                ", "
+              )}
             </p>
-            <p>{framing}</p>
-          </>
-        ) : (
-          <p className="muted">No framing set.</p>
+
+            <ul>
+              {initialTable.latentFactions.map(
+                (f, i) => (
+                  <li key={i}>
+                    <strong>{f.name}</strong> —{" "}
+                    {f.desire} ({f.pressure})
+                  </li>
+                )
+              )}
+            </ul>
+
+            <p className="muted">
+              Oddity:{" "}
+              {initialTable.environmentalOddities.join(
+                ", "
+              )}
+            </p>
+
+            <p className="muted">
+              Hook:{" "}
+              {initialTable.dormantHooks.join(
+                ", "
+              )}
+            </p>
+
+            <button
+              onClick={() =>
+                setInitialTable(
+                  generateInitialTable()
+                )
+              }
+            >
+              Regenerate
+            </button>{" "}
+            <button
+              onClick={() => setTableAccepted(true)}
+            >
+              Accept Table
+            </button>
+          </CardSection>
         )}
-      </CardSection>
 
-      <CardSection title="Player Action">
-        <textarea
-          rows={3}
-          value={playerInput}
-          onChange={(e) =>
-            setPlayerInput(e.target.value)
-          }
-          placeholder="Describe what your character does…"
-        />
-        <button onClick={handlePlayerAction}>
-          Submit Action
-        </button>
-      </CardSection>
+      {/* BLOCK PLAY UNTIL ACCEPTED */}
+      {dmMode === "solace-neutral" &&
+        !tableAccepted && <Disclaimer />}
 
-      {parsed && (
-        <CardSection title="Parsed Action (System)">
-          <pre>{JSON.stringify(parsed, null, 2)}</pre>
-        </CardSection>
+      {/* GAME FLOW */}
+      {(dmMode === "human" || tableAccepted) && (
+        <>
+          <DungeonPressurePanel
+            turn={state.events.filter(
+              (e) => e.type === "OUTCOME"
+            ).length}
+            events={state.events}
+          />
+
+          <CardSection title="Player Action">
+            <textarea
+              rows={3}
+              value={playerInput}
+              onChange={(e) =>
+                setPlayerInput(e.target.value)
+              }
+              placeholder="Describe what your character does…"
+            />
+            <button onClick={handlePlayerAction}>
+              Submit Action
+            </button>
+          </CardSection>
+
+          {parsed && (
+            <CardSection title="Parsed Action">
+              <pre>
+                {JSON.stringify(parsed, null, 2)}
+              </pre>
+            </CardSection>
+          )}
+
+          {options && dmMode === "human" && (
+            <CardSection title="Options">
+              <ul>
+                {options.map((opt) => (
+                  <li key={opt.id}>
+                    <button
+                      onClick={() =>
+                        setSelectedOption(opt)
+                      }
+                    >
+                      {opt.description}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </CardSection>
+          )}
+
+          {selectedOption && (
+            <ResolutionDraftAdvisoryPanel
+              role={role}
+              context={{
+                optionDescription:
+                  selectedOption.description,
+                optionKind: inferOptionKind(
+                  selectedOption.description
+                ),
+              }}
+              onRecord={handleRecord}
+            />
+          )}
+
+          <NextActionHint state={state} />
+          <WorldLedgerPanelLegacy
+            events={state.events}
+          />
+        </>
       )}
-
-      {/* OPTIONS — HUMAN DM ONLY */}
-      {options && dmMode === "human" && (
-        <CardSection title="Possible Options (No Ranking)">
-          <ul>
-            {options.map((opt) => (
-              <li key={opt.id}>
-                <button
-                  onClick={() =>
-                    setSelectedOption(opt)
-                  }
-                >
-                  {opt.description}
-                </button>
-              </li>
-            ))}
-          </ul>
-        </CardSection>
-      )}
-
-      {selectedOption && (
-        <ResolutionDraftAdvisoryPanel
-          role={role}
-          context={{
-            optionDescription:
-              selectedOption.description,
-            optionKind: inferOptionKind(
-              selectedOption.description
-            ),
-          }}
-          onRecord={handleRecord}
-        />
-      )}
-
-      <NextActionHint state={state} />
-      <WorldLedgerPanelLegacy events={state.events} />
 
       <Disclaimer />
     </StewardedShell>
