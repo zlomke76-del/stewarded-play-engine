@@ -4,11 +4,10 @@
 // ResolutionDraftAdvisoryPanel
 // ------------------------------------------------------------
 // Authority contract (HUMAN-ARBITER):
-// - Dice decide fate
-// - Solace narrates the dice (not outcomes)
-// - Human Arbiter binds canon
-// - Player may roll physically or digitally
-// - Invalid rolls are rejected
+// - Solace drafts only (non-authoritative)
+// - Dice decide outcome
+// - Solace narrates strain on the PLAN, not player failure
+// - Human Arbiter explicitly records canon
 // ------------------------------------------------------------
 
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -18,7 +17,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 ------------------------------------------------------------ */
 
 type DiceMode = "d4" | "d6" | "d8" | "d10" | "d12" | "d20";
-type RollSource = "solace" | "player-ui" | "player-manual";
+type RollSource = "manual" | "solace";
 
 export type ResolutionContext = {
   optionDescription: string;
@@ -34,7 +33,6 @@ type Props = {
       mode: DiceMode;
       roll: number;
       dc: number;
-      justification: string;
       source: RollSource;
     };
     audit: string[];
@@ -48,20 +46,71 @@ type Props = {
 function difficultyFor(kind?: ResolutionContext["optionKind"]) {
   switch (kind) {
     case "safe":
-      return { dc: 6, justification: "Low immediate risk" };
+      return 6;
     case "environmental":
-      return { dc: 8, justification: "Environmental uncertainty" };
+      return 8;
     case "risky":
-      return { dc: 10, justification: "Meaningful risk involved" };
+      return 10;
     case "contested":
-      return { dc: 14, justification: "Active opposition expected" };
+      return 14;
     default:
-      return { dc: 10, justification: "Outcome uncertain" };
+      return 10;
   }
 }
 
-function diceMax(mode: DiceMode): number {
-  return parseInt(mode.replace("d", ""), 10);
+/* ------------------------------------------------------------
+   Intent analysis
+------------------------------------------------------------ */
+
+function analyzeIntent(text: string) {
+  const t = text.toLowerCase();
+
+  return {
+    stealth: t.includes("stealth") || t.includes("sneak") || t.includes("scout"),
+    magic: t.includes("spell") || t.includes("cantrip") || t.includes("detect"),
+    force: t.includes("attack") || t.includes("grip") || t.includes("ready"),
+    caution: t.includes("careful") || t.includes("quiet") || t.includes("if clear"),
+  };
+}
+
+/* ------------------------------------------------------------
+   Narrative synthesis
+------------------------------------------------------------ */
+
+function narrateOutcome(
+  intent: string,
+  roll: number,
+  dc: number
+): string {
+  const margin = roll - dc;
+  const intentShape = analyzeIntent(intent);
+
+  // SUCCESS — clean or strong
+  if (margin >= 3) {
+    return "The plan unfolds cleanly. Each role holds, and the path ahead opens without resistance.";
+  }
+
+  if (margin >= 0) {
+    return "The plan holds, though only just. Small adjustments keep things quiet — for now.";
+  }
+
+  // FAILURE — strain, not stupidity
+  if (margin >= -2) {
+    if (intentShape.stealth) {
+      return "The formation stays tight, but something feels off. Sound carries farther than expected, and caution slows the advance.";
+    }
+    if (intentShape.magic) {
+      return "The magic hums uncertainly, offering no clear warning — absence of certainty becomes its own risk.";
+    }
+    return "The approach meets resistance from the environment itself. Progress slows under growing tension.";
+  }
+
+  // HARD FAILURE
+  if (intentShape.stealth) {
+    return "Movement betrays you — not loudly, but unmistakably. The plan fractures at its edges as attention shifts your way.";
+  }
+
+  return "The plan collapses under pressure. What should have been controlled becomes exposed, forcing immediate decisions.";
 }
 
 /* ------------------------------------------------------------ */
@@ -71,90 +120,39 @@ export default function ResolutionDraftAdvisoryPanel({
   role,
   onRecord,
 }: Props) {
-  const base = difficultyFor(context.optionKind);
+  const dc = difficultyFor(context.optionKind);
 
   const [diceMode, setDiceMode] = useState<DiceMode>("d20");
   const [roll, setRoll] = useState<number | null>(null);
-  const [rollSource, setRollSource] =
-    useState<RollSource>("solace");
-  const [manualInput, setManualInput] =
-    useState<string>("");
+  const [manualRoll, setManualRoll] = useState<string>("");
 
   const committedRef = useRef(false);
 
-  // Reset on new intent
   useEffect(() => {
     setRoll(null);
-    setManualInput("");
+    setManualRoll("");
     committedRef.current = false;
   }, [context.optionDescription]);
 
-  /* ----------------------------------------------------------
-     Dice narration (interesting, non-authoritative)
-  ---------------------------------------------------------- */
-
-  const narration = useMemo(() => {
-    if (roll === null) {
-      return "The moment tightens. This comes down to the roll.";
-    }
-
-    const delta = roll - base.dc;
-
-    if (delta >= 6) {
-      return "That’s overwhelming. The numbers don’t hesitate.";
-    }
-
-    if (delta >= 1) {
-      return "It clears the bar — barely enough, but enough.";
-    }
-
-    if (delta === 0) {
-      return "Right on the edge. No margin at all.";
-    }
-
-    if (delta >= -3) {
-      return "Close — but the dice don’t give it to you.";
-    }
-
-    return "That goes badly. The roll leaves no room to argue.";
-  }, [roll, base.dc]);
-
-  /* ----------------------------------------------------------
-     Roll handlers
-  ---------------------------------------------------------- */
-
-  function rollDigitally() {
-    const max = diceMax(diceMode);
+  function rollDice() {
+    const max = parseInt(diceMode.slice(1), 10);
     const r = Math.ceil(Math.random() * max);
     setRoll(r);
-    setRollSource("player-ui");
   }
 
   function acceptManualRoll() {
-    const value = Number(manualInput);
-    const max = diceMax(diceMode);
-
-    if (
-      !Number.isInteger(value) ||
-      value < 1 ||
-      value > max
-    ) {
-      alert(
-        `Invalid roll. ${diceMode} must be between 1 and ${max}.`
-      );
-      return;
-    }
-
-    setRoll(value);
-    setRollSource("player-manual");
+    const r = Number(manualRoll);
+    if (!Number.isInteger(r) || r <= 0) return;
+    setRoll(r);
   }
 
-  /* ----------------------------------------------------------
-     Commit canon (manual, arbiter only)
-  ---------------------------------------------------------- */
+  const narration =
+    roll !== null
+      ? narrateOutcome(context.optionDescription, roll, dc)
+      : "The moment stretches as fate waits on the dice.";
 
   function handleRecord() {
-    if (committedRef.current || roll === null) return;
+    if (roll === null || committedRef.current) return;
     committedRef.current = true;
 
     onRecord({
@@ -162,101 +160,64 @@ export default function ResolutionDraftAdvisoryPanel({
       dice: {
         mode: diceMode,
         roll,
-        dc: base.dc,
-        justification: base.justification,
-        source: rollSource,
+        dc,
+        source: manualRoll ? "manual" : "solace",
       },
-      audit: [
-        "Dice determine fate",
-        `Roll source: ${rollSource}`,
-        "Canon recorded by Arbiter",
-      ],
+      audit: ["Drafted by Solace", "Recorded by Arbiter"],
     });
   }
 
-  /* ----------------------------------------------------------
-     UI
-  ---------------------------------------------------------- */
-
   return (
-    <section
-      style={{
-        border: "1px dashed #666",
-        padding: 16,
-        marginTop: 16,
-      }}
-    >
+    <section style={{ border: "1px dashed #666", padding: 16 }}>
       <h3>Resolution Draft</h3>
 
       <p className="muted">
-        Difficulty {base.dc} — {base.justification}
+        Difficulty {dc} — Dice decide outcome
       </p>
 
       <label>
-        Dice:&nbsp;
+        Dice:
         <select
           value={diceMode}
           onChange={(e) =>
             setDiceMode(e.target.value as DiceMode)
           }
-          disabled={roll !== null}
         >
-          {["d4", "d6", "d8", "d10", "d12", "d20"].map(
-            (d) => (
-              <option key={d} value={d}>
-                {d}
-              </option>
-            )
-          )}
+          <option>d4</option>
+          <option>d6</option>
+          <option>d8</option>
+          <option>d10</option>
+          <option>d12</option>
+          <option>d20</option>
         </select>
       </label>
 
-      <div style={{ marginTop: 12 }}>
-        <button
-          onClick={rollDigitally}
-          disabled={roll !== null}
-        >
-          Roll Here
-        </button>
+      <div style={{ marginTop: 8 }}>
+        <button onClick={rollDice}>Roll Here</button>
       </div>
 
       <div style={{ marginTop: 8 }}>
         <input
-          type="number"
           placeholder="Enter physical roll"
-          value={manualInput}
-          onChange={(e) =>
-            setManualInput(e.target.value)
-          }
-          disabled={roll !== null}
-          style={{ width: 140 }}
+          value={manualRoll}
+          onChange={(e) => setManualRoll(e.target.value)}
         />
-        <button
-          onClick={acceptManualRoll}
-          disabled={roll !== null}
-          style={{ marginLeft: 8 }}
-        >
-          Accept Roll
-        </button>
+        <button onClick={acceptManualRoll}>Accept Roll</button>
       </div>
 
       {roll !== null && (
-        <>
-          <p style={{ marginTop: 12 }}>
-            🎲 {diceMode} rolled{" "}
-            <strong>{roll}</strong> vs DC{" "}
-            <strong>{base.dc}</strong>
-          </p>
-
-          <p>{narration}</p>
-        </>
+        <p>
+          🎲 {diceMode} rolled <strong>{roll}</strong> vs DC{" "}
+          <strong>{dc}</strong>
+        </p>
       )}
+
+      <p>{narration}</p>
 
       {role === "arbiter" && (
         <button
           onClick={handleRecord}
           disabled={roll === null}
-          style={{ marginTop: 12 }}
         >
           Record Outcome
         </button>
