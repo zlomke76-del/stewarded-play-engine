@@ -419,63 +419,63 @@ export default function DemoPage() {
         </label>
       </CardSection>
 
-      {/* INITIAL TABLE GATE */}
-      {dmMode === "solace-neutral" &&
-        initialTable &&
-        !tableAccepted && (
-          <CardSection title="Initial Table (Solace)">
-            {/* DM-EDITABLE, TABLE-PLAYABLE NARRATION */}
-            <p className="muted" style={{ marginBottom: 8 }}>
-              Table-play narration (editable before start):
-            </p>
+{/* INITIAL TABLE GATE */}
+{dmMode === "solace-neutral" &&
+  initialTable &&
+  !tableAccepted && (
+    <CardSection title="Initial Table (Solace)">
+      {/* FINALIZED TABLE NARRATION (NON-EDITABLE, NON-DRAFT) */}
+      <p className="muted" style={{ marginBottom: 8 }}>
+        Table-play narration (finalized):
+      </p>
 
-            {/* ✅ CHANGE: In Solace mode, this is READ-ONLY (no edits). */}
-            <textarea
-              rows={10}
-              value={tableDraftText}
-              readOnly
-              style={{ width: "100%" }}
-            />
+      <div
+        style={{
+          whiteSpace: "pre-wrap",
+          lineHeight: 1.6,
+          background: "rgba(0,0,0,0.25)",
+          padding: "16px",
+          borderRadius: "6px",
+        }}
+      >
+        {tableDraftText}
+      </div>
 
-            {/* Keep the raw table visible, but not as the primary “start” */}
-            <details style={{ marginTop: 12 }}>
-              <summary className="muted">Show underlying table signals</summary>
-              <div style={{ marginTop: 10 }}>
-                <p>{initialTable.openingFrame}</p>
+      {/* Keep the raw table visible, but not as the primary “start” */}
+      <details style={{ marginTop: 12 }}>
+        <summary className="muted">Show underlying table signals</summary>
+        <div style={{ marginTop: 10 }}>
+          <p>{initialTable.openingFrame}</p>
 
-                <p className="muted">
-                  Traits:{" "}
-                  {initialTable.locationTraits.join(", ")}
-                </p>
+          <p className="muted">
+            Traits: {initialTable.locationTraits.join(", ")}
+          </p>
 
-                <ul>
-                  {initialTable.latentFactions.map((f, i) => (
-                    <li key={i}>
-                      <strong>{f.name}</strong> — {f.desire} ({f.pressure})
-                    </li>
-                  ))}
-                </ul>
+          <ul>
+            {initialTable.latentFactions.map((f, i) => (
+              <li key={i}>
+                <strong>{f.name}</strong> — {f.desire} ({f.pressure})
+              </li>
+            ))}
+          </ul>
 
-                <p className="muted">
-                  Oddity:{" "}
-                  {initialTable.environmentalOddities.join(", ")}
-                </p>
+          <p className="muted">
+            Oddity: {initialTable.environmentalOddities.join(", ")}
+          </p>
 
-                <p className="muted">
-                  Hook:{" "}
-                  {initialTable.dormantHooks.join(", ")}
-                </p>
-              </div>
-            </details>
+          <p className="muted">
+            Hook: {initialTable.dormantHooks.join(", ")}
+          </p>
+        </div>
+      </details>
 
-            <div style={{ marginTop: 10 }}>
-              {/* ✅ CHANGE: No regenerate button in Solace mode (no overwrite / no deletions). */}
-              <button onClick={() => setTableAccepted(true)}>
-                Accept Table
-              </button>
-            </div>
-          </CardSection>
-        )}
+      <div style={{ marginTop: 10 }}>
+        <button onClick={() => setTableAccepted(true)}>
+          Accept Table
+        </button>
+      </div>
+    </CardSection>
+  )}
 
       {/* HUMAN DM: optional Solace setup helper (EDITABLE) */}
       {dmMode === "human" && (
