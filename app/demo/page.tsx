@@ -6,9 +6,9 @@
 //
 // Invariants:
 // - Player declares intent
-// - Solace proposes + drafts (non-authoritative)
-// - Dice are advisory only
-// - Arbiter edits + records canon
+// - Solace narrates dice outcomes (non-authoritative)
+// - Dice decide fate
+// - Arbiter commits canon
 // - Audit ribbon always visible
 // ------------------------------------------------------------
 
@@ -25,7 +25,7 @@ import { exportCanon } from "@/lib/export/exportCanon";
 
 import ResolutionDraftAdvisoryPanel from "@/components/resolution/ResolutionDraftAdvisoryPanel";
 import NextActionHint from "@/components/NextActionHint";
-import WorldLedgerPanelAdvisory from "@/components/world/WorldLedgerPanelAdvisory";
+import WorldLedgerPanelLegacy from "@/components/world/WorldLedgerPanel.legacy";
 import DungeonPressurePanel from "@/components/world/DungeonPressurePanel";
 
 import StewardedShell from "@/components/layout/StewardedShell";
@@ -58,7 +58,7 @@ function generateFraming(seed: string): string {
 }
 
 // ------------------------------------------------------------
-// Difficulty inference (NO Option schema changes)
+// Difficulty inference (language-only)
 // ------------------------------------------------------------
 
 function inferOptionKind(description: string): OptionKind {
@@ -143,36 +143,28 @@ export default function DemoPage() {
   }
 
   // ----------------------------------------------------------
-  // Solace silently selects when facilitator
+  // Solace silently selects option when facilitating
   // ----------------------------------------------------------
 
   useEffect(() => {
     if (dmMode !== "solace-neutral") return;
     if (!options || options.length === 0) return;
 
-    // Deterministic, non-ranking choice
+    // Deterministic, non-ranking
     setSelectedOption(options[0]);
   }, [dmMode, options]);
 
   // ----------------------------------------------------------
-  // Human option selection
-  // ----------------------------------------------------------
-
-  function handleSelectOption(option: Option) {
-    setSelectedOption(option);
-  }
-
-  // ----------------------------------------------------------
-  // Record canon (arbiter only)
+  // Arbiter records canon (UPDATED SIGNATURE)
   // ----------------------------------------------------------
 
   function handleRecord(payload: {
     description: string;
     dice: {
       mode: string;
-      roll: number | null;
+      roll: number;
       dc: number;
-      justification: string;
+      source: "manual" | "solace";
     };
     audit: string[];
   }) {
@@ -209,18 +201,17 @@ export default function DemoPage() {
         roles={[
           { label: "Player", description: "Declares intent" },
           {
-            label: "Solace (Neutral)",
+            label: "Solace",
             description:
-              "Frames scenes and drafts neutral resolutions",
+              "Narrates dice outcomes (non-authoritative)",
           },
           {
             label: "Arbiter",
-            description: "Edits and records canon",
+            description: "Commits outcomes to canon",
           },
         ]}
       />
 
-      {/* ---------- ADVISORY DUNGEON PRESSURE ---------- */}
       <DungeonPressurePanel
         turn={state.events.filter(
           (e) => e.type === "OUTCOME"
@@ -305,7 +296,7 @@ export default function DemoPage() {
               <li key={opt.id}>
                 <button
                   onClick={() =>
-                    handleSelectOption(opt)
+                    setSelectedOption(opt)
                   }
                 >
                   {opt.description}
@@ -331,33 +322,7 @@ export default function DemoPage() {
       )}
 
       <NextActionHint state={state} />
-
-      <WorldLedgerPanelAdvisory
-        events={state.events}
-      />
-
-      <CardSection
-        title="Canon (Confirmed Narrative)"
-        className="canon"
-      >
-        {state.events.filter(
-          (e) => e.type === "OUTCOME"
-        ).length === 0 ? (
-          <p className="muted">No canon yet.</p>
-        ) : (
-          <ul>
-            {state.events
-              .filter((e) => e.type === "OUTCOME")
-              .map((event) => (
-                <li key={event.id}>
-                  {String(
-                    event.payload.description
-                  )}
-                </li>
-              ))}
-          </ul>
-        )}
-      </CardSection>
+      <WorldLedgerPanelLegacy events={state.events} />
 
       <Disclaimer />
     </StewardedShell>
