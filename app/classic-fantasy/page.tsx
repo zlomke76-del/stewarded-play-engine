@@ -12,7 +12,7 @@
 // - Dungeon pressure is visible but NEVER acts
 // ------------------------------------------------------------
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import {
   createSession,
   recordEvent,
@@ -188,6 +188,17 @@ export default function ClassicFantasyPage() {
   }
 
   // ----------------------------------------------------------
+  // Solace silently selects option (non-ranking)
+  // ----------------------------------------------------------
+
+  useEffect(() => {
+    if (!options || options.length === 0) return;
+
+    // Deterministic facilitator choice
+    setSelectedOption(options[0]);
+  }, [options]);
+
+  // ----------------------------------------------------------
   // Arbiter records canon (TURN ADVANCES HERE)
   // ----------------------------------------------------------
 
@@ -308,23 +319,7 @@ export default function ClassicFantasyPage() {
         </CardSection>
       )}
 
-      {options && (
-        <CardSection title="Possible Resolution Paths">
-          <ul>
-            {options.map((opt) => (
-              <li key={opt.id}>
-                <button
-                  onClick={() =>
-                    setSelectedOption(opt)
-                  }
-                >
-                  {opt.description}
-                </button>
-              </li>
-            ))}
-          </ul>
-        </CardSection>
-      )}
+      {/* OPTIONS INTENTIONALLY HIDDEN — SOLACE FACILITATES */}
 
       {selectedOption && (
         <ResolutionDraftAdvisoryPanel
