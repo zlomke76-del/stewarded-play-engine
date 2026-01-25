@@ -23,7 +23,7 @@ import { parseAction } from "@/lib/parser/ActionParser";
 import { generateOptions, Option } from "@/lib/options/OptionGenerator";
 import { exportCanon } from "@/lib/export/exportCanon";
 
-import ResolutionDraftPanel from "@/components/resolution/ResolutionDraftPanel";
+import ResolutionDraftAdvisoryPanel from "@/components/resolution/ResolutionDraftAdvisoryPanel";
 import NextActionHint from "@/components/NextActionHint";
 
 import WorldLedgerPanelLegacy from "@/components/world/WorldLedgerPanel.legacy";
@@ -126,16 +126,19 @@ function buildEpilogue(events: readonly any[]): string | null {
 export default function ClassicFantasyPage() {
   const role: "arbiter" = "arbiter";
 
-  // ✅ CORRECT: createSession takes ONE argument in this repo
   const [state, setState] = useState<SessionState>(
-  createSession("classic-fantasy-session", "classic-fantasy")
-);
+    createSession(
+      "classic-fantasy-session",
+      "classic-fantasy"
+    )
+  );
 
   const [turn, setTurn] = useState(0);
 
   const [command, setCommand] = useState("");
   const [parsed, setParsed] = useState<any>(null);
-  const [options, setOptions] = useState<Option[] | null>(null);
+  const [options, setOptions] =
+    useState<Option[] | null>(null);
   const [selectedOption, setSelectedOption] =
     useState<Option | null>(null);
 
@@ -149,7 +152,8 @@ export default function ClassicFantasyPage() {
       .find(
         (e) =>
           e.type === "OUTCOME" &&
-          typeof (e as any).payload?.world?.roomId === "string"
+          typeof (e as any).payload?.world
+            ?.roomId === "string"
       ) as any | undefined;
 
     return last?.payload?.world?.roomId;
@@ -172,7 +176,10 @@ export default function ClassicFantasyPage() {
   function handleSubmitCommand() {
     if (!command.trim()) return;
 
-    const parsedAction = parseAction("player_1", command);
+    const parsedAction = parseAction(
+      "player_1",
+      command
+    );
     const optionSet = generateOptions(parsedAction);
 
     setParsed(parsedAction);
@@ -239,7 +246,10 @@ export default function ClassicFantasyPage() {
         title="Classic Fantasy — Resolution"
         onShare={handleShare}
         roles={[
-          { label: "Player", description: "Issues commands" },
+          {
+            label: "Player",
+            description: "Issues commands",
+          },
           {
             label: "Solace",
             description:
@@ -261,10 +271,13 @@ export default function ClassicFantasyPage() {
 
       <CardSection title="📍 Current Location">
         <p>
-          <strong>{prettyRoomName(currentRoomId)}</strong>
+          <strong>
+            {prettyRoomName(currentRoomId)}
+          </strong>
         </p>
         <p className="muted">
-          Canon location derived from last recorded outcome.
+          Canon location derived from last recorded
+          outcome.
         </p>
       </CardSection>
 
@@ -279,7 +292,9 @@ export default function ClassicFantasyPage() {
         <textarea
           rows={3}
           value={command}
-          onChange={(e) => setCommand(e.target.value)}
+          onChange={(e) =>
+            setCommand(e.target.value)
+          }
           placeholder="OPEN DOOR, ATTACK GOBLIN, SEARCH CHEST…"
         />
         <button onClick={handleSubmitCommand}>
@@ -299,7 +314,9 @@ export default function ClassicFantasyPage() {
             {options.map((opt) => (
               <li key={opt.id}>
                 <button
-                  onClick={() => setSelectedOption(opt)}
+                  onClick={() =>
+                    setSelectedOption(opt)
+                  }
                 >
                   {opt.description}
                 </button>
@@ -310,7 +327,7 @@ export default function ClassicFantasyPage() {
       )}
 
       {selectedOption && (
-        <ResolutionDraftPanel
+        <ResolutionDraftAdvisoryPanel
           role={role}
           context={{
             optionDescription:
