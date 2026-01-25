@@ -477,79 +477,72 @@ export default function DemoPage() {
     </CardSection>
   )}
 
-      {/* HUMAN DM: optional Solace setup helper (EDITABLE) */}
-      {dmMode === "human" && (
-        <CardSection title="Solace Setup Helper (Optional)">
-          <p className="muted" style={{ marginTop: 0 }}>
-            If you want a fast-start table, generate one, edit it, then run the game.
-          </p>
+      {/* HUMAN DM: optional Solace setup helper (EDITABLE ONLY UNTIL ACCEPTED) */}
+{dmMode === "human" && !tableAccepted && (
+  <CardSection title="Solace Setup Helper (Optional)">
+    <p className="muted" style={{ marginTop: 0 }}>
+      If you want a fast-start table, generate one, edit it, then run the game.
+    </p>
 
-          {!initialTable ? (
-            <button
-              onClick={() => {
-                const next = generateInitialTable();
-                setInitialTable(next);
-                setTableDraftText(renderInitialTableNarration(next));
-              }}
-            >
-              Generate Table
-            </button>
-          ) : (
-            <>
-              {/* ✅ Human DM mode: editable */}
-              <textarea
-                rows={10}
-                value={tableDraftText}
-                onChange={(e) => setTableDraftText(e.target.value)}
-                style={{ width: "100%" }}
-              />
+    {!initialTable ? (
+      <button
+        onClick={() => {
+          const next = generateInitialTable();
+          setInitialTable(next);
+          setTableDraftText(renderInitialTableNarration(next));
+        }}
+      >
+        Generate Table
+      </button>
+    ) : (
+      <>
+        <textarea
+          rows={10}
+          value={tableDraftText}
+          onChange={(e) => setTableDraftText(e.target.value)}
+          style={{ width: "100%" }}
+        />
 
-              <details style={{ marginTop: 12 }}>
-                <summary className="muted">Show underlying table signals</summary>
-                <div style={{ marginTop: 10 }}>
-                  <p>{initialTable.openingFrame}</p>
+        <details style={{ marginTop: 12 }}>
+          <summary className="muted">Show underlying table signals</summary>
+          <div style={{ marginTop: 10 }}>
+            <p>{initialTable.openingFrame}</p>
 
-                  <p className="muted">
-                    Traits:{" "}
-                    {initialTable.locationTraits.join(", ")}
-                  </p>
+            <p className="muted">
+              Traits: {initialTable.locationTraits.join(", ")}
+            </p>
 
-                  <ul>
-                    {initialTable.latentFactions.map((f, i) => (
-                      <li key={i}>
-                        <strong>{f.name}</strong> — {f.desire} ({f.pressure})
-                      </li>
-                    ))}
-                  </ul>
+            <ul>
+              {initialTable.latentFactions.map((f, i) => (
+                <li key={i}>
+                  <strong>{f.name}</strong> — {f.desire} ({f.pressure})
+                </li>
+              ))}
+            </ul>
 
-                  <p className="muted">
-                    Oddity:{" "}
-                    {initialTable.environmentalOddities.join(", ")}
-                  </p>
+            <p className="muted">
+              Oddity: {initialTable.environmentalOddities.join(", ")}
+            </p>
 
-                  <p className="muted">
-                    Hook:{" "}
-                    {initialTable.dormantHooks.join(", ")}
-                  </p>
-                </div>
-              </details>
+            <p className="muted">
+              Hook: {initialTable.dormantHooks.join(", ")}
+            </p>
+          </div>
+        </details>
 
-              <div style={{ marginTop: 10 }}>
-                {/* ✅ Human-only regenerate allowed */}
-                <button
-                  onClick={() => {
-                    const next = generateInitialTable();
-                    setInitialTable(next);
-                    setTableDraftText(renderInitialTableNarration(next));
-                  }}
-                >
-                  Regenerate
-                </button>
-              </div>
-            </>
-          )}
-        </CardSection>
-      )}
+        <div style={{ marginTop: 10 }}>
+          <button
+            onClick={() => {
+              setTableAccepted(true);
+            }}
+          >
+            Accept Table
+          </button>
+        </div>
+      </>
+    )}
+  </CardSection>
+)}
 
       {/* BLOCK PLAY UNTIL ACCEPTED */}
       {dmMode === "solace-neutral" && !tableAccepted && <Disclaimer />}
