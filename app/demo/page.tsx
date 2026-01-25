@@ -372,6 +372,9 @@ export default function DemoPage() {
     alert("Canon copied to clipboard.");
   }
 
+  const isHumanDM = dmMode === "human";
+  const isSolaceMode = dmMode === "solace-neutral";
+
   // ----------------------------------------------------------
   // UI
   // ----------------------------------------------------------
@@ -425,10 +428,12 @@ export default function DemoPage() {
             <p className="muted" style={{ marginBottom: 8 }}>
               Table-play narration (editable before start):
             </p>
+
+            {/* ✅ CHANGE: In Solace mode, this is READ-ONLY (no edits). */}
             <textarea
               rows={10}
               value={tableDraftText}
-              onChange={(e) => setTableDraftText(e.target.value)}
+              readOnly
               style={{ width: "100%" }}
             />
 
@@ -464,15 +469,7 @@ export default function DemoPage() {
             </details>
 
             <div style={{ marginTop: 10 }}>
-              <button
-                onClick={() => {
-                  const next = generateInitialTable();
-                  setInitialTable(next);
-                  setTableDraftText(renderInitialTableNarration(next));
-                }}
-              >
-                Regenerate
-              </button>{" "}
+              {/* ✅ CHANGE: No regenerate button in Solace mode (no overwrite / no deletions). */}
               <button onClick={() => setTableAccepted(true)}>
                 Accept Table
               </button>
@@ -499,6 +496,7 @@ export default function DemoPage() {
             </button>
           ) : (
             <>
+              {/* ✅ Human DM mode: editable */}
               <textarea
                 rows={10}
                 value={tableDraftText}
@@ -537,6 +535,7 @@ export default function DemoPage() {
               </details>
 
               <div style={{ marginTop: 10 }}>
+                {/* ✅ Human-only regenerate allowed */}
                 <button
                   onClick={() => {
                     const next = generateInitialTable();
