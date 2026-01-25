@@ -38,11 +38,14 @@ import Disclaimer from "@/components/layout/Disclaimer";
 // ------------------------------------------------------------
 
 type DMMode = "human" | "solace-neutral";
+
 type OptionKind =
   | "safe"
   | "environmental"
   | "risky"
   | "contested";
+
+type DiceMode = "d4" | "d6" | "d8" | "d10" | "d12" | "d20";
 
 // ------------------------------------------------------------
 // Framing helpers
@@ -58,7 +61,7 @@ function generateFraming(seed: string): string {
 }
 
 // ------------------------------------------------------------
-// Difficulty inference (language-only)
+// Difficulty inference (language-only, advisory)
 // ------------------------------------------------------------
 
 function inferOptionKind(description: string): OptionKind {
@@ -117,7 +120,7 @@ export default function DemoPage() {
   );
 
   // ----------------------------------------------------------
-  // Framing
+  // Framing (Solace-neutral only, pre-canon)
   // ----------------------------------------------------------
 
   useEffect(() => {
@@ -128,7 +131,7 @@ export default function DemoPage() {
   }, [dmMode, campaignSeed, canonStarted]);
 
   // ----------------------------------------------------------
-  // Player submits action
+  // Player submits intent
   // ----------------------------------------------------------
 
   function handlePlayerAction() {
@@ -150,24 +153,26 @@ export default function DemoPage() {
     if (dmMode !== "solace-neutral") return;
     if (!options || options.length === 0) return;
 
-    // Deterministic, non-ranking
+    // Deterministic, non-ranking facilitator choice
     setSelectedOption(options[0]);
   }, [dmMode, options]);
 
   // ----------------------------------------------------------
-  // Arbiter records canon (UPDATED SIGNATURE)
+  // Arbiter records canon (type-safe, guarded)
   // ----------------------------------------------------------
 
   function handleRecord(payload: {
     description: string;
     dice: {
-      mode: string;
+      mode: DiceMode;
       roll: number;
       dc: number;
       source: "manual" | "solace";
     };
     audit: string[];
   }) {
+    if (!payload.description.trim()) return;
+
     setState((prev) =>
       recordEvent(prev, {
         id: crypto.randomUUID(),
