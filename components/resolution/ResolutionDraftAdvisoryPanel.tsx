@@ -4,14 +4,11 @@
 // ResolutionDraftAdvisoryPanel
 // ------------------------------------------------------------
 // Authority contract (HUMAN-ARBITER):
-// - Solace drafts only (non-authoritative)
-// - Dice are advisory
-// - Human Arbiter explicitly records canon
-// - NO auto-commit, ever
-// - One record action per draft (guarded)
-//
-// This file exists to PROVE:
-// Solace cannot act without human consent.
+// - Dice decide fate
+// - Solace narrates the dice (not outcomes)
+// - Human Arbiter binds canon
+// - Player may roll physically or digitally
+// - Invalid rolls are rejected
 // ------------------------------------------------------------
 
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -21,53 +18,31 @@ import { useEffect, useMemo, useRef, useState } from "react";
 ------------------------------------------------------------ */
 
 type DiceMode = "d4" | "d6" | "d8" | "d10" | "d12" | "d20";
-type RollSource = "manual";
+type RollSource = "solace" | "player-ui" | "player-manual";
 
 export type ResolutionContext = {
   optionDescription: string;
   optionKind?: "safe" | "environmental" | "risky" | "contested";
 };
 
-type TrapState = "armed" | "sprung" | "disarmed";
-
 type Props = {
   context: ResolutionContext;
   role: "arbiter";
-
-  // Optional, invisible bias from tribe history / skills
-  tribeBias?: {
-    dcShift: number;
-    narrative?: string;
-  };
-
   onRecord: (payload: {
     description: string;
     dice: {
       mode: DiceMode;
-      roll: number | null;
+      roll: number;
       dc: number;
       justification: string;
       source: RollSource;
     };
     audit: string[];
-    world?: {
-      primary?: string;
-      roomId?: string;
-      scope?: "local";
-      trap?: {
-        id: string;
-        state: TrapState;
-        effect?: string;
-      };
-      resources?: {
-        foodDelta?: number;
-      };
-    };
   }) => void;
 };
 
 /* ------------------------------------------------------------
-   Difficulty framing (language-only, advisory)
+   Difficulty framing (advisory)
 ------------------------------------------------------------ */
 
 function difficultyFor(kind?: ResolutionContext["optionKind"]) {
@@ -85,15 +60,6 @@ function difficultyFor(kind?: ResolutionContext["optionKind"]) {
   }
 }
 
-function inferRoomName(text: string): string {
-  const t = text.toLowerCase();
-  if (t.includes("hunt")) return "Hunting Grounds";
-  if (t.includes("scout")) return "Nearby Ridge";
-  if (t.includes("defend")) return "Camp Perimeter";
-  if (t.includes("move")) return "New Camp";
-  return "The Wilds";
-}
-
 function diceMax(mode: DiceMode): number {
   return parseInt(mode.replace("d", ""), 10);
 }
@@ -103,118 +69,198 @@ function diceMax(mode: DiceMode): number {
 export default function ResolutionDraftAdvisoryPanel({
   context,
   role,
-  tribeBias,
   onRecord,
 }: Props) {
   const base = difficultyFor(context.optionKind);
 
-  // Bias applied here (never exposed directly)
-  const dc = Math.max(base.dc + (tribeBias?.dcShift ?? 0), 1);
-  const justification =
-    base.justification +
-    (tribeBias?.dcShift
-      ? " (shaped by tribal experience)"
-      : "");
-
-  const [diceMode] = useState<DiceMode>("d20");
+  const [diceMode, setDiceMode] = useState<DiceMode>("d20");
   const [roll, setRoll] = useState<number | null>(null);
+  const [rollSource, setRollSource] =
+    useState<RollSource>("solace");
+  const [manualInput, setManualInput] =
+    useState<string>("");
 
-  const inferredRoomName = useMemo(
-    () => inferRoomName(context.optionDescription),
-    [context.optionDescription]
-  );
-
-  const [audit, setAudit] = useState<string[]>([
-    "Drafted by Solace",
-    ...(tribeBias?.narrative ? [tribeBias.narrative] : []),
-  ]);
-
-  // Prevent double-record
   const committedRef = useRef(false);
 
-  // Reset when intent changes
+  // Reset on new intent
   useEffect(() => {
     setRoll(null);
+    setManualInput("");
     committedRef.current = false;
   }, [context.optionDescription]);
 
-  const draftDescription = useMemo(() => {
-    if (roll === null) {
-      return "Solace weighs the moment, holding consequence in view.";
-    }
-    if (roll >= dc) {
-      return "The tribe acts decisively. Fortune favors them.";
-    }
-    return "The attempt falters. The land pushes back.";
-  }, [roll, dc]);
+  /* ----------------------------------------------------------
+     Dice narration (interesting, non-authoritative)
+  ---------------------------------------------------------- */
 
-  function handleRoll() {
+  const narration = useMemo(() => {
+    if (roll === null) {
+      return "The moment tightens. This comes down to the roll.";
+    }
+
+    const delta = roll - base.dc;
+
+    if (delta >= 6) {
+      return "That’s overwhelming. The numbers don’t hesitate.";
+    }
+
+    if (delta >= 1) {
+      return "It clears the bar — barely enough, but enough.";
+    }
+
+    if (delta === 0) {
+      return "Right on the edge. No margin at all.";
+    }
+
+    if (delta >= -3) {
+      return "Close — but the dice don’t give it to you.";
+    }
+
+    return "That goes badly. The roll leaves no room to argue.";
+  }, [roll, base.dc]);
+
+  /* ----------------------------------------------------------
+     Roll handlers
+  ---------------------------------------------------------- */
+
+  function rollDigitally() {
     const max = diceMax(diceMode);
     const r = Math.ceil(Math.random() * max);
     setRoll(r);
-    setAudit((a) => [
-      ...a,
-      `Dice rolled (${diceMode}, advisory): ${r}`,
-    ]);
+    setRollSource("player-ui");
   }
 
+  function acceptManualRoll() {
+    const value = Number(manualInput);
+    const max = diceMax(diceMode);
+
+    if (
+      !Number.isInteger(value) ||
+      value < 1 ||
+      value > max
+    ) {
+      alert(
+        `Invalid roll. ${diceMode} must be between 1 and ${max}.`
+      );
+      return;
+    }
+
+    setRoll(value);
+    setRollSource("player-manual");
+  }
+
+  /* ----------------------------------------------------------
+     Commit canon (manual, arbiter only)
+  ---------------------------------------------------------- */
+
   function handleRecord() {
-    if (committedRef.current) return;
+    if (committedRef.current || roll === null) return;
     committedRef.current = true;
 
-    const success = roll !== null && roll >= dc;
-
     onRecord({
-      description: draftDescription,
+      description: narration,
       dice: {
         mode: diceMode,
         roll,
-        dc,
-        justification,
-        source: "manual",
+        dc: base.dc,
+        justification: base.justification,
+        source: rollSource,
       },
-      audit: [...audit, "Recorded by Arbiter"],
-      world: {
-        primary: "location",
-        roomId: inferredRoomName,
-        scope: "local",
-        resources:
-          context.optionKind === "contested" && success
-            ? { foodDelta: 2 }
-            : undefined,
-      },
+      audit: [
+        "Dice determine fate",
+        `Roll source: ${rollSource}`,
+        "Canon recorded by Arbiter",
+      ],
     });
   }
 
+  /* ----------------------------------------------------------
+     UI
+  ---------------------------------------------------------- */
+
   return (
-    <section style={{ border: "1px dashed #666", padding: 16 }}>
-      <h3>Resolution Draft (Advisory)</h3>
+    <section
+      style={{
+        border: "1px dashed #666",
+        padding: 16,
+        marginTop: 16,
+      }}
+    >
+      <h3>Resolution Draft</h3>
 
       <p className="muted">
-        Difficulty {dc} — {justification}
+        Difficulty {base.dc} — {base.justification}
       </p>
 
-      <button onClick={handleRoll}>
-        Roll (Advisory)
-      </button>
+      <label>
+        Dice:&nbsp;
+        <select
+          value={diceMode}
+          onChange={(e) =>
+            setDiceMode(e.target.value as DiceMode)
+          }
+          disabled={roll !== null}
+        >
+          {["d4", "d6", "d8", "d10", "d12", "d20"].map(
+            (d) => (
+              <option key={d} value={d}>
+                {d}
+              </option>
+            )
+          )}
+        </select>
+      </label>
+
+      <div style={{ marginTop: 12 }}>
+        <button
+          onClick={rollDigitally}
+          disabled={roll !== null}
+        >
+          Roll Here
+        </button>
+      </div>
+
+      <div style={{ marginTop: 8 }}>
+        <input
+          type="number"
+          placeholder="Enter physical roll"
+          value={manualInput}
+          onChange={(e) =>
+            setManualInput(e.target.value)
+          }
+          disabled={roll !== null}
+          style={{ width: 140 }}
+        />
+        <button
+          onClick={acceptManualRoll}
+          disabled={roll !== null}
+          style={{ marginLeft: 8 }}
+        >
+          Accept Roll
+        </button>
+      </div>
 
       {roll !== null && (
-        <p>
-          🎲 Result: <strong>{roll}</strong> vs DC{" "}
-          <strong>{dc}</strong>
-        </p>
+        <>
+          <p style={{ marginTop: 12 }}>
+            🎲 {diceMode} rolled{" "}
+            <strong>{roll}</strong> vs DC{" "}
+            <strong>{base.dc}</strong>
+          </p>
+
+          <p>{narration}</p>
+        </>
       )}
 
       {role === "arbiter" && (
         <button
           onClick={handleRecord}
           disabled={roll === null}
+          style={{ marginTop: 12 }}
         >
           Record Outcome
         </button>
       )}
-
-      <p className="muted">{audit.join(" · ")}</p>
     </section>
   );
 }
