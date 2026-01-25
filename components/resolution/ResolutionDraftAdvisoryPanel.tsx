@@ -5,7 +5,7 @@
 // ------------------------------------------------------------
 // Authority contract:
 // - Dice decide success/failure
-// - Creative Engine drafts narration
+// - CreativeNarrator drafts narration
 // - Human Arbiter may EDIT narration
 // - Arbiter commits canon
 // ------------------------------------------------------------
@@ -14,7 +14,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   generateNarration,
   NarrativeLens,
-} from "@/lib/creative/CreativeNarrator";
+} from "@/lib/narration/CreativeNarrator";
 
 /* ------------------------------------------------------------
    Types
@@ -31,7 +31,6 @@ export type ResolutionContext = {
 type Props = {
   context: ResolutionContext;
   role: "arbiter";
-  lens?: NarrativeLens;
   onRecord: (payload: {
     description: string;
     dice: {
@@ -45,7 +44,7 @@ type Props = {
 };
 
 /* ------------------------------------------------------------
-   Difficulty (language-only)
+   Difficulty (mechanical truth only)
 ------------------------------------------------------------ */
 
 function difficultyFor(
@@ -70,23 +69,23 @@ function difficultyFor(
 export default function ResolutionDraftAdvisoryPanel({
   context,
   role,
-  lens = "grounded",
   onRecord,
 }: Props) {
   const dc = difficultyFor(context.optionKind);
 
   const [diceMode, setDiceMode] =
     useState<DiceMode>("d20");
-  const [roll, setRoll] =
-    useState<number | null>(null);
-  const [manualRoll, setManualRoll] =
-    useState("");
-
-  const [draftText, setDraftText] =
-    useState("");
+  const [roll, setRoll] = useState<number | null>(
+    null
+  );
+  const [manualRoll, setManualRoll] = useState("");
 
   const committedRef = useRef(false);
 
+  // Editable narration
+  const [draftText, setDraftText] = useState("");
+
+  // Reset on new intent
   useEffect(() => {
     setRoll(null);
     setManualRoll("");
@@ -94,8 +93,12 @@ export default function ResolutionDraftAdvisoryPanel({
     committedRef.current = false;
   }, [context.optionDescription]);
 
+  /* ----------------------------------------------------------
+     Dice handling
+  ---------------------------------------------------------- */
+
   function rollDice() {
-    const max = parseInt(diceMode.slice(1), 10);
+    const max = Number(diceMode.slice(1));
     setRoll(Math.ceil(Math.random() * max));
   }
 
@@ -105,24 +108,33 @@ export default function ResolutionDraftAdvisoryPanel({
     setRoll(r);
   }
 
-  const generated = useMemo(() => {
+  /* ----------------------------------------------------------
+     Creative narration (NON-AUTHORITATIVE)
+  ---------------------------------------------------------- */
+
+  const generatedNarration = useMemo(() => {
     if (roll === null) return "";
+
     return generateNarration({
       intentText: context.optionDescription,
       margin: roll - dc,
-      lens,
+      lens: "heroic" as NarrativeLens,
     });
-  }, [roll, dc, context.optionDescription, lens]);
+  }, [roll, dc, context.optionDescription]);
 
+  // Seed editable text once per roll
   useEffect(() => {
     if (roll !== null && draftText === "") {
-      setDraftText(generated);
+      setDraftText(generatedNarration);
     }
-  }, [generated, roll, draftText]);
+  }, [roll, generatedNarration, draftText]);
+
+  /* ----------------------------------------------------------
+     Commit (human-only authority)
+  ---------------------------------------------------------- */
 
   function handleRecord() {
-    if (roll === null || committedRef.current)
-      return;
+    if (roll === null || committedRef.current) return;
     committedRef.current = true;
 
     onRecord({
@@ -134,15 +146,20 @@ export default function ResolutionDraftAdvisoryPanel({
         source: manualRoll ? "manual" : "solace",
       },
       audit: [
-        "Drafted by Creative Engine",
+        "Drafted by CreativeNarrator",
         "Edited by Arbiter",
       ],
     });
   }
 
+  /* ---------------------------------------------------------- */
+
   return (
     <section
-      style={{ border: "1px dashed #666", padding: 16 }}
+      style={{
+        border: "1px dashed #666",
+        padding: 16,
+      }}
     >
       <h3>Resolution Draft</h3>
 
@@ -153,7 +170,9 @@ export default function ResolutionDraftAdvisoryPanel({
         <select
           value={diceMode}
           onChange={(e) =>
-            setDiceMode(e.target.value as DiceMode)
+            setDiceMode(
+              e.target.value as DiceMode
+            )
           }
         >
           <option>d4</option>
@@ -166,7 +185,9 @@ export default function ResolutionDraftAdvisoryPanel({
       </label>
 
       <div style={{ marginTop: 8 }}>
-        <button onClick={rollDice}>Roll Here</button>
+        <button onClick={rollDice}>
+          Roll Here
+        </button>
       </div>
 
       <div style={{ marginTop: 8 }}>
