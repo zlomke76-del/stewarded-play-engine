@@ -26,7 +26,7 @@ import { exportCanon } from "@/lib/export/exportCanon";
 import ResolutionDraftAdvisoryPanel from "@/components/resolution/ResolutionDraftAdvisoryPanel";
 import NextActionHint from "@/components/NextActionHint";
 
-import WorldLedgerPanelLegacy from "@/components/world/WorldLedgerPanel.legacy";
+import WorldLedgerPanelAdvisory from "@/components/world/WorldLedgerPanelAdvisory";
 import DungeonPressurePanel from "@/components/world/DungeonPressurePanel";
 
 import StewardedShell from "@/components/layout/StewardedShell";
@@ -194,7 +194,6 @@ export default function ClassicFantasyPage() {
   useEffect(() => {
     if (!options || options.length === 0) return;
 
-    // Deterministic facilitator choice
     setSelectedOption(options[0]);
   }, [options]);
 
@@ -336,7 +335,10 @@ export default function ClassicFantasyPage() {
       )}
 
       <NextActionHint state={state} />
-      <WorldLedgerPanelLegacy events={state.events} />
+
+      <WorldLedgerPanelAdvisory
+        events={state.events}
+      />
 
       {epilogue && (
         <CardSection title="Epilogue">
