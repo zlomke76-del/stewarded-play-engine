@@ -378,34 +378,34 @@ export default function CavemanPage() {
       />
 
       <CardSection title="🌍 Current State">
-        <strong>{currentLocation}</strong>
-      </CardSection>
+  <strong>{currentLocation}</strong>
+</CardSection>
 
-      <CardSection title="Solace Observes">
-        <p className="muted">{observation}</p>
-      </CardSection>
+<CardSection title="Solace Observes">
+  <p className="muted">{observation}</p>
+</CardSection>
 
-      <EnvironmentalPressurePanel turn={turn} />
-      <SurvivalResourcePanel turn={turn} />
+<EnvironmentalPressurePanel turn={turn} />
+<SurvivalResourcePanel turn={turn} />
 
-      {selectedOption && resolutionActive && (
-        <CardSection title="Resolution">
-          <ResolutionDraftPanel
-            key={`resolution-${selectedOption.id}`}
-            role="arbiter"
-            autoResolve
-            context={{
-              optionDescription: selectedOption.description,
-              optionKind: optionCategoryToKind(
-                selectedOption.category
-              ),
-            }}
-            onRecord={handleAutoRecord}
-          />
-        </CardSection>
-      )}
+{selectedOption && resolutionActive && (
+  <CardSection title="Resolution">
+    <ResolutionDraftPanel
+      key={`resolution-${selectedOption.id}`}
+      role="arbiter"
+      autoResolve
+      context={{
+        optionDescription: selectedOption.description,
+        optionKind: optionCategoryToKind(
+          selectedOption.category
+        ),
+      }}
+      onRecord={handleAutoRecord}
+    />
+  </CardSection>
+)}
 
-      <CardSection title="Intent">
+<CardSection title="Intent">
   <textarea
     value={intent}
     onChange={(e) => setIntent(e.target.value)}
@@ -425,6 +425,9 @@ export default function CavemanPage() {
   </div>
 </CardSection>
 
+</StewardedShell>
+);
+}
 
 /* ------------------------------------------------------------
    EOF
