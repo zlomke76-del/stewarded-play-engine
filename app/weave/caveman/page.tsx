@@ -145,8 +145,8 @@ function deriveObservation(world?: any): string {
 
 export default function CavemanPage() {
   const [state, setState] = useState<SessionState>(
-    createSession("demo-session", "demo")
-  );
+  createSession("demo-session", "demo")
+);
 
   const [turn, setTurn] = useState(0);
 
@@ -167,20 +167,6 @@ export default function CavemanPage() {
   // 🔒 Resolution persists until NEXT intent
   const [resolutionActive, setResolutionActive] =
     useState(false);
-
-  // ------------------------------------------------------------
-  // ✅ Player Intent (UI state — missing before)
-  // ------------------------------------------------------------
-
-  const [intent, setIntent] = useState("");
-
-  function commitIntent() {
-    if (!intent.trim()) return;
-
-    setCommand(intent);
-    setIntent("");
-    handleSubmitCommand();
-  }
 
   // ----------------------------------------------------------
   // Canon-derived world (ephemeral UI truth)
@@ -304,6 +290,7 @@ export default function CavemanPage() {
       );
     }
 
+    // 1️⃣ SessionState canon (UI / ephemeral)
     setState((prev) =>
       recordEvent(prev, {
         id: crypto.randomUUID(),
@@ -327,17 +314,22 @@ export default function CavemanPage() {
       })
     );
 
+    // 2️⃣ Client draft (felt chance only)
     buildClientResolution({
       legacyPayload: payload,
       turn: nextTurn,
     });
 
+    // 3️⃣ Durable canon (SERVER AUTHORITATIVE)
     if (!run) return;
 
     const optionKind = selectedOption
       ? optionCategoryToKind(selectedOption.category)
       : inferOptionKindFromText(payload.description);
 
+    // NOTE:
+    // These values are intentionally conservative.
+    // Advisory UI resources are NOT canonical.
     const context = {
       food: 0,
       stamina: 0,
@@ -415,25 +407,17 @@ export default function CavemanPage() {
 
       <CardSection title="Intent">
         <textarea
-          value={intent}
-          onChange={(e) => setIntent(e.target.value)}
-          placeholder="HUNT, DEFEND, WAIT, SCOUT..."
-          style={{
-            width: "100%",
-            minHeight: "120px",
-            resize: "vertical",
-            boxSizing: "border-box",
-            lineHeight: 1.5,
-          }}
+          rows={3}
+          value={command}
+          onChange={(e) => setCommand(e.target.value)}
+          placeholder="HUNT, DEFEND, WAIT, SCOUT…"
         />
-        <div style={{ marginTop: 8 }}>
-          <button onClick={commitIntent}>
-            Commit Intent
-          </button>
-        </div>
+        <button onClick={handleSubmitCommand}>
+          Commit Intent
+        </button>
       </CardSection>
 
-      <WorldLedgerPanel />
+      {run && <WorldLedgerPanel run={run} />}
       <Disclaimer />
     </StewardedShell>
   );
