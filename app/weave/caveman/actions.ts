@@ -26,9 +26,8 @@ type OptionKind =
   | "contested";
 
 // ------------------------------------------------------------
-// Resource Delta (TINY SCHEMA)
+// Tiny Resource Delta Schema (OPTIONAL)
 // ------------------------------------------------------------
-// Canonical, server-authoritative, optional per resolution
 
 type ResourceDelta = {
   foodDelta?: number;
@@ -184,7 +183,6 @@ export async function runSolaceResolutionOnServer(input: {
     input.optionKind
   );
 
-  // Dice success inference (NO re-rolls, canonical only)
   const success =
     typeof input.legacyPayload?.dice?.roll === "number" &&
     input.legacyPayload.dice.roll >=
@@ -199,14 +197,21 @@ export async function runSolaceResolutionOnServer(input: {
     },
   });
 
-  // Canonical, strict, server-authoritative build
+  // 🔒 Canon-safe injection (no schema break)
+  const enrichedPayload = {
+    ...input.legacyPayload,
+    mechanical_resolution: {
+      ...(input.legacyPayload?.mechanical_resolution ?? {}),
+      ...resourceDelta,
+    },
+  };
+
   return buildSolaceResolution({
-    legacyPayload: input.legacyPayload,
+    legacyPayload: enrichedPayload,
     turn: input.turn,
     riskSignals,
     intentType,
     context: input.context,
-    resourceDelta, // optional, tiny, authoritative
   });
 }
 
