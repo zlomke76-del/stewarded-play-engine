@@ -15,11 +15,30 @@ import type { ResolutionRun } from "@/lib/solace/resolution.run";
 import { buildSolaceResolution } from "@/lib/solace/resolution.pipeline";
 import { saveRun } from "@/lib/solace/resolution.persistence";
 
+// ------------------------------------------------------------
+// Option Kinds
+// ------------------------------------------------------------
+
 type OptionKind =
   | "safe"
   | "environmental"
   | "risky"
   | "contested";
+
+// ------------------------------------------------------------
+// Resource Delta (TINY SCHEMA)
+// ------------------------------------------------------------
+// Canonical, server-authoritative, optional per resolution
+
+type ResourceDelta = {
+  foodDelta?: number;
+  staminaDelta?: number;
+  fireDelta?: number;
+};
+
+// ------------------------------------------------------------
+// Intent inference (STRUCTURAL)
+// ------------------------------------------------------------
 
 function optionKindToIntentType(
   kind: OptionKind
@@ -38,8 +57,11 @@ function optionKindToIntentType(
   }
 }
 
+// ------------------------------------------------------------
+// Risk signals (STRUCTURAL — AUTHORITATIVE)
+// ------------------------------------------------------------
+
 function optionKindToRiskSignals(kind: OptionKind) {
-  // Structural inference — server authoritative
   switch (kind) {
     case "safe":
       return {
@@ -84,12 +106,67 @@ function optionKindToRiskSignals(kind: OptionKind) {
   }
 }
 
+// ------------------------------------------------------------
+// Resource Delta Derivation (AUTHORITATIVE)
+// ------------------------------------------------------------
+
+function deriveResourceDelta(params: {
+  intentType: "rest" | "hunt" | "gather" | "travel" | "tend";
+  success: boolean;
+  context: {
+    hasShelter: boolean;
+    hasFire: boolean;
+  };
+}): ResourceDelta | undefined {
+  const { intentType, success, context } = params;
+
+  if (!success) return undefined;
+
+  switch (intentType) {
+    case "hunt":
+      return {
+        foodDelta: 1 + (context.hasFire ? 1 : 0),
+        staminaDelta: -1,
+      };
+
+    case "gather":
+      return {
+        foodDelta: 1,
+        staminaDelta: -1,
+      };
+
+    case "rest":
+      return {
+        staminaDelta: context.hasShelter ? 2 : 1,
+        fireDelta: context.hasFire ? 0 : -1,
+      };
+
+    case "tend":
+      return {
+        fireDelta: 1,
+        staminaDelta: -1,
+      };
+
+    case "travel":
+      return {
+        staminaDelta: -1,
+        fireDelta: context.hasFire ? -1 : 0,
+      };
+
+    default:
+      return undefined;
+  }
+}
+
+// ------------------------------------------------------------
+// Canonical Resolution Entry Point
+// ------------------------------------------------------------
+
 export async function runSolaceResolutionOnServer(input: {
   legacyPayload: any;
   turn: number;
   optionKind: OptionKind;
 
-  // current pressures (best available; can be refined later)
   context: {
     food: number;
     stamina: number;
@@ -107,6 +184,21 @@ export async function runSolaceResolutionOnServer(input: {
     input.optionKind
   );
 
+  // Dice success inference (NO re-rolls, canonical only)
+  const success =
+    typeof input.legacyPayload?.dice?.roll === "number" &&
+    input.legacyPayload.dice.roll >=
+      input.legacyPayload.dice.dc;
+
+  const resourceDelta = deriveResourceDelta({
+    intentType,
+    success,
+    context: {
+      hasShelter: input.context.hasShelter,
+      hasFire: input.context.hasFire,
+    },
+  });
+
   // Canonical, strict, server-authoritative build
   return buildSolaceResolution({
     legacyPayload: input.legacyPayload,
@@ -114,12 +206,16 @@ export async function runSolaceResolutionOnServer(input: {
     riskSignals,
     intentType,
     context: input.context,
+    resourceDelta, // optional, tiny, authoritative
   });
 }
+
+// ------------------------------------------------------------
+// Durable Persistence
+// ------------------------------------------------------------
 
 export async function persistRunOnServer(
   run: ResolutionRun
 ): Promise<void> {
-  // Durable append-only persistence
   await saveRun(run);
 }
