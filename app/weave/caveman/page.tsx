@@ -145,8 +145,8 @@ function deriveObservation(world?: any): string {
 
 export default function CavemanPage() {
   const [state, setState] = useState<SessionState>(
-  createSession("demo-session", "demo")
-);
+    createSession("demo-session", "demo")
+  );
 
   const [turn, setTurn] = useState(0);
 
@@ -167,6 +167,20 @@ export default function CavemanPage() {
   // 🔒 Resolution persists until NEXT intent
   const [resolutionActive, setResolutionActive] =
     useState(false);
+
+  // ------------------------------------------------------------
+  // ✅ Player Intent (UI state — missing before)
+  // ------------------------------------------------------------
+
+  const [intent, setIntent] = useState("");
+
+  function commitIntent() {
+    if (!intent.trim()) return;
+
+    setCommand(intent);
+    setIntent("");
+    handleSubmitCommand();
+  }
 
   // ----------------------------------------------------------
   // Canon-derived world (ephemeral UI truth)
@@ -290,7 +304,6 @@ export default function CavemanPage() {
       );
     }
 
-    // 1️⃣ SessionState canon (UI / ephemeral)
     setState((prev) =>
       recordEvent(prev, {
         id: crypto.randomUUID(),
@@ -314,22 +327,17 @@ export default function CavemanPage() {
       })
     );
 
-    // 2️⃣ Client draft (felt chance only)
     buildClientResolution({
       legacyPayload: payload,
       turn: nextTurn,
     });
 
-    // 3️⃣ Durable canon (SERVER AUTHORITATIVE)
     if (!run) return;
 
     const optionKind = selectedOption
       ? optionCategoryToKind(selectedOption.category)
       : inferOptionKindFromText(payload.description);
 
-    // NOTE:
-    // These values are intentionally conservative.
-    // Advisory UI resources are NOT canonical.
     const context = {
       food: 0,
       stamina: 0,
@@ -378,55 +386,57 @@ export default function CavemanPage() {
       />
 
       <CardSection title="🌍 Current State">
-  <strong>{currentLocation}</strong>
-</CardSection>
+        <strong>{currentLocation}</strong>
+      </CardSection>
 
-<CardSection title="Solace Observes">
-  <p className="muted">{observation}</p>
-</CardSection>
+      <CardSection title="Solace Observes">
+        <p className="muted">{observation}</p>
+      </CardSection>
 
-<EnvironmentalPressurePanel turn={turn} />
-<SurvivalResourcePanel turn={turn} />
+      <EnvironmentalPressurePanel turn={turn} />
+      <SurvivalResourcePanel turn={turn} />
 
-{selectedOption && resolutionActive && (
-  <CardSection title="Resolution">
-    <ResolutionDraftPanel
-      key={`resolution-${selectedOption.id}`}
-      role="arbiter"
-      autoResolve
-      context={{
-        optionDescription: selectedOption.description,
-        optionKind: optionCategoryToKind(
-          selectedOption.category
-        ),
-      }}
-      onRecord={handleAutoRecord}
-    />
-  </CardSection>
-)}
+      {selectedOption && resolutionActive && (
+        <CardSection title="Resolution">
+          <ResolutionDraftPanel
+            key={`resolution-${selectedOption.id}`}
+            role="arbiter"
+            autoResolve
+            context={{
+              optionDescription: selectedOption.description,
+              optionKind: optionCategoryToKind(
+                selectedOption.category
+              ),
+            }}
+            onRecord={handleAutoRecord}
+          />
+        </CardSection>
+      )}
 
-<CardSection title="Intent">
-  <textarea
-    value={intent}
-    onChange={(e) => setIntent(e.target.value)}
-    placeholder="HUNT, DEFEND, WAIT, SCOUT..."
-    style={{
-      width: "100%",
-      minHeight: "120px",
-      resize: "vertical",
-      boxSizing: "border-box",
-      lineHeight: 1.5,
-    }}
-  />
-  <div style={{ marginTop: 8 }}>
-    <button onClick={commitIntent}>
-      Commit Intent
-    </button>
-  </div>
-</CardSection>
+      <CardSection title="Intent">
+        <textarea
+          value={intent}
+          onChange={(e) => setIntent(e.target.value)}
+          placeholder="HUNT, DEFEND, WAIT, SCOUT..."
+          style={{
+            width: "100%",
+            minHeight: "120px",
+            resize: "vertical",
+            boxSizing: "border-box",
+            lineHeight: 1.5,
+          }}
+        />
+        <div style={{ marginTop: 8 }}>
+          <button onClick={commitIntent}>
+            Commit Intent
+          </button>
+        </div>
+      </CardSection>
 
-</StewardedShell>
-);
+      <WorldLedgerPanel events={state.events} />
+      <Disclaimer />
+    </StewardedShell>
+  );
 }
 
 /* ------------------------------------------------------------
