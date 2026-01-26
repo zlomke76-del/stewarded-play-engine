@@ -406,22 +406,25 @@ export default function CavemanPage() {
       )}
 
       <CardSection title="Intent">
-        <textarea
-          rows={3}
-          value={command}
-          onChange={(e) => setCommand(e.target.value)}
-          placeholder="HUNT, DEFEND, WAIT, SCOUT…"
-        />
-        <button onClick={handleSubmitCommand}>
-          Commit Intent
-        </button>
-      </CardSection>
+  <textarea
+    value={intent}
+    onChange={(e) => setIntent(e.target.value)}
+    placeholder="HUNT, DEFEND, WAIT, SCOUT..."
+    style={{
+      width: "100%",
+      minHeight: "120px",
+      resize: "vertical",
+      boxSizing: "border-box",
+      lineHeight: 1.5,
+    }}
+  />
+  <div style={{ marginTop: 8 }}>
+    <button onClick={commitIntent}>
+      Commit Intent
+    </button>
+  </div>
+</CardSection>
 
-      {run && <WorldLedgerPanel run={run} />}
-      <Disclaimer />
-    </StewardedShell>
-  );
-}
 
 /* ------------------------------------------------------------
    EOF
