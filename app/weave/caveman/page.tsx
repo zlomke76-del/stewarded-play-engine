@@ -433,7 +433,7 @@ export default function CavemanPage() {
         </div>
       </CardSection>
 
-      <WorldLedgerPanel events={state.events} />
+      <WorldLedgerPanel />
       <Disclaimer />
     </StewardedShell>
   );
