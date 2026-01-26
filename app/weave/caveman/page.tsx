@@ -120,23 +120,49 @@ function optionCategoryToKind(
 // ------------------------------------------------------------
 
 function deriveObservation(world?: any): string {
+  // Open land / no shelter yet
   if (!world || world.nodeType !== "cave") {
-    return "Wind moves freely here, but stone nearby interrupts its flow.";
+    return [
+      "The land stretches wide.",
+      "Wind moves through grass and brush, bending it low, then letting it rise again.",
+      "The ground is firm underfoot, marked by old tracks and newer ones.",
+      "Nothing presses close here — but nothing shields you either."
+    ].join(" ");
   }
 
+  // Cave mouth / threshold
   if (world.depth === 0) {
-    return "Air cools unevenly near the rock face, carrying the scent of damp stone.";
+    return [
+      "Stone breaks the wind at the cave mouth.",
+      "Cool air spills outward, carrying the damp smell of earth and rock.",
+      "Light reaches inside, but only in thin bands, fading quickly as it falls."
+    ].join(" ");
   }
 
+  // Shallow interior
   if (world.depth === 1) {
-    return "Sound dulls quickly here, swallowed by twisting stone and narrow air.";
+    return [
+      "The cave tightens around you.",
+      "Sound dulls quickly, swallowed by rough stone.",
+      "Footsteps feel heavier here, as if the ground holds weight longer than it should."
+    ].join(" ");
   }
 
+  // Altered / held space
   if (world.state === "sacred") {
-    return "The chamber feels altered — as if presence, not shelter, defines it now.";
+    return [
+      "The chamber feels held.",
+      "Marks in the stone catch the eye — placed, not broken.",
+      "The air is still, as if movement here should be chosen, not taken for granted."
+    ].join(" ");
   }
 
-  return "The stone closes in, holding traces of earlier passage.";
+  // Default deep cave
+  return [
+    "Stone presses in from all sides.",
+    "The air is cool and unmoving.",
+    "Time feels slower here, measured by breath and step."
+  ].join(" ");
 }
 
 // ------------------------------------------------------------
@@ -290,7 +316,6 @@ export default function CavemanPage() {
       );
     }
 
-    // 1️⃣ SessionState canon (UI / ephemeral)
     setState((prev) =>
       recordEvent(prev, {
         id: crypto.randomUUID(),
@@ -314,22 +339,17 @@ export default function CavemanPage() {
       })
     );
 
-    // 2️⃣ Client draft (felt chance only)
     buildClientResolution({
       legacyPayload: payload,
       turn: nextTurn,
     });
 
-    // 3️⃣ Durable canon (SERVER AUTHORITATIVE)
     if (!run) return;
 
     const optionKind = selectedOption
       ? optionCategoryToKind(selectedOption.category)
       : inferOptionKindFromText(payload.description);
 
-    // NOTE:
-    // These values are intentionally conservative.
-    // Advisory UI resources are NOT canonical.
     const context = {
       food: 0,
       stamina: 0,
