@@ -567,59 +567,64 @@ return (
             events={state.events}
           />
 
-          <CardSection title="Player Action">
-            <textarea
-              rows={3}
-              value={playerInput}
-              onChange={(e) =>
-                setPlayerInput(e.target.value)
-              }
-              placeholder="Describe what your character does…"
-            />
-            <button onClick={handlePlayerAction}>
-              Submit Action
-            </button>
-          </CardSection>
+<CardSection title="Player Action">
+  <textarea
+    value={playerInput}
+    onChange={(e) => setPlayerInput(e.target.value)}
+    placeholder="Describe what your character does…"
+    style={{
+      width: "100%",
+      minHeight: "120px",
+      resize: "vertical",
+      boxSizing: "border-box",
+      lineHeight: 1.5,
+    }}
+  />
+  <div style={{ marginTop: 8 }}>
+    <button onClick={handlePlayerAction}>
+      Submit Action
+    </button>
+  </div>
+</CardSection>
 
-          {parsed && (
-            <CardSection title="Parsed Action">
-              <pre>
-                {JSON.stringify(parsed, null, 2)}
-              </pre>
-            </CardSection>
-          )}
+{parsed && (
+  <CardSection title="Parsed Action">
+    <pre>
+      {JSON.stringify(parsed, null, 2)}
+    </pre>
+  </CardSection>
+)}
 
-          {options && dmMode === "human" && (
-            <CardSection title="Options">
-              <ul>
-                {options.map((opt) => (
-                  <li key={opt.id}>
-                    <button
-                      onClick={() =>
-                        setSelectedOption(opt)
-                      }
-                    >
-                      {opt.description}
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            </CardSection>
-          )}
+{options && dmMode === "human" && (
+  <CardSection title="Options">
+    <ul>
+      {options.map((opt) => (
+        <li key={opt.id}>
+          <button
+            onClick={() => setSelectedOption(opt)}
+          >
+            {opt.description}
+          </button>
+        </li>
+      ))}
+    </ul>
+  </CardSection>
+)}
 
-          {selectedOption && (
-            <ResolutionDraftAdvisoryPanel
-              role={role}
-              context={{
-                optionDescription:
-                  selectedOption.description,
-                optionKind: inferOptionKind(
-                  selectedOption.description
-                ),
-              }}
-              onRecord={handleRecord}
-            />
-          )}
+{selectedOption && (
+  <ResolutionDraftAdvisoryPanel
+    role={role}
+    context={{
+      optionDescription:
+        selectedOption.description,
+      optionKind: inferOptionKind(
+        selectedOption.description
+      ),
+    }}
+    onRecord={handleRecord}
+  />
+)}
+
 
           <NextActionHint state={state} />
           <WorldLedgerPanelLegacy
