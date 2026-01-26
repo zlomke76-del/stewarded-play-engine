@@ -484,7 +484,6 @@ return (
           </div>
         </CardSection>
       )}
-);
 
 
       {/* HUMAN DM: optional Solace setup helper (EDITABLE ONLY UNTIL ACCEPTED) */}
