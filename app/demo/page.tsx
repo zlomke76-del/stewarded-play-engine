@@ -375,107 +375,117 @@ export default function DemoPage() {
   const isHumanDM = dmMode === "human";
   const isSolaceMode = dmMode === "solace-neutral";
 
-  // ----------------------------------------------------------
-  // UI
-  // ----------------------------------------------------------
+// ----------------------------------------------------------
+// UI
+// ----------------------------------------------------------
 
-  return (
-    <StewardedShell>
-      <ModeHeader
-        title="Stewarded Play — Full Flow"
-        onShare={shareCanon}
-        roles={[
-          { label: "Player", description: "Declares intent" },
-          {
-            label: "Solace",
-            description:
-              "Prepares the table and narrates outcomes",
-          },
-          {
-            label: "Arbiter",
-            description: "Commits canon",
-          },
-        ]}
-      />
+return (
+  <StewardedShell>
+    <ModeHeader
+      title="Stewarded Play — Full Flow"
+      onShare={shareCanon}
+      roles={[
+        { label: "Player", description: "Declares intent" },
+        {
+          label: "Solace",
+          description:
+            "Prepares the resolution and narrates outcome",
+        },
+        {
+          label: "Arbiter",
+          description: "Commits canon",
+        },
+      ]}
+    />
 
-      {/* FACILITATION MODE (NO DELETIONS — ADDED CONTROL) */}
-      <CardSection title="Facilitation Mode">
-        <label>
-          <input
-            type="radio"
-            checked={dmMode === "human"}
-            onChange={() => setDmMode("human")}
-          />{" "}
-          Human DM (options visible + editable setup)
-        </label>
-        <br />
-        <label>
-          <input
-            type="radio"
-            checked={dmMode === "solace-neutral"}
-            onChange={() => setDmMode("solace-neutral")}
-          />{" "}
-          Solace (Neutral Facilitator)
-        </label>
-      </CardSection>
-
-{/* INITIAL TABLE GATE */}
-{dmMode === "solace-neutral" &&
-  initialTable &&
-  !tableAccepted && (
-    <CardSection title="Initial Table (Solace)">
-      {/* FINALIZED TABLE NARRATION (NON-EDITABLE, NON-DRAFT) */}
-      <p className="muted" style={{ marginBottom: 8 }}>
-        Table-play narration (finalized):
-      </p>
-
-      <div
-        style={{
-          whiteSpace: "pre-wrap",
-          lineHeight: 1.6,
-          background: "rgba(0,0,0,0.25)",
-          padding: "16px",
-          borderRadius: "6px",
-        }}
-      >
-        {tableDraftText}
-      </div>
-
-      {/* Keep the raw table visible, but not as the primary “start” */}
-      <details style={{ marginTop: 12 }}>
-        <summary className="muted">Show underlying table signals</summary>
-        <div style={{ marginTop: 10 }}>
-          <p>{initialTable.openingFrame}</p>
-
-          <p className="muted">
-            Traits: {initialTable.locationTraits.join(", ")}
-          </p>
-
-          <ul>
-            {initialTable.latentFactions.map((f, i) => (
-              <li key={i}>
-                <strong>{f.name}</strong> — {f.desire} ({f.pressure})
-              </li>
-            ))}
-          </ul>
-
-          <p className="muted">
-            Oddity: {initialTable.environmentalOddities.join(", ")}
-          </p>
-
-          <p className="muted">
-            Hook: {initialTable.dormantHooks.join(", ")}
-          </p>
-        </div>
-      </details>
-
-      <div style={{ marginTop: 10 }}>
-        <button onClick={() => setTableAccepted(true)}>
-          Accept Table
-        </button>
-      </div>
+    {/* FACILITATION MODE (NO DELETIONS — ADDED CONTROL) */}
+    <CardSection title="Facilitation Mode">
+      <label>
+        <input
+          type="radio"
+          checked={dmMode === "human"}
+          onChange={() => setDmMode("human")}
+        />{" "}
+        Human DM (options visible + editable setup)
+      </label>
+      <br />
+      <label>
+        <input
+          type="radio"
+          checked={dmMode === "solace-neutral"}
+          onChange={() => setDmMode("solace-neutral")}
+        />{" "}
+        Solace (Neutral Facilitator)
+      </label>
     </CardSection>
-  )}
+
+    {/* INITIAL TABLE GATE */}
+    {dmMode === "solace-neutral" &&
+      initialTable &&
+      !tableAccepted && (
+        <CardSection title="Initial Table (Solace)">
+          {/* FINALIZED TABLE NARRATION (NON-EDITABLE, NON-DRAFT) */}
+          <p className="muted" style={{ marginBottom: 8 }}>
+            Table-play narration (finalized):
+          </p>
+
+          <div
+            style={{
+              whiteSpace: "pre-wrap",
+              lineHeight: 1.6,
+              background: "rgba(0,0,0,0.25)",
+              padding: "16px",
+              borderRadius: "6px",
+            }}
+          >
+            {tableDraftText}
+          </div>
+
+          {/* Keep the raw table visible, but not as the primary “start” */}
+          <details style={{ marginTop: 12 }}>
+            <summary className="muted">
+              Show underlying table signals
+            </summary>
+            <div style={{ marginTop: 10 }}>
+              <p>{initialTable.openingFrame}</p>
+
+              <p className="muted">
+                Traits:{" "}
+                {initialTable.locationTraits.join(", ")}
+              </p>
+
+              <ul>
+                {initialTable.latentFactions.map((f, i) => (
+                  <li key={i}>
+                    <strong>{f.name}</strong> —{" "}
+                    {f.desire} ({f.pressure})
+                  </li>
+                ))}
+              </ul>
+
+              <p className="muted">
+                Oddity:{" "}
+                {initialTable.environmentalOddities.join(
+                  ", "
+                )}
+              </p>
+
+              <p className="muted">
+                Hook:{" "}
+                {initialTable.dormantHooks.join(", ")}
+              </p>
+            </div>
+          </details>
+
+          <div style={{ marginTop: 10 }}>
+            <button onClick={() => setTableAccepted(true)}>
+              Accept Table
+            </button>
+          </div>
+        </CardSection>
+      )}
+);
+
 
       {/* HUMAN DM: optional Solace setup helper (EDITABLE ONLY UNTIL ACCEPTED) */}
 {dmMode === "human" && !tableAccepted && (
