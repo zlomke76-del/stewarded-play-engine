@@ -585,6 +585,8 @@ return (
       </>
     )}
 
-    <Disclaimer />
+       <Disclaimer />
   </StewardedShell>
 );
+}
+
