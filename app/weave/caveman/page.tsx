@@ -145,8 +145,8 @@ function deriveObservation(world?: any): string {
 
 export default function CavemanPage() {
   const [state, setState] = useState<SessionState>(
-  createSession("demo-session", "demo")
-);
+    createSession("demo-session", "demo")
+  );
 
   const [turn, setTurn] = useState(0);
 
@@ -407,14 +407,22 @@ export default function CavemanPage() {
 
       <CardSection title="Intent">
         <textarea
-          rows={3}
           value={command}
           onChange={(e) => setCommand(e.target.value)}
           placeholder="HUNT, DEFEND, WAIT, SCOUT…"
+          style={{
+            width: "100%",
+            minHeight: "120px",
+            resize: "vertical",
+            boxSizing: "border-box",
+            lineHeight: 1.5,
+          }}
         />
-        <button onClick={handleSubmitCommand}>
-          Commit Intent
-        </button>
+        <div style={{ marginTop: 8 }}>
+          <button onClick={handleSubmitCommand}>
+            Commit Intent
+          </button>
+        </div>
       </CardSection>
 
       {run && <WorldLedgerPanel run={run} />}
