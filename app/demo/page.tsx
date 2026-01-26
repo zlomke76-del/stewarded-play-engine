@@ -265,115 +265,112 @@ export default function DemoPage() {
     useState<Option | null>(null);
 
   // ----------------------------------------------------------
-  // Generate table ONCE per session in Solace mode
-  // ----------------------------------------------------------
+// Generate table ONCE per session
+// ----------------------------------------------------------
 
-  useEffect(() => {
-    if (dmMode !== "solace-neutral") return;
-    if (initialTable) return;
+useEffect(() => {
+  if (initialTable) return;
 
+  // Generate for BOTH modes
+  if (dmMode === "solace-neutral" || dmMode === "human") {
     setInitialTable(generateInitialTable());
-  }, [dmMode, initialTable]);
-
-  // ----------------------------------------------------------
-  // When table exists, generate playable narration (once),
-  // then allow DM edits.
-  // ----------------------------------------------------------
-
-  const renderedTableNarration = useMemo(() => {
-    if (!initialTable) return "";
-    return renderInitialTableNarration(initialTable);
-  }, [initialTable]);
-
-  useEffect(() => {
-    if (!initialTable) return;
-
-    // Seed editable draft only if empty (no overwriting DM edits)
-    if (tableDraftText.trim() === "") {
-      setTableDraftText(renderedTableNarration);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [initialTable, renderedTableNarration]);
-
-  // ----------------------------------------------------------
-  // If user switches to HUMAN DM mode:
-  // - don’t block play behind the table gate
-  // - but still allow “Solace setup” as convenience
-  // ----------------------------------------------------------
-
-  useEffect(() => {
-    if (dmMode === "human") {
-      setTableAccepted(true);
-    } else {
-      // In Solace mode, gate applies again until accepted
-      setTableAccepted(false);
-    }
-  }, [dmMode]);
-
-  // ----------------------------------------------------------
-  // Player submits action
-  // ----------------------------------------------------------
-
-  function handlePlayerAction() {
-    if (!playerInput.trim()) return;
-
-    const parsedAction = parseAction("player_1", playerInput);
-    const optionSet = generateOptions(parsedAction);
-
-    setParsed(parsedAction);
-    setOptions([...optionSet.options]);
-    setSelectedOption(null);
   }
+}, [dmMode, initialTable]);
 
-  // ----------------------------------------------------------
-  // Solace silently selects option when facilitating
-  // ----------------------------------------------------------
+// ----------------------------------------------------------
+// When table exists, generate playable narration (once),
+// then allow DM edits.
+// ----------------------------------------------------------
 
-  useEffect(() => {
-    if (dmMode !== "solace-neutral") return;
-    if (!options || options.length === 0) return;
+const renderedTableNarration = useMemo(() => {
+  if (!initialTable) return "";
+  return renderInitialTableNarration(initialTable);
+}, [initialTable]);
 
-    setSelectedOption(options[0]);
-  }, [dmMode, options]);
+useEffect(() => {
+  if (!initialTable) return;
 
-  // ----------------------------------------------------------
-  // Record canon
-  // ----------------------------------------------------------
-
-  function handleRecord(payload: {
-    description: string;
-    dice: {
-      mode: DiceMode;
-      roll: number;
-      dc: number;
-      source: RollSource;
-    };
-    audit: string[];
-  }) {
-    setState((prev) =>
-      recordEvent(prev, {
-        id: crypto.randomUUID(),
-        timestamp: Date.now(),
-        actor: "arbiter",
-        type: "OUTCOME",
-        payload,
-      })
-    );
+  // Seed editable draft only if empty (no overwriting DM edits)
+  if (tableDraftText.trim() === "") {
+    setTableDraftText(renderedTableNarration);
   }
+}, [initialTable, renderedTableNarration]);
 
-  // ----------------------------------------------------------
-  // Share canon
-  // ----------------------------------------------------------
+// ----------------------------------------------------------
+// If user switches modes:
+// - Solace: gate applies
+// - Human: DO NOT auto-accept
+// ----------------------------------------------------------
 
-  function shareCanon() {
-    navigator.clipboard.writeText(
-      exportCanon(state.events)
-    );
-    alert("Canon copied to clipboard.");
+useEffect(() => {
+  if (dmMode === "solace-neutral") {
+    setTableAccepted(false);
   }
+  // ❗ intentionally no auto-accept for human
+}, [dmMode]);
 
-  const isHumanDM = dmMode === "human";
-  const isSolaceMode = dmMode === "solace-neutral";
+// ----------------------------------------------------------
+// Player submits action
+// ----------------------------------------------------------
+
+function handlePlayerAction() {
+  if (!playerInput.trim()) return;
+
+  const parsedAction = parseAction("player_1", playerInput);
+  const optionSet = generateOptions(parsedAction);
+
+  setParsed(parsedAction);
+  setOptions([...optionSet.options]);
+  setSelectedOption(null);
+}
+
+// ----------------------------------------------------------
+// Solace silently selects option when facilitating
+// ----------------------------------------------------------
+
+useEffect(() => {
+  if (dmMode !== "solace-neutral") return;
+  if (!options || options.length === 0) return;
+
+  setSelectedOption(options[0]);
+}, [dmMode, options]);
+
+// ----------------------------------------------------------
+// Record canon
+// ----------------------------------------------------------
+
+function handleRecord(payload: {
+  description: string;
+  dice: {
+    mode: DiceMode;
+    roll: number;
+    dc: number;
+    source: RollSource;
+  };
+  audit: string[];
+}) {
+  setState((prev) =>
+    recordEvent(prev, {
+      id: crypto.randomUUID(),
+      timestamp: Date.now(),
+      actor: "arbiter",
+      type: "OUTCOME",
+      payload,
+    })
+  );
+}
+
+// ----------------------------------------------------------
+// Share canon
+// ----------------------------------------------------------
+
+function shareCanon() {
+  navigator.clipboard.writeText(exportCanon(state.events));
+  alert("Canon copied to clipboard.");
+}
+
+const isHumanDM = dmMode === "human";
+const isSolaceMode = dmMode === "solace-neutral";
 
 // ----------------------------------------------------------
 // UI
@@ -388,8 +385,7 @@ return (
         { label: "Player", description: "Declares intent" },
         {
           label: "Solace",
-          description:
-            "Prepares the resolution and narrates outcome",
+          description: "Prepares the resolution and narrates outcome",
         },
         {
           label: "Arbiter",
@@ -419,12 +415,11 @@ return (
       </label>
     </CardSection>
 
-    {/* INITIAL TABLE GATE */}
+    {/* INITIAL TABLE GATE — SOLACE */}
     {dmMode === "solace-neutral" &&
       initialTable &&
       !tableAccepted && (
         <CardSection title="Initial Table (Solace)">
-          {/* FINALIZED TABLE NARRATION (NON-EDITABLE, NON-DRAFT) */}
           <p className="muted" style={{ marginBottom: 8 }}>
             Table-play narration (finalized):
           </p>
@@ -441,38 +436,29 @@ return (
             {tableDraftText}
           </div>
 
-          {/* Keep the raw table visible, but not as the primary “start” */}
           <details style={{ marginTop: 12 }}>
-            <summary className="muted">
-              Show underlying table signals
-            </summary>
+            <summary className="muted">Show underlying table signals</summary>
             <div style={{ marginTop: 10 }}>
               <p>{initialTable.openingFrame}</p>
 
               <p className="muted">
-                Traits:{" "}
-                {initialTable.locationTraits.join(", ")}
+                Traits: {initialTable.locationTraits.join(", ")}
               </p>
 
               <ul>
                 {initialTable.latentFactions.map((f, i) => (
                   <li key={i}>
-                    <strong>{f.name}</strong> —{" "}
-                    {f.desire} ({f.pressure})
+                    <strong>{f.name}</strong> — {f.desire} ({f.pressure})
                   </li>
                 ))}
               </ul>
 
               <p className="muted">
-                Oddity:{" "}
-                {initialTable.environmentalOddities.join(
-                  ", "
-                )}
+                Oddity: {initialTable.environmentalOddities.join(", ")}
               </p>
 
               <p className="muted">
-                Hook:{" "}
-                {initialTable.dormantHooks.join(", ")}
+                Hook: {initialTable.dormantHooks.join(", ")}
               </p>
             </div>
           </details>
@@ -485,26 +471,13 @@ return (
         </CardSection>
       )}
 
+    {/* HUMAN DM: editable table (AUTO-GENERATED) */}
+    {dmMode === "human" && initialTable && !tableAccepted && (
+      <CardSection title="Solace Setup Helper (Optional)">
+        <p className="muted" style={{ marginTop: 0 }}>
+          If you want a fast-start table, edit it, then run the game.
+        </p>
 
-      {/* HUMAN DM: optional Solace setup helper (EDITABLE ONLY UNTIL ACCEPTED) */}
-{dmMode === "human" && !tableAccepted && (
-  <CardSection title="Solace Setup Helper (Optional)">
-    <p className="muted" style={{ marginTop: 0 }}>
-      If you want a fast-start table, generate one, edit it, then run the game.
-    </p>
-
-    {!initialTable ? (
-      <button
-        onClick={() => {
-          const next = generateInitialTable();
-          setInitialTable(next);
-          setTableDraftText(renderInitialTableNarration(next));
-        }}
-      >
-        Generate Table
-      </button>
-    ) : (
-      <>
         <textarea
           rows={10}
           value={tableDraftText}
@@ -540,99 +513,78 @@ return (
         </details>
 
         <div style={{ marginTop: 10 }}>
-          <button
-            onClick={() => {
-              setTableAccepted(true);
-            }}
-          >
+          <button onClick={() => setTableAccepted(true)}>
             Accept Table
           </button>
         </div>
+      </CardSection>
+    )}
+
+    {/* BLOCK PLAY UNTIL ACCEPTED */}
+    {dmMode === "solace-neutral" && !tableAccepted && <Disclaimer />}
+
+    {/* GAME FLOW */}
+    {(dmMode === "human" || tableAccepted) && (
+      <>
+        <DungeonPressurePanel
+          turn={state.events.filter((e) => e.type === "OUTCOME").length}
+          events={state.events}
+        />
+
+        <CardSection title="Player Action">
+          <textarea
+            value={playerInput}
+            onChange={(e) => setPlayerInput(e.target.value)}
+            placeholder="Describe what your character does…"
+            style={{
+              width: "100%",
+              minHeight: "120px",
+              resize: "vertical",
+              boxSizing: "border-box",
+              lineHeight: 1.5,
+            }}
+          />
+          <div style={{ marginTop: 8 }}>
+            <button onClick={handlePlayerAction}>Submit Action</button>
+          </div>
+        </CardSection>
+
+        {parsed && (
+          <CardSection title="Parsed Action">
+            <pre>{JSON.stringify(parsed, null, 2)}</pre>
+          </CardSection>
+        )}
+
+        {options && dmMode === "human" && (
+          <CardSection title="Options">
+            <ul>
+              {options.map((opt) => (
+                <li key={opt.id}>
+                  <button onClick={() => setSelectedOption(opt)}>
+                    {opt.description}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </CardSection>
+        )}
+
+        {selectedOption && (
+          <ResolutionDraftAdvisoryPanel
+            role={role}
+            context={{
+              optionDescription: selectedOption.description,
+              optionKind: inferOptionKind(selectedOption.description),
+            }}
+            onRecord={handleRecord}
+          />
+        )}
+
+        <NextActionHint state={state} />
+        <WorldLedgerPanelLegacy events={state.events} />
       </>
     )}
-  </CardSection>
-)}
 
-      {/* BLOCK PLAY UNTIL ACCEPTED */}
-      {dmMode === "solace-neutral" && !tableAccepted && <Disclaimer />}
-
-      {/* GAME FLOW */}
-      {(dmMode === "human" || tableAccepted) && (
-        <>
-          <DungeonPressurePanel
-            turn={state.events.filter(
-              (e) => e.type === "OUTCOME"
-            ).length}
-            events={state.events}
-          />
-
-<CardSection title="Player Action">
-  <textarea
-    value={playerInput}
-    onChange={(e) => setPlayerInput(e.target.value)}
-    placeholder="Describe what your character does…"
-    style={{
-      width: "100%",
-      minHeight: "120px",
-      resize: "vertical",
-      boxSizing: "border-box",
-      lineHeight: 1.5,
-    }}
-  />
-  <div style={{ marginTop: 8 }}>
-    <button onClick={handlePlayerAction}>
-      Submit Action
-    </button>
-  </div>
-</CardSection>
-
-{parsed && (
-  <CardSection title="Parsed Action">
-    <pre>
-      {JSON.stringify(parsed, null, 2)}
-    </pre>
-  </CardSection>
-)}
-
-{options && dmMode === "human" && (
-  <CardSection title="Options">
-    <ul>
-      {options.map((opt) => (
-        <li key={opt.id}>
-          <button
-            onClick={() => setSelectedOption(opt)}
-          >
-            {opt.description}
-          </button>
-        </li>
-      ))}
-    </ul>
-  </CardSection>
-)}
-
-{selectedOption && (
-  <ResolutionDraftAdvisoryPanel
-    role={role}
-    context={{
-      optionDescription:
-        selectedOption.description,
-      optionKind: inferOptionKind(
-        selectedOption.description
-      ),
-    }}
-    onRecord={handleRecord}
-  />
-)}
-
-
-          <NextActionHint state={state} />
-          <WorldLedgerPanelLegacy
-            events={state.events}
-          />
-        </>
-      )}
-
-      <Disclaimer />
-    </StewardedShell>
-  );
-}
+    <Disclaimer />
+  </StewardedShell>
+);
