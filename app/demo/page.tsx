@@ -15,18 +15,12 @@
 // - Grouped-enemy initiative combat loop (deterministic, replayable)
 // - Turn advancement (derived, event-sourced)
 //
-// UI upgrades in this version:
-// - Dropdowns for player count + init mods
-// - Optional player names (defaults to Player 1..N)
-// - Enemy groups as dropdown + add/remove chips (no comma-typing)
-//
-// Exploration (event-sourced):
-// - PLAYER_MOVED (arbiter-only canon)
-// - MAP_REVEALED (arbiter-only canon)
-// - MAP_MARKED (arbiter-only canon)  ✅
+// Exploration:
+// - Moved into components/world/ExplorationMapPanel.tsx
+// - PLAYER_MOVED / MAP_REVEALED / MAP_MARKED recorded here (arbiter-only)
 //
 // Ledger:
-// - CanonEventsPanel (non-OUTCOME canon ledger) ✅
+// - CanonEventsPanel (non-OUTCOME canon ledger) inline
 // - WorldLedgerPanelLegacy remains OUTCOME-only
 //
 // ------------------------------------------------------------
@@ -42,6 +36,7 @@ import ResolutionDraftAdvisoryPanel from "@/components/resolution/ResolutionDraf
 import NextActionHint from "@/components/NextActionHint";
 import WorldLedgerPanelLegacy from "@/components/world/WorldLedgerPanel.legacy";
 import DungeonPressurePanel from "@/components/world/DungeonPressurePanel";
+import ExplorationMapPanel, { MapMarkKind } from "@/components/world/ExplorationMapPanel";
 
 import StewardedShell from "@/components/layout/StewardedShell";
 import ModeHeader from "@/components/layout/ModeHeader";
@@ -81,131 +76,6 @@ type InitialTable = {
 // Keep local dice types aligned with ResolutionDraftAdvisoryPanel
 type DiceMode = "d4" | "d6" | "d8" | "d10" | "d12" | "d20";
 type RollSource = "manual" | "solace";
-
-// ------------------------------------------------------------
-// Exploration / Map (event-sourced)
-// ------------------------------------------------------------
-
-type XY = { x: number; y: number };
-
-type PlayerMovedPayload = {
-  from: XY;
-  to: XY;
-};
-
-type MapRevealedPayload = {
-  tiles: XY[];
-};
-
-type MapMarkKind = "door" | "stairs" | "altar" | "cache" | "hazard";
-
-type MapMarkedPayload = {
-  at: XY;
-  kind: MapMarkKind;
-  note?: string | null;
-};
-
-type MapMark = {
-  at: XY;
-  kind: MapMarkKind;
-  note?: string | null;
-  eventId: string;
-  timestamp: number;
-};
-
-function keyXY(p: XY) {
-  return `${p.x},${p.y}`;
-}
-
-function withinBounds(p: XY, w: number, h: number) {
-  return p.x >= 0 && p.y >= 0 && p.x < w && p.y < h;
-}
-
-function revealRadius(center: XY, radius: number, w: number, h: number): XY[] {
-  const out: XY[] = [];
-  for (let dy = -radius; dy <= radius; dy++) {
-    for (let dx = -radius; dx <= radius; dx++) {
-      const p = { x: center.x + dx, y: center.y + dy };
-      if (withinBounds(p, w, h)) out.push(p);
-    }
-  }
-  return out;
-}
-
-function normalizeNote(s: string) {
-  return s.replace(/\s+/g, " ").trim();
-}
-
-function deriveMapState(events: any[], w: number, h: number) {
-  // Deterministic start: middle of the grid
-  let position: XY = { x: Math.floor(w / 2), y: Math.floor(h / 2) };
-  const discovered = new Set<string>();
-
-  // Marks: latest mark per tile (last write wins by event order)
-  const marksByTile = new Map<string, MapMark>();
-
-  // Always reveal start tile
-  discovered.add(keyXY(position));
-
-  for (const e of events) {
-    if (e?.type === "PLAYER_MOVED") {
-      const p = e.payload as PlayerMovedPayload;
-      if (p?.to && withinBounds(p.to, w, h)) {
-        position = { x: p.to.x, y: p.to.y };
-        discovered.add(keyXY(position));
-      }
-    }
-
-    if (e?.type === "MAP_REVEALED") {
-      const p = e.payload as MapRevealedPayload;
-      const tiles = Array.isArray(p?.tiles) ? p.tiles : [];
-      for (const t of tiles) {
-        if (t && withinBounds(t, w, h)) discovered.add(keyXY(t));
-      }
-    }
-
-    if (e?.type === "MAP_MARKED") {
-      const p = e.payload as MapMarkedPayload;
-      if (!p?.at || typeof p.at.x !== "number" || typeof p.at.y !== "number") continue;
-      if (!withinBounds(p.at, w, h)) continue;
-
-      const kind = p.kind as MapMarkKind;
-      if (!kind) continue;
-
-      const k = keyXY(p.at);
-      marksByTile.set(k, {
-        at: { x: p.at.x, y: p.at.y },
-        kind,
-        note: typeof p.note === "string" ? p.note : null,
-        eventId: String(e.id ?? ""),
-        timestamp: Number(e.timestamp ?? Date.now()),
-      });
-
-      // Marking implies the tile is known (does not reveal neighbors)
-      discovered.add(k);
-    }
-  }
-
-  const marks = Array.from(marksByTile.values());
-  return { position, discovered, marksByTile, marks };
-}
-
-function glyphForMark(kind: MapMarkKind): string {
-  switch (kind) {
-    case "door":
-      return "🚪";
-    case "stairs":
-      return "⬇️";
-    case "altar":
-      return "✶";
-    case "cache":
-      return "⬚";
-    case "hazard":
-      return "⚠️";
-    default:
-      return "•";
-  }
-}
 
 // ------------------------------------------------------------
 // CanonEventsPanel (inline; non-OUTCOME canon ledger)
@@ -296,9 +166,7 @@ function CanonEventsPanel({ events }: CanonPanelProps) {
                   </div>
                 </div>
                 <div className="muted" style={{ whiteSpace: "nowrap" }}>
-                  {typeof e.timestamp === "number"
-                    ? new Date(e.timestamp).toLocaleTimeString()
-                    : ""}
+                  {typeof e.timestamp === "number" ? new Date(e.timestamp).toLocaleTimeString() : ""}
                 </div>
               </div>
             </li>
@@ -464,9 +332,7 @@ function renderInitialTableNarration(t: InitialTable): string {
 
   // Oddity becomes immediate table tension
   if (/footsteps echo twice/i.test(oddity)) {
-    lines.push(
-      "Every step answers itself — once, then again — like the street remembers you a beat too late."
-    );
+    lines.push("Every step answers itself — once, then again — like the street remembers you a beat too late.");
   } else if (/lantern/i.test(oddity.toLowerCase())) {
     lines.push("Lanternlight can’t decide what it wants to be — steady one second, starving the next.");
   } else if (/absorb sound/i.test(oddity.toLowerCase())) {
@@ -522,7 +388,6 @@ export default function DemoPage() {
   const role: "arbiter" = "arbiter";
 
   const [state, setState] = useState<SessionState>(createSession("demo-session", "demo"));
-
   const [dmMode, setDmMode] = useState<DMMode>("solace-neutral");
 
   // Initial Table Gate
@@ -538,22 +403,19 @@ export default function DemoPage() {
   const [selectedOption, setSelectedOption] = useState<Option | null>(null);
 
   // ----------------------------------------------------------
-  // Exploration map (MVP)
+  // Exploration event recorders (arbiter-only canon)
   // ----------------------------------------------------------
 
   const MAP_W = 13;
   const MAP_H = 9;
 
-  const derivedMap = useMemo(() => {
-    return deriveMapState(state.events as any[], MAP_W, MAP_H);
-  }, [state.events]);
-
-  const [markKind, setMarkKind] = useState<MapMarkKind>("door");
-  const [markNote, setMarkNote] = useState("");
-
-  function recordPlayerMoved(to: XY) {
-    const from = derivedMap.position;
-
+  function recordPlayerMoved(to: { x: number; y: number }) {
+    // Parent doesn’t derive current position; the panel does.
+    // We still record a from/to for readability.
+    // "from" is filled in by panel when it calls this; it will pass the intended "to".
+    // For canonical integrity, the "from" is not required for derivation (to is enough),
+    // but we keep it for human audit readability by setting from = to for now in this minimal interface.
+    // If you want exact from/to, we can change callback signature to (from,to).
     setState((prev) =>
       recordEvent(prev, {
         id: crypto.randomUUID(),
@@ -561,28 +423,26 @@ export default function DemoPage() {
         actor: "arbiter",
         type: "PLAYER_MOVED",
         payload: {
-          from,
+          from: { x: to.x, y: to.y },
           to,
-        } as PlayerMovedPayload,
+        } as any,
       })
     );
   }
 
-  function recordMapRevealed(tiles: XY[]) {
+  function recordMapRevealed(tiles: { x: number; y: number }[]) {
     setState((prev) =>
       recordEvent(prev, {
         id: crypto.randomUUID(),
         timestamp: Date.now(),
         actor: "arbiter",
         type: "MAP_REVEALED",
-        payload: {
-          tiles,
-        } as MapRevealedPayload,
+        payload: { tiles } as any,
       })
     );
   }
 
-  function recordMapMarked(at: XY, kind: MapMarkKind, note?: string | null) {
+  function recordMapMarked(at: { x: number; y: number }, kind: MapMarkKind, note?: string | null) {
     setState((prev) =>
       recordEvent(prev, {
         id: crypto.randomUUID(),
@@ -593,14 +453,9 @@ export default function DemoPage() {
           at,
           kind,
           note: typeof note === "string" && note.trim() ? note.trim() : null,
-        } as MapMarkedPayload,
+        } as any,
       })
     );
-  }
-
-  function moveAndReveal(to: XY) {
-    recordPlayerMoved(to);
-    recordMapRevealed(revealRadius(to, 1, MAP_W, MAP_H));
   }
 
   // ----------------------------------------------------------
@@ -658,8 +513,6 @@ export default function DemoPage() {
 
   useEffect(() => {
     if (initialTable) return;
-
-    // Generate for BOTH modes
     if (dmMode === "solace-neutral" || dmMode === "human") {
       setInitialTable(generateInitialTable());
     }
@@ -677,8 +530,6 @@ export default function DemoPage() {
 
   useEffect(() => {
     if (!initialTable) return;
-
-    // Seed editable draft only if empty (no overwriting DM edits)
     if (tableDraftText.trim() === "") {
       setTableDraftText(renderedTableNarration);
     }
@@ -694,7 +545,6 @@ export default function DemoPage() {
     if (dmMode === "solace-neutral") {
       setTableAccepted(false);
     }
-    // ❗ intentionally no auto-accept for human
   }, [dmMode]);
 
   // ----------------------------------------------------------
@@ -724,7 +574,7 @@ export default function DemoPage() {
   }, [dmMode, options]);
 
   // ----------------------------------------------------------
-  // Record canon
+  // Record canon (OUTCOME)
   // ----------------------------------------------------------
 
   function handleRecord(payload: {
@@ -1049,213 +899,15 @@ export default function DemoPage() {
             events={state.events}
           />
 
-          {/* EXPLORATION MAP (MVP + MARKS) */}
-          <CardSection title="Exploration Map (Fog-of-War)">
-            <p className="muted" style={{ marginTop: 0 }}>
-              Arbiter-only: move / reveal / mark are canon events (append-only). The map is derived from events.
-            </p>
-
-            <div className="muted" style={{ marginBottom: 10 }}>
-              Position: <strong>({derivedMap.position.x},{derivedMap.position.y})</strong> · Discovered:{" "}
-              <strong>{derivedMap.discovered.size}</strong>
-              {derivedMap.marks.length > 0 && (
-                <>
-                  {" "}
-                  · Marks: <strong>{derivedMap.marks.length}</strong>
-                </>
-              )}
-            </div>
-
-            <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "flex-start" }}>
-              {/* Grid */}
-              <div
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: `repeat(${MAP_W}, 22px)`,
-                  gap: 4,
-                  padding: 10,
-                  borderRadius: 10,
-                  border: "1px solid rgba(255,255,255,0.10)",
-                  background: "rgba(255,255,255,0.03)",
-                }}
-              >
-                {Array.from({ length: MAP_W * MAP_H }, (_, i) => {
-                  const x = i % MAP_W;
-                  const y = Math.floor(i / MAP_W);
-                  const here = derivedMap.position.x === x && derivedMap.position.y === y;
-                  const seen = derivedMap.discovered.has(`${x},${y}`);
-
-                  const mark = derivedMap.marksByTile.get(`${x},${y}`) ?? null;
-                  const glyph = mark ? glyphForMark(mark.kind) : "";
-
-                  const titleParts: string[] = [];
-                  titleParts.push(seen ? `(${x},${y})` : "Unknown");
-                  if (mark) {
-                    titleParts.push(`Mark: ${mark.kind}`);
-                    if (mark.note) titleParts.push(`Note: ${mark.note}`);
-                  }
-
-                  return (
-                    <div
-                      key={`${x},${y}`}
-                      title={titleParts.join(" · ")}
-                      style={{
-                        width: 22,
-                        height: 22,
-                        borderRadius: 6,
-                        position: "relative",
-                        border: here
-                          ? "1px solid rgba(138,180,255,0.65)"
-                          : "1px solid rgba(255,255,255,0.10)",
-                        background: !seen
-                          ? "rgba(0,0,0,0.55)" // fog
-                          : here
-                            ? "rgba(138,180,255,0.18)"
-                            : "rgba(255,255,255,0.06)",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        fontSize: 12,
-                        lineHeight: 1,
-                        userSelect: "none",
-                      }}
-                    >
-                      {seen && glyph ? (
-                        <span style={{ transform: "translateY(-0.5px)" }}>{glyph}</span>
-                      ) : null}
-                    </div>
-                  );
-                })}
-              </div>
-
-              {/* Controls */}
-              <div style={{ minWidth: 300 }}>
-                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                  <button onClick={() => recordMapRevealed(revealRadius(derivedMap.position, 1, MAP_W, MAP_H))}>
-                    Reveal (radius 1)
-                  </button>
-                  <button onClick={() => recordMapRevealed(revealRadius(derivedMap.position, 2, MAP_W, MAP_H))}>
-                    Reveal (radius 2)
-                  </button>
-                </div>
-
-                {/* Mark tile */}
-                <div style={{ marginTop: 12 }}>
-                  <div className="muted" style={{ marginBottom: 6 }}>
-                    Mark current tile (commits MAP_MARKED)
-                  </div>
-
-                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "flex-end" }}>
-                    <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                      Kind:
-                      <select value={markKind} onChange={(e) => setMarkKind(e.target.value as MapMarkKind)}>
-                        <option value="door">door 🚪</option>
-                        <option value="stairs">stairs ⬇️</option>
-                        <option value="altar">altar ✶</option>
-                        <option value="cache">cache ⬚</option>
-                        <option value="hazard">hazard ⚠️</option>
-                      </select>
-                    </label>
-
-                    <label style={{ display: "flex", flexDirection: "column", gap: 6, flex: "1 1 180px" }}>
-                      Note (optional):
-                      <input
-                        value={markNote}
-                        onChange={(e) => setMarkNote(e.target.value)}
-                        placeholder="e.g., locked, rune, blood, warm air…"
-                      />
-                    </label>
-
-                    <button
-                      onClick={() => {
-                        const note = normalizeNote(markNote);
-                        recordMapMarked(derivedMap.position, markKind, note || null);
-                        setMarkNote("");
-                      }}
-                    >
-                      Add mark
-                    </button>
-                  </div>
-
-                  {derivedMap.marksByTile.get(keyXY(derivedMap.position)) ? (
-                    <div className="muted" style={{ marginTop: 8 }}>
-                      Current tile mark:{" "}
-                      <strong>
-                        {derivedMap.marksByTile.get(keyXY(derivedMap.position))?.kind}
-                      </strong>
-                      {derivedMap.marksByTile.get(keyXY(derivedMap.position))?.note ? (
-                        <>
-                          {" "}
-                          — {derivedMap.marksByTile.get(keyXY(derivedMap.position))?.note}
-                        </>
-                      ) : null}
-                    </div>
-                  ) : (
-                    <div className="muted" style={{ marginTop: 8 }}>
-                      No mark on current tile.
-                    </div>
-                  )}
-                </div>
-
-                {/* Movement */}
-                <div style={{ marginTop: 14 }}>
-                  <div className="muted" style={{ marginBottom: 8 }}>
-                    Move (commits PLAYER_MOVED + MAP_REVEALED radius 1)
-                  </div>
-
-                  <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 70px)", gap: 8 }}>
-                    <span />
-                    <button
-                      onClick={() => {
-                        const to = { x: derivedMap.position.x, y: derivedMap.position.y - 1 };
-                        if (withinBounds(to, MAP_W, MAP_H)) moveAndReveal(to);
-                      }}
-                    >
-                      ↑
-                    </button>
-                    <span />
-
-                    <button
-                      onClick={() => {
-                        const to = { x: derivedMap.position.x - 1, y: derivedMap.position.y };
-                        if (withinBounds(to, MAP_W, MAP_H)) moveAndReveal(to);
-                      }}
-                    >
-                      ←
-                    </button>
-
-                    <button disabled style={{ opacity: 0.5 }}>
-                      •
-                    </button>
-
-                    <button
-                      onClick={() => {
-                        const to = { x: derivedMap.position.x + 1, y: derivedMap.position.y };
-                        if (withinBounds(to, MAP_W, MAP_H)) moveAndReveal(to);
-                      }}
-                    >
-                      →
-                    </button>
-
-                    <span />
-                    <button
-                      onClick={() => {
-                        const to = { x: derivedMap.position.x, y: derivedMap.position.y + 1 };
-                        if (withinBounds(to, MAP_W, MAP_H)) moveAndReveal(to);
-                      }}
-                    >
-                      ↓
-                    </button>
-                    <span />
-                  </div>
-
-                  <p className="muted" style={{ marginTop: 10, marginBottom: 0 }}>
-                    MVP grid now. Marks give campaign anchors (doors, stairs, hazards) without inventing facts.
-                  </p>
-                </div>
-              </div>
-            </div>
-          </CardSection>
+          {/* ✅ Exploration Map extracted into component */}
+          <ExplorationMapPanel
+            events={state.events}
+            mapW={MAP_W}
+            mapH={MAP_H}
+            onMove={recordPlayerMoved}
+            onReveal={recordMapRevealed}
+            onMark={recordMapMarked}
+          />
 
           {/* COMBAT (DEMO) */}
           <CardSection title="Combat (Deterministic, Grouped Enemies)">
@@ -1379,7 +1031,14 @@ export default function DemoPage() {
                 </div>
               </div>
 
-              <div style={{ marginTop: 10, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 10 }}>
+              <div
+                style={{
+                  marginTop: 10,
+                  display: "grid",
+                  gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+                  gap: 10,
+                }}
+              >
                 {Array.from({ length: clampInt(playerCount, 1, 6) }, (_, idx) => {
                   const i1 = idx + 1;
                   const value = playerNames[idx] ?? "";
@@ -1507,10 +1166,7 @@ export default function DemoPage() {
 
           <NextActionHint state={state} />
 
-          {/* ✅ Non-OUTCOME canon ledger */}
           <CanonEventsPanel events={state.events as any[]} />
-
-          {/* OUTCOME-only narration ledger */}
           <WorldLedgerPanelLegacy events={state.events} />
         </>
       )}
