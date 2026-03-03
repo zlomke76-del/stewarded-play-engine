@@ -120,7 +120,6 @@ export default function ExplorationMapPanel({ events, mapW = 13, mapH = 9 }: Pro
         canon when the Arbiter commits.
       </p>
 
-      {/* Legend */}
       <div
         style={{
           display: "flex",
