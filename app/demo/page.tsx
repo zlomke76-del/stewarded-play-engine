@@ -20,10 +20,14 @@
 // - Optional player names (defaults to Player 1..N)
 // - Enemy groups as dropdown + add/remove chips (no comma-typing)
 //
-// NEW in this version:
-// - Exploration + Fog-of-War Map Reveal (event-sourced)
-//   - PLAYER_MOVED (arbiter-only canon)
-//   - MAP_REVEALED (arbiter-only canon)
+// Exploration (event-sourced):
+// - PLAYER_MOVED (arbiter-only canon)
+// - MAP_REVEALED (arbiter-only canon)
+// - MAP_MARKED (arbiter-only canon)  ✅
+//
+// Ledger:
+// - CanonEventsPanel (non-OUTCOME canon ledger) ✅
+// - WorldLedgerPanelLegacy remains OUTCOME-only
 //
 // ------------------------------------------------------------
 
@@ -93,6 +97,22 @@ type MapRevealedPayload = {
   tiles: XY[];
 };
 
+type MapMarkKind = "door" | "stairs" | "altar" | "cache" | "hazard";
+
+type MapMarkedPayload = {
+  at: XY;
+  kind: MapMarkKind;
+  note?: string | null;
+};
+
+type MapMark = {
+  at: XY;
+  kind: MapMarkKind;
+  note?: string | null;
+  eventId: string;
+  timestamp: number;
+};
+
 function keyXY(p: XY) {
   return `${p.x},${p.y}`;
 }
@@ -112,10 +132,17 @@ function revealRadius(center: XY, radius: number, w: number, h: number): XY[] {
   return out;
 }
 
+function normalizeNote(s: string) {
+  return s.replace(/\s+/g, " ").trim();
+}
+
 function deriveMapState(events: any[], w: number, h: number) {
   // Deterministic start: middle of the grid
   let position: XY = { x: Math.floor(w / 2), y: Math.floor(h / 2) };
   const discovered = new Set<string>();
+
+  // Marks: latest mark per tile (last write wins by event order)
+  const marksByTile = new Map<string, MapMark>();
 
   // Always reveal start tile
   discovered.add(keyXY(position));
@@ -136,9 +163,150 @@ function deriveMapState(events: any[], w: number, h: number) {
         if (t && withinBounds(t, w, h)) discovered.add(keyXY(t));
       }
     }
+
+    if (e?.type === "MAP_MARKED") {
+      const p = e.payload as MapMarkedPayload;
+      if (!p?.at || typeof p.at.x !== "number" || typeof p.at.y !== "number") continue;
+      if (!withinBounds(p.at, w, h)) continue;
+
+      const kind = p.kind as MapMarkKind;
+      if (!kind) continue;
+
+      const k = keyXY(p.at);
+      marksByTile.set(k, {
+        at: { x: p.at.x, y: p.at.y },
+        kind,
+        note: typeof p.note === "string" ? p.note : null,
+        eventId: String(e.id ?? ""),
+        timestamp: Number(e.timestamp ?? Date.now()),
+      });
+
+      // Marking implies the tile is known (does not reveal neighbors)
+      discovered.add(k);
+    }
   }
 
-  return { position, discovered };
+  const marks = Array.from(marksByTile.values());
+  return { position, discovered, marksByTile, marks };
+}
+
+function glyphForMark(kind: MapMarkKind): string {
+  switch (kind) {
+    case "door":
+      return "🚪";
+    case "stairs":
+      return "⬇️";
+    case "altar":
+      return "✶";
+    case "cache":
+      return "⬚";
+    case "hazard":
+      return "⚠️";
+    default:
+      return "•";
+  }
+}
+
+// ------------------------------------------------------------
+// CanonEventsPanel (inline; non-OUTCOME canon ledger)
+// ------------------------------------------------------------
+
+type CanonPanelProps = {
+  events: readonly any[];
+};
+
+function fmtXY(xy: any) {
+  if (!xy || typeof xy.x !== "number" || typeof xy.y !== "number") return "(?,?)";
+  return `(${xy.x},${xy.y})`;
+}
+
+function renderCanonEventLine(e: any) {
+  const p: any = e?.payload;
+
+  switch (e?.type) {
+    case "PLAYER_MOVED": {
+      const from = fmtXY(p?.from);
+      const to = fmtXY(p?.to);
+      return `🧭 Move ${from} → ${to}`;
+    }
+
+    case "MAP_REVEALED": {
+      const tiles = Array.isArray(p?.tiles) ? p.tiles : [];
+      const n = tiles.length;
+      return `🗺️ Reveal ${n} tile${n === 1 ? "" : "s"}`;
+    }
+
+    case "MAP_MARKED": {
+      const at = fmtXY(p?.at);
+      const kind = typeof p?.kind === "string" ? p.kind : "mark";
+      const note = typeof p?.note === "string" && p.note.trim() ? ` — ${p.note.trim()}` : "";
+      return `📍 Mark ${kind} at ${at}${note}`;
+    }
+
+    case "COMBAT_STARTED": {
+      const combatId = p?.combatId ? String(p.combatId) : "(unknown)";
+      const participants = Array.isArray(p?.participants) ? p.participants.length : 0;
+      return `⚔️ Combat started (${combatId}) — ${participants} participants`;
+    }
+
+    case "INITIATIVE_ROLLED": {
+      const who = p?.combatantId ? String(p.combatantId) : "(combatant)";
+      const total = typeof p?.total === "number" ? p.total : "?";
+      const natural = typeof p?.natural === "number" ? p.natural : "?";
+      const mod = typeof p?.modifier === "number" ? p.modifier : "?";
+      return `🎲 Initiative ${who}: ${total} (d20 ${natural} + ${mod})`;
+    }
+
+    case "TURN_ADVANCED": {
+      const combatId = p?.combatId ? String(p.combatId) : "(combat)";
+      const round = typeof p?.round === "number" ? p.round : "?";
+      const index = typeof p?.index === "number" ? p.index : "?";
+      return `⏭️ Turn advanced — ${combatId} (round ${round}, index ${index})`;
+    }
+
+    default: {
+      const safe = (() => {
+        try {
+          return JSON.stringify(p ?? {}, null, 0);
+        } catch {
+          return "{}";
+        }
+      })();
+      return `• ${String(e?.type ?? "UNKNOWN")} ${safe !== "{}" ? `— ${safe}` : ""}`;
+    }
+  }
+}
+
+function CanonEventsPanel({ events }: CanonPanelProps) {
+  const canon = (events ?? []).filter((e: any) => e?.type !== "OUTCOME");
+
+  return (
+    <CardSection title="Canon Events">
+      {canon.length === 0 ? (
+        <p className="muted">No canon events yet.</p>
+      ) : (
+        <ul>
+          {canon.map((e: any) => (
+            <li key={e.id} style={{ marginBottom: 10 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
+                <div>
+                  <strong>{renderCanonEventLine(e)}</strong>
+                  <div className="muted" style={{ marginTop: 4 }}>
+                    actor: {e.actor} · type: {e.type}
+                  </div>
+                </div>
+                <div className="muted" style={{ whiteSpace: "nowrap" }}>
+                  {typeof e.timestamp === "number"
+                    ? new Date(e.timestamp).toLocaleTimeString()
+                    : ""}
+                </div>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+    </CardSection>
+  );
 }
 
 // ------------------------------------------------------------
@@ -333,21 +501,11 @@ function renderInitialTableNarration(t: InitialTable): string {
 function inferOptionKind(description: string): OptionKind {
   const text = description.toLowerCase();
 
-  if (
-    text.includes("attack") ||
-    text.includes("fight") ||
-    text.includes("oppose") ||
-    text.includes("contest")
-  ) {
+  if (text.includes("attack") || text.includes("fight") || text.includes("oppose") || text.includes("contest")) {
     return "contested";
   }
 
-  if (
-    text.includes("climb") ||
-    text.includes("cross") ||
-    text.includes("navigate") ||
-    text.includes("environment")
-  ) {
+  if (text.includes("climb") || text.includes("cross") || text.includes("navigate") || text.includes("environment")) {
     return "environmental";
   }
 
@@ -390,6 +548,9 @@ export default function DemoPage() {
     return deriveMapState(state.events as any[], MAP_W, MAP_H);
   }, [state.events]);
 
+  const [markKind, setMarkKind] = useState<MapMarkKind>("door");
+  const [markNote, setMarkNote] = useState("");
+
   function recordPlayerMoved(to: XY) {
     const from = derivedMap.position;
 
@@ -417,6 +578,22 @@ export default function DemoPage() {
         payload: {
           tiles,
         } as MapRevealedPayload,
+      })
+    );
+  }
+
+  function recordMapMarked(at: XY, kind: MapMarkKind, note?: string | null) {
+    setState((prev) =>
+      recordEvent(prev, {
+        id: crypto.randomUUID(),
+        timestamp: Date.now(),
+        actor: "arbiter",
+        type: "MAP_MARKED",
+        payload: {
+          at,
+          kind,
+          note: typeof note === "string" && note.trim() ? note.trim() : null,
+        } as MapMarkedPayload,
       })
     );
   }
@@ -872,15 +1049,21 @@ export default function DemoPage() {
             events={state.events}
           />
 
-          {/* EXPLORATION MAP (MVP) */}
+          {/* EXPLORATION MAP (MVP + MARKS) */}
           <CardSection title="Exploration Map (Fog-of-War)">
             <p className="muted" style={{ marginTop: 0 }}>
-              Arbiter-only: movement + reveal are canon events (append-only). The map is derived from events.
+              Arbiter-only: move / reveal / mark are canon events (append-only). The map is derived from events.
             </p>
 
             <div className="muted" style={{ marginBottom: 10 }}>
               Position: <strong>({derivedMap.position.x},{derivedMap.position.y})</strong> · Discovered:{" "}
               <strong>{derivedMap.discovered.size}</strong>
+              {derivedMap.marks.length > 0 && (
+                <>
+                  {" "}
+                  · Marks: <strong>{derivedMap.marks.length}</strong>
+                </>
+              )}
             </div>
 
             <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "flex-start" }}>
@@ -902,14 +1085,25 @@ export default function DemoPage() {
                   const here = derivedMap.position.x === x && derivedMap.position.y === y;
                   const seen = derivedMap.discovered.has(`${x},${y}`);
 
+                  const mark = derivedMap.marksByTile.get(`${x},${y}`) ?? null;
+                  const glyph = mark ? glyphForMark(mark.kind) : "";
+
+                  const titleParts: string[] = [];
+                  titleParts.push(seen ? `(${x},${y})` : "Unknown");
+                  if (mark) {
+                    titleParts.push(`Mark: ${mark.kind}`);
+                    if (mark.note) titleParts.push(`Note: ${mark.note}`);
+                  }
+
                   return (
                     <div
                       key={`${x},${y}`}
-                      title={seen ? `(${x},${y})` : "Unknown"}
+                      title={titleParts.join(" · ")}
                       style={{
                         width: 22,
                         height: 22,
                         borderRadius: 6,
+                        position: "relative",
                         border: here
                           ? "1px solid rgba(138,180,255,0.65)"
                           : "1px solid rgba(255,255,255,0.10)",
@@ -918,28 +1112,93 @@ export default function DemoPage() {
                           : here
                             ? "rgba(138,180,255,0.18)"
                             : "rgba(255,255,255,0.06)",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        fontSize: 12,
+                        lineHeight: 1,
+                        userSelect: "none",
                       }}
-                    />
+                    >
+                      {seen && glyph ? (
+                        <span style={{ transform: "translateY(-0.5px)" }}>{glyph}</span>
+                      ) : null}
+                    </div>
                   );
                 })}
               </div>
 
               {/* Controls */}
-              <div style={{ minWidth: 260 }}>
+              <div style={{ minWidth: 300 }}>
                 <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                  <button
-                    onClick={() => recordMapRevealed(revealRadius(derivedMap.position, 1, MAP_W, MAP_H))}
-                  >
+                  <button onClick={() => recordMapRevealed(revealRadius(derivedMap.position, 1, MAP_W, MAP_H))}>
                     Reveal (radius 1)
                   </button>
-                  <button
-                    onClick={() => recordMapRevealed(revealRadius(derivedMap.position, 2, MAP_W, MAP_H))}
-                  >
+                  <button onClick={() => recordMapRevealed(revealRadius(derivedMap.position, 2, MAP_W, MAP_H))}>
                     Reveal (radius 2)
                   </button>
                 </div>
 
+                {/* Mark tile */}
                 <div style={{ marginTop: 12 }}>
+                  <div className="muted" style={{ marginBottom: 6 }}>
+                    Mark current tile (commits MAP_MARKED)
+                  </div>
+
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "flex-end" }}>
+                    <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                      Kind:
+                      <select value={markKind} onChange={(e) => setMarkKind(e.target.value as MapMarkKind)}>
+                        <option value="door">door 🚪</option>
+                        <option value="stairs">stairs ⬇️</option>
+                        <option value="altar">altar ✶</option>
+                        <option value="cache">cache ⬚</option>
+                        <option value="hazard">hazard ⚠️</option>
+                      </select>
+                    </label>
+
+                    <label style={{ display: "flex", flexDirection: "column", gap: 6, flex: "1 1 180px" }}>
+                      Note (optional):
+                      <input
+                        value={markNote}
+                        onChange={(e) => setMarkNote(e.target.value)}
+                        placeholder="e.g., locked, rune, blood, warm air…"
+                      />
+                    </label>
+
+                    <button
+                      onClick={() => {
+                        const note = normalizeNote(markNote);
+                        recordMapMarked(derivedMap.position, markKind, note || null);
+                        setMarkNote("");
+                      }}
+                    >
+                      Add mark
+                    </button>
+                  </div>
+
+                  {derivedMap.marksByTile.get(keyXY(derivedMap.position)) ? (
+                    <div className="muted" style={{ marginTop: 8 }}>
+                      Current tile mark:{" "}
+                      <strong>
+                        {derivedMap.marksByTile.get(keyXY(derivedMap.position))?.kind}
+                      </strong>
+                      {derivedMap.marksByTile.get(keyXY(derivedMap.position))?.note ? (
+                        <>
+                          {" "}
+                          — {derivedMap.marksByTile.get(keyXY(derivedMap.position))?.note}
+                        </>
+                      ) : null}
+                    </div>
+                  ) : (
+                    <div className="muted" style={{ marginTop: 8 }}>
+                      No mark on current tile.
+                    </div>
+                  )}
+                </div>
+
+                {/* Movement */}
+                <div style={{ marginTop: 14 }}>
                   <div className="muted" style={{ marginBottom: 8 }}>
                     Move (commits PLAYER_MOVED + MAP_REVEALED radius 1)
                   </div>
@@ -991,7 +1250,7 @@ export default function DemoPage() {
                   </div>
 
                   <p className="muted" style={{ marginTop: 10, marginBottom: 0 }}>
-                    MVP grid now. Later we can evolve to rooms + corridors or a node graph without breaking replay.
+                    MVP grid now. Marks give campaign anchors (doors, stairs, hazards) without inventing facts.
                   </p>
                 </div>
               </div>
@@ -1113,28 +1372,14 @@ export default function DemoPage() {
 
             {/* Player Names */}
             <div style={{ marginTop: 14 }}>
-              <div
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                  gap: 10,
-                }}
-              >
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
                 <strong>Players</strong>
                 <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                   <button onClick={randomizePlayerNames}>🎲 Random names</button>
                 </div>
               </div>
 
-              <div
-                style={{
-                  marginTop: 10,
-                  display: "grid",
-                  gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-                  gap: 10,
-                }}
-              >
+              <div style={{ marginTop: 10, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 10 }}>
                 {Array.from({ length: clampInt(playerCount, 1, 6) }, (_, idx) => {
                   const i1 = idx + 1;
                   const value = playerNames[idx] ?? "";
@@ -1159,8 +1404,7 @@ export default function DemoPage() {
               </div>
 
               <p className="muted" style={{ marginTop: 10, marginBottom: 0 }}>
-                Blank names will display as “Player 1…N”. Names are used for initiative labels and canon
-                readability.
+                Blank names will display as “Player 1…N”. Names are used for initiative labels and canon readability.
               </p>
             </div>
 
@@ -1174,22 +1418,13 @@ export default function DemoPage() {
             {derivedCombat && (
               <div style={{ marginTop: 12 }}>
                 <div className="muted">
-                  Combat: <strong>{derivedCombat.combatId}</strong> · Round{" "}
-                  <strong>{derivedCombat.round}</strong>
+                  Combat: <strong>{derivedCombat.combatId}</strong> · Round <strong>{derivedCombat.round}</strong>
                 </div>
 
-                <div
-                  style={{
-                    marginTop: 10,
-                    display: "grid",
-                    gridTemplateColumns: "1fr",
-                    gap: 6,
-                  }}
-                >
+                <div style={{ marginTop: 10, display: "grid", gridTemplateColumns: "1fr", gap: 6 }}>
                   {derivedCombat.order.map((id, idx) => {
                     const spec = derivedCombat.participants.find((p) => p.id === id) ?? null;
                     const roll = derivedCombat.initiative.find((r) => r.combatantId === id) ?? null;
-
                     const active = derivedCombat.activeCombatantId === id;
 
                     return (
@@ -1198,12 +1433,8 @@ export default function DemoPage() {
                         style={{
                           padding: "10px 12px",
                           borderRadius: 8,
-                          border: active
-                            ? "1px solid rgba(138,180,255,0.55)"
-                            : "1px solid rgba(255,255,255,0.10)",
-                          background: active
-                            ? "rgba(138,180,255,0.10)"
-                            : "rgba(255,255,255,0.04)",
+                          border: active ? "1px solid rgba(138,180,255,0.55)" : "1px solid rgba(255,255,255,0.10)",
+                          background: active ? "rgba(138,180,255,0.10)" : "rgba(255,255,255,0.04)",
                           display: "flex",
                           justifyContent: "space-between",
                           alignItems: "center",
@@ -1275,6 +1506,11 @@ export default function DemoPage() {
           )}
 
           <NextActionHint state={state} />
+
+          {/* ✅ Non-OUTCOME canon ledger */}
+          <CanonEventsPanel events={state.events as any[]} />
+
+          {/* OUTCOME-only narration ledger */}
           <WorldLedgerPanelLegacy events={state.events} />
         </>
       )}
