@@ -10,11 +10,6 @@
 //     PLAYER_MOVED / MAP_REVEALED / MAP_MARKED
 // - Arbiter commits the bundle alongside OUTCOME (one click)
 //
-// CHANGE REQUEST (this turn):
-// - Replace “To X/Y” inputs with a directional dropdown (North/South/East/West/Stay)
-// - Still commit canonical PLAYER_MOVED as { from, to } (coords), derived from direction + currentPos
-// - If move would be out-of-bounds, disable commit + show warning
-//
 // ------------------------------------------------------------
 
 import { useEffect, useMemo, useState } from "react";
@@ -35,22 +30,13 @@ import ModeHeader from "@/components/layout/ModeHeader";
 import CardSection from "@/components/layout/CardSection";
 import Disclaimer from "@/components/layout/Disclaimer";
 
-import {
-  CombatStartedPayload,
-  CombatantSpec,
-  deriveCombatState,
-  findLatestCombatId,
-  formatCombatantLabel,
-  generateDeterministicInitiativeRolls,
-  nextTurnPointer,
-} from "@/lib/combat/CombatState";
+import CombatSetupPanel from "@/components/combat/CombatSetupPanel";
 
 // ------------------------------------------------------------
 // Types
 // ------------------------------------------------------------
 
 type DMMode = "human" | "solace-neutral";
-
 type OptionKind = "safe" | "environmental" | "risky" | "contested";
 
 type InitialTable = {
@@ -70,8 +56,7 @@ type DiceMode = "d4" | "d6" | "d8" | "d10" | "d12" | "d20";
 type RollSource = "manual" | "solace";
 
 type XY = { x: number; y: number };
-
-type MoveDir = "stay" | "north" | "south" | "east" | "west";
+type Dir = "north" | "south" | "east" | "west";
 
 // ------------------------------------------------------------
 // CanonEventsPanel (inline; non-OUTCOME canon ledger)
@@ -194,46 +179,6 @@ function normalizeName(s: string) {
   return s.replace(/\s+/g, " ").trim();
 }
 
-function randomName(): string {
-  const a = [
-    "Astra",
-    "Kara",
-    "Thorne",
-    "Hex",
-    "Rook",
-    "Nyx",
-    "Vex",
-    "Dax",
-    "Mara",
-    "Rune",
-    "Sable",
-    "Orin",
-    "Juno",
-    "Kade",
-    "Iris",
-    "Zeph",
-  ];
-  const b = [
-    "of Ember",
-    "of Glass",
-    "of Iron",
-    "of Neon",
-    "of Ash",
-    "of Dawn",
-    "of Night",
-    "of the Grid",
-    "the Quiet",
-    "the Bold",
-    "the Warden",
-    "the Runner",
-    "the Signal",
-    "the Echo",
-  ];
-  const base = pick(a);
-  const tail = pick([true, false, false]) ? ` ${pick(b)}` : "";
-  return `${base}${tail}`;
-}
-
 // ------------------------------------------------------------
 // Exploration derivation + drafting helpers (local to demo)
 // ------------------------------------------------------------
@@ -266,7 +211,7 @@ function revealRadius(center: XY, radius: number, w: number, h: number): XY[] {
   return out;
 }
 
-function inferDirection(text: string): MoveDir | null {
+function inferDirection(text: string): Dir | null {
   const t = text.toLowerCase();
   if (/\b(north|up|forward|ahead)\b/.test(t)) return "north";
   if (/\b(south|down|back|backward)\b/.test(t)) return "south";
@@ -275,7 +220,7 @@ function inferDirection(text: string): MoveDir | null {
   return null;
 }
 
-function stepFrom(pos: XY, dir: Exclude<MoveDir, "stay">): XY {
+function stepFrom(pos: XY, dir: Dir): XY {
   switch (dir) {
     case "north":
       return { x: pos.x, y: pos.y - 1 };
@@ -285,21 +230,6 @@ function stepFrom(pos: XY, dir: Exclude<MoveDir, "stay">): XY {
       return { x: pos.x + 1, y: pos.y };
     case "west":
       return { x: pos.x - 1, y: pos.y };
-  }
-}
-
-function dirLabel(d: MoveDir) {
-  switch (d) {
-    case "stay":
-      return "Stay (no move)";
-    case "north":
-      return "North ↑";
-    case "south":
-      return "South ↓";
-    case "east":
-      return "East →";
-    case "west":
-      return "West ←";
   }
 }
 
@@ -315,11 +245,9 @@ function textSuggestsLocked(text: string) {
 
 type ExplorationDraft = {
   enableMove: boolean;
-  dir: MoveDir;
-
+  moveDir: Dir;
   enableReveal: boolean;
   revealRadius: 0 | 1 | 2;
-
   enableMark: boolean;
   markKind: MapMarkKind;
   markNote: string;
@@ -367,29 +295,17 @@ function generateInitialTable(): InitialTable {
       "Voices echo where they shouldn’t, carrying fragments of argument.",
       "The city hums, unaware of the pressure building beneath it.",
     ]),
-    locationTraits: [
-      pick(["crowded", "echoing", "claustrophobic", "uneasily quiet"]),
-      pick(["ancient stone", "rotting wood", "slick cobblestone"]),
-    ],
+    locationTraits: [pick(["crowded", "echoing", "claustrophobic", "uneasily quiet"]), pick(["ancient stone", "rotting wood", "slick cobblestone"])],
     latentFactions: chosenNames.map((name) => ({
       name,
       desire: pick(desires),
       pressure: pick(pressures),
     })),
     environmentalOddities: [
-      pick([
-        "Lantern flames gutter without wind",
-        "Stone walls seem to absorb sound",
-        "Whispers surface near old drains",
-        "Footsteps echo twice",
-      ]),
+      pick(["Lantern flames gutter without wind", "Stone walls seem to absorb sound", "Whispers surface near old drains", "Footsteps echo twice"]),
     ],
     dormantHooks: [
-      pick([
-        "A name scratched into stone repeats across districts",
-        "A missing city clerk last seen near the underways",
-        "A sealed door recently disturbed",
-      ]),
+      pick(["A name scratched into stone repeats across districts", "A missing city clerk last seen near the underways", "A sealed door recently disturbed"]),
     ],
   };
 }
@@ -411,9 +327,7 @@ function renderInitialTableNarration(t: InitialTable): string {
   } else if (/absorb sound/i.test(oddity.toLowerCase())) {
     lines.push("Sound doesn’t travel right. Words die early, like the walls are swallowing them.");
   } else if (/whispers/i.test(oddity.toLowerCase())) {
-    lines.push(
-      "You keep catching whispers at the edge of hearing — not loud enough to understand, not quiet enough to ignore."
-    );
+    lines.push("You keep catching whispers at the edge of hearing — not loud enough to understand, not quiet enough to ignore.");
   } else {
     lines.push(`${oddity}.`);
   }
@@ -431,16 +345,9 @@ function renderInitialTableNarration(t: InitialTable): string {
 
 function inferOptionKind(description: string): OptionKind {
   const text = description.toLowerCase();
-
-  if (text.includes("attack") || text.includes("fight") || text.includes("oppose") || text.includes("contest")) {
-    return "contested";
-  }
-  if (text.includes("climb") || text.includes("cross") || text.includes("navigate") || text.includes("environment")) {
-    return "environmental";
-  }
-  if (text.includes("steal") || text.includes("sneak") || text.includes("risk")) {
-    return "risky";
-  }
+  if (text.includes("attack") || text.includes("fight") || text.includes("oppose") || text.includes("contest")) return "contested";
+  if (text.includes("climb") || text.includes("cross") || text.includes("navigate") || text.includes("environment")) return "environmental";
+  if (text.includes("steal") || text.includes("sneak") || text.includes("risk")) return "risky";
   return "safe";
 }
 
@@ -467,6 +374,22 @@ export default function DemoPage() {
   const [selectedOption, setSelectedOption] = useState<Option | null>(null);
 
   // ----------------------------------------------------------
+  // Append canon helper (single point of truth)
+  // ----------------------------------------------------------
+
+  function appendCanon(type: string, payload: any) {
+    setState((prev) =>
+      recordEvent(prev, {
+        id: crypto.randomUUID(),
+        timestamp: Date.now(),
+        actor: "arbiter",
+        type: type as any,
+        payload,
+      })
+    );
+  }
+
+  // ----------------------------------------------------------
   // Exploration draft (auto-prepared AFTER intent)
   // ----------------------------------------------------------
 
@@ -474,7 +397,7 @@ export default function DemoPage() {
 
   const [explorationDraft, setExplorationDraft] = useState<ExplorationDraft>({
     enableMove: false,
-    dir: "stay",
+    moveDir: "north",
     enableReveal: true,
     revealRadius: 1,
     enableMark: false,
@@ -482,50 +405,40 @@ export default function DemoPage() {
     markNote: "",
   });
 
-  const draftedTo = useMemo(() => {
-    if (!explorationDraft.enableMove) return null;
-    if (explorationDraft.dir === "stay") return null;
-    const to = stepFrom(currentPos, explorationDraft.dir);
-    return withinBounds(to, MAP_W, MAP_H) ? to : null;
-  }, [explorationDraft.enableMove, explorationDraft.dir, currentPos, MAP_W, MAP_H]);
+  const draftTo = useMemo(() => {
+    return stepFrom(currentPos, explorationDraft.moveDir);
+  }, [currentPos, explorationDraft.moveDir]);
 
-  const moveOutOfBounds = useMemo(() => {
-    if (!explorationDraft.enableMove) return false;
-    if (explorationDraft.dir === "stay") return false;
-    const to = stepFrom(currentPos, explorationDraft.dir);
-    return !withinBounds(to, MAP_W, MAP_H);
-  }, [explorationDraft.enableMove, explorationDraft.dir, currentPos, MAP_W, MAP_H]);
+  const draftToValid = useMemo(() => withinBounds(draftTo, MAP_W, MAP_H), [draftTo, MAP_W, MAP_H]);
 
   // When an option is selected (i.e., we are about to resolve), auto-draft exploration.
   useEffect(() => {
     if (!selectedOption) return;
 
     const intentText = `${playerInput}\n${selectedOption.description}`.trim();
-    const inferred = inferDirection(intentText);
+    const dir = inferDirection(intentText);
 
     const door = textSuggestsDoor(intentText);
     const locked = textSuggestsLocked(intentText);
 
-    setExplorationDraft((prev) => ({
-      ...prev,
-      enableMove: inferred ? true : prev.enableMove,
-      dir: inferred ?? prev.dir,
+    setExplorationDraft((prev) => {
+      const nextDir = dir ?? prev.moveDir;
+      const to = stepFrom(currentPos, nextDir);
+      const canMove = withinBounds(to, MAP_W, MAP_H);
 
-      enableReveal: true,
-      revealRadius: 1,
-
-      enableMark: door,
-      markKind: "door",
-      markNote: door ? (locked ? "locked" : prev.markNote || "") : prev.markNote,
-    }));
+      return {
+        ...prev,
+        moveDir: nextDir,
+        enableMove: canMove && !!dir, // only auto-enable move if text actually suggests a direction
+        enableReveal: true,
+        revealRadius: 1,
+        enableMark: door,
+        markKind: "door",
+        markNote: door ? (locked ? "locked" : prev.markNote || "") : prev.markNote,
+      };
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedOption?.id]);
-
-  // If user picks an out-of-bounds move, auto-disable move (draft-only guardrail).
-  useEffect(() => {
-    if (!moveOutOfBounds) return;
-    setExplorationDraft((p) => ({ ...p, enableMove: false, dir: "stay" }));
-  }, [moveOutOfBounds]);
 
   // ----------------------------------------------------------
   // Generate table ONCE per session
@@ -579,74 +492,36 @@ export default function DemoPage() {
   function commitExplorationBundle() {
     const d = explorationDraft;
 
-    setState((prev) => {
-      let next = prev;
+    // Decide destination at commit time (based on current canon pos + selected dir)
+    const from = deriveCurrentPosition(state.events as any[], MAP_W, MAP_H);
+    const to = stepFrom(from, d.moveDir);
 
-      const here = deriveCurrentPosition(next.events as any[], MAP_W, MAP_H);
+    // Movement only commits if enabled AND in bounds
+    if (d.enableMove && withinBounds(to, MAP_W, MAP_H)) {
+      appendCanon("PLAYER_MOVED", { from, to } as any);
 
-      // Movement is the resolution of intent → only commit if enabled + valid
-      if (d.enableMove && d.dir !== "stay") {
-        const to = stepFrom(here, d.dir);
-        if (withinBounds(to, MAP_W, MAP_H)) {
-          next = recordEvent(next, {
-            id: crypto.randomUUID(),
-            timestamp: Date.now(),
-            actor: "arbiter",
-            type: "PLAYER_MOVED",
-            payload: { from: here, to } as any,
-          });
-
-          if (d.enableReveal && d.revealRadius > 0) {
-            next = recordEvent(next, {
-              id: crypto.randomUUID(),
-              timestamp: Date.now(),
-              actor: "arbiter",
-              type: "MAP_REVEALED",
-              payload: { tiles: revealRadius(to, d.revealRadius, MAP_W, MAP_H) } as any,
-            });
-          }
-
-          // Mark at the destination (e.g., “you arrive at a locked door”)
-          if (d.enableMark) {
-            const note = d.markNote.trim() ? d.markNote.trim() : null;
-            next = recordEvent(next, {
-              id: crypto.randomUUID(),
-              timestamp: Date.now(),
-              actor: "arbiter",
-              type: "MAP_MARKED",
-              payload: { at: to, kind: d.markKind, note } as any,
-            });
-          }
-
-          return next;
-        }
-      }
-
-      // No move: allow reveal/mark at current tile ONLY if explicitly enabled.
-      // (This supports “I inspect the room / I listen at the door” without moving.)
       if (d.enableReveal && d.revealRadius > 0) {
-        next = recordEvent(next, {
-          id: crypto.randomUUID(),
-          timestamp: Date.now(),
-          actor: "arbiter",
-          type: "MAP_REVEALED",
-          payload: { tiles: revealRadius(here, d.revealRadius, MAP_W, MAP_H) } as any,
-        });
+        appendCanon("MAP_REVEALED", { tiles: revealRadius(to, d.revealRadius, MAP_W, MAP_H) } as any);
       }
 
+      // Mark at destination (e.g., “you arrive at a locked door”)
       if (d.enableMark) {
         const note = d.markNote.trim() ? d.markNote.trim() : null;
-        next = recordEvent(next, {
-          id: crypto.randomUUID(),
-          timestamp: Date.now(),
-          actor: "arbiter",
-          type: "MAP_MARKED",
-          payload: { at: here, kind: d.markKind, note } as any,
-        });
+        appendCanon("MAP_MARKED", { at: to, kind: d.markKind, note } as any);
       }
 
-      return next;
-    });
+      return;
+    }
+
+    // No move: allow reveal/mark at current tile only if explicitly enabled.
+    if (d.enableReveal && d.revealRadius > 0) {
+      appendCanon("MAP_REVEALED", { tiles: revealRadius(from, d.revealRadius, MAP_W, MAP_H) } as any);
+    }
+
+    if (d.enableMark) {
+      const note = d.markNote.trim() ? d.markNote.trim() : null;
+      appendCanon("MAP_MARKED", { at: from, kind: d.markKind, note } as any);
+    }
   }
 
   function handleRecord(payload: {
@@ -660,16 +535,7 @@ export default function DemoPage() {
     audit: string[];
   }) {
     // OUTCOME is canon first…
-    setState((prev) =>
-      recordEvent(prev, {
-        id: crypto.randomUUID(),
-        timestamp: Date.now(),
-        actor: "arbiter",
-        type: "OUTCOME",
-        payload,
-      })
-    );
-
+    appendCanon("OUTCOME", payload as any);
     // …then we commit the exploration bundle (still append-only, still arbiter-gated)
     commitExplorationBundle();
   }
@@ -677,184 +543,6 @@ export default function DemoPage() {
   function shareCanon() {
     navigator.clipboard.writeText(exportCanon(state.events));
     alert("Canon copied to clipboard.");
-  }
-
-  // ----------------------------------------------------------
-  // Combat demo inputs
-  // ----------------------------------------------------------
-
-  const [playerCount, setPlayerCount] = useState(4);
-  const [playerNames, setPlayerNames] = useState<string[]>(["", "", "", "", "", ""]);
-
-  const [enemyGroups, setEnemyGroups] = useState<string[]>(["Skirmishers", "Archers"]);
-  const [enemyGroupSelect, setEnemyGroupSelect] = useState<string>("Skirmishers");
-
-  const [initModPlayers, setInitModPlayers] = useState(1);
-  const [initModEnemies, setInitModEnemies] = useState(1);
-
-  const PLAYER_COUNTS = [1, 2, 3, 4, 5, 6] as const;
-  const INIT_MODS = [-2, -1, 0, 1, 2, 3, 4, 5, 6, 7, 8] as const;
-
-  const ENEMY_GROUP_LIBRARY = useMemo(
-    () => [
-      "Skirmishers",
-      "Archers",
-      "Brutes",
-      "Shields",
-      "Stalkers",
-      "Casters",
-      "Drones",
-      "Sentries",
-      "Wraiths",
-      "Grid Knights",
-      "Firewall Wardens",
-      "Neon Hounds",
-    ],
-    []
-  );
-
-  useEffect(() => {
-    setPlayerNames((prev) => {
-      if (prev.length === 6) return prev;
-      const next = [...prev];
-      while (next.length < 6) next.push("");
-      return next.slice(0, 6);
-    });
-  }, []);
-
-  const latestCombatId = useMemo(() => findLatestCombatId(state.events as any) ?? null, [state.events]);
-
-  const derivedCombat = useMemo(() => {
-    if (!latestCombatId) return null;
-    return deriveCombatState(latestCombatId, state.events as any);
-  }, [latestCombatId, state.events]);
-
-  function getEffectivePlayerName(i1Based: number) {
-    const idx = i1Based - 1;
-    const raw = playerNames[idx] ?? "";
-    const name = normalizeName(raw);
-    return name.length > 0 ? name : `Player ${i1Based}`;
-  }
-
-  function startCombatDeterministic() {
-    const pc = clampInt(playerCount, 1, 6);
-
-    const groups = enemyGroups.map(normalizeName).filter(Boolean).slice(0, 6);
-
-    const combatId = crypto.randomUUID();
-    const seed = crypto.randomUUID();
-
-    const participants: CombatantSpec[] = [];
-
-    for (let i = 1; i <= pc; i++) {
-      participants.push({
-        id: `player_${i}`,
-        name: getEffectivePlayerName(i),
-        kind: "player",
-        initiativeMod: Math.trunc(initModPlayers || 0),
-      });
-    }
-
-    groups.forEach((name, idx) => {
-      participants.push({
-        id: `enemy_group_${idx + 1}`,
-        name,
-        kind: "enemy_group",
-        initiativeMod: Math.trunc(initModEnemies || 0),
-      });
-    });
-
-    const started: CombatStartedPayload = { combatId, seed, participants };
-    const initRolls = generateDeterministicInitiativeRolls(started);
-
-    setState((prev) => {
-      let next = prev;
-
-      next = recordEvent(next, {
-        id: crypto.randomUUID(),
-        timestamp: Date.now(),
-        actor: "arbiter",
-        type: "COMBAT_STARTED",
-        payload: started as any,
-      });
-
-      for (const r of initRolls) {
-        next = recordEvent(next, {
-          id: crypto.randomUUID(),
-          timestamp: Date.now(),
-          actor: "arbiter",
-          type: "INITIATIVE_ROLLED",
-          payload: r as any,
-        });
-      }
-
-      next = recordEvent(next, {
-        id: crypto.randomUUID(),
-        timestamp: Date.now(),
-        actor: "arbiter",
-        type: "TURN_ADVANCED",
-        payload: { combatId, round: 1, index: 0 } as any,
-      });
-
-      return next;
-    });
-  }
-
-  function advanceTurn() {
-    if (!derivedCombat) return;
-    const payload = nextTurnPointer(derivedCombat);
-
-    setState((prev) =>
-      recordEvent(prev, {
-        id: crypto.randomUUID(),
-        timestamp: Date.now(),
-        actor: "arbiter",
-        type: "TURN_ADVANCED",
-        payload: payload as any,
-      })
-    );
-  }
-
-  function addEnemyGroup(name: string) {
-    const v = normalizeName(name);
-    if (!v) return;
-
-    setEnemyGroups((prev) => {
-      if (prev.map((x) => x.toLowerCase()).includes(v.toLowerCase())) return prev;
-      if (prev.length >= 6) return prev;
-      return [...prev, v];
-    });
-  }
-
-  function removeEnemyGroup(name: string) {
-    setEnemyGroups((prev) => prev.filter((g) => g !== name));
-  }
-
-  function clearEnemyGroups() {
-    setEnemyGroups([]);
-  }
-
-  function randomizePlayerNames() {
-    const pc = clampInt(playerCount, 1, 6);
-    setPlayerNames((prev) => {
-      const next = [...prev];
-      const used = new Set<string>(next.map((x) => normalizeName(x).toLowerCase()).filter(Boolean));
-
-      for (let i = 0; i < pc; i++) {
-        const current = normalizeName(next[i] ?? "");
-        if (current) continue;
-
-        let tries = 0;
-        let name = randomName();
-        while (used.has(name.toLowerCase()) && tries < 12) {
-          name = randomName();
-          tries++;
-        }
-        used.add(name.toLowerCase());
-        next[i] = name;
-      }
-      return next.slice(0, 6);
-    });
   }
 
   const isHumanDM = dmMode === "human";
@@ -877,13 +565,11 @@ export default function DemoPage() {
 
       <CardSection title="Facilitation Mode">
         <label>
-          <input type="radio" checked={dmMode === "human"} onChange={() => setDmMode("human")} /> Human DM (options
-          visible + editable setup)
+          <input type="radio" checked={dmMode === "human"} onChange={() => setDmMode("human")} /> Human DM (options visible + editable setup)
         </label>
         <br />
         <label>
-          <input type="radio" checked={dmMode === "solace-neutral"} onChange={() => setDmMode("solace-neutral")} /> Solace
-          (Neutral Facilitator)
+          <input type="radio" checked={dmMode === "solace-neutral"} onChange={() => setDmMode("solace-neutral")} /> Solace (Neutral Facilitator)
         </label>
       </CardSection>
 
@@ -968,183 +654,8 @@ export default function DemoPage() {
           {/* Map is canon-only view */}
           <ExplorationMapPanel events={state.events} mapW={MAP_W} mapH={MAP_H} />
 
-          {/* COMBAT (unchanged) */}
-          <CardSection title="Combat (Deterministic, Grouped Enemies)">
-            <p className="muted" style={{ marginTop: 0 }}>
-              Players roll individually. Enemy groups roll once per group. Turn order is derived from events.
-            </p>
-
-            <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "flex-end" }}>
-              <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                Players (1–6):
-                <select value={playerCount} onChange={(e) => setPlayerCount(clampInt(Number(e.target.value), 1, 6))} style={{ minWidth: 140 }}>
-                  {PLAYER_COUNTS.map((n) => (
-                    <option key={n} value={n}>
-                      {n}
-                    </option>
-                  ))}
-                </select>
-              </label>
-
-              <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                Player init mod:
-                <select value={initModPlayers} onChange={(e) => setInitModPlayers(Math.trunc(Number(e.target.value)))} style={{ minWidth: 140 }}>
-                  {INIT_MODS.map((n) => (
-                    <option key={n} value={n}>
-                      {n >= 0 ? `+${n}` : `${n}`}
-                    </option>
-                  ))}
-                </select>
-              </label>
-
-              <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                Enemy group init mod:
-                <select value={initModEnemies} onChange={(e) => setInitModEnemies(Math.trunc(Number(e.target.value)))} style={{ minWidth: 170 }}>
-                  {INIT_MODS.map((n) => (
-                    <option key={n} value={n}>
-                      {n >= 0 ? `+${n}` : `${n}`}
-                    </option>
-                  ))}
-                </select>
-              </label>
-
-              <div style={{ flex: "1 1 320px", display: "flex", flexDirection: "column", gap: 6 }}>
-                <span className="muted">Enemy groups</span>
-                <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-                  <select value={enemyGroupSelect} onChange={(e) => setEnemyGroupSelect(e.target.value)} style={{ minWidth: 220 }}>
-                    {ENEMY_GROUP_LIBRARY.map((g) => (
-                      <option key={g} value={g}>
-                        {g}
-                      </option>
-                    ))}
-                  </select>
-                  <button onClick={() => addEnemyGroup(enemyGroupSelect)}>Add</button>
-                  <button onClick={clearEnemyGroups} disabled={enemyGroups.length === 0}>
-                    Clear
-                  </button>
-                  <span className="muted" style={{ fontSize: 12 }}>
-                    (max 6)
-                  </span>
-                </div>
-
-                {enemyGroups.length > 0 ? (
-                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8 }}>
-                    {enemyGroups.map((g) => (
-                      <span
-                        key={g}
-                        style={{
-                          display: "inline-flex",
-                          alignItems: "center",
-                          gap: 8,
-                          padding: "6px 10px",
-                          borderRadius: 999,
-                          border: "1px solid rgba(255,255,255,0.12)",
-                          background: "rgba(255,255,255,0.05)",
-                        }}
-                      >
-                        <span>{g}</span>
-                        <button
-                          onClick={() => removeEnemyGroup(g)}
-                          aria-label={`Remove ${g}`}
-                          style={{ padding: "0 8px", borderRadius: 999, border: "1px solid rgba(255,255,255,0.12)" }}
-                        >
-                          ×
-                        </button>
-                      </span>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="muted" style={{ marginTop: 8 }}>
-                    No enemy groups yet. Add one.
-                  </div>
-                )}
-              </div>
-            </div>
-
-            <div style={{ marginTop: 14 }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
-                <strong>Players</strong>
-                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                  <button onClick={randomizePlayerNames}>🎲 Random names</button>
-                </div>
-              </div>
-
-              <div style={{ marginTop: 10, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 10 }}>
-                {Array.from({ length: clampInt(playerCount, 1, 6) }, (_, idx) => {
-                  const i1 = idx + 1;
-                  const value = playerNames[idx] ?? "";
-                  return (
-                    <label key={i1} style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                      <span className="muted">Player {i1} name (optional)</span>
-                      <input
-                        value={value}
-                        onChange={(e) => {
-                          const v = e.target.value;
-                          setPlayerNames((prev) => {
-                            const next = [...prev];
-                            next[idx] = v;
-                            return next.slice(0, 6);
-                          });
-                        }}
-                        placeholder={`Player ${i1}`}
-                      />
-                    </label>
-                  );
-                })}
-              </div>
-
-              <p className="muted" style={{ marginTop: 10, marginBottom: 0 }}>
-                Blank names will display as “Player 1…N”. Names are used for initiative labels and canon readability.
-              </p>
-            </div>
-
-            <div style={{ marginTop: 14, display: "flex", gap: 8 }}>
-              <button onClick={startCombatDeterministic}>Start Combat (Seeded)</button>
-              <button onClick={advanceTurn} disabled={!derivedCombat}>
-                Advance Turn
-              </button>
-            </div>
-
-            {derivedCombat && (
-              <div style={{ marginTop: 12 }}>
-                <div className="muted">
-                  Combat: <strong>{derivedCombat.combatId}</strong> · Round <strong>{derivedCombat.round}</strong>
-                </div>
-
-                <div style={{ marginTop: 10, display: "grid", gridTemplateColumns: "1fr", gap: 6 }}>
-                  {derivedCombat.order.map((id, idx) => {
-                    const spec = derivedCombat.participants.find((p) => p.id === id) ?? null;
-                    const roll = derivedCombat.initiative.find((r) => r.combatantId === id) ?? null;
-                    const active = derivedCombat.activeCombatantId === id;
-
-                    return (
-                      <div
-                        key={id}
-                        style={{
-                          padding: "10px 12px",
-                          borderRadius: 8,
-                          border: active ? "1px solid rgba(138,180,255,0.55)" : "1px solid rgba(255,255,255,0.10)",
-                          background: active ? "rgba(138,180,255,0.10)" : "rgba(255,255,255,0.04)",
-                          display: "flex",
-                          justifyContent: "space-between",
-                          alignItems: "center",
-                          gap: 10,
-                        }}
-                      >
-                        <div>
-                          <strong>
-                            {idx + 1}. {spec ? formatCombatantLabel(spec) : id}
-                          </strong>
-                          {active && <span className="muted">{"  "}← active</span>}
-                        </div>
-                        <div className="muted">{roll ? `Init ${roll.total} (d20 ${roll.natural} + ${roll.modifier})` : "Init —"}</div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-          </CardSection>
+          {/* Combat (broken out, locked by canon) */}
+          <CombatSetupPanel events={state.events as any[]} onAppendCanon={appendCanon} />
 
           <CardSection title="Player Action">
             <textarea
@@ -1180,20 +691,11 @@ export default function DemoPage() {
           {selectedOption && (
             <CardSection title="Proposed Exploration Canon (Draft)">
               <p className="muted" style={{ marginTop: 0 }}>
-                These are auto-suggested based on intent text. They are NOT canon until you record the outcome.
+                Auto-suggested from intent text. NOT canon until you record the outcome.
               </p>
 
               <div className="muted" style={{ marginBottom: 10 }}>
                 Current canon position: <strong>({currentPos.x},{currentPos.y})</strong>
-                {draftedTo && (
-                  <>
-                    {" "}
-                    · Draft destination:{" "}
-                    <strong>
-                      ({draftedTo.x},{draftedTo.y})
-                    </strong>
-                  </>
-                )}
               </div>
 
               <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 10 }}>
@@ -1211,28 +713,23 @@ export default function DemoPage() {
                     <label style={{ display: "flex", flexDirection: "column", gap: 6, minWidth: 220 }}>
                       Direction:
                       <select
-                        value={explorationDraft.dir}
-                        onChange={(e) => setExplorationDraft((p) => ({ ...p, dir: e.target.value as MoveDir }))}
-                        style={{ minWidth: 220 }}
+                        value={explorationDraft.moveDir}
+                        onChange={(e) => setExplorationDraft((p) => ({ ...p, moveDir: e.target.value as Dir }))}
                       >
-                        <option value="stay">{dirLabel("stay")}</option>
-                        <option value="north">{dirLabel("north")}</option>
-                        <option value="east">{dirLabel("east")}</option>
-                        <option value="south">{dirLabel("south")}</option>
-                        <option value="west">{dirLabel("west")}</option>
+                        <option value="north">North (↑)</option>
+                        <option value="east">East (→)</option>
+                        <option value="south">South (↓)</option>
+                        <option value="west">West (←)</option>
                       </select>
                     </label>
 
-                    <span className="muted" style={{ marginBottom: 2 }}>
-                      {explorationDraft.dir === "stay"
-                        ? "No movement will be recorded."
-                        : draftedTo
-                        ? `Will move to (${draftedTo.x},${draftedTo.y}).`
-                        : "That move would go out of bounds."}
-                    </span>
-
-                    <span className="muted" style={{ marginBottom: 2 }}>
-                      (Bounds: 0..{MAP_W - 1} / 0..{MAP_H - 1})
+                    <span className="muted">
+                      To:{" "}
+                      <strong style={{ opacity: draftToValid ? 1 : 0.8 }}>
+                        ({draftTo.x},{draftTo.y})
+                      </strong>{" "}
+                      {!draftToValid ? "(out of bounds)" : ""}
+                      {"  "}· Bounds: 0..{MAP_W - 1} / 0..{MAP_H - 1}
                     </span>
                   </div>
                 )}
