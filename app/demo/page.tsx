@@ -20,6 +20,11 @@
 // - Optional player names (defaults to Player 1..N)
 // - Enemy groups as dropdown + add/remove chips (no comma-typing)
 //
+// NEW in this version:
+// - Exploration + Fog-of-War Map Reveal (event-sourced)
+//   - PLAYER_MOVED (arbiter-only canon)
+//   - MAP_REVEALED (arbiter-only canon)
+//
 // ------------------------------------------------------------
 
 import { useEffect, useMemo, useState } from "react";
@@ -72,6 +77,69 @@ type InitialTable = {
 // Keep local dice types aligned with ResolutionDraftAdvisoryPanel
 type DiceMode = "d4" | "d6" | "d8" | "d10" | "d12" | "d20";
 type RollSource = "manual" | "solace";
+
+// ------------------------------------------------------------
+// Exploration / Map (event-sourced)
+// ------------------------------------------------------------
+
+type XY = { x: number; y: number };
+
+type PlayerMovedPayload = {
+  from: XY;
+  to: XY;
+};
+
+type MapRevealedPayload = {
+  tiles: XY[];
+};
+
+function keyXY(p: XY) {
+  return `${p.x},${p.y}`;
+}
+
+function withinBounds(p: XY, w: number, h: number) {
+  return p.x >= 0 && p.y >= 0 && p.x < w && p.y < h;
+}
+
+function revealRadius(center: XY, radius: number, w: number, h: number): XY[] {
+  const out: XY[] = [];
+  for (let dy = -radius; dy <= radius; dy++) {
+    for (let dx = -radius; dx <= radius; dx++) {
+      const p = { x: center.x + dx, y: center.y + dy };
+      if (withinBounds(p, w, h)) out.push(p);
+    }
+  }
+  return out;
+}
+
+function deriveMapState(events: any[], w: number, h: number) {
+  // Deterministic start: middle of the grid
+  let position: XY = { x: Math.floor(w / 2), y: Math.floor(h / 2) };
+  const discovered = new Set<string>();
+
+  // Always reveal start tile
+  discovered.add(keyXY(position));
+
+  for (const e of events) {
+    if (e?.type === "PLAYER_MOVED") {
+      const p = e.payload as PlayerMovedPayload;
+      if (p?.to && withinBounds(p.to, w, h)) {
+        position = { x: p.to.x, y: p.to.y };
+        discovered.add(keyXY(position));
+      }
+    }
+
+    if (e?.type === "MAP_REVEALED") {
+      const p = e.payload as MapRevealedPayload;
+      const tiles = Array.isArray(p?.tiles) ? p.tiles : [];
+      for (const t of tiles) {
+        if (t && withinBounds(t, w, h)) discovered.add(keyXY(t));
+      }
+    }
+  }
+
+  return { position, discovered };
+}
 
 // ------------------------------------------------------------
 // Random helpers (deterministic per load, different each time)
@@ -265,11 +333,21 @@ function renderInitialTableNarration(t: InitialTable): string {
 function inferOptionKind(description: string): OptionKind {
   const text = description.toLowerCase();
 
-  if (text.includes("attack") || text.includes("fight") || text.includes("oppose") || text.includes("contest")) {
+  if (
+    text.includes("attack") ||
+    text.includes("fight") ||
+    text.includes("oppose") ||
+    text.includes("contest")
+  ) {
     return "contested";
   }
 
-  if (text.includes("climb") || text.includes("cross") || text.includes("navigate") || text.includes("environment")) {
+  if (
+    text.includes("climb") ||
+    text.includes("cross") ||
+    text.includes("navigate") ||
+    text.includes("environment")
+  ) {
     return "environmental";
   }
 
@@ -300,6 +378,53 @@ export default function DemoPage() {
   const [parsed, setParsed] = useState<any>(null);
   const [options, setOptions] = useState<Option[] | null>(null);
   const [selectedOption, setSelectedOption] = useState<Option | null>(null);
+
+  // ----------------------------------------------------------
+  // Exploration map (MVP)
+  // ----------------------------------------------------------
+
+  const MAP_W = 13;
+  const MAP_H = 9;
+
+  const derivedMap = useMemo(() => {
+    return deriveMapState(state.events as any[], MAP_W, MAP_H);
+  }, [state.events]);
+
+  function recordPlayerMoved(to: XY) {
+    const from = derivedMap.position;
+
+    setState((prev) =>
+      recordEvent(prev, {
+        id: crypto.randomUUID(),
+        timestamp: Date.now(),
+        actor: "arbiter",
+        type: "PLAYER_MOVED",
+        payload: {
+          from,
+          to,
+        } as PlayerMovedPayload,
+      })
+    );
+  }
+
+  function recordMapRevealed(tiles: XY[]) {
+    setState((prev) =>
+      recordEvent(prev, {
+        id: crypto.randomUUID(),
+        timestamp: Date.now(),
+        actor: "arbiter",
+        type: "MAP_REVEALED",
+        payload: {
+          tiles,
+        } as MapRevealedPayload,
+      })
+    );
+  }
+
+  function moveAndReveal(to: XY) {
+    recordPlayerMoved(to);
+    recordMapRevealed(revealRadius(to, 1, MAP_W, MAP_H));
+  }
 
   // ----------------------------------------------------------
   // Combat demo inputs (upgraded UX)
@@ -747,6 +872,132 @@ export default function DemoPage() {
             events={state.events}
           />
 
+          {/* EXPLORATION MAP (MVP) */}
+          <CardSection title="Exploration Map (Fog-of-War)">
+            <p className="muted" style={{ marginTop: 0 }}>
+              Arbiter-only: movement + reveal are canon events (append-only). The map is derived from events.
+            </p>
+
+            <div className="muted" style={{ marginBottom: 10 }}>
+              Position: <strong>({derivedMap.position.x},{derivedMap.position.y})</strong> · Discovered:{" "}
+              <strong>{derivedMap.discovered.size}</strong>
+            </div>
+
+            <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "flex-start" }}>
+              {/* Grid */}
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: `repeat(${MAP_W}, 22px)`,
+                  gap: 4,
+                  padding: 10,
+                  borderRadius: 10,
+                  border: "1px solid rgba(255,255,255,0.10)",
+                  background: "rgba(255,255,255,0.03)",
+                }}
+              >
+                {Array.from({ length: MAP_W * MAP_H }, (_, i) => {
+                  const x = i % MAP_W;
+                  const y = Math.floor(i / MAP_W);
+                  const here = derivedMap.position.x === x && derivedMap.position.y === y;
+                  const seen = derivedMap.discovered.has(`${x},${y}`);
+
+                  return (
+                    <div
+                      key={`${x},${y}`}
+                      title={seen ? `(${x},${y})` : "Unknown"}
+                      style={{
+                        width: 22,
+                        height: 22,
+                        borderRadius: 6,
+                        border: here
+                          ? "1px solid rgba(138,180,255,0.65)"
+                          : "1px solid rgba(255,255,255,0.10)",
+                        background: !seen
+                          ? "rgba(0,0,0,0.55)" // fog
+                          : here
+                            ? "rgba(138,180,255,0.18)"
+                            : "rgba(255,255,255,0.06)",
+                      }}
+                    />
+                  );
+                })}
+              </div>
+
+              {/* Controls */}
+              <div style={{ minWidth: 260 }}>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  <button
+                    onClick={() => recordMapRevealed(revealRadius(derivedMap.position, 1, MAP_W, MAP_H))}
+                  >
+                    Reveal (radius 1)
+                  </button>
+                  <button
+                    onClick={() => recordMapRevealed(revealRadius(derivedMap.position, 2, MAP_W, MAP_H))}
+                  >
+                    Reveal (radius 2)
+                  </button>
+                </div>
+
+                <div style={{ marginTop: 12 }}>
+                  <div className="muted" style={{ marginBottom: 8 }}>
+                    Move (commits PLAYER_MOVED + MAP_REVEALED radius 1)
+                  </div>
+
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 70px)", gap: 8 }}>
+                    <span />
+                    <button
+                      onClick={() => {
+                        const to = { x: derivedMap.position.x, y: derivedMap.position.y - 1 };
+                        if (withinBounds(to, MAP_W, MAP_H)) moveAndReveal(to);
+                      }}
+                    >
+                      ↑
+                    </button>
+                    <span />
+
+                    <button
+                      onClick={() => {
+                        const to = { x: derivedMap.position.x - 1, y: derivedMap.position.y };
+                        if (withinBounds(to, MAP_W, MAP_H)) moveAndReveal(to);
+                      }}
+                    >
+                      ←
+                    </button>
+
+                    <button disabled style={{ opacity: 0.5 }}>
+                      •
+                    </button>
+
+                    <button
+                      onClick={() => {
+                        const to = { x: derivedMap.position.x + 1, y: derivedMap.position.y };
+                        if (withinBounds(to, MAP_W, MAP_H)) moveAndReveal(to);
+                      }}
+                    >
+                      →
+                    </button>
+
+                    <span />
+                    <button
+                      onClick={() => {
+                        const to = { x: derivedMap.position.x, y: derivedMap.position.y + 1 };
+                        if (withinBounds(to, MAP_W, MAP_H)) moveAndReveal(to);
+                      }}
+                    >
+                      ↓
+                    </button>
+                    <span />
+                  </div>
+
+                  <p className="muted" style={{ marginTop: 10, marginBottom: 0 }}>
+                    MVP grid now. Later we can evolve to rooms + corridors or a node graph without breaking replay.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </CardSection>
+
           {/* COMBAT (DEMO) */}
           <CardSection title="Combat (Deterministic, Grouped Enemies)">
             <p className="muted" style={{ marginTop: 0 }}>
@@ -862,14 +1113,28 @@ export default function DemoPage() {
 
             {/* Player Names */}
             <div style={{ marginTop: 14 }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  gap: 10,
+                }}
+              >
                 <strong>Players</strong>
                 <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                   <button onClick={randomizePlayerNames}>🎲 Random names</button>
                 </div>
               </div>
 
-              <div style={{ marginTop: 10, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 10 }}>
+              <div
+                style={{
+                  marginTop: 10,
+                  display: "grid",
+                  gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+                  gap: 10,
+                }}
+              >
                 {Array.from({ length: clampInt(playerCount, 1, 6) }, (_, idx) => {
                   const i1 = idx + 1;
                   const value = playerNames[idx] ?? "";
@@ -894,7 +1159,8 @@ export default function DemoPage() {
               </div>
 
               <p className="muted" style={{ marginTop: 10, marginBottom: 0 }}>
-                Blank names will display as “Player 1…N”. Names are used for initiative labels and canon readability.
+                Blank names will display as “Player 1…N”. Names are used for initiative labels and canon
+                readability.
               </p>
             </div>
 
@@ -908,7 +1174,8 @@ export default function DemoPage() {
             {derivedCombat && (
               <div style={{ marginTop: 12 }}>
                 <div className="muted">
-                  Combat: <strong>{derivedCombat.combatId}</strong> · Round <strong>{derivedCombat.round}</strong>
+                  Combat: <strong>{derivedCombat.combatId}</strong> · Round{" "}
+                  <strong>{derivedCombat.round}</strong>
                 </div>
 
                 <div
@@ -921,8 +1188,7 @@ export default function DemoPage() {
                 >
                   {derivedCombat.order.map((id, idx) => {
                     const spec = derivedCombat.participants.find((p) => p.id === id) ?? null;
-                    const roll =
-                      derivedCombat.initiative.find((r) => r.combatantId === id) ?? null;
+                    const roll = derivedCombat.initiative.find((r) => r.combatantId === id) ?? null;
 
                     const active = derivedCombat.activeCombatantId === id;
 
