@@ -15,14 +15,15 @@
 // - Grouped-enemy initiative combat loop (deterministic, replayable)
 // - Turn advancement (derived, event-sourced)
 //
+// UI upgrades in this version:
+// - Dropdowns for player count + init mods
+// - Optional player names (defaults to Player 1..N)
+// - Enemy groups as dropdown + add/remove chips (no comma-typing)
+//
 // ------------------------------------------------------------
 
 import { useEffect, useMemo, useState } from "react";
-import {
-  createSession,
-  recordEvent,
-  SessionState,
-} from "@/lib/session/SessionState";
+import { createSession, recordEvent, SessionState } from "@/lib/session/SessionState";
 
 import { parseAction } from "@/lib/parser/ActionParser";
 import { generateOptions, Option } from "@/lib/options/OptionGenerator";
@@ -40,7 +41,6 @@ import Disclaimer from "@/components/layout/Disclaimer";
 
 import {
   CombatStartedPayload,
-  CombatantKind,
   CombatantSpec,
   deriveCombatState,
   findLatestCombatId,
@@ -55,11 +55,7 @@ import {
 
 type DMMode = "human" | "solace-neutral";
 
-type OptionKind =
-  | "safe"
-  | "environmental"
-  | "risky"
-  | "contested";
+type OptionKind = "safe" | "environmental" | "risky" | "contested";
 
 type InitialTable = {
   openingFrame: string;
@@ -93,6 +89,55 @@ function pickManyUnique<T>(arr: T[], count: number): T[] {
     out.push(pool.splice(idx, 1)[0]);
   }
   return out;
+}
+
+function clampInt(n: number, min: number, max: number) {
+  const x = Number.isFinite(n) ? Math.trunc(n) : min;
+  return Math.max(min, Math.min(max, x));
+}
+
+function normalizeName(s: string) {
+  return s.replace(/\s+/g, " ").trim();
+}
+
+function randomName(): string {
+  const a = [
+    "Astra",
+    "Kara",
+    "Thorne",
+    "Hex",
+    "Rook",
+    "Nyx",
+    "Vex",
+    "Dax",
+    "Mara",
+    "Rune",
+    "Sable",
+    "Orin",
+    "Juno",
+    "Kade",
+    "Iris",
+    "Zeph",
+  ];
+  const b = [
+    "of Ember",
+    "of Glass",
+    "of Iron",
+    "of Neon",
+    "of Ash",
+    "of Dawn",
+    "of Night",
+    "of the Grid",
+    "the Quiet",
+    "the Bold",
+    "the Warden",
+    "the Runner",
+    "the Signal",
+    "the Echo",
+  ];
+  const base = pick(a);
+  const tail = pick([true, false, false]) ? ` ${pick(b)}` : "";
+  return `${base}${tail}`;
 }
 
 function generateInitialTable(): InitialTable {
@@ -179,9 +224,7 @@ function renderInitialTableNarration(t: InitialTable): string {
   lines.push(t.openingFrame);
 
   // Traits become sensory framing (no new facts; just voice)
-  lines.push(
-    `The place feels ${traitA}, and the air carries the stink of ${traitB}.`
-  );
+  lines.push(`The place feels ${traitA}, and the air carries the stink of ${traitB}.`);
 
   // Oddity becomes immediate table tension
   if (/footsteps echo twice/i.test(oddity)) {
@@ -189,13 +232,9 @@ function renderInitialTableNarration(t: InitialTable): string {
       "Every step answers itself — once, then again — like the street remembers you a beat too late."
     );
   } else if (/lantern/i.test(oddity.toLowerCase())) {
-    lines.push(
-      "Lanternlight can’t decide what it wants to be — steady one second, starving the next."
-    );
+    lines.push("Lanternlight can’t decide what it wants to be — steady one second, starving the next.");
   } else if (/absorb sound/i.test(oddity.toLowerCase())) {
-    lines.push(
-      "Sound doesn’t travel right. Words die early, like the walls are swallowing them."
-    );
+    lines.push("Sound doesn’t travel right. Words die early, like the walls are swallowing them.");
   } else if (/whispers/i.test(oddity.toLowerCase())) {
     lines.push(
       "You keep catching whispers at the edge of hearing — not loud enough to understand, not quiet enough to ignore."
@@ -226,29 +265,15 @@ function renderInitialTableNarration(t: InitialTable): string {
 function inferOptionKind(description: string): OptionKind {
   const text = description.toLowerCase();
 
-  if (
-    text.includes("attack") ||
-    text.includes("fight") ||
-    text.includes("oppose") ||
-    text.includes("contest")
-  ) {
+  if (text.includes("attack") || text.includes("fight") || text.includes("oppose") || text.includes("contest")) {
     return "contested";
   }
 
-  if (
-    text.includes("climb") ||
-    text.includes("cross") ||
-    text.includes("navigate") ||
-    text.includes("environment")
-  ) {
+  if (text.includes("climb") || text.includes("cross") || text.includes("navigate") || text.includes("environment")) {
     return "environmental";
   }
 
-  if (
-    text.includes("steal") ||
-    text.includes("sneak") ||
-    text.includes("risk")
-  ) {
+  if (text.includes("steal") || text.includes("sneak") || text.includes("risk")) {
     return "risky";
   }
 
@@ -260,15 +285,12 @@ function inferOptionKind(description: string): OptionKind {
 export default function DemoPage() {
   const role: "arbiter" = "arbiter";
 
-  const [state, setState] = useState<SessionState>(
-    createSession("demo-session", "demo")
-  );
+  const [state, setState] = useState<SessionState>(createSession("demo-session", "demo"));
 
   const [dmMode, setDmMode] = useState<DMMode>("solace-neutral");
 
   // Initial Table Gate
-  const [initialTable, setInitialTable] =
-    useState<InitialTable | null>(null);
+  const [initialTable, setInitialTable] = useState<InitialTable | null>(null);
   const [tableAccepted, setTableAccepted] = useState(false);
 
   // Editable narration buffer (DM-controlled)
@@ -277,17 +299,56 @@ export default function DemoPage() {
   const [playerInput, setPlayerInput] = useState("");
   const [parsed, setParsed] = useState<any>(null);
   const [options, setOptions] = useState<Option[] | null>(null);
-  const [selectedOption, setSelectedOption] =
-    useState<Option | null>(null);
+  const [selectedOption, setSelectedOption] = useState<Option | null>(null);
 
   // ----------------------------------------------------------
-  // Combat demo inputs
+  // Combat demo inputs (upgraded UX)
   // ----------------------------------------------------------
 
   const [playerCount, setPlayerCount] = useState(4);
-  const [enemyGroupsText, setEnemyGroupsText] = useState("Skirmishers, Archers");
+
+  // Player names indexed 0..5 (we render only first N)
+  const [playerNames, setPlayerNames] = useState<string[]>(["", "", "", "", "", ""]);
+
+  // Enemy groups as chips
+  const [enemyGroups, setEnemyGroups] = useState<string[]>(["Skirmishers", "Archers"]);
+  const [enemyGroupSelect, setEnemyGroupSelect] = useState<string>("Skirmishers");
+
+  // Init mods
   const [initModPlayers, setInitModPlayers] = useState(1);
   const [initModEnemies, setInitModEnemies] = useState(1);
+
+  const PLAYER_COUNTS = [1, 2, 3, 4, 5, 6] as const;
+  const INIT_MODS = [-2, -1, 0, 1, 2, 3, 4, 5, 6, 7, 8] as const;
+
+  // Enemy group archetypes (classic + Tron-ish)
+  const ENEMY_GROUP_LIBRARY = useMemo(
+    () => [
+      "Skirmishers",
+      "Archers",
+      "Brutes",
+      "Shields",
+      "Stalkers",
+      "Casters",
+      "Drones",
+      "Sentries",
+      "Wraiths",
+      "Grid Knights",
+      "Firewall Wardens",
+      "Neon Hounds",
+    ],
+    []
+  );
+
+  // Ensure playerNames always has length 6
+  useEffect(() => {
+    setPlayerNames((prev) => {
+      if (prev.length === 6) return prev;
+      const next = [...prev];
+      while (next.length < 6) next.push("");
+      return next.slice(0, 6);
+    });
+  }, []);
 
   // ----------------------------------------------------------
   // Generate table ONCE per session
@@ -407,12 +468,18 @@ export default function DemoPage() {
     return deriveCombatState(latestCombatId, state.events as any);
   }, [latestCombatId, state.events]);
 
-  function startCombatDeterministic() {
-    const pc = Math.max(1, Math.min(6, Math.trunc(playerCount || 1)));
+  function getEffectivePlayerName(i1Based: number) {
+    const idx = i1Based - 1;
+    const raw = playerNames[idx] ?? "";
+    const name = normalizeName(raw);
+    return name.length > 0 ? name : `Player ${i1Based}`;
+  }
 
-    const groups = enemyGroupsText
-      .split(",")
-      .map((s) => s.trim())
+  function startCombatDeterministic() {
+    const pc = clampInt(playerCount, 1, 6);
+
+    const groups = enemyGroups
+      .map((g) => normalizeName(g))
       .filter(Boolean)
       .slice(0, 6);
 
@@ -424,7 +491,7 @@ export default function DemoPage() {
     for (let i = 1; i <= pc; i++) {
       participants.push({
         id: `player_${i}`,
-        name: `Player ${i}`,
+        name: getEffectivePlayerName(i),
         kind: "player",
         initiativeMod: Math.trunc(initModPlayers || 0),
       });
@@ -501,6 +568,52 @@ export default function DemoPage() {
     );
   }
 
+  // Enemy group builder actions
+  function addEnemyGroup(name: string) {
+    const v = normalizeName(name);
+    if (!v) return;
+
+    setEnemyGroups((prev) => {
+      if (prev.map((x) => x.toLowerCase()).includes(v.toLowerCase())) return prev;
+      if (prev.length >= 6) return prev;
+      return [...prev, v];
+    });
+  }
+
+  function removeEnemyGroup(name: string) {
+    setEnemyGroups((prev) => prev.filter((g) => g !== name));
+  }
+
+  function clearEnemyGroups() {
+    setEnemyGroups([]);
+  }
+
+  function randomizePlayerNames() {
+    const pc = clampInt(playerCount, 1, 6);
+    setPlayerNames((prev) => {
+      const next = [...prev];
+      const used = new Set<string>(next.map((x) => normalizeName(x).toLowerCase()).filter(Boolean));
+
+      for (let i = 0; i < pc; i++) {
+        const current = normalizeName(next[i] ?? "");
+        if (current) continue;
+
+        // Avoid duplicates (best-effort)
+        let tries = 0;
+        let name = randomName();
+        while (used.has(name.toLowerCase()) && tries < 12) {
+          name = randomName();
+          tries++;
+        }
+        used.add(name.toLowerCase());
+        next[i] = name;
+      }
+
+      // Leave remaining slots untouched (for when pc increases later)
+      return next.slice(0, 6);
+    });
+  }
+
   const isHumanDM = dmMode === "human";
 
   // ----------------------------------------------------------
@@ -514,25 +627,15 @@ export default function DemoPage() {
         onShare={shareCanon}
         roles={[
           { label: "Player", description: "Declares intent" },
-          {
-            label: "Solace",
-            description: "Prepares the resolution and narrates outcome",
-          },
-          {
-            label: "Arbiter",
-            description: "Commits canon",
-          },
+          { label: "Solace", description: "Prepares the resolution and narrates outcome" },
+          { label: "Arbiter", description: "Commits canon" },
         ]}
       />
 
       {/* FACILITATION MODE */}
       <CardSection title="Facilitation Mode">
         <label>
-          <input
-            type="radio"
-            checked={dmMode === "human"}
-            onChange={() => setDmMode("human")}
-          />{" "}
+          <input type="radio" checked={dmMode === "human"} onChange={() => setDmMode("human")} />{" "}
           Human DM (options visible + editable setup)
         </label>
         <br />
@@ -570,9 +673,7 @@ export default function DemoPage() {
             <div style={{ marginTop: 10 }}>
               <p>{initialTable.openingFrame}</p>
 
-              <p className="muted">
-                Traits: {initialTable.locationTraits.join(", ")}
-              </p>
+              <p className="muted">Traits: {initialTable.locationTraits.join(", ")}</p>
 
               <ul>
                 {initialTable.latentFactions.map((f, i) => (
@@ -582,13 +683,9 @@ export default function DemoPage() {
                 ))}
               </ul>
 
-              <p className="muted">
-                Oddity: {initialTable.environmentalOddities.join(", ")}
-              </p>
+              <p className="muted">Oddity: {initialTable.environmentalOddities.join(", ")}</p>
 
-              <p className="muted">
-                Hook: {initialTable.dormantHooks.join(", ")}
-              </p>
+              <p className="muted">Hook: {initialTable.dormantHooks.join(", ")}</p>
             </div>
           </details>
 
@@ -617,9 +714,7 @@ export default function DemoPage() {
             <div style={{ marginTop: 10 }}>
               <p>{initialTable.openingFrame}</p>
 
-              <p className="muted">
-                Traits: {initialTable.locationTraits.join(", ")}
-              </p>
+              <p className="muted">Traits: {initialTable.locationTraits.join(", ")}</p>
 
               <ul>
                 {initialTable.latentFactions.map((f, i) => (
@@ -629,13 +724,9 @@ export default function DemoPage() {
                 ))}
               </ul>
 
-              <p className="muted">
-                Oddity: {initialTable.environmentalOddities.join(", ")}
-              </p>
+              <p className="muted">Oddity: {initialTable.environmentalOddities.join(", ")}</p>
 
-              <p className="muted">
-                Hook: {initialTable.dormantHooks.join(", ")}
-              </p>
+              <p className="muted">Hook: {initialTable.dormantHooks.join(", ")}</p>
             </div>
           </details>
 
@@ -659,57 +750,156 @@ export default function DemoPage() {
           {/* COMBAT (DEMO) */}
           <CardSection title="Combat (Deterministic, Grouped Enemies)">
             <p className="muted" style={{ marginTop: 0 }}>
-              Players roll individually. Enemy groups roll once per group. Turn
-              order is derived from events.
+              Players roll individually. Enemy groups roll once per group. Turn order is derived from events.
             </p>
 
-            <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
-              <label>
-                Players (1–6):{" "}
-                <input
-                  type="number"
-                  min={1}
-                  max={6}
+            <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "flex-end" }}>
+              <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                Players (1–6):
+                <select
                   value={playerCount}
-                  onChange={(e) => setPlayerCount(Number(e.target.value))}
-                  style={{ width: 80 }}
-                />
+                  onChange={(e) => setPlayerCount(clampInt(Number(e.target.value), 1, 6))}
+                  style={{ minWidth: 140 }}
+                >
+                  {PLAYER_COUNTS.map((n) => (
+                    <option key={n} value={n}>
+                      {n}
+                    </option>
+                  ))}
+                </select>
               </label>
 
-              <label>
-                Player init mod:{" "}
-                <input
-                  type="number"
+              <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                Player init mod:
+                <select
                   value={initModPlayers}
-                  onChange={(e) => setInitModPlayers(Number(e.target.value))}
-                  style={{ width: 80 }}
-                />
+                  onChange={(e) => setInitModPlayers(Math.trunc(Number(e.target.value)))}
+                  style={{ minWidth: 140 }}
+                >
+                  {INIT_MODS.map((n) => (
+                    <option key={n} value={n}>
+                      {n >= 0 ? `+${n}` : `${n}`}
+                    </option>
+                  ))}
+                </select>
               </label>
 
-              <label>
-                Enemy group init mod:{" "}
-                <input
-                  type="number"
+              <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                Enemy group init mod:
+                <select
                   value={initModEnemies}
-                  onChange={(e) => setInitModEnemies(Number(e.target.value))}
-                  style={{ width: 80 }}
-                />
+                  onChange={(e) => setInitModEnemies(Math.trunc(Number(e.target.value)))}
+                  style={{ minWidth: 170 }}
+                >
+                  {INIT_MODS.map((n) => (
+                    <option key={n} value={n}>
+                      {n >= 0 ? `+${n}` : `${n}`}
+                    </option>
+                  ))}
+                </select>
               </label>
 
-              <label style={{ flex: "1 1 320px" }}>
-                Enemy groups (comma-separated):{" "}
-                <input
-                  value={enemyGroupsText}
-                  onChange={(e) => setEnemyGroupsText(e.target.value)}
-                  style={{ width: "100%" }}
-                />
-              </label>
+              <div style={{ flex: "1 1 320px", display: "flex", flexDirection: "column", gap: 6 }}>
+                <span className="muted">Enemy groups</span>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                  <select
+                    value={enemyGroupSelect}
+                    onChange={(e) => setEnemyGroupSelect(e.target.value)}
+                    style={{ minWidth: 220 }}
+                  >
+                    {ENEMY_GROUP_LIBRARY.map((g) => (
+                      <option key={g} value={g}>
+                        {g}
+                      </option>
+                    ))}
+                  </select>
+                  <button onClick={() => addEnemyGroup(enemyGroupSelect)}>Add</button>
+                  <button onClick={clearEnemyGroups} disabled={enemyGroups.length === 0}>
+                    Clear
+                  </button>
+                  <span className="muted" style={{ fontSize: 12 }}>
+                    (max 6)
+                  </span>
+                </div>
+
+                {enemyGroups.length > 0 ? (
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8 }}>
+                    {enemyGroups.map((g) => (
+                      <span
+                        key={g}
+                        style={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: 8,
+                          padding: "6px 10px",
+                          borderRadius: 999,
+                          border: "1px solid rgba(255,255,255,0.12)",
+                          background: "rgba(255,255,255,0.05)",
+                        }}
+                      >
+                        <span>{g}</span>
+                        <button
+                          onClick={() => removeEnemyGroup(g)}
+                          aria-label={`Remove ${g}`}
+                          style={{
+                            padding: "0 8px",
+                            borderRadius: 999,
+                            border: "1px solid rgba(255,255,255,0.12)",
+                          }}
+                        >
+                          ×
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="muted" style={{ marginTop: 8 }}>
+                    No enemy groups yet. Add one.
+                  </div>
+                )}
+              </div>
             </div>
 
-            <div style={{ marginTop: 10, display: "flex", gap: 8 }}>
-              <button onClick={startCombatDeterministic}>
-                Start Combat (Seeded)
-              </button>
+            {/* Player Names */}
+            <div style={{ marginTop: 14 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
+                <strong>Players</strong>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  <button onClick={randomizePlayerNames}>🎲 Random names</button>
+                </div>
+              </div>
+
+              <div style={{ marginTop: 10, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 10 }}>
+                {Array.from({ length: clampInt(playerCount, 1, 6) }, (_, idx) => {
+                  const i1 = idx + 1;
+                  const value = playerNames[idx] ?? "";
+                  return (
+                    <label key={i1} style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                      <span className="muted">Player {i1} name (optional)</span>
+                      <input
+                        value={value}
+                        onChange={(e) => {
+                          const v = e.target.value;
+                          setPlayerNames((prev) => {
+                            const next = [...prev];
+                            next[idx] = v;
+                            return next.slice(0, 6);
+                          });
+                        }}
+                        placeholder={`Player ${i1}`}
+                      />
+                    </label>
+                  );
+                })}
+              </div>
+
+              <p className="muted" style={{ marginTop: 10, marginBottom: 0 }}>
+                Blank names will display as “Player 1…N”. Names are used for initiative labels and canon readability.
+              </p>
+            </div>
+
+            <div style={{ marginTop: 14, display: "flex", gap: 8 }}>
+              <button onClick={startCombatDeterministic}>Start Combat (Seeded)</button>
               <button onClick={advanceTurn} disabled={!derivedCombat}>
                 Advance Turn
               </button>
@@ -718,8 +908,7 @@ export default function DemoPage() {
             {derivedCombat && (
               <div style={{ marginTop: 12 }}>
                 <div className="muted">
-                  Combat: <strong>{derivedCombat.combatId}</strong> · Round{" "}
-                  <strong>{derivedCombat.round}</strong>
+                  Combat: <strong>{derivedCombat.combatId}</strong> · Round <strong>{derivedCombat.round}</strong>
                 </div>
 
                 <div
@@ -731,12 +920,9 @@ export default function DemoPage() {
                   }}
                 >
                   {derivedCombat.order.map((id, idx) => {
-                    const spec =
-                      derivedCombat.participants.find((p) => p.id === id) ??
-                      null;
+                    const spec = derivedCombat.participants.find((p) => p.id === id) ?? null;
                     const roll =
-                      derivedCombat.initiative.find((r) => r.combatantId === id) ??
-                      null;
+                      derivedCombat.initiative.find((r) => r.combatantId === id) ?? null;
 
                     const active = derivedCombat.activeCombatantId === id;
 
@@ -760,17 +946,12 @@ export default function DemoPage() {
                       >
                         <div>
                           <strong>
-                            {idx + 1}.{" "}
-                            {spec ? formatCombatantLabel(spec) : id}
+                            {idx + 1}. {spec ? formatCombatantLabel(spec) : id}
                           </strong>
-                          {active && (
-                            <span className="muted">{"  "}← active</span>
-                          )}
+                          {active && <span className="muted">{"  "}← active</span>}
                         </div>
                         <div className="muted">
-                          {roll
-                            ? `Init ${roll.total} (d20 ${roll.natural} + ${roll.modifier})`
-                            : "Init —"}
+                          {roll ? `Init ${roll.total} (d20 ${roll.natural} + ${roll.modifier})` : "Init —"}
                         </div>
                       </div>
                     );
@@ -809,9 +990,7 @@ export default function DemoPage() {
               <ul>
                 {options.map((opt) => (
                   <li key={opt.id}>
-                    <button onClick={() => setSelectedOption(opt)}>
-                      {opt.description}
-                    </button>
+                    <button onClick={() => setSelectedOption(opt)}>{opt.description}</button>
                   </li>
                 ))}
               </ul>
