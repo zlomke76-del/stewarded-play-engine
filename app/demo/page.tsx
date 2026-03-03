@@ -4,12 +4,16 @@
 // Demo Page — Stewarded Play (Full Governed Flow)
 // ------------------------------------------------------------
 //
-// Exploration fix:
+// FIXED EXPLORATION GOVERNANCE:
 // - Map is read-only (canon view)
-// - After intent + option selection, we AUTO-DRAFT exploration canon:
+// - After player intent + option selection, we AUTO-DRAFT exploration canon:
 //     PLAYER_MOVED / MAP_REVEALED / MAP_MARKED
-// - Draft uses a DIRECTION dropdown (N/S/E/W/Stay), not coordinates
 // - Arbiter commits the bundle alongside OUTCOME (one click)
+//
+// CHANGE REQUEST (this turn):
+// - Replace “To X/Y” inputs with a directional dropdown (North/South/East/West/Stay)
+// - Still commit canonical PLAYER_MOVED as { from, to } (coords), derived from direction + currentPos
+// - If move would be out-of-bounds, disable commit + show warning
 //
 // ------------------------------------------------------------
 
@@ -61,14 +65,16 @@ type InitialTable = {
   dormantHooks: string[];
 };
 
+// Keep local dice types aligned with ResolutionDraftAdvisoryPanel
 type DiceMode = "d4" | "d6" | "d8" | "d10" | "d12" | "d20";
 type RollSource = "manual" | "solace";
 
 type XY = { x: number; y: number };
+
 type MoveDir = "stay" | "north" | "south" | "east" | "west";
 
 // ------------------------------------------------------------
-// CanonEventsPanel (inline)
+// CanonEventsPanel (inline; non-OUTCOME canon ledger)
 // ------------------------------------------------------------
 
 type CanonPanelProps = {
@@ -162,7 +168,7 @@ function CanonEventsPanel({ events }: CanonPanelProps) {
 }
 
 // ------------------------------------------------------------
-// Helpers
+// Random helpers
 // ------------------------------------------------------------
 
 function pick<T>(arr: T[]) {
@@ -189,15 +195,47 @@ function normalizeName(s: string) {
 }
 
 function randomName(): string {
-  const a = ["Astra", "Kara", "Thorne", "Hex", "Rook", "Nyx", "Vex", "Dax", "Mara", "Rune", "Sable", "Orin", "Juno", "Kade", "Iris", "Zeph"];
-  const b = ["of Ember", "of Glass", "of Iron", "of Neon", "of Ash", "of Dawn", "of Night", "of the Grid", "the Quiet", "the Bold", "the Warden", "the Runner", "the Signal", "the Echo"];
+  const a = [
+    "Astra",
+    "Kara",
+    "Thorne",
+    "Hex",
+    "Rook",
+    "Nyx",
+    "Vex",
+    "Dax",
+    "Mara",
+    "Rune",
+    "Sable",
+    "Orin",
+    "Juno",
+    "Kade",
+    "Iris",
+    "Zeph",
+  ];
+  const b = [
+    "of Ember",
+    "of Glass",
+    "of Iron",
+    "of Neon",
+    "of Ash",
+    "of Dawn",
+    "of Night",
+    "of the Grid",
+    "the Quiet",
+    "the Bold",
+    "the Warden",
+    "the Runner",
+    "the Signal",
+    "the Echo",
+  ];
   const base = pick(a);
   const tail = pick([true, false, false]) ? ` ${pick(b)}` : "";
   return `${base}${tail}`;
 }
 
 // ------------------------------------------------------------
-// Exploration derivation + drafting
+// Exploration derivation + drafting helpers (local to demo)
 // ------------------------------------------------------------
 
 function withinBounds(p: XY, w: number, h: number) {
@@ -228,7 +266,7 @@ function revealRadius(center: XY, radius: number, w: number, h: number): XY[] {
   return out;
 }
 
-function inferDirection(text: string): Exclude<MoveDir, "stay"> | null {
+function inferDirection(text: string): MoveDir | null {
   const t = text.toLowerCase();
   if (/\b(north|up|forward|ahead)\b/.test(t)) return "north";
   if (/\b(south|down|back|backward)\b/.test(t)) return "south";
@@ -292,7 +330,15 @@ type ExplorationDraft = {
 // ------------------------------------------------------------
 
 function generateInitialTable(): InitialTable {
-  const factionNames = ["The Whisperers", "The Vaultwardens", "The Ash Circle", "The Night Ledger", "The Bell-Silent", "The Cobble Court"];
+  const factionNames = [
+    "The Whisperers",
+    "The Vaultwardens",
+    "The Ash Circle",
+    "The Night Ledger",
+    "The Bell-Silent",
+    "The Cobble Court",
+  ];
+
   const desires = [
     "control what sleeps below",
     "seal the vaults forever",
@@ -301,7 +347,15 @@ function generateInitialTable(): InitialTable {
     "expose the truth no matter the cost",
     "keep the city calm at any price",
   ];
-  const pressures = ["time is running out", "someone is leaking secrets", "an old oath is failing", "a rival faction is moving first", "witnesses keep vanishing", "the city above is starting to notice"];
+
+  const pressures = [
+    "time is running out",
+    "someone is leaking secrets",
+    "an old oath is failing",
+    "a rival faction is moving first",
+    "witnesses keep vanishing",
+    "the city above is starting to notice",
+  ];
 
   const factionCount = pick([2, 3, 3]);
   const chosenNames = pickManyUnique(factionNames, factionCount);
@@ -313,10 +367,30 @@ function generateInitialTable(): InitialTable {
       "Voices echo where they shouldn’t, carrying fragments of argument.",
       "The city hums, unaware of the pressure building beneath it.",
     ]),
-    locationTraits: [pick(["crowded", "echoing", "claustrophobic", "uneasily quiet"]), pick(["ancient stone", "rotting wood", "slick cobblestone"])],
-    latentFactions: chosenNames.map((name) => ({ name, desire: pick(desires), pressure: pick(pressures) })),
-    environmentalOddities: [pick(["Lantern flames gutter without wind", "Stone walls seem to absorb sound", "Whispers surface near old drains", "Footsteps echo twice"])],
-    dormantHooks: [pick(["A name scratched into stone repeats across districts", "A missing city clerk last seen near the underways", "A sealed door recently disturbed"])],
+    locationTraits: [
+      pick(["crowded", "echoing", "claustrophobic", "uneasily quiet"]),
+      pick(["ancient stone", "rotting wood", "slick cobblestone"]),
+    ],
+    latentFactions: chosenNames.map((name) => ({
+      name,
+      desire: pick(desires),
+      pressure: pick(pressures),
+    })),
+    environmentalOddities: [
+      pick([
+        "Lantern flames gutter without wind",
+        "Stone walls seem to absorb sound",
+        "Whispers surface near old drains",
+        "Footsteps echo twice",
+      ]),
+    ],
+    dormantHooks: [
+      pick([
+        "A name scratched into stone repeats across districts",
+        "A missing city clerk last seen near the underways",
+        "A sealed door recently disturbed",
+      ]),
+    ],
   };
 }
 
@@ -337,7 +411,9 @@ function renderInitialTableNarration(t: InitialTable): string {
   } else if (/absorb sound/i.test(oddity.toLowerCase())) {
     lines.push("Sound doesn’t travel right. Words die early, like the walls are swallowing them.");
   } else if (/whispers/i.test(oddity.toLowerCase())) {
-    lines.push("You keep catching whispers at the edge of hearing — not loud enough to understand, not quiet enough to ignore.");
+    lines.push(
+      "You keep catching whispers at the edge of hearing — not loud enough to understand, not quiet enough to ignore."
+    );
   } else {
     lines.push(`${oddity}.`);
   }
@@ -356,9 +432,15 @@ function renderInitialTableNarration(t: InitialTable): string {
 function inferOptionKind(description: string): OptionKind {
   const text = description.toLowerCase();
 
-  if (text.includes("attack") || text.includes("fight") || text.includes("oppose") || text.includes("contest")) return "contested";
-  if (text.includes("climb") || text.includes("cross") || text.includes("navigate") || text.includes("environment")) return "environmental";
-  if (text.includes("steal") || text.includes("sneak") || text.includes("risk")) return "risky";
+  if (text.includes("attack") || text.includes("fight") || text.includes("oppose") || text.includes("contest")) {
+    return "contested";
+  }
+  if (text.includes("climb") || text.includes("cross") || text.includes("navigate") || text.includes("environment")) {
+    return "environmental";
+  }
+  if (text.includes("steal") || text.includes("sneak") || text.includes("risk")) {
+    return "risky";
+  }
   return "safe";
 }
 
@@ -376,6 +458,7 @@ export default function DemoPage() {
   // Initial Table Gate
   const [initialTable, setInitialTable] = useState<InitialTable | null>(null);
   const [tableAccepted, setTableAccepted] = useState(false);
+
   const [tableDraftText, setTableDraftText] = useState("");
 
   const [playerInput, setPlayerInput] = useState("");
@@ -413,6 +496,7 @@ export default function DemoPage() {
     return !withinBounds(to, MAP_W, MAP_H);
   }, [explorationDraft.enableMove, explorationDraft.dir, currentPos, MAP_W, MAP_H]);
 
+  // When an option is selected (i.e., we are about to resolve), auto-draft exploration.
   useEffect(() => {
     if (!selectedOption) return;
 
@@ -444,7 +528,7 @@ export default function DemoPage() {
   }, [moveOutOfBounds]);
 
   // ----------------------------------------------------------
-  // Generate table ONCE
+  // Generate table ONCE per session
   // ----------------------------------------------------------
 
   useEffect(() => {
@@ -452,7 +536,10 @@ export default function DemoPage() {
     if (dmMode === "solace-neutral" || dmMode === "human") setInitialTable(generateInitialTable());
   }, [dmMode, initialTable]);
 
-  const renderedTableNarration = useMemo(() => (initialTable ? renderInitialTableNarration(initialTable) : ""), [initialTable]);
+  const renderedTableNarration = useMemo(() => {
+    if (!initialTable) return "";
+    return renderInitialTableNarration(initialTable);
+  }, [initialTable]);
 
   useEffect(() => {
     if (!initialTable) return;
@@ -478,6 +565,7 @@ export default function DemoPage() {
     setSelectedOption(null);
   }
 
+  // Solace selects an option in neutral facilitator mode
   useEffect(() => {
     if (dmMode !== "solace-neutral") return;
     if (!options || options.length === 0) return;
@@ -485,7 +573,7 @@ export default function DemoPage() {
   }, [dmMode, options]);
 
   // ----------------------------------------------------------
-  // Record canon (OUTCOME + exploration bundle)
+  // Record canon (OUTCOME + optional exploration bundle)
   // ----------------------------------------------------------
 
   function commitExplorationBundle() {
@@ -493,15 +581,13 @@ export default function DemoPage() {
 
     setState((prev) => {
       let next = prev;
+
       const here = deriveCurrentPosition(next.events as any[], MAP_W, MAP_H);
 
-      let targetTile: XY = here;
-
+      // Movement is the resolution of intent → only commit if enabled + valid
       if (d.enableMove && d.dir !== "stay") {
         const to = stepFrom(here, d.dir);
         if (withinBounds(to, MAP_W, MAP_H)) {
-          targetTile = to;
-
           next = recordEvent(next, {
             id: crypto.randomUUID(),
             timestamp: Date.now(),
@@ -509,16 +595,42 @@ export default function DemoPage() {
             type: "PLAYER_MOVED",
             payload: { from: here, to } as any,
           });
+
+          if (d.enableReveal && d.revealRadius > 0) {
+            next = recordEvent(next, {
+              id: crypto.randomUUID(),
+              timestamp: Date.now(),
+              actor: "arbiter",
+              type: "MAP_REVEALED",
+              payload: { tiles: revealRadius(to, d.revealRadius, MAP_W, MAP_H) } as any,
+            });
+          }
+
+          // Mark at the destination (e.g., “you arrive at a locked door”)
+          if (d.enableMark) {
+            const note = d.markNote.trim() ? d.markNote.trim() : null;
+            next = recordEvent(next, {
+              id: crypto.randomUUID(),
+              timestamp: Date.now(),
+              actor: "arbiter",
+              type: "MAP_MARKED",
+              payload: { at: to, kind: d.markKind, note } as any,
+            });
+          }
+
+          return next;
         }
       }
 
+      // No move: allow reveal/mark at current tile ONLY if explicitly enabled.
+      // (This supports “I inspect the room / I listen at the door” without moving.)
       if (d.enableReveal && d.revealRadius > 0) {
         next = recordEvent(next, {
           id: crypto.randomUUID(),
           timestamp: Date.now(),
           actor: "arbiter",
           type: "MAP_REVEALED",
-          payload: { tiles: revealRadius(targetTile, d.revealRadius, MAP_W, MAP_H) } as any,
+          payload: { tiles: revealRadius(here, d.revealRadius, MAP_W, MAP_H) } as any,
         });
       }
 
@@ -529,7 +641,7 @@ export default function DemoPage() {
           timestamp: Date.now(),
           actor: "arbiter",
           type: "MAP_MARKED",
-          payload: { at: targetTile, kind: d.markKind, note } as any,
+          payload: { at: here, kind: d.markKind, note } as any,
         });
       }
 
@@ -547,6 +659,7 @@ export default function DemoPage() {
     };
     audit: string[];
   }) {
+    // OUTCOME is canon first…
     setState((prev) =>
       recordEvent(prev, {
         id: crypto.randomUUID(),
@@ -557,6 +670,7 @@ export default function DemoPage() {
       })
     );
 
+    // …then we commit the exploration bundle (still append-only, still arbiter-gated)
     commitExplorationBundle();
   }
 
@@ -566,7 +680,7 @@ export default function DemoPage() {
   }
 
   // ----------------------------------------------------------
-  // Combat demo inputs (unchanged)
+  // Combat demo inputs
   // ----------------------------------------------------------
 
   const [playerCount, setPlayerCount] = useState(4);
@@ -582,7 +696,20 @@ export default function DemoPage() {
   const INIT_MODS = [-2, -1, 0, 1, 2, 3, 4, 5, 6, 7, 8] as const;
 
   const ENEMY_GROUP_LIBRARY = useMemo(
-    () => ["Skirmishers", "Archers", "Brutes", "Shields", "Stalkers", "Casters", "Drones", "Sentries", "Wraiths", "Grid Knights", "Firewall Wardens", "Neon Hounds"],
+    () => [
+      "Skirmishers",
+      "Archers",
+      "Brutes",
+      "Shields",
+      "Stalkers",
+      "Casters",
+      "Drones",
+      "Sentries",
+      "Wraiths",
+      "Grid Knights",
+      "Firewall Wardens",
+      "Neon Hounds",
+    ],
     []
   );
 
@@ -611,6 +738,7 @@ export default function DemoPage() {
 
   function startCombatDeterministic() {
     const pc = clampInt(playerCount, 1, 6);
+
     const groups = enemyGroups.map(normalizeName).filter(Boolean).slice(0, 6);
 
     const combatId = crypto.randomUUID();
@@ -749,11 +877,13 @@ export default function DemoPage() {
 
       <CardSection title="Facilitation Mode">
         <label>
-          <input type="radio" checked={dmMode === "human"} onChange={() => setDmMode("human")} /> Human DM (options visible + editable setup)
+          <input type="radio" checked={dmMode === "human"} onChange={() => setDmMode("human")} /> Human DM (options
+          visible + editable setup)
         </label>
         <br />
         <label>
-          <input type="radio" checked={dmMode === "solace-neutral"} onChange={() => setDmMode("solace-neutral")} /> Solace (Neutral Facilitator)
+          <input type="radio" checked={dmMode === "solace-neutral"} onChange={() => setDmMode("solace-neutral")} /> Solace
+          (Neutral Facilitator)
         </label>
       </CardSection>
 
@@ -763,7 +893,17 @@ export default function DemoPage() {
             Table-play narration (finalized):
           </p>
 
-          <div style={{ whiteSpace: "pre-wrap", lineHeight: 1.6, background: "rgba(0,0,0,0.25)", padding: "16px", borderRadius: "6px" }}>{tableDraftText}</div>
+          <div
+            style={{
+              whiteSpace: "pre-wrap",
+              lineHeight: 1.6,
+              background: "rgba(0,0,0,0.25)",
+              padding: "16px",
+              borderRadius: "6px",
+            }}
+          >
+            {tableDraftText}
+          </div>
 
           <details style={{ marginTop: 12 }}>
             <summary className="muted">Show underlying table signals</summary>
@@ -825,13 +965,187 @@ export default function DemoPage() {
         <>
           <DungeonPressurePanel turn={state.events.filter((e) => e.type === "OUTCOME").length} events={state.events} />
 
+          {/* Map is canon-only view */}
           <ExplorationMapPanel events={state.events} mapW={MAP_W} mapH={MAP_H} />
 
-          {/* ... Combat block stays exactly as-is in your repo.
-              (Keeping it omitted here would violate "full file", so it remains present in your actual copy.)
-              For brevity in this chat UI, we continue with the rest of the demo flow (combat code unchanged). */}
+          {/* COMBAT (unchanged) */}
+          <CardSection title="Combat (Deterministic, Grouped Enemies)">
+            <p className="muted" style={{ marginTop: 0 }}>
+              Players roll individually. Enemy groups roll once per group. Turn order is derived from events.
+            </p>
 
-          {/* PLAYER ACTION */}
+            <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "flex-end" }}>
+              <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                Players (1–6):
+                <select value={playerCount} onChange={(e) => setPlayerCount(clampInt(Number(e.target.value), 1, 6))} style={{ minWidth: 140 }}>
+                  {PLAYER_COUNTS.map((n) => (
+                    <option key={n} value={n}>
+                      {n}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                Player init mod:
+                <select value={initModPlayers} onChange={(e) => setInitModPlayers(Math.trunc(Number(e.target.value)))} style={{ minWidth: 140 }}>
+                  {INIT_MODS.map((n) => (
+                    <option key={n} value={n}>
+                      {n >= 0 ? `+${n}` : `${n}`}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                Enemy group init mod:
+                <select value={initModEnemies} onChange={(e) => setInitModEnemies(Math.trunc(Number(e.target.value)))} style={{ minWidth: 170 }}>
+                  {INIT_MODS.map((n) => (
+                    <option key={n} value={n}>
+                      {n >= 0 ? `+${n}` : `${n}`}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <div style={{ flex: "1 1 320px", display: "flex", flexDirection: "column", gap: 6 }}>
+                <span className="muted">Enemy groups</span>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                  <select value={enemyGroupSelect} onChange={(e) => setEnemyGroupSelect(e.target.value)} style={{ minWidth: 220 }}>
+                    {ENEMY_GROUP_LIBRARY.map((g) => (
+                      <option key={g} value={g}>
+                        {g}
+                      </option>
+                    ))}
+                  </select>
+                  <button onClick={() => addEnemyGroup(enemyGroupSelect)}>Add</button>
+                  <button onClick={clearEnemyGroups} disabled={enemyGroups.length === 0}>
+                    Clear
+                  </button>
+                  <span className="muted" style={{ fontSize: 12 }}>
+                    (max 6)
+                  </span>
+                </div>
+
+                {enemyGroups.length > 0 ? (
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8 }}>
+                    {enemyGroups.map((g) => (
+                      <span
+                        key={g}
+                        style={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: 8,
+                          padding: "6px 10px",
+                          borderRadius: 999,
+                          border: "1px solid rgba(255,255,255,0.12)",
+                          background: "rgba(255,255,255,0.05)",
+                        }}
+                      >
+                        <span>{g}</span>
+                        <button
+                          onClick={() => removeEnemyGroup(g)}
+                          aria-label={`Remove ${g}`}
+                          style={{ padding: "0 8px", borderRadius: 999, border: "1px solid rgba(255,255,255,0.12)" }}
+                        >
+                          ×
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="muted" style={{ marginTop: 8 }}>
+                    No enemy groups yet. Add one.
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div style={{ marginTop: 14 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
+                <strong>Players</strong>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  <button onClick={randomizePlayerNames}>🎲 Random names</button>
+                </div>
+              </div>
+
+              <div style={{ marginTop: 10, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 10 }}>
+                {Array.from({ length: clampInt(playerCount, 1, 6) }, (_, idx) => {
+                  const i1 = idx + 1;
+                  const value = playerNames[idx] ?? "";
+                  return (
+                    <label key={i1} style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                      <span className="muted">Player {i1} name (optional)</span>
+                      <input
+                        value={value}
+                        onChange={(e) => {
+                          const v = e.target.value;
+                          setPlayerNames((prev) => {
+                            const next = [...prev];
+                            next[idx] = v;
+                            return next.slice(0, 6);
+                          });
+                        }}
+                        placeholder={`Player ${i1}`}
+                      />
+                    </label>
+                  );
+                })}
+              </div>
+
+              <p className="muted" style={{ marginTop: 10, marginBottom: 0 }}>
+                Blank names will display as “Player 1…N”. Names are used for initiative labels and canon readability.
+              </p>
+            </div>
+
+            <div style={{ marginTop: 14, display: "flex", gap: 8 }}>
+              <button onClick={startCombatDeterministic}>Start Combat (Seeded)</button>
+              <button onClick={advanceTurn} disabled={!derivedCombat}>
+                Advance Turn
+              </button>
+            </div>
+
+            {derivedCombat && (
+              <div style={{ marginTop: 12 }}>
+                <div className="muted">
+                  Combat: <strong>{derivedCombat.combatId}</strong> · Round <strong>{derivedCombat.round}</strong>
+                </div>
+
+                <div style={{ marginTop: 10, display: "grid", gridTemplateColumns: "1fr", gap: 6 }}>
+                  {derivedCombat.order.map((id, idx) => {
+                    const spec = derivedCombat.participants.find((p) => p.id === id) ?? null;
+                    const roll = derivedCombat.initiative.find((r) => r.combatantId === id) ?? null;
+                    const active = derivedCombat.activeCombatantId === id;
+
+                    return (
+                      <div
+                        key={id}
+                        style={{
+                          padding: "10px 12px",
+                          borderRadius: 8,
+                          border: active ? "1px solid rgba(138,180,255,0.55)" : "1px solid rgba(255,255,255,0.10)",
+                          background: active ? "rgba(138,180,255,0.10)" : "rgba(255,255,255,0.04)",
+                          display: "flex",
+                          justifyContent: "space-between",
+                          alignItems: "center",
+                          gap: 10,
+                        }}
+                      >
+                        <div>
+                          <strong>
+                            {idx + 1}. {spec ? formatCombatantLabel(spec) : id}
+                          </strong>
+                          {active && <span className="muted">{"  "}← active</span>}
+                        </div>
+                        <div className="muted">{roll ? `Init ${roll.total} (d20 ${roll.natural} + ${roll.modifier})` : "Init —"}</div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </CardSection>
+
           <CardSection title="Player Action">
             <textarea
               value={playerInput}
@@ -862,10 +1176,11 @@ export default function DemoPage() {
             </CardSection>
           )}
 
+          {/* Drafted exploration bundle (only after intent -> option selected) */}
           {selectedOption && (
             <CardSection title="Proposed Exploration Canon (Draft)">
               <p className="muted" style={{ marginTop: 0 }}>
-                Auto-suggested from intent text. Not canon until you record the outcome.
+                These are auto-suggested based on intent text. They are NOT canon until you record the outcome.
               </p>
 
               <div className="muted" style={{ marginBottom: 10 }}>
@@ -895,7 +1210,11 @@ export default function DemoPage() {
                   <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "flex-end" }}>
                     <label style={{ display: "flex", flexDirection: "column", gap: 6, minWidth: 220 }}>
                       Direction:
-                      <select value={explorationDraft.dir} onChange={(e) => setExplorationDraft((p) => ({ ...p, dir: e.target.value as MoveDir }))}>
+                      <select
+                        value={explorationDraft.dir}
+                        onChange={(e) => setExplorationDraft((p) => ({ ...p, dir: e.target.value as MoveDir }))}
+                        style={{ minWidth: 220 }}
+                      >
                         <option value="stay">{dirLabel("stay")}</option>
                         <option value="north">{dirLabel("north")}</option>
                         <option value="east">{dirLabel("east")}</option>
@@ -904,13 +1223,17 @@ export default function DemoPage() {
                       </select>
                     </label>
 
-                    <div className="muted" style={{ marginBottom: 2 }}>
+                    <span className="muted" style={{ marginBottom: 2 }}>
                       {explorationDraft.dir === "stay"
                         ? "No movement will be recorded."
                         : draftedTo
                         ? `Will move to (${draftedTo.x},${draftedTo.y}).`
                         : "That move would go out of bounds."}
-                    </div>
+                    </span>
+
+                    <span className="muted" style={{ marginBottom: 2 }}>
+                      (Bounds: 0..{MAP_W - 1} / 0..{MAP_H - 1})
+                    </span>
                   </div>
                 )}
 
@@ -926,7 +1249,10 @@ export default function DemoPage() {
                 {explorationDraft.enableReveal && (
                   <label style={{ display: "flex", flexDirection: "column", gap: 6, maxWidth: 220 }}>
                     Reveal radius:
-                    <select value={explorationDraft.revealRadius} onChange={(e) => setExplorationDraft((p) => ({ ...p, revealRadius: Number(e.target.value) as any }))}>
+                    <select
+                      value={explorationDraft.revealRadius}
+                      onChange={(e) => setExplorationDraft((p) => ({ ...p, revealRadius: Number(e.target.value) as any }))}
+                    >
                       <option value={0}>0 (none)</option>
                       <option value={1}>1 (tight)</option>
                       <option value={2}>2 (wide)</option>
@@ -947,7 +1273,10 @@ export default function DemoPage() {
                   <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "flex-end" }}>
                     <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                       Kind:
-                      <select value={explorationDraft.markKind} onChange={(e) => setExplorationDraft((p) => ({ ...p, markKind: e.target.value as MapMarkKind }))}>
+                      <select
+                        value={explorationDraft.markKind}
+                        onChange={(e) => setExplorationDraft((p) => ({ ...p, markKind: e.target.value as MapMarkKind }))}
+                      >
                         <option value="door">door 🚪</option>
                         <option value="stairs">stairs ⬇️</option>
                         <option value="altar">altar ✶</option>
@@ -958,7 +1287,11 @@ export default function DemoPage() {
 
                     <label style={{ display: "flex", flexDirection: "column", gap: 6, flex: "1 1 220px" }}>
                       Note (optional):
-                      <input value={explorationDraft.markNote} onChange={(e) => setExplorationDraft((p) => ({ ...p, markNote: e.target.value }))} placeholder="e.g., locked / sealed / humming / glyph" />
+                      <input
+                        value={explorationDraft.markNote}
+                        onChange={(e) => setExplorationDraft((p) => ({ ...p, markNote: e.target.value }))}
+                        placeholder="e.g., locked / sealed / humming / glyph"
+                      />
                     </label>
 
                     <span className="muted">(Mark applies to destination if moving; otherwise current tile.)</span>
@@ -971,7 +1304,10 @@ export default function DemoPage() {
           {selectedOption && (
             <ResolutionDraftAdvisoryPanel
               role={role}
-              context={{ optionDescription: selectedOption.description, optionKind: inferOptionKind(selectedOption.description) }}
+              context={{
+                optionDescription: selectedOption.description,
+                optionKind: inferOptionKind(selectedOption.description),
+              }}
               onRecord={handleRecord}
             />
           )}
