@@ -1,24 +1,23 @@
 "use client";
 
 // ------------------------------------------------------------
-// ExplorationMapPanel
+// ExplorationMapPanel (READ-ONLY)
 // ------------------------------------------------------------
-// Event-sourced fog-of-war exploration UI.
+// Event-sourced fog-of-war visualization.
 // - Derives position + discovered tiles + marks purely from events
-// - Records canon ONLY via callbacks passed from parent (arbiter-only)
-// - No silent mutation, no procedural "facts"
+// - NO controls here (movement/reveal/mark are drafted+committed via resolution)
 // ------------------------------------------------------------
 
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import type { SessionEvent } from "@/lib/session/SessionState";
 import CardSection from "@/components/layout/CardSection";
 
 type XY = { x: number; y: number };
 
+export type MapMarkKind = "door" | "stairs" | "altar" | "cache" | "hazard";
+
 type PlayerMovedPayload = { from: XY; to: XY };
 type MapRevealedPayload = { tiles: XY[] };
-
-export type MapMarkKind = "door" | "stairs" | "altar" | "cache" | "hazard";
 type MapMarkedPayload = { at: XY; kind: MapMarkKind; note?: string | null };
 
 type MapMark = {
@@ -33,11 +32,6 @@ type Props = {
   events: readonly SessionEvent[];
   mapW?: number;
   mapH?: number;
-
-  // Canon recorders (arbiter-only)
-  onMove: (to: XY) => void;
-  onReveal: (tiles: XY[]) => void;
-  onMark: (at: XY, kind: MapMarkKind, note?: string | null) => void;
 };
 
 function keyXY(p: XY) {
@@ -46,21 +40,6 @@ function keyXY(p: XY) {
 
 function withinBounds(p: XY, w: number, h: number) {
   return p.x >= 0 && p.y >= 0 && p.x < w && p.y < h;
-}
-
-function revealRadius(center: XY, radius: number, w: number, h: number): XY[] {
-  const out: XY[] = [];
-  for (let dy = -radius; dy <= radius; dy++) {
-    for (let dx = -radius; dx <= radius; dx++) {
-      const p = { x: center.x + dx, y: center.y + dy };
-      if (withinBounds(p, w, h)) out.push(p);
-    }
-  }
-  return out;
-}
-
-function normalizeNote(s: string) {
-  return s.replace(/\s+/g, " ").trim();
 }
 
 function glyphForMark(kind: MapMarkKind): string {
@@ -84,11 +63,8 @@ function deriveMapState(events: readonly SessionEvent[], w: number, h: number) {
   // Deterministic start: middle of the grid
   let position: XY = { x: Math.floor(w / 2), y: Math.floor(h / 2) };
   const discovered = new Set<string>();
-
-  // Latest mark per tile (last write wins by event order)
   const marksByTile = new Map<string, MapMark>();
 
-  // Always reveal start tile
   discovered.add(keyXY(position));
 
   for (const e of events as any[]) {
@@ -125,7 +101,7 @@ function deriveMapState(events: readonly SessionEvent[], w: number, h: number) {
         timestamp: Number(e.timestamp ?? Date.now()),
       });
 
-      // Marking implies the tile is known (does not reveal neighbors)
+      // Mark implies the tile is known (but does not reveal neighbors)
       discovered.add(k);
     }
   }
@@ -134,48 +110,17 @@ function deriveMapState(events: readonly SessionEvent[], w: number, h: number) {
   return { position, discovered, marksByTile, marks };
 }
 
-export default function ExplorationMapPanel({
-  events,
-  mapW = 13,
-  mapH = 9,
-  onMove,
-  onReveal,
-  onMark,
-}: Props) {
+export default function ExplorationMapPanel({ events, mapW = 13, mapH = 9 }: Props) {
   const derived = useMemo(() => deriveMapState(events, mapW, mapH), [events, mapW, mapH]);
 
-  const [markKind, setMarkKind] = useState<MapMarkKind>("door");
-  const [markNote, setMarkNote] = useState("");
-
-  function moveAndReveal(to: XY) {
-    onMove(to);
-    onReveal(revealRadius(to, 1, mapW, mapH));
-  }
-
-  function tryMove(dx: number, dy: number) {
-    const to = { x: derived.position.x + dx, y: derived.position.y + dy };
-    if (!withinBounds(to, mapW, mapH)) return;
-    moveAndReveal(to);
-  }
-
-  function isAdjacent(to: XY) {
-    const dx = Math.abs(to.x - derived.position.x);
-    const dy = Math.abs(to.y - derived.position.y);
-    return dx + dy === 1; // 4-neighbor adjacency
-  }
-
-  const canUp = derived.position.y > 0;
-  const canDown = derived.position.y < mapH - 1;
-  const canLeft = derived.position.x > 0;
-  const canRight = derived.position.x < mapW - 1;
-
   return (
-    <CardSection title="Exploration Map (Fog-of-War)">
+    <CardSection title="Exploration Map (Canon View)">
       <p className="muted" style={{ marginTop: 0 }}>
-        Arbiter-only: move / reveal / mark are canon events (append-only). The map is derived from events.
+        This map is derived from canon events. Movement / reveal / marks are drafted during resolution and only become
+        canon when the Arbiter commits.
       </p>
 
-      {/* Legend (makes the grid understandable instantly) */}
+      {/* Legend */}
       <div
         style={{
           display: "flex",
@@ -245,180 +190,77 @@ export default function ExplorationMapPanel({
         )}
       </div>
 
-      <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "flex-start" }}>
-        {/* Grid */}
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: `repeat(${mapW}, 22px)`,
-            gap: 4,
-            padding: 10,
-            borderRadius: 10,
-            border: "1px solid rgba(255,255,255,0.10)",
-            background: "rgba(255,255,255,0.03)",
-          }}
-        >
-          {Array.from({ length: mapW * mapH }, (_, i) => {
-            const x = i % mapW;
-            const y = Math.floor(i / mapW);
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: `repeat(${mapW}, 22px)`,
+          gap: 4,
+          padding: 10,
+          borderRadius: 10,
+          border: "1px solid rgba(255,255,255,0.10)",
+          background: "rgba(255,255,255,0.03)",
+        }}
+      >
+        {Array.from({ length: mapW * mapH }, (_, i) => {
+          const x = i % mapW;
+          const y = Math.floor(i / mapW);
 
-            const here = derived.position.x === x && derived.position.y === y;
-            const seen = derived.discovered.has(`${x},${y}`);
+          const here = derived.position.x === x && derived.position.y === y;
+          const seen = derived.discovered.has(`${x},${y}`);
 
-            const mark = derived.marksByTile.get(`${x},${y}`) ?? null;
-            const glyph = mark ? glyphForMark(mark.kind) : "";
+          const mark = derived.marksByTile.get(`${x},${y}`) ?? null;
+          const glyph = mark ? glyphForMark(mark.kind) : "";
 
-            const titleParts: string[] = [];
-            titleParts.push(seen ? `(${x},${y})` : "Unknown");
-            if (mark) {
-              titleParts.push(`Mark: ${mark.kind}`);
-              if (mark.note) titleParts.push(`Note: ${mark.note}`);
-            }
-            if (isAdjacent({ x, y })) titleParts.push("Click to move");
+          const titleParts: string[] = [];
+          titleParts.push(seen ? `(${x},${y})` : "Unknown");
+          if (mark) {
+            titleParts.push(`Mark: ${mark.kind}`);
+            if (mark.note) titleParts.push(`Note: ${mark.note}`);
+          }
 
-            const clickable = isAdjacent({ x, y }) && withinBounds({ x, y }, mapW, mapH);
-
-            return (
-              <button
-                key={`${x},${y}`}
-                title={titleParts.join(" · ")}
-                onClick={() => {
-                  if (!clickable) return;
-                  moveAndReveal({ x, y });
-                }}
-                disabled={!clickable}
-                style={{
-                  width: 22,
-                  height: 22,
-                  borderRadius: 6,
-                  position: "relative",
-                  padding: 0,
-                  cursor: clickable ? "pointer" : "default",
-                  border: here
-                    ? "1px solid rgba(138,180,255,0.65)"
-                    : "1px solid rgba(255,255,255,0.10)",
-                  background: !seen
-                    ? "rgba(0,0,0,0.55)" // fog
-                    : here
-                      ? "rgba(138,180,255,0.18)"
-                      : "rgba(255,255,255,0.06)",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  fontSize: 12,
-                  lineHeight: 1,
-                  userSelect: "none",
-                  opacity: clickable || here ? 1 : 0.92,
-                }}
-              >
-                {seen && glyph ? <span style={{ transform: "translateY(-0.5px)" }}>{glyph}</span> : null}
-              </button>
-            );
-          })}
-        </div>
-
-        {/* Controls */}
-        <div style={{ minWidth: 320 }}>
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            <button onClick={() => onReveal(revealRadius(derived.position, 1, mapW, mapH))}>
-              Reveal (radius 1)
-            </button>
-            <button onClick={() => onReveal(revealRadius(derived.position, 2, mapW, mapH))}>
-              Reveal (radius 2)
-            </button>
-          </div>
-
-          {/* Mark tile */}
-          <div style={{ marginTop: 12 }}>
-            <div className="muted" style={{ marginBottom: 6 }}>
-              Mark current tile (commits MAP_MARKED)
+          return (
+            <div
+              key={`${x},${y}`}
+              title={titleParts.join(" · ")}
+              style={{
+                width: 22,
+                height: 22,
+                borderRadius: 6,
+                border: here ? "1px solid rgba(138,180,255,0.65)" : "1px solid rgba(255,255,255,0.10)",
+                background: !seen ? "rgba(0,0,0,0.55)" : here ? "rgba(138,180,255,0.18)" : "rgba(255,255,255,0.06)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                fontSize: 12,
+                lineHeight: 1,
+                userSelect: "none",
+              }}
+            >
+              {seen && glyph ? <span style={{ transform: "translateY(-0.5px)" }}>{glyph}</span> : null}
             </div>
-
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "flex-end" }}>
-              <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                Kind:
-                <select value={markKind} onChange={(e) => setMarkKind(e.target.value as MapMarkKind)}>
-                  <option value="door">door 🚪</option>
-                  <option value="stairs">stairs ⬇️</option>
-                  <option value="altar">altar ✶</option>
-                  <option value="cache">cache ⬚</option>
-                  <option value="hazard">hazard ⚠️</option>
-                </select>
-              </label>
-
-              <label style={{ display: "flex", flexDirection: "column", gap: 6, flex: "1 1 180px" }}>
-                Note (optional):
-                <input
-                  value={markNote}
-                  onChange={(e) => setMarkNote(e.target.value)}
-                  placeholder="e.g., locked, rune, blood, warm air…"
-                />
-              </label>
-
-              <button
-                onClick={() => {
-                  const note = normalizeNote(markNote);
-                  onMark(derived.position, markKind, note || null);
-                  setMarkNote("");
-                }}
-              >
-                Add mark
-              </button>
-            </div>
-
-            {derived.marksByTile.get(keyXY(derived.position)) ? (
-              <div className="muted" style={{ marginTop: 8 }}>
-                Current tile mark:{" "}
-                <strong>{derived.marksByTile.get(keyXY(derived.position))?.kind}</strong>
-                {derived.marksByTile.get(keyXY(derived.position))?.note ? (
-                  <> — {derived.marksByTile.get(keyXY(derived.position))?.note}</>
-                ) : null}
-              </div>
-            ) : (
-              <div className="muted" style={{ marginTop: 8 }}>
-                No mark on current tile.
-              </div>
-            )}
-          </div>
-
-          {/* Movement */}
-          <div style={{ marginTop: 14 }}>
-            <div className="muted" style={{ marginBottom: 8 }}>
-              Move (commits PLAYER_MOVED + MAP_REVEALED radius 1)
-            </div>
-
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 70px)", gap: 8 }}>
-              <span />
-              <button onClick={() => tryMove(0, -1)} disabled={!canUp} style={{ opacity: canUp ? 1 : 0.5 }}>
-                ↑
-              </button>
-              <span />
-
-              <button onClick={() => tryMove(-1, 0)} disabled={!canLeft} style={{ opacity: canLeft ? 1 : 0.5 }}>
-                ←
-              </button>
-
-              <button disabled style={{ opacity: 0.5 }}>
-                •
-              </button>
-
-              <button onClick={() => tryMove(1, 0)} disabled={!canRight} style={{ opacity: canRight ? 1 : 0.5 }}>
-                →
-              </button>
-
-              <span />
-              <button onClick={() => tryMove(0, 1)} disabled={!canDown} style={{ opacity: canDown ? 1 : 0.5 }}>
-                ↓
-              </button>
-              <span />
-            </div>
-
-            <p className="muted" style={{ marginTop: 10, marginBottom: 0 }}>
-              Tip: click an adjacent tile to move. Marks create “dungeon memory” without inventing facts.
-            </p>
-          </div>
-        </div>
+          );
+        })}
       </div>
+
+      {derived.marks.length > 0 && (
+        <details style={{ marginTop: 12 }}>
+          <summary className="muted">Show marks</summary>
+          <ul style={{ marginTop: 10 }}>
+            {derived.marks
+              .slice()
+              .sort((a, b) => a.timestamp - b.timestamp)
+              .map((m) => (
+                <li key={m.eventId}>
+                  <strong>
+                    {m.kind} {glyphForMark(m.kind)}
+                  </strong>{" "}
+                  at ({m.at.x},{m.at.y})
+                  {m.note ? <> — {m.note}</> : null}
+                </li>
+              ))}
+          </ul>
+        </details>
+      )}
     </CardSection>
   );
 }
