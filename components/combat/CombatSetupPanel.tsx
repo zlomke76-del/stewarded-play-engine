@@ -1,14 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
 import CardSection from "@/components/layout/CardSection";
-import { clampInt } from "@/lib/utils/clampInt"; // If you don't have this util, delete this import + use local clamp below.
-
-// NOTE: If you don't have "@/lib/utils/clampInt", replace with this local helper:
-// function clampInt(n: number, min: number, max: number) {
-//   const x = Number.isFinite(n) ? Math.trunc(n) : min;
-//   return Math.max(min, Math.min(max, x));
-// }
 
 type Props = {
   locked: boolean;
@@ -46,7 +38,7 @@ type Props = {
   formatCombatantLabel: (spec: any) => string;
 };
 
-function localClampInt(n: number, min: number, max: number) {
+function clampInt(n: number, min: number, max: number) {
   const x = Number.isFinite(n) ? Math.trunc(n) : min;
   return Math.max(min, Math.min(max, x));
 }
@@ -79,36 +71,38 @@ export default function CombatSetupPanel(props: Props) {
     formatCombatantLabel,
   } = props;
 
-  // In case clampInt util isn’t present, fall back.
-  const clamp = useMemo(() => {
-    try {
-      return clampInt;
-    } catch {
-      return localClampInt;
-    }
-  }, []);
-
-  const pc = clamp(playerCount, 1, 6);
+  const pc = clampInt(playerCount, 1, 6);
 
   return (
     <CardSection title="Combat (Deterministic, Grouped Enemies)">
       <p className="muted" style={{ marginTop: 0 }}>
-        Players roll individually. Enemy groups roll once per group. Turn order is derived from events.
+        Players roll individually. Enemy groups roll once per group. Turn order
+        is derived from events.
       </p>
 
       {locked && (
         <p className="muted" style={{ marginTop: 0 }}>
-          🔒 Combat is active. Setup is locked to preserve replay integrity. End combat to reconfigure.
+          🔒 Combat is active. Setup is locked to preserve replay integrity. End
+          combat to reconfigure.
         </p>
       )}
 
-      <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "flex-end" }}>
+      <div
+        style={{
+          display: "flex",
+          gap: 12,
+          flexWrap: "wrap",
+          alignItems: "flex-end",
+        }}
+      >
         <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
           Players (1–6):
           <select
             value={playerCount}
             disabled={locked}
-            onChange={(e) => setPlayerCount(clamp(Number(e.target.value), 1, 6))}
+            onChange={(e) =>
+              setPlayerCount(clampInt(Number(e.target.value), 1, 6))
+            }
             style={{ minWidth: 140 }}
           >
             {PLAYER_COUNTS.map((n) => (
@@ -166,12 +160,15 @@ export default function CombatSetupPanel(props: Props) {
                 </option>
               ))}
             </select>
+
             <button onClick={() => addEnemyGroup(enemyGroupSelect)} disabled={locked}>
               Add
             </button>
+
             <button onClick={clearEnemyGroups} disabled={locked || enemyGroups.length === 0}>
               Clear
             </button>
+
             <span className="muted" style={{ fontSize: 12 }}>
               (max 6)
             </span>
@@ -216,9 +213,15 @@ export default function CombatSetupPanel(props: Props) {
         </div>
       </div>
 
-      {/* Player Names */}
       <div style={{ marginTop: 14 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            gap: 10,
+          }}
+        >
           <strong>Players</strong>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             <button onClick={randomizePlayerNames} disabled={locked}>
@@ -227,10 +230,18 @@ export default function CombatSetupPanel(props: Props) {
           </div>
         </div>
 
-        <div style={{ marginTop: 10, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 10 }}>
+        <div
+          style={{
+            marginTop: 10,
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+            gap: 10,
+          }}
+        >
           {Array.from({ length: pc }, (_, idx) => {
             const i1 = idx + 1;
             const value = playerNames[idx] ?? "";
+
             return (
               <label key={i1} style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                 <span className="muted">Player {i1} name (optional)</span>
@@ -239,14 +250,12 @@ export default function CombatSetupPanel(props: Props) {
                   disabled={locked}
                   onChange={(e) => {
                     const v = e.target.value;
-                    setPlayerNames(
-                      (() => {
-                        const next = [...playerNames];
-                        next[idx] = v;
-                        while (next.length < 6) next.push("");
-                        return next.slice(0, 6);
-                      })()
-                    );
+                    setPlayerNames(() => {
+                      const next = [...playerNames];
+                      next[idx] = v;
+                      while (next.length < 6) next.push("");
+                      return next.slice(0, 6);
+                    });
                   }}
                   placeholder={`Player ${i1}`}
                 />
@@ -256,7 +265,8 @@ export default function CombatSetupPanel(props: Props) {
         </div>
 
         <p className="muted" style={{ marginTop: 10, marginBottom: 0 }}>
-          Blank names will display as “Player 1…N”. Names are used for initiative labels and canon readability.
+          Blank names will display as “Player 1…N”. Names are used for initiative
+          labels and canon readability.
         </p>
       </div>
 
@@ -264,9 +274,11 @@ export default function CombatSetupPanel(props: Props) {
         <button onClick={onStartCombat} disabled={locked}>
           Start Combat (Seeded)
         </button>
+
         <button onClick={onAdvanceTurn} disabled={!derivedCombat}>
           Advance Turn
         </button>
+
         <button onClick={onEndCombat} disabled={!locked}>
           End Combat
         </button>
@@ -275,13 +287,17 @@ export default function CombatSetupPanel(props: Props) {
       {derivedCombat && (
         <div style={{ marginTop: 12 }}>
           <div className="muted">
-            Combat: <strong>{derivedCombat.combatId}</strong> · Round <strong>{derivedCombat.round}</strong>
+            Combat: <strong>{derivedCombat.combatId}</strong> · Round{" "}
+            <strong>{derivedCombat.round}</strong>
           </div>
 
           <div style={{ marginTop: 10, display: "grid", gridTemplateColumns: "1fr", gap: 6 }}>
             {derivedCombat.order.map((id: string, idx: number) => {
-              const spec = derivedCombat.participants.find((p: any) => p.id === id) ?? null;
-              const roll = derivedCombat.initiative.find((r: any) => r.combatantId === id) ?? null;
+              const spec =
+                derivedCombat.participants.find((p: any) => p.id === id) ?? null;
+              const roll =
+                derivedCombat.initiative.find((r: any) => r.combatantId === id) ??
+                null;
               const active = derivedCombat.activeCombatantId === id;
 
               return (
@@ -290,8 +306,12 @@ export default function CombatSetupPanel(props: Props) {
                   style={{
                     padding: "10px 12px",
                     borderRadius: 8,
-                    border: active ? "1px solid rgba(138,180,255,0.55)" : "1px solid rgba(255,255,255,0.10)",
-                    background: active ? "rgba(138,180,255,0.10)" : "rgba(255,255,255,0.04)",
+                    border: active
+                      ? "1px solid rgba(138,180,255,0.55)"
+                      : "1px solid rgba(255,255,255,0.10)",
+                    background: active
+                      ? "rgba(138,180,255,0.10)"
+                      : "rgba(255,255,255,0.04)",
                     display: "flex",
                     justifyContent: "space-between",
                     alignItems: "center",
@@ -304,7 +324,11 @@ export default function CombatSetupPanel(props: Props) {
                     </strong>
                     {active && <span className="muted">{"  "}← active</span>}
                   </div>
-                  <div className="muted">{roll ? `Init ${roll.total} (d20 ${roll.natural} + ${roll.modifier})` : "Init —"}</div>
+                  <div className="muted">
+                    {roll
+                      ? `Init ${roll.total} (d20 ${roll.natural} + ${roll.modifier})`
+                      : "Init —"}
+                  </div>
                 </div>
               );
             })}
