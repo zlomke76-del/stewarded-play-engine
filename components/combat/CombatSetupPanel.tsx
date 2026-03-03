@@ -1,244 +1,94 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 import CardSection from "@/components/layout/CardSection";
-import {
-  CombatStartedPayload,
-  CombatantSpec,
-  deriveCombatState,
-  findLatestCombatId,
-  formatCombatantLabel,
-  generateDeterministicInitiativeRolls,
-  nextTurnPointer,
-} from "@/lib/combat/CombatState";
+import { clampInt } from "@/lib/utils/clampInt"; // If you don't have this util, delete this import + use local clamp below.
+
+// NOTE: If you don't have "@/lib/utils/clampInt", replace with this local helper:
+// function clampInt(n: number, min: number, max: number) {
+//   const x = Number.isFinite(n) ? Math.trunc(n) : min;
+//   return Math.max(min, Math.min(max, x));
+// }
 
 type Props = {
-  events: readonly any[];
-  onAppendCanon: (type: string, payload: any) => void;
+  locked: boolean;
+
+  playerCount: number;
+  setPlayerCount: (n: number) => void;
+
+  playerNames: string[];
+  setPlayerNames: (next: string[]) => void;
+  randomizePlayerNames: () => void;
+
+  enemyGroups: string[];
+  enemyGroupSelect: string;
+  setEnemyGroupSelect: (v: string) => void;
+  addEnemyGroup: (name: string) => void;
+  removeEnemyGroup: (name: string) => void;
+  clearEnemyGroups: () => void;
+
+  initModPlayers: number;
+  setInitModPlayers: (n: number) => void;
+
+  initModEnemies: number;
+  setInitModEnemies: (n: number) => void;
+
+  PLAYER_COUNTS: readonly number[];
+  INIT_MODS: readonly number[];
+  ENEMY_GROUP_LIBRARY: readonly string[];
+
+  onStartCombat: () => void;
+  onAdvanceTurn: () => void;
+  onEndCombat: () => void;
+
+  derivedCombat: any | null;
+
+  formatCombatantLabel: (spec: any) => string;
 };
 
-function pick<T>(arr: T[]) {
-  return arr[Math.floor(Math.random() * arr.length)];
-}
-
-function clampInt(n: number, min: number, max: number) {
+function localClampInt(n: number, min: number, max: number) {
   const x = Number.isFinite(n) ? Math.trunc(n) : min;
   return Math.max(min, Math.min(max, x));
 }
 
-function normalizeName(s: string) {
-  return s.replace(/\s+/g, " ").trim();
-}
+export default function CombatSetupPanel(props: Props) {
+  const {
+    locked,
+    playerCount,
+    setPlayerCount,
+    playerNames,
+    setPlayerNames,
+    randomizePlayerNames,
+    enemyGroups,
+    enemyGroupSelect,
+    setEnemyGroupSelect,
+    addEnemyGroup,
+    removeEnemyGroup,
+    clearEnemyGroups,
+    initModPlayers,
+    setInitModPlayers,
+    initModEnemies,
+    setInitModEnemies,
+    PLAYER_COUNTS,
+    INIT_MODS,
+    ENEMY_GROUP_LIBRARY,
+    onStartCombat,
+    onAdvanceTurn,
+    onEndCombat,
+    derivedCombat,
+    formatCombatantLabel,
+  } = props;
 
-function randomName(): string {
-  const a = [
-    "Astra",
-    "Kara",
-    "Thorne",
-    "Hex",
-    "Rook",
-    "Nyx",
-    "Vex",
-    "Dax",
-    "Mara",
-    "Rune",
-    "Sable",
-    "Orin",
-    "Juno",
-    "Kade",
-    "Iris",
-    "Zeph",
-  ];
-  const b = [
-    "of Ember",
-    "of Glass",
-    "of Iron",
-    "of Neon",
-    "of Ash",
-    "of Dawn",
-    "of Night",
-    "of the Grid",
-    "the Quiet",
-    "the Bold",
-    "the Warden",
-    "the Runner",
-    "the Signal",
-    "the Echo",
-  ];
-  const base = pick(a);
-  const tail = pick([true, false, false]) ? ` ${pick(b)}` : "";
-  return `${base}${tail}`;
-}
-
-export default function CombatSetupPanel({ events, onAppendCanon }: Props) {
-  // ----------------------------------------------------------
-  // Lockdown (canon decides)
-  // ----------------------------------------------------------
-
-  const latestCombatId = useMemo(() => findLatestCombatId(events as any) ?? null, [events]);
-
-  const derivedCombat = useMemo(() => {
-    if (!latestCombatId) return null;
-    return deriveCombatState(latestCombatId, events as any);
-  }, [latestCombatId, events]);
-
-  const locked = !!derivedCombat; // Once combat exists in canon, setup is frozen.
-
-  // ----------------------------------------------------------
-  // Combat setup state (UI-only)
-  // ----------------------------------------------------------
-
-  const [playerCount, setPlayerCount] = useState(4);
-
-  // Player names indexed 0..5 (we render only first N)
-  const [playerNames, setPlayerNames] = useState<string[]>(["", "", "", "", "", ""]);
-
-  // Enemy groups as chips
-  const [enemyGroups, setEnemyGroups] = useState<string[]>(["Skirmishers", "Archers"]);
-  const [enemyGroupSelect, setEnemyGroupSelect] = useState<string>("Skirmishers");
-
-  // Init mods
-  const [initModPlayers, setInitModPlayers] = useState(1);
-  const [initModEnemies, setInitModEnemies] = useState(1);
-
-  const PLAYER_COUNTS = [1, 2, 3, 4, 5, 6] as const;
-  const INIT_MODS = [-2, -1, 0, 1, 2, 3, 4, 5, 6, 7, 8] as const;
-
-  // Enemy group archetypes (classic + Tron-ish)
-  const ENEMY_GROUP_LIBRARY = useMemo(
-    () => [
-      "Skirmishers",
-      "Archers",
-      "Brutes",
-      "Shields",
-      "Stalkers",
-      "Casters",
-      "Drones",
-      "Sentries",
-      "Wraiths",
-      "Grid Knights",
-      "Firewall Wardens",
-      "Neon Hounds",
-    ],
-    []
-  );
-
-  // Ensure playerNames always has length 6
-  useEffect(() => {
-    setPlayerNames((prev) => {
-      if (prev.length === 6) return prev;
-      const next = [...prev];
-      while (next.length < 6) next.push("");
-      return next.slice(0, 6);
-    });
+  // In case clampInt util isn’t present, fall back.
+  const clamp = useMemo(() => {
+    try {
+      return clampInt;
+    } catch {
+      return localClampInt;
+    }
   }, []);
 
-  function getEffectivePlayerName(i1Based: number) {
-    const idx = i1Based - 1;
-    const raw = playerNames[idx] ?? "";
-    const name = normalizeName(raw);
-    return name.length > 0 ? name : `Player ${i1Based}`;
-  }
-
-  function addEnemyGroup(name: string) {
-    const v = normalizeName(name);
-    if (!v) return;
-
-    setEnemyGroups((prev) => {
-      if (prev.map((x) => x.toLowerCase()).includes(v.toLowerCase())) return prev;
-      if (prev.length >= 6) return prev;
-      return [...prev, v];
-    });
-  }
-
-  function removeEnemyGroup(name: string) {
-    setEnemyGroups((prev) => prev.filter((g) => g !== name));
-  }
-
-  function clearEnemyGroups() {
-    setEnemyGroups([]);
-  }
-
-  function randomizePlayerNames() {
-    const pc = clampInt(playerCount, 1, 6);
-    setPlayerNames((prev) => {
-      const next = [...prev];
-      const used = new Set<string>(next.map((x) => normalizeName(x).toLowerCase()).filter(Boolean));
-
-      for (let i = 0; i < pc; i++) {
-        const current = normalizeName(next[i] ?? "");
-        if (current) continue;
-
-        let tries = 0;
-        let name = randomName();
-        while (used.has(name.toLowerCase()) && tries < 12) {
-          name = randomName();
-          tries++;
-        }
-        used.add(name.toLowerCase());
-        next[i] = name;
-      }
-
-      return next.slice(0, 6);
-    });
-  }
-
-  // ----------------------------------------------------------
-  // Canon actions
-  // ----------------------------------------------------------
-
-  function startCombatDeterministic() {
-    if (locked) return;
-
-    const pc = clampInt(playerCount, 1, 6);
-    const groups = enemyGroups
-      .map((g) => normalizeName(g))
-      .filter(Boolean)
-      .slice(0, 6);
-
-    const combatId = crypto.randomUUID();
-    const seed = crypto.randomUUID(); // deterministic within-combat once committed
-
-    const participants: CombatantSpec[] = [];
-
-    for (let i = 1; i <= pc; i++) {
-      participants.push({
-        id: `player_${i}`,
-        name: getEffectivePlayerName(i),
-        kind: "player",
-        initiativeMod: Math.trunc(initModPlayers || 0),
-      });
-    }
-
-    groups.forEach((name, idx) => {
-      const id = `enemy_group_${idx + 1}`;
-      participants.push({
-        id,
-        name,
-        kind: "enemy_group",
-        initiativeMod: Math.trunc(initModEnemies || 0),
-      });
-    });
-
-    const started: CombatStartedPayload = { combatId, seed, participants };
-    const initRolls = generateDeterministicInitiativeRolls(started);
-
-    onAppendCanon("COMBAT_STARTED", started as any);
-    for (const r of initRolls) onAppendCanon("INITIATIVE_ROLLED", r as any);
-
-    // Initialize pointer at round 1, index 0
-    onAppendCanon("TURN_ADVANCED", { combatId, round: 1, index: 0 } as any);
-  }
-
-  function advanceTurn() {
-    if (!derivedCombat) return;
-    const payload = nextTurnPointer(derivedCombat);
-    onAppendCanon("TURN_ADVANCED", payload as any);
-  }
-
-  // ----------------------------------------------------------
-  // UI
-  // ----------------------------------------------------------
+  const pc = clamp(playerCount, 1, 6);
 
   return (
     <CardSection title="Combat (Deterministic, Grouped Enemies)">
@@ -248,7 +98,7 @@ export default function CombatSetupPanel({ events, onAppendCanon }: Props) {
 
       {locked && (
         <p className="muted" style={{ marginTop: 0 }}>
-          ✅ Combat has started. Setup is locked (canon is authoritative).
+          🔒 Combat is active. Setup is locked to preserve replay integrity. End combat to reconfigure.
         </p>
       )}
 
@@ -257,9 +107,9 @@ export default function CombatSetupPanel({ events, onAppendCanon }: Props) {
           Players (1–6):
           <select
             value={playerCount}
-            onChange={(e) => setPlayerCount(clampInt(Number(e.target.value), 1, 6))}
-            style={{ minWidth: 140 }}
             disabled={locked}
+            onChange={(e) => setPlayerCount(clamp(Number(e.target.value), 1, 6))}
+            style={{ minWidth: 140 }}
           >
             {PLAYER_COUNTS.map((n) => (
               <option key={n} value={n}>
@@ -273,9 +123,9 @@ export default function CombatSetupPanel({ events, onAppendCanon }: Props) {
           Player init mod:
           <select
             value={initModPlayers}
+            disabled={locked}
             onChange={(e) => setInitModPlayers(Math.trunc(Number(e.target.value)))}
             style={{ minWidth: 140 }}
-            disabled={locked}
           >
             {INIT_MODS.map((n) => (
               <option key={n} value={n}>
@@ -289,9 +139,9 @@ export default function CombatSetupPanel({ events, onAppendCanon }: Props) {
           Enemy group init mod:
           <select
             value={initModEnemies}
+            disabled={locked}
             onChange={(e) => setInitModEnemies(Math.trunc(Number(e.target.value)))}
             style={{ minWidth: 170 }}
-            disabled={locked}
           >
             {INIT_MODS.map((n) => (
               <option key={n} value={n}>
@@ -306,9 +156,9 @@ export default function CombatSetupPanel({ events, onAppendCanon }: Props) {
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
             <select
               value={enemyGroupSelect}
+              disabled={locked}
               onChange={(e) => setEnemyGroupSelect(e.target.value)}
               style={{ minWidth: 220 }}
-              disabled={locked}
             >
               {ENEMY_GROUP_LIBRARY.map((g) => (
                 <option key={g} value={g}>
@@ -340,15 +190,18 @@ export default function CombatSetupPanel({ events, onAppendCanon }: Props) {
                     borderRadius: 999,
                     border: "1px solid rgba(255,255,255,0.12)",
                     background: "rgba(255,255,255,0.05)",
-                    opacity: locked ? 0.75 : 1,
                   }}
                 >
                   <span>{g}</span>
                   <button
                     onClick={() => removeEnemyGroup(g)}
-                    aria-label={`Remove ${g}`}
-                    style={{ padding: "0 8px", borderRadius: 999, border: "1px solid rgba(255,255,255,0.12)" }}
                     disabled={locked}
+                    aria-label={`Remove ${g}`}
+                    style={{
+                      padding: "0 8px",
+                      borderRadius: 999,
+                      border: "1px solid rgba(255,255,255,0.12)",
+                    }}
                   >
                     ×
                   </button>
@@ -374,15 +227,8 @@ export default function CombatSetupPanel({ events, onAppendCanon }: Props) {
           </div>
         </div>
 
-        <div
-          style={{
-            marginTop: 10,
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-            gap: 10,
-          }}
-        >
-          {Array.from({ length: clampInt(playerCount, 1, 6) }, (_, idx) => {
+        <div style={{ marginTop: 10, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 10 }}>
+          {Array.from({ length: pc }, (_, idx) => {
             const i1 = idx + 1;
             const value = playerNames[idx] ?? "";
             return (
@@ -390,16 +236,19 @@ export default function CombatSetupPanel({ events, onAppendCanon }: Props) {
                 <span className="muted">Player {i1} name (optional)</span>
                 <input
                   value={value}
+                  disabled={locked}
                   onChange={(e) => {
                     const v = e.target.value;
-                    setPlayerNames((prev) => {
-                      const next = [...prev];
-                      next[idx] = v;
-                      return next.slice(0, 6);
-                    });
+                    setPlayerNames(
+                      (() => {
+                        const next = [...playerNames];
+                        next[idx] = v;
+                        while (next.length < 6) next.push("");
+                        return next.slice(0, 6);
+                      })()
+                    );
                   }}
                   placeholder={`Player ${i1}`}
-                  disabled={locked}
                 />
               </label>
             );
@@ -411,12 +260,15 @@ export default function CombatSetupPanel({ events, onAppendCanon }: Props) {
         </p>
       </div>
 
-      <div style={{ marginTop: 14, display: "flex", gap: 8 }}>
-        <button onClick={startCombatDeterministic} disabled={locked}>
+      <div style={{ marginTop: 14, display: "flex", gap: 8, flexWrap: "wrap" }}>
+        <button onClick={onStartCombat} disabled={locked}>
           Start Combat (Seeded)
         </button>
-        <button onClick={advanceTurn} disabled={!derivedCombat}>
+        <button onClick={onAdvanceTurn} disabled={!derivedCombat}>
           Advance Turn
+        </button>
+        <button onClick={onEndCombat} disabled={!locked}>
+          End Combat
         </button>
       </div>
 
@@ -427,10 +279,9 @@ export default function CombatSetupPanel({ events, onAppendCanon }: Props) {
           </div>
 
           <div style={{ marginTop: 10, display: "grid", gridTemplateColumns: "1fr", gap: 6 }}>
-            {derivedCombat.order.map((id, idx) => {
-              const spec = derivedCombat.participants.find((p) => p.id === id) ?? null;
-              const roll = derivedCombat.initiative.find((r) => r.combatantId === id) ?? null;
-
+            {derivedCombat.order.map((id: string, idx: number) => {
+              const spec = derivedCombat.participants.find((p: any) => p.id === id) ?? null;
+              const roll = derivedCombat.initiative.find((r: any) => r.combatantId === id) ?? null;
               const active = derivedCombat.activeCombatantId === id;
 
               return (
@@ -453,9 +304,7 @@ export default function CombatSetupPanel({ events, onAppendCanon }: Props) {
                     </strong>
                     {active && <span className="muted">{"  "}← active</span>}
                   </div>
-                  <div className="muted">
-                    {roll ? `Init ${roll.total} (d20 ${roll.natural} + ${roll.modifier})` : "Init —"}
-                  </div>
+                  <div className="muted">{roll ? `Init ${roll.total} (d20 ${roll.natural} + ${roll.modifier})` : "Init —"}</div>
                 </div>
               );
             })}
