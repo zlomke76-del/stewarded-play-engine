@@ -24,6 +24,7 @@ import WorldLedgerPanelLegacy from "@/components/world/WorldLedgerPanel.legacy";
 import DungeonPressurePanel from "@/components/world/DungeonPressurePanel";
 import ExplorationMapPanel, { MapMarkKind } from "@/components/world/ExplorationMapPanel";
 import CombatRendererPanel from "@/components/world/CombatRendererPanel";
+import EnemyTurnResolverPanel from "@/components/combat/EnemyTurnResolverPanel";
 
 import StewardedShell from "@/components/layout/StewardedShell";
 import ModeHeader from "@/components/layout/ModeHeader";
@@ -50,18 +51,13 @@ import {
   DiceMode,
   RollSource,
   InitialTable,
-  XY,
-  Direction,
   ExplorationDraft,
-  OptionKind,
 } from "./demoTypes";
 
 import {
   anchorId,
   scrollToSection,
-  sectionLabel,
   pick,
-  pickManyUnique,
   clampInt,
   normalizeName,
   randomName,
@@ -83,9 +79,7 @@ import {
 export default function DemoPage() {
   const role: "arbiter" = "arbiter";
 
-  const [state, setState] = useState<SessionState>(
-    createSession("demo-session", "demo")
-  );
+  const [state, setState] = useState<SessionState>(createSession("demo-session", "demo"));
 
   // IMPORTANT UX CHANGE: mode must be explicitly selected
   const [dmMode, setDmMode] = useState<DMMode | null>(null);
@@ -107,14 +101,14 @@ export default function DemoPage() {
   const [options, setOptions] = useState<Option[] | null>(null);
   const [selectedOption, setSelectedOption] = useState<Option | null>(null);
 
+  // Combat renderer trigger (parent-driven)
+  const [enemyPlayNonce, setEnemyPlayNonce] = useState(0);
+
   // ----------------------------------------------------------
   // Combat state (derived + ended-aware)
   // ----------------------------------------------------------
 
-  const latestCombatId = useMemo(
-    () => findLatestCombatId(state.events as any) ?? null,
-    [state.events]
-  );
+  const latestCombatId = useMemo(() => findLatestCombatId(state.events as any) ?? null, [state.events]);
 
   const derivedCombat = useMemo(() => {
     if (!latestCombatId) return null;
@@ -130,11 +124,7 @@ export default function DemoPage() {
 
   const activeCombatantSpec = useMemo(() => {
     if (!derivedCombat?.activeCombatantId) return null;
-    return (
-      derivedCombat.participants.find(
-        (p) => p.id === derivedCombat.activeCombatantId
-      ) ?? null
-    );
+    return derivedCombat.participants.find((p) => p.id === derivedCombat.activeCombatantId) ?? null;
   }, [derivedCombat]);
 
   const isEnemyTurn = combatActive && activeCombatantSpec?.kind === "enemy_group";
@@ -343,6 +333,26 @@ export default function DemoPage() {
     queueMicrotask(() => scrollToSection("canon"));
   }
 
+  // Enemy outcomes should NOT auto-commit exploration movement/reveal/marks.
+  function handleRecordOutcomeOnly(payload: {
+    description: string;
+    dice: { mode: DiceMode; roll: number; dc: number; source: RollSource };
+    audit: string[];
+  }) {
+    setState((prev) =>
+      recordEvent(prev, {
+        id: crypto.randomUUID(),
+        timestamp: Date.now(),
+        actor: "arbiter",
+        type: "OUTCOME",
+        payload,
+      })
+    );
+
+    setActiveSection("canon");
+    queueMicrotask(() => scrollToSection("canon"));
+  }
+
   function shareCanon() {
     navigator.clipboard.writeText(exportCanon(state.events));
     alert("Canon copied to clipboard.");
@@ -526,9 +536,7 @@ export default function DemoPage() {
     const pc = clampInt(playerCount, 1, 6);
     setPlayerNames((prev) => {
       const next = [...prev];
-      const used = new Set<string>(
-        next.map((x) => normalizeName(x).toLowerCase()).filter(Boolean)
-      );
+      const used = new Set<string>(next.map((x) => normalizeName(x).toLowerCase()).filter(Boolean));
 
       for (let i = 0; i < pc; i++) {
         const current = normalizeName(next[i] ?? "");
@@ -586,6 +594,20 @@ export default function DemoPage() {
   // - and we're not in Human DM (Solace-neutral expects Solace to run enemy action)
   const activeEnemyOverlayName =
     dmMode !== "human" && combatActive && isEnemyTurn ? String(activeCombatantSpec?.name ?? "") : null;
+
+  const activeEnemyOverlayId =
+    dmMode !== "human" && combatActive && isEnemyTurn ? String(activeCombatantSpec?.id ?? "") : null;
+
+  const solaceNeutralEnemyTurnEnabled =
+    dmMode === "solace-neutral" && combatActive && isEnemyTurn && !!activeEnemyOverlayName && !!activeEnemyOverlayId;
+
+  const effectivePlayerNames = useMemo(() => {
+    const pc = clampInt(playerCount, 1, 6);
+    const names: string[] = [];
+    for (let i = 1; i <= pc; i++) names.push(getEffectivePlayerName(i));
+    return names;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [playerCount, playerNames]);
 
   return (
     <AmbientBackground>
@@ -656,6 +678,8 @@ export default function DemoPage() {
                     mapW={MAP_W}
                     mapH={MAP_H}
                     activeEnemyGroupName={activeEnemyOverlayName}
+                    hideControls={true}
+                    playSignal={enemyPlayNonce}
                   />
                 </div>
               </div>
@@ -666,6 +690,20 @@ export default function DemoPage() {
                   <p className="muted" style={{ marginTop: 0 }}>
                     Players roll individually. Enemy groups roll once per group. Turn order is derived from events.
                   </p>
+
+                  {solaceNeutralEnemyTurnEnabled && (
+                    <div style={{ marginTop: 10, marginBottom: 12 }}>
+                      <EnemyTurnResolverPanel
+                        enabled={true}
+                        activeEnemyGroupName={activeEnemyOverlayName}
+                        activeEnemyGroupId={activeEnemyOverlayId}
+                        playerNames={effectivePlayerNames}
+                        onTelegraph={() => setEnemyPlayNonce((n) => n + 1)}
+                        onCommitOutcome={(payload) => handleRecordOutcomeOnly(payload)}
+                        onAdvanceTurn={advanceTurn}
+                      />
+                    </div>
+                  )}
 
                   {combatActive && (
                     <div className="muted" style={{ marginTop: 8 }}>
@@ -836,7 +874,8 @@ export default function DemoPage() {
                     </div>
 
                     <p className="muted" style={{ marginTop: 10, marginBottom: 0 }}>
-                      Blank names will display as “Player 1…N”. Names are used for initiative labels and canon readability.
+                      Blank names will display as “Player 1…N”. Names are used for initiative labels and canon
+                      readability.
                     </p>
                   </div>
 
@@ -844,9 +883,12 @@ export default function DemoPage() {
                     <button onClick={startCombatDeterministic} disabled={combatActive}>
                       Start Combat (Seeded)
                     </button>
-                    <button onClick={advanceTurn} disabled={!derivedCombat || combatEnded}>
+
+                    {/* In Solace-neutral enemy turns, EnemyTurnResolverPanel advances turns after commit. */}
+                    <button onClick={advanceTurn} disabled={!derivedCombat || combatEnded || (dmMode === "solace-neutral" && isEnemyTurn)}>
                       Advance Turn
                     </button>
+
                     <button onClick={endCombat} disabled={!derivedCombat || combatEnded}>
                       End Combat
                     </button>
@@ -855,8 +897,7 @@ export default function DemoPage() {
                   {derivedCombat && (
                     <div style={{ marginTop: 12 }}>
                       <div className="muted">
-                        Combat: <strong>{derivedCombat.combatId}</strong> · Round{" "}
-                        <strong>{derivedCombat.round}</strong>
+                        Combat: <strong>{derivedCombat.combatId}</strong> · Round <strong>{derivedCombat.round}</strong>
                         {activeCombatantSpec && (
                           <>
                             {" "}
@@ -910,8 +951,8 @@ export default function DemoPage() {
                 <CardSection title="Player Action">
                   {combatActive && isEnemyTurn && dmMode !== "human" && (
                     <p className="muted" style={{ marginTop: 0 }}>
-                      Enemy turn. In Solace-neutral, the player cannot declare enemy intent. Switch to Human DM to enter
-                      enemy intent.
+                      Enemy turn. In Solace-neutral, Solace resolves enemy action above (Combat section). After the
+                      outcome is committed, the turn advances automatically.
                     </p>
                   )}
 
@@ -1019,7 +1060,9 @@ export default function DemoPage() {
                           <div className="muted" style={{ paddingBottom: 4 }}>
                             Bounds: <strong>0..{MAP_W - 1}</strong> / <strong>0..{MAP_H - 1}</strong> · Suggested
                             destination:{" "}
-                            <strong>{suggestedTo ? `(${suggestedTo.x},${suggestedTo.y})` : "(out of bounds / none)"}</strong>
+                            <strong>
+                              {suggestedTo ? `(${suggestedTo.x},${suggestedTo.y})` : "(out of bounds / none)"}
+                            </strong>
                           </div>
                         </div>
                       )}
