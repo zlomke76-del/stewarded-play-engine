@@ -39,7 +39,6 @@ import EnemyTurnResolverPanel from "@/components/combat/EnemyTurnResolverPanel";
 import StewardedShell from "@/components/layout/StewardedShell";
 import ModeHeader from "@/components/layout/ModeHeader";
 import CardSection from "@/components/layout/CardSection";
-import Disclaimer from "@/components/layout/Disclaimer";
 
 import {
   CombatStartedPayload,
@@ -507,7 +506,7 @@ export default function DemoPage() {
     setState((prev) => {
       let next = recordEvent(prev, {
         id: crypto.randomUUID(),
-        timestamp: Date.now(),
+       timestamp: Date.now(),
         actor: "arbiter",
         type: "OUTCOME",
         payload,
@@ -1134,8 +1133,6 @@ export default function DemoPage() {
               </div>
             </>
           )}
-
-          <Disclaimer />
         </StewardedShell>
       </div>
     </AmbientBackground>
