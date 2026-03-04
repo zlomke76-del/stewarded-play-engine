@@ -87,6 +87,126 @@ function computeCombatLocked(events: readonly any[]) {
   return lastStarted !== -1 && lastStarted > lastEnded;
 }
 
+function Pill({
+  children,
+  tone = "neutral",
+}: {
+  children: React.ReactNode;
+  tone?: "neutral" | "info" | "warn";
+}) {
+  const toneStyle =
+    tone === "info"
+      ? {
+          border: "1px solid rgba(138,180,255,0.22)",
+          background: "rgba(138,180,255,0.08)",
+        }
+      : tone === "warn"
+      ? {
+          border: "1px solid rgba(255,200,140,0.22)",
+          background: "rgba(255,200,140,0.08)",
+        }
+      : {
+          border: "1px solid rgba(255,255,255,0.12)",
+          background: "rgba(255,255,255,0.05)",
+        };
+
+  return (
+    <span
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 8,
+        padding: "6px 10px",
+        borderRadius: 999,
+        ...toneStyle,
+      }}
+    >
+      {children}
+    </span>
+  );
+}
+
+function ControlLabel({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+      <span className="muted" style={{ fontSize: 12 }}>
+        {label}
+      </span>
+      {children}
+    </label>
+  );
+}
+
+function selectStyle(disabled?: boolean): React.CSSProperties {
+  return {
+    minWidth: 160,
+    padding: "10px 12px",
+    borderRadius: 10,
+    border: "1px solid rgba(255,255,255,0.12)",
+    background: disabled ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.28)",
+    color: "inherit",
+    outline: "none",
+    boxShadow: "inset 0 1px 0 rgba(255,255,255,0.05)",
+  };
+}
+
+function inputStyle(disabled?: boolean): React.CSSProperties {
+  return {
+    padding: "10px 12px",
+    borderRadius: 10,
+    border: "1px solid rgba(255,255,255,0.12)",
+    background: disabled ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.28)",
+    color: "inherit",
+    outline: "none",
+    boxShadow: "inset 0 1px 0 rgba(255,255,255,0.05)",
+  };
+}
+
+function buttonStyle(tone: "primary" | "ghost" | "danger", disabled?: boolean): React.CSSProperties {
+  const base: React.CSSProperties = {
+    padding: "10px 12px",
+    borderRadius: 10,
+    border: "1px solid rgba(255,255,255,0.14)",
+    background: "rgba(255,255,255,0.06)",
+    color: "inherit",
+    cursor: disabled ? "not-allowed" : "pointer",
+    opacity: disabled ? 0.55 : 1,
+    boxShadow: "inset 0 1px 0 rgba(255,255,255,0.05)",
+    userSelect: "none",
+    transition: "transform 120ms ease, background 140ms ease, border-color 140ms ease",
+  };
+
+  if (tone === "primary") {
+    return {
+      ...base,
+      border: "1px solid rgba(138,180,255,0.28)",
+      background: "linear-gradient(180deg, rgba(138,180,255,0.14), rgba(138,180,255,0.06))",
+      boxShadow:
+        "inset 0 1px 0 rgba(255,255,255,0.06), 0 10px 22px rgba(0,0,0,0.22)",
+    };
+  }
+
+  if (tone === "danger") {
+    return {
+      ...base,
+      border: "1px solid rgba(255,120,120,0.24)",
+      background: "linear-gradient(180deg, rgba(255,120,120,0.14), rgba(255,120,120,0.06))",
+    };
+  }
+
+  // ghost
+  return {
+    ...base,
+    background: "rgba(255,255,255,0.04)",
+  };
+}
+
 export default function CombatSetupPanel({ events, onAppendCanon }: Props) {
   const locked = useMemo(() => computeCombatLocked(events), [events]);
 
@@ -275,203 +395,233 @@ export default function CombatSetupPanel({ events, onAppendCanon }: Props) {
 
   return (
     <CardSection title="Combat (Deterministic, Grouped Enemies)">
-      <p className="muted" style={{ marginTop: 0 }}>
+      <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center", marginTop: 2 }}>
+        <Pill tone="info">Event-sourced turn order</Pill>
+        {locked ? <Pill tone="warn">🔒 Combat active — setup locked</Pill> : <Pill>Setup editable</Pill>}
+      </div>
+
+      <p className="muted" style={{ marginTop: 10 }}>
         Players roll individually. Enemy groups roll once per group. Turn order is derived from events.
       </p>
 
-      {locked && (
-        <p className="muted" style={{ marginTop: 0 }}>
-          🔒 Combat is active. Setup is locked to preserve replay integrity.
-        </p>
-      )}
-
-      <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "flex-end" }}>
-        <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-          Players (1–6):
-          <select
-            value={playerCount}
-            disabled={locked}
-            onChange={(e) => setPlayerCount(clampInt(Number(e.target.value), 1, 6))}
-            style={{ minWidth: 140 }}
-          >
-            {PLAYER_COUNTS.map((n) => (
-              <option key={n} value={n}>
-                {n}
-              </option>
-            ))}
-          </select>
-        </label>
-
-        <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-          Player init mod:
-          <select
-            value={initModPlayers}
-            disabled={locked}
-            onChange={(e) => setInitModPlayers(Math.trunc(Number(e.target.value)))}
-            style={{ minWidth: 140 }}
-          >
-            {INIT_MODS.map((n) => (
-              <option key={n} value={n}>
-                {n >= 0 ? `+${n}` : `${n}`}
-              </option>
-            ))}
-          </select>
-        </label>
-
-        <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-          Enemy group init mod:
-          <select
-            value={initModEnemies}
-            disabled={locked}
-            onChange={(e) => setInitModEnemies(Math.trunc(Number(e.target.value)))}
-            style={{ minWidth: 170 }}
-          >
-            {INIT_MODS.map((n) => (
-              <option key={n} value={n}>
-                {n >= 0 ? `+${n}` : `${n}`}
-              </option>
-            ))}
-          </select>
-        </label>
-
-        <div style={{ flex: "1 1 320px", display: "flex", flexDirection: "column", gap: 6 }}>
-          <span className="muted">Enemy groups</span>
-
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+      {/* Setup console */}
+      <div
+        style={{
+          marginTop: 12,
+          padding: 14,
+          borderRadius: 14,
+          border: "1px solid rgba(255,255,255,0.10)",
+          background:
+            "linear-gradient(180deg, rgba(0,0,0,0.18), rgba(0,0,0,0.10))",
+          boxShadow: "inset 0 1px 0 rgba(255,255,255,0.05)",
+        }}
+      >
+        <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "flex-end" }}>
+          <ControlLabel label="Players (1–6)">
             <select
-              value={enemyGroupSelect}
+              value={playerCount}
               disabled={locked}
-              onChange={(e) => setEnemyGroupSelect(e.target.value)}
-              style={{ minWidth: 220 }}
+              onChange={(e) => setPlayerCount(clampInt(Number(e.target.value), 1, 6))}
+              style={selectStyle(locked)}
             >
-              {ENEMY_GROUP_LIBRARY.map((g) => (
-                <option key={g} value={g}>
-                  {g}
+              {PLAYER_COUNTS.map((n) => (
+                <option key={n} value={n}>
+                  {n}
                 </option>
               ))}
             </select>
+          </ControlLabel>
 
-            <button onClick={() => addEnemyGroup(enemyGroupSelect)} disabled={locked}>
-              Add
-            </button>
+          <ControlLabel label="Player init mod">
+            <select
+              value={initModPlayers}
+              disabled={locked}
+              onChange={(e) => setInitModPlayers(Math.trunc(Number(e.target.value)))}
+              style={selectStyle(locked)}
+            >
+              {INIT_MODS.map((n) => (
+                <option key={n} value={n}>
+                  {n >= 0 ? `+${n}` : `${n}`}
+                </option>
+              ))}
+            </select>
+          </ControlLabel>
 
-            <button onClick={clearEnemyGroups} disabled={locked || enemyGroups.length === 0}>
-              Clear
-            </button>
+          <ControlLabel label="Enemy group init mod">
+            <select
+              value={initModEnemies}
+              disabled={locked}
+              onChange={(e) => setInitModEnemies(Math.trunc(Number(e.target.value)))}
+              style={selectStyle(locked)}
+            >
+              {INIT_MODS.map((n) => (
+                <option key={n} value={n}>
+                  {n >= 0 ? `+${n}` : `${n}`}
+                </option>
+              ))}
+            </select>
+          </ControlLabel>
 
+          <div style={{ flex: "1 1 360px", display: "flex", flexDirection: "column", gap: 6 }}>
             <span className="muted" style={{ fontSize: 12 }}>
-              (max 6)
+              Enemy groups
             </span>
-          </div>
 
-          {enemyGroups.length > 0 ? (
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8 }}>
-              {enemyGroups.map((g) => (
-                <span
-                  key={g}
-                  style={{
-                    display: "inline-flex",
-                    alignItems: "center",
-                    gap: 8,
-                    padding: "6px 10px",
-                    borderRadius: 999,
-                    border: "1px solid rgba(255,255,255,0.12)",
-                    background: "rgba(255,255,255,0.05)",
-                  }}
-                >
-                  <span>{g}</span>
-                  <button
-                    onClick={() => removeEnemyGroup(g)}
-                    disabled={locked}
-                    aria-label={`Remove ${g}`}
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+              <select
+                value={enemyGroupSelect}
+                disabled={locked}
+                onChange={(e) => setEnemyGroupSelect(e.target.value)}
+                style={{ ...selectStyle(locked), minWidth: 240 }}
+              >
+                {ENEMY_GROUP_LIBRARY.map((g) => (
+                  <option key={g} value={g}>
+                    {g}
+                  </option>
+                ))}
+              </select>
+
+              <button
+                onClick={() => addEnemyGroup(enemyGroupSelect)}
+                disabled={locked}
+                style={buttonStyle("primary", locked)}
+              >
+                Add
+              </button>
+
+              <button
+                onClick={clearEnemyGroups}
+                disabled={locked || enemyGroups.length === 0}
+                style={buttonStyle("ghost", locked || enemyGroups.length === 0)}
+              >
+                Clear
+              </button>
+
+              <span className="muted" style={{ fontSize: 12 }}>
+                (max 6)
+              </span>
+            </div>
+
+            {enemyGroups.length > 0 ? (
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 10 }}>
+                {enemyGroups.map((g) => (
+                  <span
+                    key={g}
                     style={{
-                      padding: "0 8px",
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: 8,
+                      padding: "7px 10px",
                       borderRadius: 999,
                       border: "1px solid rgba(255,255,255,0.12)",
+                      background: "rgba(255,255,255,0.05)",
                     }}
                   >
-                    ×
-                  </button>
-                </span>
-              ))}
-            </div>
-          ) : (
-            <div className="muted" style={{ marginTop: 8 }}>
-              No enemy groups yet. Add one.
-            </div>
-          )}
-        </div>
-      </div>
-
-      <div style={{ marginTop: 14 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
-          <strong>Players</strong>
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            <button onClick={randomizePlayerNames} disabled={locked}>
-              🎲 Random names
-            </button>
+                    <span>{g}</span>
+                    <button
+                      onClick={() => removeEnemyGroup(g)}
+                      disabled={locked}
+                      aria-label={`Remove ${g}`}
+                      style={{
+                        padding: "0 10px",
+                        height: 24,
+                        borderRadius: 999,
+                        border: "1px solid rgba(255,255,255,0.12)",
+                        background: "rgba(0,0,0,0.22)",
+                        color: "inherit",
+                        opacity: locked ? 0.55 : 1,
+                        cursor: locked ? "not-allowed" : "pointer",
+                      }}
+                    >
+                      ×
+                    </button>
+                  </span>
+                ))}
+              </div>
+            ) : (
+              <div className="muted" style={{ marginTop: 10 }}>
+                No enemy groups yet. Add one.
+              </div>
+            )}
           </div>
         </div>
 
-        <div
-          style={{
-            marginTop: 10,
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-            gap: 10,
-          }}
-        >
-          {Array.from({ length: clampInt(playerCount, 1, 6) }, (_, idx) => {
-            const i1 = idx + 1;
-            const value = playerNames[idx] ?? "";
-            return (
-              <label key={i1} style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                <span className="muted">Player {i1} name (optional)</span>
-                <input
-                  value={value}
-                  disabled={locked}
-                  onChange={(e) => {
-                    const v = e.target.value;
-                    setPlayerNames((prev) => {
-                      const next = [...prev];
-                      while (next.length < 6) next.push("");
-                      next[idx] = v;
-                      return next.slice(0, 6);
-                    });
-                  }}
-                  placeholder={`Player ${i1}`}
-                />
-              </label>
-            );
-          })}
-        </div>
+        {/* Players */}
+        <div style={{ marginTop: 16 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
+            <strong>Players</strong>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <button onClick={randomizePlayerNames} disabled={locked} style={buttonStyle("ghost", locked)}>
+                🎲 Random names
+              </button>
+            </div>
+          </div>
 
-        <p className="muted" style={{ marginTop: 10, marginBottom: 0 }}>
-          Blank names will display as “Player 1…N”. Names are used for initiative labels and canon readability.
-        </p>
+          <div
+            style={{
+              marginTop: 10,
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+              gap: 10,
+            }}
+          >
+            {Array.from({ length: clampInt(playerCount, 1, 6) }, (_, idx) => {
+              const i1 = idx + 1;
+              const value = playerNames[idx] ?? "";
+              return (
+                <label key={i1} style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                  <span className="muted" style={{ fontSize: 12 }}>
+                    Player {i1} name (optional)
+                  </span>
+                  <input
+                    value={value}
+                    disabled={locked}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      setPlayerNames((prev) => {
+                        const next = [...prev];
+                        while (next.length < 6) next.push("");
+                        next[idx] = v;
+                        return next.slice(0, 6);
+                      });
+                    }}
+                    placeholder={`Player ${i1}`}
+                    style={inputStyle(locked)}
+                  />
+                </label>
+              );
+            })}
+          </div>
+
+          <p className="muted" style={{ marginTop: 10, marginBottom: 0 }}>
+            Blank names will display as “Player 1…N”. Names are used for initiative labels and canon readability.
+          </p>
+        </div>
       </div>
 
+      {/* Actions */}
       <div style={{ marginTop: 14, display: "flex", gap: 8, flexWrap: "wrap" }}>
-        <button onClick={startCombatDeterministic} disabled={locked}>
+        <button onClick={startCombatDeterministic} disabled={locked} style={buttonStyle("primary", locked)}>
           Start Combat (Seeded)
         </button>
 
-        <button onClick={advanceTurn} disabled={!derivedCombat}>
+        <button onClick={advanceTurn} disabled={!derivedCombat} style={buttonStyle("ghost", !derivedCombat)}>
           Advance Turn
         </button>
 
-        <button onClick={endCombat} disabled={!locked}>
+        <button onClick={endCombat} disabled={!locked} style={buttonStyle("danger", !locked)}>
           End Combat
         </button>
       </div>
 
+      {/* Derived order */}
       {derivedCombat && (
-        <div style={{ marginTop: 12 }}>
+        <div style={{ marginTop: 14 }}>
           <div className="muted">
             Combat: <strong>{derivedCombat.combatId}</strong> · Round <strong>{derivedCombat.round}</strong>
           </div>
 
-          <div style={{ marginTop: 10, display: "grid", gridTemplateColumns: "1fr", gap: 6 }}>
+          <div style={{ marginTop: 10, display: "grid", gridTemplateColumns: "1fr", gap: 8 }}>
             {derivedCombat.order.map((id: string, idx: number) => {
               const spec = derivedCombat.participants.find((p: any) => p.id === id) ?? null;
               const roll = derivedCombat.initiative.find((r: any) => r.combatantId === id) ?? null;
@@ -481,22 +631,43 @@ export default function CombatSetupPanel({ events, onAppendCanon }: Props) {
                 <div
                   key={id}
                   style={{
-                    padding: "10px 12px",
-                    borderRadius: 8,
-                    border: active ? "1px solid rgba(138,180,255,0.55)" : "1px solid rgba(255,255,255,0.10)",
-                    background: active ? "rgba(138,180,255,0.10)" : "rgba(255,255,255,0.04)",
+                    padding: "12px 12px",
+                    borderRadius: 12,
+                    border: active ? "1px solid rgba(138,180,255,0.35)" : "1px solid rgba(255,255,255,0.10)",
+                    background: active
+                      ? "linear-gradient(180deg, rgba(138,180,255,0.10), rgba(0,0,0,0.10))"
+                      : "rgba(255,255,255,0.04)",
                     display: "flex",
                     justifyContent: "space-between",
                     alignItems: "center",
                     gap: 10,
+                    boxShadow: active ? "0 10px 22px rgba(0,0,0,0.22)" : "none",
                   }}
                 >
-                  <div>
-                    <strong>
-                      {idx + 1}. {spec ? formatCombatantLabel(spec) : id}
-                    </strong>
-                    {active && <span className="muted">{"  "}← active</span>}
+                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                    <span
+                      aria-hidden
+                      style={{
+                        width: 10,
+                        height: 10,
+                        borderRadius: 999,
+                        border: active ? "1px solid rgba(138,180,255,0.60)" : "1px solid rgba(255,255,255,0.16)",
+                        background: active ? "rgba(138,180,255,0.18)" : "rgba(255,255,255,0.05)",
+                        boxShadow: active ? "0 0 14px rgba(138,180,255,0.25)" : "none",
+                      }}
+                    />
+                    <div>
+                      <strong>
+                        {idx + 1}. {spec ? formatCombatantLabel(spec) : id}
+                      </strong>
+                      {active && (
+                        <span className="muted" style={{ marginLeft: 8 }}>
+                          ← active
+                        </span>
+                      )}
+                    </div>
                   </div>
+
                   <div className="muted">
                     {roll ? `Init ${roll.total} (d20 ${roll.natural} + ${roll.modifier})` : "Init —"}
                   </div>
