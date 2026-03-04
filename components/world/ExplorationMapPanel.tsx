@@ -142,9 +142,8 @@ function LegendChip({
 export default function ExplorationMapPanel({ events, mapW = 13, mapH = 9 }: Props) {
   const derived = useMemo(() => deriveMapState(events, mapW, mapH), [events, mapW, mapH]);
 
-  // B/C feel: board + fog-of-war tactical
-  // Keep this simple and inline: no logic changes, presentation only.
-  const TILE = 26; // physical presence (was 22)
+  // B/C feel: tabletop board + fog-of-war tactical
+  const TILE = 26; // physical presence
   const GAP = 5;
 
   return (
@@ -245,120 +244,159 @@ export default function ExplorationMapPanel({ events, mapW = 13, mapH = 9 }: Pro
           maxWidth: "100%",
         }}
       >
+        {/* Grid wrapper: relative so we can add a torchlight + vignette overlay */}
         <div
           style={{
-            display: "grid",
-            gridTemplateColumns: `repeat(${mapW}, ${TILE}px)`,
-            gap: GAP,
-            padding: 12,
+            position: "relative",
             borderRadius: 12,
-            border: "1px solid rgba(255,255,255,0.10)",
-            background:
-              // Subtle “stone board” feel with a faint grid sheen
-              "linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.02))",
-            boxShadow: "inset 0 0 0 1px rgba(0,0,0,0.25)",
           }}
         >
-          {Array.from({ length: mapW * mapH }, (_, i) => {
-            const x = i % mapW;
-            const y = Math.floor(i / mapW);
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: `repeat(${mapW}, ${TILE}px)`,
+              gap: GAP,
+              padding: 12,
+              borderRadius: 12,
+              border: "1px solid rgba(255,255,255,0.10)",
+              background: "linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.02))",
+              boxShadow: "inset 0 0 0 1px rgba(0,0,0,0.25)",
+            }}
+          >
+            {Array.from({ length: mapW * mapH }, (_, i) => {
+              const x = i % mapW;
+              const y = Math.floor(i / mapW);
 
-            const here = derived.position.x === x && derived.position.y === y;
-            const seen = derived.discovered.has(`${x},${y}`);
+              const here = derived.position.x === x && derived.position.y === y;
+              const seen = derived.discovered.has(`${x},${y}`);
 
-            const mark = derived.marksByTile.get(`${x},${y}`) ?? null;
-            const glyph = mark ? glyphForMark(mark.kind) : "";
+              const mark = derived.marksByTile.get(`${x},${y}`) ?? null;
+              const glyph = mark ? glyphForMark(mark.kind) : "";
 
-            const titleParts: string[] = [];
-            titleParts.push(seen ? `(${x},${y})` : "Unknown");
-            if (mark) {
-              titleParts.push(`Mark: ${mark.kind}`);
-              if (mark.note) titleParts.push(`Note: ${mark.note}`);
-            }
+              const titleParts: string[] = [];
+              titleParts.push(seen ? `(${x},${y})` : "Unknown");
+              if (mark) {
+                titleParts.push(`Mark: ${mark.kind}`);
+                if (mark.note) titleParts.push(`Note: ${mark.note}`);
+              }
 
-            // Visual states
-            const fogBg = "rgba(0,0,0,0.64)";
-            const knownBg = "rgba(255,255,255,0.07)";
-            const playerBg = "rgba(138,180,255,0.14)";
+              // Visual states
+              const fogBg = "rgba(0,0,0,0.64)";
+              const knownBg = "rgba(255,255,255,0.07)";
+              const playerBg = "rgba(138,180,255,0.14)";
 
-            const baseBorder = "1px solid rgba(255,255,255,0.10)";
-            const knownBorder = "1px solid rgba(255,255,255,0.14)";
-            const playerBorder = "1px solid rgba(138,180,255,0.65)";
+              const baseBorder = "1px solid rgba(255,255,255,0.10)";
+              const knownBorder = "1px solid rgba(255,255,255,0.14)";
+              const playerBorder = "1px solid rgba(138,180,255,0.65)";
 
-            return (
-              <div
-                key={`${x},${y}`}
-                title={titleParts.join(" · ")}
-                style={{
-                  width: TILE,
-                  height: TILE,
-                  borderRadius: 8,
-                  border: here ? playerBorder : seen ? knownBorder : baseBorder,
-                  background: !seen ? fogBg : here ? playerBg : knownBg,
-                  position: "relative",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  fontSize: 13,
-                  lineHeight: 1,
-                  userSelect: "none",
-                  overflow: "hidden",
+              return (
+                <div
+                  key={`${x},${y}`}
+                  title={titleParts.join(" · ")}
+                  style={{
+                    width: TILE,
+                    height: TILE,
+                    borderRadius: 8,
+                    border: here ? playerBorder : seen ? knownBorder : baseBorder,
+                    background: !seen ? fogBg : here ? playerBg : knownBg,
+                    position: "relative",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    fontSize: 13,
+                    lineHeight: 1,
+                    userSelect: "none",
+                    overflow: "hidden",
+                    transition: "background 180ms ease, border-color 180ms ease, transform 140ms ease, opacity 180ms ease",
+                    transform: here ? "translateY(-0.5px)" : "none",
+                    opacity: seen ? 1 : 0.95,
+                  }}
+                >
+                  {/* Subtle tile texture for known tiles */}
+                  {seen ? (
+                    <span
+                      aria-hidden
+                      style={{
+                        position: "absolute",
+                        inset: 0,
+                        background:
+                          "radial-gradient(18px 18px at 30% 25%, rgba(255,255,255,0.06), rgba(255,255,255,0.00) 60%), radial-gradient(22px 22px at 70% 80%, rgba(0,0,0,0.18), rgba(0,0,0,0.00) 62%)",
+                        opacity: here ? 0.55 : 0.35,
+                        pointerEvents: "none",
+                      }}
+                    />
+                  ) : null}
 
-                  // “fog clears” feel
-                  transition: "background 180ms ease, border-color 180ms ease, transform 140ms ease",
-                  transform: here ? "translateY(-0.5px)" : "none",
-                }}
-              >
-                {/* Subtle tile texture for known tiles */}
-                {seen ? (
-                  <span
-                    aria-hidden
-                    style={{
-                      position: "absolute",
-                      inset: 0,
-                      background:
-                        "radial-gradient(18px 18px at 30% 25%, rgba(255,255,255,0.06), rgba(255,255,255,0.00) 60%), radial-gradient(22px 22px at 70% 80%, rgba(0,0,0,0.18), rgba(0,0,0,0.00) 62%)",
-                      opacity: here ? 0.55 : 0.35,
-                      pointerEvents: "none",
-                    }}
-                  />
-                ) : null}
+                  {/* Player marker (ring + glow) */}
+                  {here ? (
+                    <span
+                      aria-hidden
+                      style={{
+                        position: "absolute",
+                        width: 16,
+                        height: 16,
+                        borderRadius: 999,
+                        border: "1px solid rgba(138,180,255,0.80)",
+                        boxShadow: "0 0 0 3px rgba(138,180,255,0.14), 0 0 18px rgba(138,180,255,0.38)",
+                        background: "rgba(138,180,255,0.10)",
+                        pointerEvents: "none",
+                      }}
+                    />
+                  ) : null}
 
-                {/* Player marker (ring + glow) */}
-                {here ? (
-                  <span
-                    aria-hidden
-                    style={{
-                      position: "absolute",
-                      width: 16,
-                      height: 16,
-                      borderRadius: 999,
-                      border: "1px solid rgba(138,180,255,0.80)",
-                      boxShadow: "0 0 0 3px rgba(138,180,255,0.14), 0 0 18px rgba(138,180,255,0.38)",
-                      background: "rgba(138,180,255,0.10)",
-                      pointerEvents: "none",
-                    }}
-                  />
-                ) : null}
+                  {/* Mark glyph */}
+                  {seen && glyph ? (
+                    <span
+                      style={{
+                        position: "relative",
+                        transform: "translateY(-0.5px)",
+                        filter: mark ? "drop-shadow(0 2px 6px rgba(0,0,0,0.35))" : "none",
+                      }}
+                    >
+                      {glyph}
+                    </span>
+                  ) : null}
+                </div>
+              );
+            })}
+          </div>
 
-                {/* Mark glyph */}
-                {seen && glyph ? (
-                  <span
-                    style={{
-                      position: "relative",
-                      transform: "translateY(-0.5px)",
-                      filter: mark ? "drop-shadow(0 2px 6px rgba(0,0,0,0.35))" : "none",
-                    }}
-                  >
-                    {glyph}
-                  </span>
-                ) : null}
-              </div>
-            );
-          })}
+          {/* Torchlight + vignette overlay (purely visual) */}
+          <span
+            aria-hidden
+            style={{
+              position: "absolute",
+              inset: 0,
+              borderRadius: 12,
+              pointerEvents: "none",
+              background: [
+                // warm torchlight pools (subtle)
+                "radial-gradient(220px 220px at 20% 18%, rgba(255,190,120,0.10), rgba(255,190,120,0.00) 62%)",
+                "radial-gradient(260px 260px at 82% 24%, rgba(255,200,140,0.08), rgba(255,200,140,0.00) 65%)",
+                // cool moon/arcane lift near center (ties to player glow without changing logic)
+                "radial-gradient(260px 200px at 52% 58%, rgba(138,180,255,0.06), rgba(138,180,255,0.00) 70%)",
+                // vignette edges
+                "radial-gradient(120% 120% at 50% 45%, rgba(0,0,0,0.00) 52%, rgba(0,0,0,0.22) 78%, rgba(0,0,0,0.36) 100%)",
+              ].join(", "),
+              mixBlendMode: "screen",
+              opacity: 0.9,
+            }}
+          />
+
+          {/* Subtle top sheen to make it feel like a physical board */}
+          <span
+            aria-hidden
+            style={{
+              position: "absolute",
+              inset: 0,
+              borderRadius: 12,
+              pointerEvents: "none",
+              background: "linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.00) 42%)",
+              opacity: 0.35,
+            }}
+          />
         </div>
 
-        {/* Optional: tiny “board caption” feel */}
         <div className="muted" style={{ marginTop: 10, fontSize: 12 }}>
           Fog clears only through canon events. Marks indicate remembered features — not revealed neighbors.
         </div>
