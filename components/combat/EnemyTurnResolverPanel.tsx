@@ -22,6 +22,12 @@ type OutcomePayload = {
   audit: string[];
 };
 
+type TelegraphInfo = {
+  enemyName: string;
+  targetName: string;
+  attackStyleHint: "volley" | "beam" | "charge" | "unknown";
+};
+
 type Props = {
   enabled: boolean; // true only when (dmMode === "solace-neutral" && combatActive && isEnemyTurn)
   activeEnemyGroupName: string | null;
@@ -30,8 +36,8 @@ type Props = {
   // for targeting text (optional)
   playerNames: string[]; // resolved names: ["Rune", "Orin", ...] for active players
 
-  // Theater trigger (parent increments a nonce)
-  onTelegraph: () => void;
+  // Theater trigger (parent increments a nonce) + optional metadata
+  onTelegraph: (info: TelegraphInfo) => void;
 
   // Parent commits OUTCOME (arbiter commit) and advances the turn pointer
   onCommitOutcome: (payload: OutcomePayload) => void;
@@ -190,7 +196,9 @@ export default function EnemyTurnResolverPanel({
     setRoll(null);
     setReveal("");
     lockedTurnRef.current = null;
+
     if (enemyName) setDC(defaultDC(enemyName));
+
     clearAllTimers();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [enabled, activeEnemyGroupId, activeEnemyGroupName]);
@@ -230,7 +238,7 @@ export default function EnemyTurnResolverPanel({
     // suspense beats
     queue(450, () => {
       setStep("telegraph");
-      onTelegraph();
+      onTelegraph({ enemyName, targetName, attackStyleHint });
     });
 
     queue(1250, () => {
