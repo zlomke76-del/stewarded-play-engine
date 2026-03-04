@@ -2,12 +2,13 @@
 
 // components/world/CombatRendererPanel.tsx
 // ------------------------------------------------------------
-// CombatRendererPanel (V1)
+// CombatRendererPanel (V2)
 // ------------------------------------------------------------
 // Visual-only combat theater overlay for the Exploration Map.
 // - Reads events + current enemy group name
-// - Plays suspenseful animations (telegraph → release → flight → impact)
-// - NEVER writes canon. NEVER mutates state. Renderer only.
+// - Plays suspenseful animations (telegraph → attack → impact)
+// - Archetype-aware visuals (archers volley, brutes charge, casters beam, etc.)
+// - NEVER writes canon. NEVER mutates session state. Renderer only.
 // ------------------------------------------------------------
 
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -82,14 +83,76 @@ function loadImage(url: string): Promise<HTMLImageElement | null> {
 
 type Phase = "idle" | "telegraph" | "release" | "flight" | "impact" | "cooldown";
 
-type VolleyParticle = {
+// Generic particle for projectiles OR “charge” motion
+type Particle = {
   x0: number;
   y0: number;
   x1: number;
   y1: number;
   t0: number;
   dur: number;
+  kind: "projectile" | "charge";
 };
+
+type Beam = {
+  t0: number;
+  dur: number;
+  // from enemy origin (px) to player (px)
+  x0: number;
+  y0: number;
+  x1: number;
+  y1: number;
+};
+
+function clamp01(x: number) {
+  return Math.max(0, Math.min(1, x));
+}
+
+function easeOutCubic(t: number) {
+  const x = clamp01(t);
+  return 1 - Math.pow(1 - x, 3);
+}
+
+function easeInOutQuad(t: number) {
+  const x = clamp01(t);
+  return x < 0.5 ? 2 * x * x : 1 - Math.pow(-2 * x + 2, 2) / 2;
+}
+
+// Rounded rect path helper (no roundRect dependency)
+function roundedRectPath(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  r: number
+) {
+  const rr = Math.max(0, Math.min(r, Math.min(w, h) / 2));
+  ctx.beginPath();
+  ctx.moveTo(x + rr, y);
+  ctx.lineTo(x + w - rr, y);
+  ctx.quadraticCurveTo(x + w, y, x + w, y + rr);
+  ctx.lineTo(x + w, y + h - rr);
+  ctx.quadraticCurveTo(x + w, y + h, x + w - rr, y + h);
+  ctx.lineTo(x + rr, y + h);
+  ctx.quadraticCurveTo(x, y + h, x, y + h - rr);
+  ctx.lineTo(x, y + rr);
+  ctx.quadraticCurveTo(x, y, x + rr, y);
+  ctx.closePath();
+}
+
+function pickProjectileForArchetype(archetype: string) {
+  // Keep V1 asset compatibility: use arrow everywhere for now,
+  // but allow future expansion if SpriteRegistry adds more.
+  // If you later add Projectiles.bolt / Projectiles.dagger, etc,
+  // just map them here.
+  if (archetype === "archers") return Projectiles.arrow;
+  if (archetype === "casters") return Projectiles.arrow; // placeholder
+  if (archetype === "drones") return Projectiles.arrow; // placeholder
+  if (archetype === "sentries") return Projectiles.arrow; // placeholder
+  if (archetype === "stalkers") return Projectiles.arrow; // placeholder
+  return Projectiles.arrow;
+}
 
 export default function CombatRendererPanel({
   events,
@@ -110,7 +173,7 @@ export default function CombatRendererPanel({
   const [busy, setBusy] = useState(false);
 
   const [enemyImg, setEnemyImg] = useState<HTMLImageElement | null>(null);
-  const [arrowImg, setArrowImg] = useState<HTMLImageElement | null>(null);
+  const [projImg, setProjImg] = useState<HTMLImageElement | null>(null);
   const [impactImg, setImpactImg] = useState<HTMLImageElement | null>(null);
   const [targetRingImg, setTargetRingImg] = useState<HTMLImageElement | null>(
     null
@@ -121,8 +184,10 @@ export default function CombatRendererPanel({
     [events, mapW, mapH]
   );
 
-  // Not required for V1 branching yet; kept for V2.
-  useMemo(() => guessEnemyArchetype(activeEnemyGroupName), [activeEnemyGroupName]);
+  const archetype = useMemo(
+    () => guessEnemyArchetype(activeEnemyGroupName),
+    [activeEnemyGroupName]
+  );
 
   // Preload images when enemy changes
   useEffect(() => {
@@ -130,28 +195,27 @@ export default function CombatRendererPanel({
 
     async function go() {
       const enemyUrl = getEnemySprite(activeEnemyGroupName);
+      const projUrl = pickProjectileForArchetype(archetype);
 
-      const [e, a, i, r] = await Promise.all([
+      const [e, p, i, r] = await Promise.all([
         loadImage(enemyUrl),
-        loadImage(Projectiles.arrow),
+        loadImage(projUrl),
         loadImage(Effects.impact),
         loadImage(Effects.targetRing),
       ]);
 
       if (!alive) return;
-
       setEnemyImg(e);
-      setArrowImg(a);
+      setProjImg(p);
       setImpactImg(i);
       setTargetRingImg(r);
     }
 
     go();
-
     return () => {
       alive = false;
     };
-  }, [activeEnemyGroupName]);
+  }, [activeEnemyGroupName, archetype]);
 
   // Canvas sizing to match the map grid container
   const canvasW = useMemo(
@@ -170,17 +234,45 @@ export default function CombatRendererPanel({
     };
   }
 
-  // Enemy “spawn” positions (left edge, staggered by player's y)
-  function enemyVolleyOrigins() {
+  // Enemy “spawn” positions (varies by archetype for richer staging)
+  function enemyOriginsTiles(): XY[] {
     const baseY = playerPos.y;
-    const ys = [baseY - 1, baseY, baseY + 1].filter(
-      (y) => y >= 0 && y < mapH
-    );
+
+    // Helpful lane set near player row
+    const ys = [baseY - 1, baseY, baseY + 1].filter((y) => y >= 0 && y < mapH);
+
+    // default: left edge “ambush line”
+    if (archetype === "archers" || archetype === "sentries" || archetype === "drones") {
+      const origins: XY[] = ys.map((y) => ({ x: 0, y }));
+      return origins.length > 0 ? origins : [{ x: 0, y: Math.floor(mapH / 2) }];
+    }
+
+    // brutes/shields: closer “frontline” (x=2)
+    if (archetype === "brutes" || archetype === "shields") {
+      const origins: XY[] = ys.map((y) => ({ x: Math.min(2, mapW - 1), y }));
+      return origins.length > 0 ? origins : [{ x: Math.min(2, mapW - 1), y: Math.floor(mapH / 2) }];
+    }
+
+    // casters/wraiths: backline (x=1) but slightly higher rows
+    if (archetype === "casters" || archetype === "wraiths") {
+      const ys2 = [baseY - 2, baseY, baseY + 2].filter((y) => y >= 0 && y < mapH);
+      const origins: XY[] = ys2.map((y) => ({ x: Math.min(1, mapW - 1), y }));
+      return origins.length > 0 ? origins : [{ x: Math.min(1, mapW - 1), y: Math.floor(mapH / 2) }];
+    }
+
+    // stalkers: right edge (flank)
+    if (archetype === "stalkers") {
+      const origins: XY[] = ys.map((y) => ({ x: mapW - 1, y }));
+      return origins.length > 0 ? origins : [{ x: mapW - 1, y: Math.floor(mapH / 2) }];
+    }
+
+    // fallback
     const origins: XY[] = ys.map((y) => ({ x: 0, y }));
     return origins.length > 0 ? origins : [{ x: 0, y: Math.floor(mapH / 2) }];
   }
 
-  const volley = useRef<VolleyParticle[]>([]);
+  const particles = useRef<Particle[]>([]);
+  const beamRef = useRef<Beam | null>(null);
 
   function startPhase(next: Phase) {
     setPhase(next);
@@ -190,10 +282,11 @@ export default function CombatRendererPanel({
   function reset() {
     setBusy(false);
     startPhase("idle");
-    volley.current = [];
+    particles.current = [];
+    beamRef.current = null;
   }
 
-  function playEnemyAnimation() {
+  async function playEnemyAnimation() {
     if (!activeEnemyGroupName) return;
     if (busy) return;
 
@@ -206,237 +299,408 @@ export default function CombatRendererPanel({
     if (playSignal === undefined) return;
     if (!activeEnemyGroupName) return;
     if (busy) return;
-
     playEnemyAnimation();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [playSignal]);
 
-  // Phase transitions (timings are “suspenseful”, not instant)
+  // Phase transitions (suspenseful pacing)
   useEffect(() => {
     if (!busy) return;
 
     const now = performance.now();
     const elapsed = now - phaseStartedAt;
 
+    // Telegraph time
     if (phase === "telegraph" && elapsed > 650) {
       startPhase("release");
       return;
     }
 
+    // Release beat: construct attack representation
     if (phase === "release" && elapsed > 250) {
       const target = tileCenterPx(playerPos);
-      const origins = enemyVolleyOrigins().map(tileCenterPx);
-
+      const origins = enemyOriginsTiles().map(tileCenterPx);
       const t0 = performance.now();
-      volley.current = origins.map((o, idx) => ({
+
+      // Archetype behaviors:
+      // - archers/sentries/drones/stalkers => projectiles
+      // - brutes/shields => charge (enemy badge surges in, then impact)
+      // - casters => beam (hold for a moment, then impact)
+      // - wraiths => “blink” (beam-like + jitter)
+      if (
+        archetype === "archers" ||
+        archetype === "sentries" ||
+        archetype === "drones" ||
+        archetype === "stalkers"
+      ) {
+        particles.current = origins.map((o, idx) => ({
+          x0: o.x,
+          y0: o.y,
+          x1: target.x,
+          y1: target.y,
+          t0: t0 + idx * 70,
+          dur: 560,
+          kind: "projectile",
+        }));
+        beamRef.current = null;
+        startPhase("flight");
+        return;
+      }
+
+      if (archetype === "casters" || archetype === "wraiths") {
+        const o = origins[0] ?? { x: target.x - 80, y: target.y };
+        beamRef.current = {
+          t0,
+          dur: archetype === "wraiths" ? 520 : 640,
+          x0: o.x,
+          y0: o.y,
+          x1: target.x,
+          y1: target.y,
+        };
+        particles.current = [];
+        startPhase("flight");
+        return;
+      }
+
+      // brutes/shields/default => charge
+      particles.current = origins.map((o, idx) => ({
         x0: o.x,
         y0: o.y,
-        x1: target.x,
+        x1: target.x - 18, // stop slightly before center for “slam”
         y1: target.y,
-        t0: t0 + idx * 60,
+        t0: t0 + idx * 90,
         dur: 520,
+        kind: "charge",
       }));
-
+      beamRef.current = null;
       startPhase("flight");
       return;
     }
 
+    // Flight ends when last particle/beam completes
     if (phase === "flight") {
-      const parts = volley.current;
-      const last = parts[parts.length - 1];
-      if (!last) {
-        startPhase("impact");
-        return;
+      const parts = particles.current;
+      const b = beamRef.current;
+
+      let landingAt = 0;
+
+      if (b) {
+        landingAt = b.t0 + b.dur;
+      } else if (parts.length > 0) {
+        const last = parts[parts.length - 1];
+        landingAt = last.t0 + last.dur;
+      } else {
+        landingAt = performance.now();
       }
-      const landingAt = last.t0 + last.dur;
+
       if (performance.now() > landingAt) {
         startPhase("impact");
         return;
       }
     }
 
-    if (phase === "impact" && elapsed > 380) {
+    // Impact flash
+    if (phase === "impact" && elapsed > 420) {
       startPhase("cooldown");
       return;
     }
 
-    if (phase === "cooldown" && elapsed > 450) {
+    // Cooldown ends
+    if (phase === "cooldown" && elapsed > 520) {
       reset();
       return;
     }
-  }, [busy, phase, phaseStartedAt, playerPos]);
+  }, [
+    busy,
+    phase,
+    phaseStartedAt,
+    playerPos,
+    archetype,
+    mapW,
+    mapH,
+    tileSize,
+    gap,
+    padding,
+  ]);
 
-  // Main render loop (strict TS: ctx never nullable inside helpers)
+  // Main render loop
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
+    const context = canvas.getContext("2d");
+    if (!context) return;
 
-    type Ctx = CanvasRenderingContext2D;
+    // Non-nullable alias for TS (prevents ctx null errors inside nested funcs)
+    const ctx: CanvasRenderingContext2D = context;
 
-    function roundRectPath(
-      g: Ctx,
-      x: number,
-      y: number,
-      w: number,
-      h: number,
-      r: number
-    ) {
-      const rr = Math.max(0, Math.min(r, Math.min(w, h) / 2));
-      const anyG = g as any;
-
-      if (typeof anyG.roundRect === "function") {
-        anyG.roundRect(x, y, w, h, rr);
-        return;
-      }
-
-      // fallback path (no roundRect)
-      g.moveTo(x + rr, y);
-      g.lineTo(x + w - rr, y);
-      g.quadraticCurveTo(x + w, y, x + w, y + rr);
-      g.lineTo(x + w, y + h - rr);
-      g.quadraticCurveTo(x + w, y + h, x + w - rr, y + h);
-      g.lineTo(x + rr, y + h);
-      g.quadraticCurveTo(x, y + h, x, y + h - rr);
-      g.lineTo(x, y + rr);
-      g.quadraticCurveTo(x, y, x + rr, y);
+    function clear() {
+      ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
     }
 
-    function clear(g: Ctx) {
-      g.clearRect(0, 0, g.canvas.width, g.canvas.height);
-    }
-
-    function drawTelegraph(g: Ctx) {
+    function drawTelegraph() {
       const center = tileCenterPx(playerPos);
-      const pulse = Math.min(1, (performance.now() - phaseStartedAt) / 650);
+      const pulse = clamp01((performance.now() - phaseStartedAt) / 650);
       const r = 10 + pulse * 14;
+
+      // Archetype tint (subtle, readable)
+      const ringColor =
+        archetype === "casters" || archetype === "wraiths"
+          ? "rgba(170,120,255,0.78)"
+          : archetype === "brutes" || archetype === "shields"
+          ? "rgba(255,120,120,0.78)"
+          : "rgba(138,180,255,0.78)";
 
       if (targetRingImg) {
         const s = 48;
-        g.globalAlpha = 0.65 + 0.25 * Math.sin(pulse * Math.PI);
-        g.drawImage(targetRingImg, center.x - s / 2, center.y - s / 2, s, s);
-        g.globalAlpha = 1;
+        ctx.globalAlpha = 0.65 + 0.25 * Math.sin(pulse * Math.PI);
+        ctx.drawImage(targetRingImg, center.x - s / 2, center.y - s / 2, s, s);
+        ctx.globalAlpha = 1;
       } else {
-        g.strokeStyle = "rgba(138,180,255,0.75)";
-        g.lineWidth = 2;
-        g.beginPath();
-        g.arc(center.x, center.y, r, 0, Math.PI * 2);
-        g.stroke();
+        ctx.strokeStyle = ringColor;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(center.x, center.y, r, 0, Math.PI * 2);
+        ctx.stroke();
       }
     }
 
-    function drawEnemyBadges(g: Ctx) {
+    function drawEnemyBadges() {
       if (!activeEnemyGroupName) return;
 
-      const origins = enemyVolleyOrigins().map(tileCenterPx);
+      const origins = enemyOriginsTiles().map(tileCenterPx);
       const size = 42;
 
       for (const o of origins) {
-        g.globalAlpha = 0.9;
-        g.fillStyle = "rgba(0,0,0,0.35)";
-        g.beginPath();
-        roundRectPath(g, o.x - size / 2, o.y - size / 2, size, size, 10);
-        g.fill();
-        g.globalAlpha = 1;
+        // plate
+        ctx.globalAlpha = 0.9;
+        ctx.fillStyle = "rgba(0,0,0,0.35)";
+        roundedRectPath(ctx, o.x - size / 2, o.y - size / 2, size, size, 10);
+        ctx.fill();
+        ctx.globalAlpha = 1;
 
         if (enemyImg) {
-          g.drawImage(enemyImg, o.x - size / 2, o.y - size / 2, size, size);
+          ctx.drawImage(enemyImg, o.x - size / 2, o.y - size / 2, size, size);
         } else {
-          g.fillStyle = "rgba(255,255,255,0.85)";
-          g.font = "16px system-ui";
-          g.textAlign = "center";
-          g.textBaseline = "middle";
-          g.fillText("EN", o.x, o.y);
+          ctx.fillStyle = "rgba(255,255,255,0.85)";
+          ctx.font = "16px system-ui";
+          ctx.textAlign = "center";
+          ctx.textBaseline = "middle";
+          ctx.fillText("EN", o.x, o.y);
         }
       }
     }
 
-    function drawArrows(g: Ctx) {
+    function drawProjectiles() {
       const now = performance.now();
-      const parts = volley.current;
+      const parts = particles.current.filter((p) => p.kind === "projectile");
 
       for (const p of parts) {
-        const t = (now - p.t0) / p.dur;
-        if (t < 0 || t > 1) continue;
+        const tRaw = (now - p.t0) / p.dur;
+        if (tRaw < 0 || tRaw > 1) continue;
+
+        const t = easeInOutQuad(tRaw);
 
         const x = p.x0 + (p.x1 - p.x0) * t;
         const y = p.y0 + (p.y1 - p.y0) * t;
 
-        g.globalAlpha = 0.55;
-        g.strokeStyle = "rgba(200,220,255,0.55)";
-        g.lineWidth = 2;
-        g.beginPath();
-        g.moveTo(p.x0, p.y0);
-        g.lineTo(x, y);
-        g.stroke();
-        g.globalAlpha = 1;
+        // Trail
+        ctx.globalAlpha = 0.55;
+        ctx.strokeStyle =
+          archetype === "stalkers"
+            ? "rgba(170,255,200,0.55)"
+            : archetype === "drones"
+            ? "rgba(170,220,255,0.55)"
+            : "rgba(200,220,255,0.55)";
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(p.x0, p.y0);
+        ctx.lineTo(x, y);
+        ctx.stroke();
+        ctx.globalAlpha = 1;
 
-        if (arrowImg) {
+        // Projectile sprite or fallback
+        if (projImg) {
           const s = 22;
           const ang = Math.atan2(p.y1 - p.y0, p.x1 - p.x0);
-          g.save();
-          g.translate(x, y);
-          g.rotate(ang);
-          g.drawImage(arrowImg, -s / 2, -s / 2, s, s);
-          g.restore();
+          ctx.save();
+          ctx.translate(x, y);
+          ctx.rotate(ang);
+          ctx.drawImage(projImg, -s / 2, -s / 2, s, s);
+          ctx.restore();
         } else {
-          g.fillStyle = "rgba(255,255,255,0.9)";
-          g.beginPath();
-          g.arc(x, y, 2.2, 0, Math.PI * 2);
-          g.fill();
+          ctx.fillStyle = "rgba(255,255,255,0.9)";
+          ctx.beginPath();
+          ctx.arc(x, y, 2.2, 0, Math.PI * 2);
+          ctx.fill();
         }
       }
     }
 
-    function drawImpact(g: Ctx) {
-      const center = tileCenterPx(playerPos);
-      const t = Math.min(1, (performance.now() - phaseStartedAt) / 380);
+    function drawChargeMotion() {
+      const now = performance.now();
+      const parts = particles.current.filter((p) => p.kind === "charge");
+      if (parts.length === 0) return;
 
-      g.globalAlpha = 0.25 + 0.25 * (1 - t);
-      g.fillStyle = "rgba(255,200,120,0.7)";
-      g.beginPath();
-      roundRectPath(
-        g,
+      for (const p of parts) {
+        const tRaw = (now - p.t0) / p.dur;
+        if (tRaw < 0 || tRaw > 1) continue;
+
+        const t = easeOutCubic(tRaw);
+        const x = p.x0 + (p.x1 - p.x0) * t;
+        const y = p.y0 + (p.y1 - p.y0) * t;
+
+        // slam shadow
+        ctx.globalAlpha = 0.35;
+        ctx.fillStyle = "rgba(255,120,120,0.35)";
+        ctx.beginPath();
+        ctx.arc(x, y + 8, 10 + 8 * t, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.globalAlpha = 1;
+
+        // moving “badge” (reuse enemy image or fallback block)
+        const size = 44;
+        ctx.globalAlpha = 0.9;
+        ctx.fillStyle = "rgba(0,0,0,0.35)";
+        roundedRectPath(ctx, x - size / 2, y - size / 2, size, size, 10);
+        ctx.fill();
+        ctx.globalAlpha = 1;
+
+        if (enemyImg) {
+          ctx.drawImage(enemyImg, x - size / 2, y - size / 2, size, size);
+        } else {
+          ctx.fillStyle = "rgba(255,255,255,0.85)";
+          ctx.font = "16px system-ui";
+          ctx.textAlign = "center";
+          ctx.textBaseline = "middle";
+          ctx.fillText("EN", x, y);
+        }
+      }
+    }
+
+    function drawBeam() {
+      const b = beamRef.current;
+      if (!b) return;
+
+      const now = performance.now();
+      const tRaw = (now - b.t0) / b.dur;
+      if (tRaw < 0 || tRaw > 1) return;
+
+      const t = easeInOutQuad(tRaw);
+
+      // Wraiths: jittery blink-beam
+      const jitter =
+        archetype === "wraiths"
+          ? 4 * Math.sin(now / 45) + 3 * Math.cos(now / 33)
+          : 0;
+
+      const x0 = b.x0;
+      const y0 = b.y0 + jitter;
+      const x1 = b.x1;
+      const y1 = b.y1;
+
+      // beam grows in intensity
+      const alpha = 0.25 + 0.55 * Math.sin(t * Math.PI);
+      ctx.globalAlpha = alpha;
+
+      ctx.lineWidth = archetype === "wraiths" ? 5 : 4;
+      ctx.strokeStyle =
+        archetype === "wraiths"
+          ? "rgba(190,150,255,0.95)"
+          : "rgba(170,120,255,0.95)";
+      ctx.beginPath();
+      ctx.moveTo(x0, y0);
+      ctx.lineTo(x1, y1);
+      ctx.stroke();
+
+      // inner core
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = "rgba(255,255,255,0.85)";
+      ctx.beginPath();
+      ctx.moveTo(x0, y0);
+      ctx.lineTo(x1, y1);
+      ctx.stroke();
+
+      ctx.globalAlpha = 1;
+
+      // small source spark
+      ctx.globalAlpha = 0.55;
+      ctx.fillStyle = "rgba(170,120,255,0.85)";
+      ctx.beginPath();
+      ctx.arc(x0, y0, 6 + 4 * t, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.globalAlpha = 1;
+    }
+
+    function drawImpact() {
+      const center = tileCenterPx(playerPos);
+      const t = clamp01((performance.now() - phaseStartedAt) / 420);
+
+      // tile flash
+      ctx.globalAlpha = 0.22 + 0.28 * (1 - t);
+      ctx.fillStyle =
+        archetype === "casters" || archetype === "wraiths"
+          ? "rgba(200,140,255,0.7)"
+          : archetype === "brutes" || archetype === "shields"
+          ? "rgba(255,160,120,0.7)"
+          : "rgba(255,200,120,0.7)";
+      roundedRectPath(
+        ctx,
         center.x - tileSize / 2,
         center.y - tileSize / 2,
         tileSize,
         tileSize,
         6
       );
-      g.fill();
-      g.globalAlpha = 1;
+      ctx.fill();
+      ctx.globalAlpha = 1;
 
+      // impact sprite
       if (impactImg) {
         const s = 64;
-        g.globalAlpha = 0.9 * (1 - t * 0.35);
-        g.drawImage(impactImg, center.x - s / 2, center.y - s / 2, s, s);
-        g.globalAlpha = 1;
+        ctx.globalAlpha = 0.9 * (1 - t * 0.35);
+        ctx.drawImage(impactImg, center.x - s / 2, center.y - s / 2, s, s);
+        ctx.globalAlpha = 1;
       } else {
-        g.strokeStyle = "rgba(255,200,120,0.9)";
-        g.lineWidth = 2;
-        g.beginPath();
-        g.arc(center.x, center.y, 10 + t * 16, 0, Math.PI * 2);
-        g.stroke();
+        ctx.strokeStyle = "rgba(255,200,120,0.9)";
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(center.x, center.y, 10 + t * 16, 0, Math.PI * 2);
+        ctx.stroke();
       }
+
+      // subtle shock ring
+      ctx.globalAlpha = 0.25 * (1 - t);
+      ctx.strokeStyle = "rgba(255,255,255,0.9)";
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.arc(center.x, center.y, 16 + t * 26, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.globalAlpha = 1;
     }
 
     function frame() {
-      clear(ctx);
+      clear();
 
+      // Always show enemy badges during non-idle enemy phase
       if (activeEnemyGroupName && (busy || phase !== "idle")) {
-        drawEnemyBadges(ctx);
+        drawEnemyBadges();
       }
 
-      if (phase === "telegraph" || phase === "release") drawTelegraph(ctx);
+      if (phase === "telegraph" || phase === "release") {
+        drawTelegraph();
+      }
 
       if (phase === "flight") {
-        drawTelegraph(ctx);
-        drawArrows(ctx);
+        drawTelegraph();
+        drawBeam();
+        drawProjectiles();
+        drawChargeMotion();
       }
 
-      if (phase === "impact") drawImpact(ctx);
+      if (phase === "impact") {
+        drawImpact();
+      }
 
       rafRef.current = requestAnimationFrame(frame);
     }
@@ -454,12 +718,15 @@ export default function CombatRendererPanel({
     phaseStartedAt,
     playerPos,
     enemyImg,
-    arrowImg,
+    projImg,
     impactImg,
     targetRingImg,
     tileSize,
     gap,
     padding,
+    mapW,
+    mapH,
+    archetype,
   ]);
 
   const canPlay = !!activeEnemyGroupName && !busy;
@@ -498,7 +765,7 @@ export default function CombatRendererPanel({
               background: "rgba(0,0,0,0.45)",
               backdropFilter: "blur(6px)",
               color: "rgba(255,255,255,0.85)",
-              maxWidth: 260,
+              maxWidth: 280,
             }}
           >
             <div style={{ fontWeight: 700, marginBottom: 4 }}>
@@ -509,6 +776,8 @@ export default function CombatRendererPanel({
               {activeEnemyGroupName ? (
                 <>
                   Active enemy: <strong>{activeEnemyGroupName}</strong>
+                  <br />
+                  Archetype: <strong>{String(archetype)}</strong>
                   <br />
                   Phase: <strong>{phase}</strong>
                 </>
