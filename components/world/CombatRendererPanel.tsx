@@ -31,6 +31,9 @@ type Props = {
 
   // Optional: disable controls and let parent trigger via key change
   hideControls?: boolean;
+
+  // If this number changes, the renderer will auto-play (if possible).
+  playSignal?: number;
 };
 
 function withinBounds(p: XY, w: number, h: number) {
@@ -83,6 +86,7 @@ export default function CombatRendererPanel({
   gap = 4,
   padding = 10,
   hideControls = false,
+  playSignal,
 }: Props) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const rafRef = useRef<number | null>(null);
@@ -97,7 +101,6 @@ export default function CombatRendererPanel({
   const [targetRingImg, setTargetRingImg] = useState<HTMLImageElement | null>(null);
 
   const playerPos = useMemo(() => derivePlayerPosition(events, mapW, mapH), [events, mapW, mapH]);
-
   const archetype = useMemo(() => guessEnemyArchetype(activeEnemyGroupName), [activeEnemyGroupName]);
 
   // Preload images when enemy changes
@@ -164,13 +167,19 @@ export default function CombatRendererPanel({
 
     setBusy(true);
 
-    // V1: Only special-case archers. Others get a simple telegraph/impact pulse for now.
-    if (archetype === "archers") {
-      startPhase("telegraph");
-    } else {
-      startPhase("telegraph");
-    }
+    // V1: all archetypes share telegraph→release→flight/impact pacing.
+    startPhase("telegraph");
   }
+
+  // Parent-triggered autoplay
+  useEffect(() => {
+    if (playSignal === undefined) return;
+    if (!activeEnemyGroupName) return;
+    if (busy) return;
+    // trigger
+    playEnemyAnimation();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [playSignal]);
 
   // Phase transitions (timings are “suspenseful”, not instant)
   useEffect(() => {
@@ -205,7 +214,7 @@ export default function CombatRendererPanel({
       return;
     }
 
-    // Flight ends when last arrow would land
+    // Flight ends when last projectile would land
     if (phase === "flight") {
       const parts = volley.current;
       const last = parts[parts.length - 1];
@@ -238,15 +247,12 @@ export default function CombatRendererPanel({
     const c = canvasRef.current;
     if (!c) return;
 
-    const maybe = c.getContext("2d");
-    if (!maybe) return;
-
-    // Capture non-null, stable bindings for nested fns (TS-safe)
-    const canvasEl: HTMLCanvasElement = c;
-    const ctx: CanvasRenderingContext2D = maybe;
+    const ctx = c.getContext("2d");
+    if (!ctx) return;
 
     function clear() {
-      ctx.clearRect(0, 0, canvasEl.width, canvasEl.height);
+      // Use ctx.canvas (non-null) to avoid TS nullability issues
+      ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
     }
 
     function drawTelegraph() {
@@ -254,7 +260,6 @@ export default function CombatRendererPanel({
       const pulse = Math.min(1, (performance.now() - phaseStartedAt) / 650);
       const r = 10 + pulse * 14;
 
-      // Target ring image if present, otherwise draw simple ring
       if (targetRingImg) {
         const s = 48;
         ctx.globalAlpha = 0.65 + 0.25 * Math.sin(pulse * Math.PI);
@@ -276,28 +281,17 @@ export default function CombatRendererPanel({
       const size = 42;
 
       for (const o of origins) {
-        // subtle background plate
         ctx.globalAlpha = 0.9;
         ctx.fillStyle = "rgba(0,0,0,0.35)";
-
-        const x = o.x - size / 2;
-        const y = o.y - size / 2;
-
-        const anyCtx = ctx as any;
-        if (typeof anyCtx.roundRect === "function") {
-          ctx.beginPath();
-          anyCtx.roundRect(x, y, size, size, 10);
-          ctx.fill();
-        } else {
-          ctx.fillRect(x, y, size, size);
-        }
-
+        ctx.beginPath();
+        // @ts-expect-error roundRect exists in modern browsers; safe in Vercel runtime
+        ctx.roundRect(o.x - size / 2, o.y - size / 2, size, size, 10);
+        ctx.fill();
         ctx.globalAlpha = 1;
 
         if (enemyImg) {
           ctx.drawImage(enemyImg, o.x - size / 2, o.y - size / 2, size, size);
         } else {
-          // fallback glyph
           ctx.fillStyle = "rgba(255,255,255,0.85)";
           ctx.font = "16px system-ui";
           ctx.textAlign = "center";
@@ -318,7 +312,6 @@ export default function CombatRendererPanel({
         const x = p.x0 + (p.x1 - p.x0) * t;
         const y = p.y0 + (p.y1 - p.y0) * t;
 
-        // Trail
         ctx.globalAlpha = 0.55;
         ctx.strokeStyle = "rgba(200,220,255,0.55)";
         ctx.lineWidth = 2;
@@ -328,10 +321,8 @@ export default function CombatRendererPanel({
         ctx.stroke();
         ctx.globalAlpha = 1;
 
-        // Arrow sprite or fallback
         if (arrowImg) {
           const s = 22;
-          // rotate to direction
           const ang = Math.atan2(p.y1 - p.y0, p.x1 - p.x0);
           ctx.save();
           ctx.translate(x, y);
@@ -351,25 +342,14 @@ export default function CombatRendererPanel({
       const center = tileCenterPx(playerPos);
       const t = Math.min(1, (performance.now() - phaseStartedAt) / 380);
 
-      // tile flash
       ctx.globalAlpha = 0.25 + 0.25 * (1 - t);
       ctx.fillStyle = "rgba(255,200,120,0.7)";
-
-      const x = center.x - tileSize / 2;
-      const y = center.y - tileSize / 2;
-
-      const anyCtx = ctx as any;
-      if (typeof anyCtx.roundRect === "function") {
-        ctx.beginPath();
-        anyCtx.roundRect(x, y, tileSize, tileSize, 6);
-        ctx.fill();
-      } else {
-        ctx.fillRect(x, y, tileSize, tileSize);
-      }
-
+      ctx.beginPath();
+      // @ts-expect-error roundRect exists in modern browsers; safe in Vercel runtime
+      ctx.roundRect(center.x - tileSize / 2, center.y - tileSize / 2, tileSize, tileSize, 6);
+      ctx.fill();
       ctx.globalAlpha = 1;
 
-      // impact sprite
       if (impactImg) {
         const s = 64;
         ctx.globalAlpha = 0.9 * (1 - t * 0.35);
@@ -387,13 +367,11 @@ export default function CombatRendererPanel({
     function frame() {
       clear();
 
-      // Always show enemy badges during non-idle enemy phase
       if (activeEnemyGroupName && (busy || phase !== "idle")) {
         drawEnemyBadges();
       }
 
-      if (phase === "telegraph") drawTelegraph();
-      if (phase === "release") drawTelegraph();
+      if (phase === "telegraph" || phase === "release") drawTelegraph();
       if (phase === "flight") {
         drawTelegraph();
         drawArrows();
@@ -419,8 +397,6 @@ export default function CombatRendererPanel({
     arrowImg,
     impactImg,
     targetRingImg,
-    mapW,
-    mapH,
     tileSize,
     gap,
     padding,
@@ -429,13 +405,7 @@ export default function CombatRendererPanel({
   const canPlay = !!activeEnemyGroupName && !busy;
 
   return (
-    <div
-      style={{
-        position: "absolute",
-        inset: 0,
-        pointerEvents: "none", // renderer is visual-only by default
-      }}
-    >
+    <div style={{ position: "absolute", inset: 0, pointerEvents: "none" }}>
       <canvas
         ref={canvasRef}
         width={canvasW}
@@ -453,7 +423,7 @@ export default function CombatRendererPanel({
             position: "absolute",
             top: 10,
             right: 10,
-            pointerEvents: "auto", // allow clicking UI
+            pointerEvents: "auto",
             display: "flex",
             flexDirection: "column",
             gap: 8,
