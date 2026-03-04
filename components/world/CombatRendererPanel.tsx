@@ -63,13 +63,7 @@ function loadImage(url: string): Promise<HTMLImageElement | null> {
   });
 }
 
-type Phase =
-  | "idle"
-  | "telegraph"
-  | "release"
-  | "flight"
-  | "impact"
-  | "cooldown";
+type Phase = "idle" | "telegraph" | "release" | "flight" | "impact" | "cooldown";
 
 type VolleyParticle = {
   x0: number;
@@ -244,8 +238,11 @@ export default function CombatRendererPanel({
     const canvas = canvasRef.current;
     if (!canvas) return;
 
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
+    const maybe = canvas.getContext("2d");
+    if (!maybe) return;
+
+    // Rebind as non-null to satisfy TS inside nested functions.
+    const ctx: CanvasRenderingContext2D = maybe;
 
     function clear() {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -281,9 +278,20 @@ export default function CombatRendererPanel({
         // subtle background plate
         ctx.globalAlpha = 0.9;
         ctx.fillStyle = "rgba(0,0,0,0.35)";
-        ctx.beginPath();
-        ctx.roundRect(o.x - size / 2, o.y - size / 2, size, size, 10);
-        ctx.fill();
+
+        const x = o.x - size / 2;
+        const y = o.y - size / 2;
+
+        // roundRect exists in modern browsers; if not, fall back to rect.
+        const anyCtx = ctx as any;
+        if (typeof anyCtx.roundRect === "function") {
+          ctx.beginPath();
+          anyCtx.roundRect(x, y, size, size, 10);
+          ctx.fill();
+        } else {
+          ctx.fillRect(x, y, size, size);
+        }
+
         ctx.globalAlpha = 1;
 
         if (enemyImg) {
@@ -346,9 +354,19 @@ export default function CombatRendererPanel({
       // tile flash
       ctx.globalAlpha = 0.25 + 0.25 * (1 - t);
       ctx.fillStyle = "rgba(255,200,120,0.7)";
-      ctx.beginPath();
-      ctx.roundRect(c.x - tileSize / 2, c.y - tileSize / 2, tileSize, tileSize, 6);
-      ctx.fill();
+
+      const x = c.x - tileSize / 2;
+      const y = c.y - tileSize / 2;
+
+      const anyCtx = ctx as any;
+      if (typeof anyCtx.roundRect === "function") {
+        ctx.beginPath();
+        anyCtx.roundRect(x, y, tileSize, tileSize, 6);
+        ctx.fill();
+      } else {
+        ctx.fillRect(x, y, tileSize, tileSize);
+      }
+
       ctx.globalAlpha = 1;
 
       // impact sprite
@@ -472,9 +490,7 @@ export default function CombatRendererPanel({
               </button>
             </div>
 
-            <div style={{ marginTop: 6, fontSize: 11, opacity: 0.8 }}>
-              Renderer only — does not write canon.
-            </div>
+            <div style={{ marginTop: 6, fontSize: 11, opacity: 0.8 }}>Renderer only — does not write canon.</div>
           </div>
         </div>
       )}
