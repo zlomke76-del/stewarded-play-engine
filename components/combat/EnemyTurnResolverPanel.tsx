@@ -171,7 +171,7 @@ export default function EnemyTurnResolverPanel({
     setDeclared("");
     setRoll(null);
     setReveal("");
-    setDC(defaultDC(enemyName));
+    if (enemyName) setDC(defaultDC(enemyName));
     // clear timers
     timers.current.forEach((t) => window.clearTimeout(t));
     timers.current = [];
