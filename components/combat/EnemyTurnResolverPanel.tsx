@@ -67,6 +67,13 @@ function archetypeFor(name: string | null) {
   return "unknown";
 }
 
+function attackStyleHintForArchetype(a: string): "volley" | "beam" | "charge" | "unknown" {
+  if (a === "archers" || a === "sentries" || a === "drones" || a === "stalkers") return "volley";
+  if (a === "casters" || a === "wraiths" || a === "firewall_wardens") return "beam";
+  if (a === "brutes" || a === "shields" || a === "grid_knights" || a === "neon_hounds") return "charge";
+  return "unknown";
+}
+
 function buildEnemyIntent(enemyName: string, targetName: string) {
   const a = archetypeFor(enemyName);
 
@@ -136,9 +143,7 @@ function outcomeText(enemyName: string, targetName: string, roll: number, dc: nu
       : `The spell fractures against the dungeon’s damp air — it fizzles wide.`;
   }
 
-  return hit
-    ? `The attack lands — ${targetName} is forced back.`
-    : `The attack misses — ${targetName} holds their ground.`;
+  return hit ? `The attack lands — ${targetName} is forced back.` : `The attack misses — ${targetName} holds their ground.`;
 }
 
 export default function EnemyTurnResolverPanel({
@@ -157,6 +162,14 @@ export default function EnemyTurnResolverPanel({
   const [reveal, setReveal] = useState<string>("");
 
   const timers = useRef<number[]>([]);
+  const lockedTurnRef = useRef<{
+    enemyName: string;
+    targetName: string;
+    dc: number;
+    roll: number;
+    intent: string;
+    attackStyleHint: "volley" | "beam" | "charge" | "unknown";
+  } | null>(null);
 
   const enemyName = activeEnemyGroupName ?? null;
 
@@ -165,16 +178,20 @@ export default function EnemyTurnResolverPanel({
     return pick(candidates) ?? "the party";
   }, [playerNames]);
 
+  function clearAllTimers() {
+    timers.current.forEach((t) => window.clearTimeout(t));
+    timers.current = [];
+  }
+
   // Reset when turn/enemy changes
   useEffect(() => {
     setStep("idle");
     setDeclared("");
     setRoll(null);
     setReveal("");
+    lockedTurnRef.current = null;
     if (enemyName) setDC(defaultDC(enemyName));
-    // clear timers
-    timers.current.forEach((t) => window.clearTimeout(t));
-    timers.current = [];
+    clearAllTimers();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [enabled, activeEnemyGroupId, activeEnemyGroupName]);
 
@@ -186,11 +203,28 @@ export default function EnemyTurnResolverPanel({
   function begin() {
     if (!enabled || !enemyName) return;
 
+    // If replaying mid-flow, clear old timers and restart clean.
+    clearAllTimers();
+
     const intent = buildEnemyIntent(enemyName, targetName);
     const nextDC = defaultDC(enemyName);
+    const nextRoll = randInt(1, 20);
+    const a = archetypeFor(enemyName);
+    const attackStyleHint = attackStyleHintForArchetype(a);
+
+    lockedTurnRef.current = {
+      enemyName,
+      targetName,
+      dc: nextDC,
+      roll: nextRoll,
+      intent,
+      attackStyleHint,
+    };
 
     setDeclared(intent);
     setDC(nextDC);
+    setRoll(null);
+    setReveal("");
     setStep("declared");
 
     // suspense beats
@@ -200,31 +234,33 @@ export default function EnemyTurnResolverPanel({
     });
 
     queue(1250, () => {
-      const r = randInt(1, 20);
-      setRoll(r);
+      setRoll(nextRoll);
       setStep("rolled");
     });
 
     queue(1750, () => {
-      const r = roll ?? randInt(1, 20); // safety; usually roll already set
-      const text = outcomeText(enemyName, targetName, r, nextDC);
+      const text = outcomeText(enemyName, targetName, nextRoll, nextDC);
       setReveal(text);
       setStep("revealed");
     });
   }
 
   function commit() {
-    if (!enabled || !enemyName) return;
-    const r = roll ?? 0;
+    if (!enabled) return;
+    const locked = lockedTurnRef.current;
+    if (!locked) return;
+    if (step !== "revealed") return;
 
     const payload: OutcomePayload = {
-      description: `Enemy turn — ${enemyName}. ${reveal || "Outcome pending."}`,
-      dice: { mode: "d20", roll: r, dc, source: "solace" },
+      description: `Enemy turn — ${locked.enemyName}. ${reveal || "Outcome pending."}`,
+      dice: { mode: "d20", roll: locked.roll, dc: locked.dc, source: "solace" },
       audit: [
-        `enemy_group=${enemyName}`,
-        `intent="${declared}"`,
-        `dc=${dc}`,
-        `roll=${r}`,
+        `enemy_group=${locked.enemyName}`,
+        `target=${locked.targetName}`,
+        `intent="${locked.intent}"`,
+        `attackStyleHint=${locked.attackStyleHint}`,
+        `dc=${locked.dc}`,
+        `roll=${locked.roll}`,
         `note=V1 heuristic resolver`,
       ],
     };
@@ -281,7 +317,7 @@ export default function EnemyTurnResolverPanel({
           </div>
 
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-            <button onClick={begin} disabled={!enemyName || step === "telegraph" || step === "rolled" || step === "revealed"}>
+            <button onClick={begin} disabled={!enemyName || step === "telegraph" || step === "rolled"}>
               Replay Enemy Turn
             </button>
 
