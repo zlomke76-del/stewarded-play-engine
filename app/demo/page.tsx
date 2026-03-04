@@ -5,32 +5,10 @@
 // Demo Page — Stewarded Play (Full Governed Flow)
 // ------------------------------------------------------------
 //
-// FIXED EXPLORATION + COMBAT GOVERNANCE:
-//
-// Exploration
-// - Map is READ-ONLY (canon view). No pre-intent movement.
-// - After player intent + option selection, we AUTO-DRAFT exploration canon:
-//     PLAYER_MOVED / MAP_REVEALED / MAP_MARKED
-// - Arbiter commits the bundle alongside OUTCOME (one click)
-//
-// Combat
-// - Combat setup locks ONLY while combat is ACTIVE (preserves replay integrity)
-// - Combat becomes inactive after COMBAT_ENDED for that combatId
-// - Active combatant is derived from canon (initiative + TURN_ADVANCED)
-// - In Solace-neutral: player cannot submit intent on enemy turns
-//
-// Canon panels
-// - WorldLedgerPanelLegacy shows OUTCOME narration
-// - CanonEventsPanel shows all OTHER canon events (movement/map/combat)
-//
-// UI (this version)
-// - Adds a “hero” + dungeon image and chapter navigation so the page feels alive
-// - Breaks the long demo into anchored sections (no new files)
-// - Adds cinematic background treatment:
-//     (1) Radial darkening + subtle blur overlay for readability
-//     (2) Torchlight flicker at edges (ambient)
-//     (3) Slow drifting fog (ambient)
-// - Keeps event-sourced invariants intact
+// UX UPGRADES (requested):
+// 1) Move Facilitation Mode selector up into the hero empty space
+// 2) Hide the Initial Table section until a facilitator mode is explicitly selected
+//    - Once selected, reveal the Initial Table area and auto-scroll to it
 //
 // ------------------------------------------------------------
 
@@ -138,8 +116,40 @@ function normalizeName(s: string) {
 }
 
 function randomName(): string {
-  const a = ["Astra", "Kara", "Thorne", "Hex", "Rook", "Nyx", "Vex", "Dax", "Mara", "Rune", "Sable", "Orin", "Juno", "Kade", "Iris", "Zeph"];
-  const b = ["of Ember", "of Glass", "of Iron", "of Neon", "of Ash", "of Dawn", "of Night", "of the Grid", "the Quiet", "the Bold", "the Warden", "the Runner", "the Signal", "the Echo"];
+  const a = [
+    "Astra",
+    "Kara",
+    "Thorne",
+    "Hex",
+    "Rook",
+    "Nyx",
+    "Vex",
+    "Dax",
+    "Mara",
+    "Rune",
+    "Sable",
+    "Orin",
+    "Juno",
+    "Kade",
+    "Iris",
+    "Zeph",
+  ];
+  const b = [
+    "of Ember",
+    "of Glass",
+    "of Iron",
+    "of Neon",
+    "of Ash",
+    "of Dawn",
+    "of Night",
+    "of the Grid",
+    "the Quiet",
+    "the Bold",
+    "the Warden",
+    "the Runner",
+    "the Signal",
+    "the Echo",
+  ];
   const base = pick(a);
   const tail = pick([true, false, false]) ? ` ${pick(b)}` : "";
   return `${base}${tail}`;
@@ -150,7 +160,14 @@ function randomName(): string {
 // ------------------------------------------------------------
 
 function generateInitialTable(): InitialTable {
-  const factionNames = ["The Whisperers", "The Vaultwardens", "The Ash Circle", "The Night Ledger", "The Bell-Silent", "The Cobble Court"];
+  const factionNames = [
+    "The Whisperers",
+    "The Vaultwardens",
+    "The Ash Circle",
+    "The Night Ledger",
+    "The Bell-Silent",
+    "The Cobble Court",
+  ];
 
   const desires = [
     "control what sleeps below",
@@ -180,14 +197,30 @@ function generateInitialTable(): InitialTable {
       "Voices echo where they shouldn’t, carrying fragments of argument.",
       "The city hums, unaware of the pressure building beneath it.",
     ]),
-    locationTraits: [pick(["crowded", "echoing", "claustrophobic", "uneasily quiet"]), pick(["ancient stone", "rotting wood", "slick cobblestone"])],
+    locationTraits: [
+      pick(["crowded", "echoing", "claustrophobic", "uneasily quiet"]),
+      pick(["ancient stone", "rotting wood", "slick cobblestone"]),
+    ],
     latentFactions: chosenNames.map((name) => ({
       name,
       desire: pick(desires),
       pressure: pick(pressures),
     })),
-    environmentalOddities: [pick(["Lantern flames gutter without wind", "Stone walls seem to absorb sound", "Whispers surface near old drains", "Footsteps echo twice"])],
-    dormantHooks: [pick(["A name scratched into stone repeats across districts", "A missing city clerk last seen near the underways", "A sealed door recently disturbed"])],
+    environmentalOddities: [
+      pick([
+        "Lantern flames gutter without wind",
+        "Stone walls seem to absorb sound",
+        "Whispers surface near old drains",
+        "Footsteps echo twice",
+      ]),
+    ],
+    dormantHooks: [
+      pick([
+        "A name scratched into stone repeats across districts",
+        "A missing city clerk last seen near the underways",
+        "A sealed door recently disturbed",
+      ]),
+    ],
   };
 }
 
@@ -199,23 +232,35 @@ function renderInitialTableNarration(t: InitialTable): string {
 
   const lines: string[] = [];
   lines.push(t.openingFrame);
-  lines.push(`The place feels ${traitA}, and the air carries the stink of ${traitB}.`);
+  lines.push(
+    `The place feels ${traitA}, and the air carries the stink of ${traitB}.`
+  );
 
   if (/footsteps echo twice/i.test(oddity)) {
-    lines.push("Every step answers itself — once, then again — like the street remembers you a beat too late.");
+    lines.push(
+      "Every step answers itself — once, then again — like the street remembers you a beat too late."
+    );
   } else if (/lantern/i.test(oddity.toLowerCase())) {
-    lines.push("Lanternlight can’t decide what it wants to be — steady one second, starving the next.");
+    lines.push(
+      "Lanternlight can’t decide what it wants to be — steady one second, starving the next."
+    );
   } else if (/absorb sound/i.test(oddity.toLowerCase())) {
-    lines.push("Sound doesn’t travel right. Words die early, like the walls are swallowing them.");
+    lines.push(
+      "Sound doesn’t travel right. Words die early, like the walls are swallowing them."
+    );
   } else if (/whispers/i.test(oddity.toLowerCase())) {
-    lines.push("You keep catching whispers at the edge of hearing — not loud enough to understand, not quiet enough to ignore.");
+    lines.push(
+      "You keep catching whispers at the edge of hearing — not loud enough to understand, not quiet enough to ignore."
+    );
   } else {
     lines.push(`${oddity}.`);
   }
 
   if (factions.length > 0) {
     lines.push("There are pressures under the surface:");
-    factions.forEach((f) => lines.push(`• ${f.name} want to ${f.desire} — but ${f.pressure}.`));
+    factions.forEach((f) =>
+      lines.push(`• ${f.name} want to ${f.desire} — but ${f.pressure}.`)
+    );
   }
 
   lines.push(`${hook}.`);
@@ -226,9 +271,22 @@ function renderInitialTableNarration(t: InitialTable): string {
 
 function inferOptionKind(description: string): OptionKind {
   const text = description.toLowerCase();
-  if (text.includes("attack") || text.includes("fight") || text.includes("oppose") || text.includes("contest")) return "contested";
-  if (text.includes("climb") || text.includes("cross") || text.includes("navigate") || text.includes("environment")) return "environmental";
-  if (text.includes("steal") || text.includes("sneak") || text.includes("risk")) return "risky";
+  if (
+    text.includes("attack") ||
+    text.includes("fight") ||
+    text.includes("oppose") ||
+    text.includes("contest")
+  )
+    return "contested";
+  if (
+    text.includes("climb") ||
+    text.includes("cross") ||
+    text.includes("navigate") ||
+    text.includes("environment")
+  )
+    return "environmental";
+  if (text.includes("steal") || text.includes("sneak") || text.includes("risk"))
+    return "risky";
   return "safe";
 }
 
@@ -245,7 +303,12 @@ function deriveCurrentPosition(events: readonly any[], w: number, h: number): XY
   for (const e of events) {
     if (e?.type === "PLAYER_MOVED") {
       const to = e?.payload?.to;
-      if (to && typeof to.x === "number" && typeof to.y === "number" && withinBounds(to, w, h)) {
+      if (
+        to &&
+        typeof to.x === "number" &&
+        typeof to.y === "number" &&
+        withinBounds(to, w, h)
+      ) {
         pos = { x: to.x, y: to.y };
       }
     }
@@ -301,7 +364,6 @@ function textSuggestsLocked(text: string) {
 // ------------------------------------------------------------
 
 function isCombatEndedForId(combatId: string, events: readonly any[]) {
-  // If we see COMBAT_ENDED for this combatId AFTER its COMBAT_STARTED, treat as ended.
   let seenStart = false;
 
   for (const e of events) {
@@ -309,7 +371,11 @@ function isCombatEndedForId(combatId: string, events: readonly any[]) {
       seenStart = true;
       continue;
     }
-    if (seenStart && e?.type === "COMBAT_ENDED" && e?.payload?.combatId === combatId) {
+    if (
+      seenStart &&
+      e?.type === "COMBAT_ENDED" &&
+      e?.payload?.combatId === combatId
+    ) {
       return true;
     }
   }
@@ -355,8 +421,7 @@ function sectionLabel(section: DemoSectionId) {
 }
 
 // ------------------------------------------------------------
-// Ambient FX: fog + torchlight
-// (kept local: no new files)
+// Ambient FX: fog + torchlight (no new files)
 // ------------------------------------------------------------
 
 function clamp01(n: number) {
@@ -374,13 +439,11 @@ function lerp(a: number, b: number, t: number) {
 }
 
 function flickerValue(nowMs: number, seed: number) {
-  // deterministic-ish flicker from time + seed (no randomness at render)
-  // produces a gentle but alive torchlight pulse (not seizurey)
   const t = (nowMs / 1000) * (0.9 + (seed % 7) * 0.03);
   const s1 = Math.sin(t * 2.3 + seed);
   const s2 = Math.sin(t * 5.1 + seed * 1.7);
   const s3 = Math.sin(t * 9.2 + seed * 0.6);
-  const raw = (s1 * 0.6 + s2 * 0.3 + s3 * 0.1) * 0.5 + 0.5; // ~0..1
+  const raw = (s1 * 0.6 + s2 * 0.3 + s3 * 0.1) * 0.5 + 0.5;
   return easeInOutCubic(clamp01(raw));
 }
 
@@ -389,8 +452,12 @@ function flickerValue(nowMs: number, seed: number) {
 export default function DemoPage() {
   const role: "arbiter" = "arbiter";
 
-  const [state, setState] = useState<SessionState>(createSession("demo-session", "demo"));
-  const [dmMode, setDmMode] = useState<DMMode>("solace-neutral");
+  const [state, setState] = useState<SessionState>(
+    createSession("demo-session", "demo")
+  );
+
+  // IMPORTANT UX CHANGE: mode must be explicitly selected
+  const [dmMode, setDmMode] = useState<DMMode | null>(null);
 
   const MAP_W = 13;
   const MAP_H = 9;
@@ -425,10 +492,9 @@ export default function DemoPage() {
     return () => cancelAnimationFrame(raf);
   }, []);
 
-  // Fog drift: slow diagonal movement, loops
   const fogShiftA = useMemo(() => {
     const t = fxNow / 1000;
-    const x = (t * 6) % 240; // px
+    const x = (t * 6) % 240;
     const y = (t * 3.5) % 180;
     return { x, y };
   }, [fxNow]);
@@ -441,7 +507,6 @@ export default function DemoPage() {
   }, [fxNow]);
 
   const torchFlicker = useMemo(() => {
-    // intensity 0..1
     return flickerValue(fxNow, 1337);
   }, [fxNow]);
 
@@ -449,7 +514,10 @@ export default function DemoPage() {
   // Combat state (derived + ended-aware)
   // ----------------------------------------------------------
 
-  const latestCombatId = useMemo(() => findLatestCombatId(state.events as any) ?? null, [state.events]);
+  const latestCombatId = useMemo(
+    () => findLatestCombatId(state.events as any) ?? null,
+    [state.events]
+  );
 
   const derivedCombat = useMemo(() => {
     if (!latestCombatId) return null;
@@ -465,7 +533,11 @@ export default function DemoPage() {
 
   const activeCombatantSpec = useMemo(() => {
     if (!derivedCombat?.activeCombatantId) return null;
-    return derivedCombat.participants.find((p) => p.id === derivedCombat.activeCombatantId) ?? null;
+    return (
+      derivedCombat.participants.find(
+        (p) => p.id === derivedCombat.activeCombatantId
+      ) ?? null
+    );
   }, [derivedCombat]);
 
   const isEnemyTurn = combatActive && activeCombatantSpec?.kind === "enemy_group";
@@ -474,7 +546,10 @@ export default function DemoPage() {
   // Exploration draft (auto-prepared AFTER intent + option)
   // ----------------------------------------------------------
 
-  const currentPos = useMemo(() => deriveCurrentPosition(state.events as any[], MAP_W, MAP_H), [state.events]);
+  const currentPos = useMemo(
+    () => deriveCurrentPosition(state.events as any[], MAP_W, MAP_H),
+    [state.events]
+  );
 
   const [explorationDraft, setExplorationDraft] = useState<ExplorationDraft>({
     enableMove: false,
@@ -533,15 +608,18 @@ export default function DemoPage() {
     if (tableDraftText.trim() === "") setTableDraftText(renderedTableNarration);
   }, [initialTable, renderedTableNarration, tableDraftText]);
 
+  // When mode changes, reset the table acceptance
   useEffect(() => {
-    if (dmMode === "solace-neutral") setTableAccepted(false);
+    if (dmMode === null) return;
+    setTableAccepted(false);
   }, [dmMode]);
 
   // ----------------------------------------------------------
   // Player submits action (intent)
   // ----------------------------------------------------------
 
-  const canPlayerSubmitIntent = (!combatActive || !isEnemyTurn) || dmMode === "human";
+  const canPlayerSubmitIntent =
+    dmMode !== null && ((!combatActive || !isEnemyTurn) || dmMode === "human");
 
   function handlePlayerAction() {
     if (!playerInput.trim()) return;
@@ -578,7 +656,10 @@ export default function DemoPage() {
     let next = nextState;
 
     const here = deriveCurrentPosition(next.events as any[], MAP_W, MAP_H);
-    const to = d.enableMove && d.direction !== "none" ? stepFrom(here, d.direction) : null;
+
+    const to =
+      d.enableMove && d.direction !== "none" ? stepFrom(here, d.direction) : null;
+
     const canMove = to ? withinBounds(to, MAP_W, MAP_H) : false;
 
     if (d.enableMove && canMove && to) {
@@ -596,7 +677,9 @@ export default function DemoPage() {
           timestamp: Date.now(),
           actor: "arbiter",
           type: "MAP_REVEALED",
-          payload: { tiles: revealRadius(to, d.revealRadius, MAP_W, MAP_H) } as any,
+          payload: {
+            tiles: revealRadius(to, d.revealRadius, MAP_W, MAP_H),
+          } as any,
         });
       }
 
@@ -620,7 +703,9 @@ export default function DemoPage() {
         timestamp: Date.now(),
         actor: "arbiter",
         type: "MAP_REVEALED",
-        payload: { tiles: revealRadius(here, d.revealRadius, MAP_W, MAP_H) } as any,
+        payload: {
+          tiles: revealRadius(here, d.revealRadius, MAP_W, MAP_H),
+        } as any,
       });
     }
 
@@ -671,10 +756,21 @@ export default function DemoPage() {
   // ----------------------------------------------------------
 
   const [playerCount, setPlayerCount] = useState(4);
-  const [playerNames, setPlayerNames] = useState<string[]>(["", "", "", "", "", ""]);
+  const [playerNames, setPlayerNames] = useState<string[]>([
+    "",
+    "",
+    "",
+    "",
+    "",
+    "",
+  ]);
 
-  const [enemyGroups, setEnemyGroups] = useState<string[]>(["Skirmishers", "Archers"]);
-  const [enemyGroupSelect, setEnemyGroupSelect] = useState<string>("Skirmishers");
+  const [enemyGroups, setEnemyGroups] = useState<string[]>([
+    "Skirmishers",
+    "Archers",
+  ]);
+  const [enemyGroupSelect, setEnemyGroupSelect] =
+    useState<string>("Skirmishers");
 
   const [initModPlayers, setInitModPlayers] = useState(1);
   const [initModEnemies, setInitModEnemies] = useState(1);
@@ -683,7 +779,20 @@ export default function DemoPage() {
   const INIT_MODS = [-2, -1, 0, 1, 2, 3, 4, 5, 6, 7, 8] as const;
 
   const ENEMY_GROUP_LIBRARY = useMemo(
-    () => ["Skirmishers", "Archers", "Brutes", "Shields", "Stalkers", "Casters", "Drones", "Sentries", "Wraiths", "Grid Knights", "Firewall Wardens", "Neon Hounds"],
+    () => [
+      "Skirmishers",
+      "Archers",
+      "Brutes",
+      "Shields",
+      "Stalkers",
+      "Casters",
+      "Drones",
+      "Sentries",
+      "Wraiths",
+      "Grid Knights",
+      "Firewall Wardens",
+      "Neon Hounds",
+    ],
     []
   );
 
@@ -809,7 +918,8 @@ export default function DemoPage() {
     if (!v) return;
 
     setEnemyGroups((prev) => {
-      if (prev.map((x) => x.toLowerCase()).includes(v.toLowerCase())) return prev;
+      if (prev.map((x) => x.toLowerCase()).includes(v.toLowerCase()))
+        return prev;
       if (prev.length >= 6) return prev;
       return [...prev, v];
     });
@@ -831,7 +941,9 @@ export default function DemoPage() {
     const pc = clampInt(playerCount, 1, 6);
     setPlayerNames((prev) => {
       const next = [...prev];
-      const used = new Set<string>(next.map((x) => normalizeName(x).toLowerCase()).filter(Boolean));
+      const used = new Set<string>(
+        next.map((x) => normalizeName(x).toLowerCase()).filter(Boolean)
+      );
 
       for (let i = 0; i < pc; i++) {
         const current = normalizeName(next[i] ?? "");
@@ -853,12 +965,19 @@ export default function DemoPage() {
 
   const isHumanDM = dmMode === "human";
 
-  const outcomesCount = useMemo(() => state.events.filter((e: any) => e?.type === "OUTCOME").length, [state.events]);
-  const canonCount = useMemo(() => state.events.filter((e: any) => e?.type && e?.type !== "OUTCOME").length, [state.events]);
+  const outcomesCount = useMemo(
+    () => state.events.filter((e: any) => e?.type === "OUTCOME").length,
+    [state.events]
+  );
+  const canonCount = useMemo(
+    () =>
+      state.events.filter((e: any) => e?.type && e?.type !== "OUTCOME").length,
+    [state.events]
+  );
 
   const chapterButtons: { id: DemoSectionId; hint: string }[] = useMemo(
     () => [
-      { id: "mode", hint: "Set facilitator mode" },
+      { id: "mode", hint: "Choose facilitator mode" },
       { id: "table", hint: "Start scene + accept table" },
       { id: "pressure", hint: "Advisory state" },
       { id: "map", hint: "Canon view of space" },
@@ -871,13 +990,14 @@ export default function DemoPage() {
     []
   );
 
-  // ----------------------------------------------------------
-  // UI
-  // ----------------------------------------------------------
-
-  // Torchlight color intensity (no explicit colors via CSS vars would be nicer, but keeping local)
   const torchAlphaLeft = lerp(0.10, 0.22, torchFlicker);
   const torchAlphaRight = lerp(0.08, 0.19, torchFlicker);
+
+  function selectMode(nextMode: DMMode) {
+    setDmMode(nextMode);
+    setActiveSection("table");
+    queueMicrotask(() => scrollToSection("table"));
+  }
 
   return (
     <div
@@ -891,7 +1011,7 @@ export default function DemoPage() {
         overflow: "hidden",
       }}
     >
-      {/* Base readability overlay (Fix #1) + subtle blur (Fix #2) */}
+      {/* Base readability overlay + subtle blur */}
       <div
         style={{
           position: "absolute",
@@ -903,15 +1023,19 @@ export default function DemoPage() {
         }}
       />
 
-      {/* Torchlight flicker (Upgrade #1) */}
+      {/* Torchlight flicker */}
       <div
         style={{
           position: "absolute",
           inset: 0,
           pointerEvents: "none",
           background: [
-            `radial-gradient(520px 820px at 8% 55%, rgba(255,170,90,${torchAlphaLeft.toFixed(3)}), transparent 62%)`,
-            `radial-gradient(460px 760px at 92% 60%, rgba(255,150,70,${torchAlphaRight.toFixed(3)}), transparent 60%)`,
+            `radial-gradient(520px 820px at 8% 55%, rgba(255,170,90,${torchAlphaLeft.toFixed(
+              3
+            )}), transparent 62%)`,
+            `radial-gradient(460px 760px at 92% 60%, rgba(255,150,70,${torchAlphaRight.toFixed(
+              3
+            )}), transparent 60%)`,
             "radial-gradient(700px 520px at 50% 110%, rgba(255,140,80,0.06), transparent 65%)",
           ].join(", "),
           mixBlendMode: "screen",
@@ -919,7 +1043,7 @@ export default function DemoPage() {
         }}
       />
 
-      {/* Fog drift (Upgrade #2) */}
+      {/* Fog drift */}
       <div
         style={{
           position: "absolute",
@@ -928,11 +1052,17 @@ export default function DemoPage() {
           opacity: 0.22,
           filter: "blur(10px)",
           background: [
-            `radial-gradient(600px 380px at ${30 + (fogShiftA.x % 40)}% ${30 + (fogShiftA.y % 30)}%, rgba(255,255,255,0.12), transparent 68%)`,
-            `radial-gradient(780px 520px at ${60 + (fogShiftB.x % 35)}% ${55 + (fogShiftB.y % 25)}%, rgba(255,255,255,0.10), transparent 70%)`,
+            `radial-gradient(600px 380px at ${
+              30 + (fogShiftA.x % 40)
+            }% ${30 + (fogShiftA.y % 30)}%, rgba(255,255,255,0.12), transparent 68%)`,
+            `radial-gradient(780px 520px at ${
+              60 + (fogShiftB.x % 35)
+            }% ${55 + (fogShiftB.y % 25)}%, rgba(255,255,255,0.10), transparent 70%)`,
             "radial-gradient(900px 600px at 50% 40%, rgba(255,255,255,0.06), transparent 72%)",
           ].join(", "),
-          transform: `translate3d(${(fogShiftA.x % 120) - 60}px, ${(fogShiftA.y % 80) - 40}px, 0)`,
+          transform: `translate3d(${(fogShiftA.x % 120) - 60}px, ${
+            (fogShiftA.y % 80) - 40
+          }px, 0)`,
         }}
       />
 
@@ -943,12 +1073,15 @@ export default function DemoPage() {
             onShare={shareCanon}
             roles={[
               { label: "Player", description: "Declares intent" },
-              { label: "Solace", description: "Prepares the resolution and narrates outcome" },
+              {
+                label: "Solace",
+                description: "Prepares the resolution and narrates outcome",
+              },
               { label: "Arbiter", description: "Commits canon" },
             ]}
           />
 
-          {/* HERO + DUNGEON IMAGE + CHAPTER NAV (visual only) */}
+          {/* HERO + DUNGEON IMAGE + CHAPTER NAV + MODE SELECTOR (moved up) */}
           <div
             style={{
               borderRadius: 12,
@@ -967,18 +1100,45 @@ export default function DemoPage() {
                 alignItems: "stretch",
               }}
             >
-              {/* LEFT: pitch + controls */}
+              {/* LEFT */}
               <div style={{ minWidth: 0 }}>
-                <div style={{ fontSize: 12, letterSpacing: 0.6, opacity: 0.85 }}>EVENT-SOURCED PLAY · FAIL-CLOSED CANON</div>
-                <div style={{ marginTop: 6, fontSize: 22, fontWeight: 800, lineHeight: 1.15 }}>
-                  A governed tabletop loop: intent → resolution → canon.
-                </div>
-                <div className="muted" style={{ marginTop: 10, maxWidth: 760, lineHeight: 1.55 }}>
-                  This page is a working demo. It’s long by nature — so it’s organized into “chapters.” Nothing here rewrites the world: the UI only
-                  renders what the event log contains.
+                <div style={{ fontSize: 12, letterSpacing: 0.6, opacity: 0.85 }}>
+                  EVENT-SOURCED PLAY · FAIL-CLOSED CANON
                 </div>
 
-                <div style={{ marginTop: 12, display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+                <div
+                  style={{
+                    marginTop: 6,
+                    fontSize: 22,
+                    fontWeight: 800,
+                    lineHeight: 1.15,
+                  }}
+                >
+                  A governed tabletop loop: intent → resolution → canon.
+                </div>
+
+                <div
+                  className="muted"
+                  style={{
+                    marginTop: 10,
+                    maxWidth: 760,
+                    lineHeight: 1.55,
+                  }}
+                >
+                  This page is a working demo. It’s long by nature — so it’s
+                  organized into “chapters.” Nothing here rewrites the world:
+                  the UI only renders what the event log contains.
+                </div>
+
+                <div
+                  style={{
+                    marginTop: 12,
+                    display: "flex",
+                    gap: 10,
+                    flexWrap: "wrap",
+                    alignItems: "center",
+                  }}
+                >
                   <button
                     onClick={() => {
                       setActiveSection("mode");
@@ -993,21 +1153,96 @@ export default function DemoPage() {
                       setActiveSection("action");
                       scrollToSection("action");
                     }}
+                    disabled={dmMode === null || !tableAccepted}
+                    title={
+                      dmMode === null
+                        ? "Choose a facilitator mode first"
+                        : !tableAccepted
+                        ? "Accept the initial table first"
+                        : "Jump to Player Action"
+                    }
                   >
                     Play me
                   </button>
 
                   <div className="muted" style={{ fontSize: 12 }}>
-                    outcomes: <strong>{outcomesCount}</strong> · canon events: <strong>{canonCount}</strong>
+                    outcomes: <strong>{outcomesCount}</strong> · canon events:{" "}
+                    <strong>{canonCount}</strong>
                   </div>
                 </div>
 
                 <div className="muted" style={{ fontSize: 12, marginTop: 10 }}>
-                  Pro-tip: click “Play me”, submit an action, then roll/record to commit canon.
+                  Pro-tip: choose a mode, accept the table, then submit an
+                  action and record an outcome.
+                </div>
+
+                {/* MODE (moved into hero empty space) */}
+                <div
+                  id={anchorId("mode")}
+                  style={{
+                    scrollMarginTop: 90,
+                    marginTop: 14,
+                    borderRadius: 12,
+                    border: "1px solid rgba(255,255,255,0.10)",
+                    background: "rgba(0,0,0,0.22)",
+                    padding: 14,
+                  }}
+                >
+                  <div style={{ fontWeight: 800, fontSize: 16 }}>
+                    Facilitation Mode
+                  </div>
+                  <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>
+                    Select who is allowed to declare intent and how options are
+                    chosen.
+                  </div>
+
+                  <div style={{ marginTop: 10, display: "grid", gap: 8 }}>
+                    <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                      <input
+                        type="radio"
+                        checked={dmMode === "human"}
+                        onChange={() => selectMode("human")}
+                      />
+                      <span>
+                        <strong>Human DM</strong>{" "}
+                        <span className="muted">
+                          (options visible + editable setup)
+                        </span>
+                      </span>
+                    </label>
+
+                    <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                      <input
+                        type="radio"
+                        checked={dmMode === "solace-neutral"}
+                        onChange={() => selectMode("solace-neutral")}
+                      />
+                      <span>
+                        <strong>Solace</strong>{" "}
+                        <span className="muted">(Neutral Facilitator)</span>
+                      </span>
+                    </label>
+
+                    {dmMode === null && (
+                      <div
+                        className="muted"
+                        style={{
+                          fontSize: 12,
+                          marginTop: 6,
+                          padding: "10px 10px",
+                          borderRadius: 10,
+                          border: "1px solid rgba(255,255,255,0.10)",
+                          background: "rgba(255,255,255,0.04)",
+                        }}
+                      >
+                        Choose a mode to reveal the Initial Table.
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
 
-              {/* RIGHT: image + chapter grid */}
+              {/* RIGHT */}
               <div style={{ minWidth: 0, display: "grid", gap: 10 }}>
                 {/* Image */}
                 <div
@@ -1035,7 +1270,8 @@ export default function DemoPage() {
                     style={{
                       position: "absolute",
                       inset: 0,
-                      background: "linear-gradient(90deg, rgba(0,0,0,0.70), rgba(0,0,0,0.30) 55%, rgba(0,0,0,0.65))",
+                      background:
+                        "linear-gradient(90deg, rgba(0,0,0,0.70), rgba(0,0,0,0.30) 55%, rgba(0,0,0,0.65))",
                     }}
                   />
                   <div
@@ -1050,7 +1286,9 @@ export default function DemoPage() {
                     }}
                   >
                     <div style={{ minWidth: 0 }}>
-                      <div style={{ fontWeight: 800, fontSize: 14 }}>Enter the dungeon</div>
+                      <div style={{ fontWeight: 800, fontSize: 14 }}>
+                        Enter the dungeon
+                      </div>
                       <div className="muted" style={{ fontSize: 12, marginTop: 2 }}>
                         You declare intent. The world remembers only what canon records.
                       </div>
@@ -1061,6 +1299,7 @@ export default function DemoPage() {
                         setActiveSection("action");
                         scrollToSection("action");
                       }}
+                      disabled={dmMode === null || !tableAccepted}
                       style={{
                         padding: "10px 12px",
                         borderRadius: 10,
@@ -1068,7 +1307,13 @@ export default function DemoPage() {
                         background: "rgba(255,255,255,0.06)",
                         whiteSpace: "nowrap",
                       }}
-                      title="Jump to Player Action"
+                      title={
+                        dmMode === null
+                          ? "Choose a facilitator mode first"
+                          : !tableAccepted
+                          ? "Accept the initial table first"
+                          : "Jump to Player Action"
+                      }
                     >
                       ▶ Play
                     </button>
@@ -1081,9 +1326,19 @@ export default function DemoPage() {
                     Chapters
                   </div>
 
-                  <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 8 }}>
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+                      gap: 8,
+                    }}
+                  >
                     {chapterButtons.map((b) => {
                       const active = activeSection === b.id;
+                      const disabled =
+                        (b.id === "action" || b.id === "resolution" || b.id === "pressure" || b.id === "map" || b.id === "combat" || b.id === "canon" || b.id === "ledger") &&
+                        (dmMode === null || !tableAccepted);
+
                       return (
                         <button
                           key={b.id}
@@ -1091,18 +1346,37 @@ export default function DemoPage() {
                             setActiveSection(b.id);
                             scrollToSection(b.id);
                           }}
+                          disabled={disabled}
                           style={{
                             padding: "10px 10px",
                             borderRadius: 10,
-                            border: active ? "1px solid rgba(138,180,255,0.55)" : "1px solid rgba(255,255,255,0.10)",
-                            background: active ? "rgba(138,180,255,0.10)" : "rgba(255,255,255,0.04)",
+                            border: active
+                              ? "1px solid rgba(138,180,255,0.55)"
+                              : "1px solid rgba(255,255,255,0.10)",
+                            background: active
+                              ? "rgba(138,180,255,0.10)"
+                              : "rgba(255,255,255,0.04)",
                             textAlign: "left",
+                            opacity: disabled ? 0.55 : 1,
                           }}
                           aria-label={`Go to ${sectionLabel(b.id)}`}
-                          title={b.hint}
+                          title={
+                            disabled
+                              ? "Choose a mode and accept the table first"
+                              : b.hint
+                          }
                         >
-                          <div style={{ fontWeight: 800, fontSize: 12 }}>{sectionLabel(b.id)}</div>
-                          <div className="muted" style={{ fontSize: 11, marginTop: 4, lineHeight: 1.2 }}>
+                          <div style={{ fontWeight: 800, fontSize: 12 }}>
+                            {sectionLabel(b.id)}
+                          </div>
+                          <div
+                            className="muted"
+                            style={{
+                              fontSize: 11,
+                              marginTop: 4,
+                              lineHeight: 1.2,
+                            }}
+                          >
                             {b.hint}
                           </div>
                         </button>
@@ -1114,40 +1388,11 @@ export default function DemoPage() {
             </div>
           </div>
 
-          {/* MODE */}
-          <div id={anchorId("mode")} style={{ scrollMarginTop: 90 }}>
-            <CardSection title="Facilitation Mode">
-              <label>
-                <input
-                  type="radio"
-                  checked={dmMode === "human"}
-                  onChange={() => {
-                    setDmMode("human");
-                    setActiveSection("table");
-                    queueMicrotask(() => scrollToSection("table"));
-                  }}
-                />{" "}
-                Human DM (options visible + editable setup)
-              </label>
-              <br />
-              <label>
-                <input
-                  type="radio"
-                  checked={dmMode === "solace-neutral"}
-                  onChange={() => {
-                    setDmMode("solace-neutral");
-                    setActiveSection("table");
-                    queueMicrotask(() => scrollToSection("table"));
-                  }}
-                />{" "}
-                Solace (Neutral Facilitator)
-              </label>
-            </CardSection>
-          </div>
-
-          {/* TABLE */}
+          {/* TABLE (hidden until mode selected) */}
           <div id={anchorId("table")} style={{ scrollMarginTop: 90 }}>
-            {dmMode === "solace-neutral" && initialTable && !tableAccepted && (
+            {dmMode === null && <Disclaimer />}
+
+            {dmMode !== null && dmMode === "solace-neutral" && initialTable && !tableAccepted && (
               <CardSection title="Initial Table (Solace)">
                 <p className="muted" style={{ marginBottom: 8 }}>
                   Table-play narration (finalized):
@@ -1165,11 +1410,13 @@ export default function DemoPage() {
                   {tableDraftText}
                 </div>
 
-                <details style={{ marginTop: 12 }}>
+                <details style={{ marginTop: 12 }} open>
                   <summary className="muted">Show underlying table signals</summary>
                   <div style={{ marginTop: 10 }}>
                     <p>{initialTable.openingFrame}</p>
-                    <p className="muted">Traits: {initialTable.locationTraits.join(", ")}</p>
+                    <p className="muted">
+                      Traits: {initialTable.locationTraits.join(", ")}
+                    </p>
                     <ul>
                       {initialTable.latentFactions.map((f, i) => (
                         <li key={i}>
@@ -1177,8 +1424,12 @@ export default function DemoPage() {
                         </li>
                       ))}
                     </ul>
-                    <p className="muted">Oddity: {initialTable.environmentalOddities.join(", ")}</p>
-                    <p className="muted">Hook: {initialTable.dormantHooks.join(", ")}</p>
+                    <p className="muted">
+                      Oddity: {initialTable.environmentalOddities.join(", ")}
+                    </p>
+                    <p className="muted">
+                      Hook: {initialTable.dormantHooks.join(", ")}
+                    </p>
                   </div>
                 </details>
 
@@ -1196,19 +1447,26 @@ export default function DemoPage() {
               </CardSection>
             )}
 
-            {dmMode === "human" && initialTable && !tableAccepted && (
+            {dmMode !== null && dmMode === "human" && initialTable && !tableAccepted && (
               <CardSection title="Solace Setup Helper (Optional)">
                 <p className="muted" style={{ marginTop: 0 }}>
                   If you want a fast-start table, edit it, then run the game.
                 </p>
 
-                <textarea rows={10} value={tableDraftText} onChange={(e) => setTableDraftText(e.target.value)} style={{ width: "100%" }} />
+                <textarea
+                  rows={10}
+                  value={tableDraftText}
+                  onChange={(e) => setTableDraftText(e.target.value)}
+                  style={{ width: "100%" }}
+                />
 
-                <details style={{ marginTop: 12 }}>
+                <details style={{ marginTop: 12 }} open>
                   <summary className="muted">Show underlying table signals</summary>
                   <div style={{ marginTop: 10 }}>
                     <p>{initialTable.openingFrame}</p>
-                    <p className="muted">Traits: {initialTable.locationTraits.join(", ")}</p>
+                    <p className="muted">
+                      Traits: {initialTable.locationTraits.join(", ")}
+                    </p>
                     <ul>
                       {initialTable.latentFactions.map((f, i) => (
                         <li key={i}>
@@ -1216,8 +1474,12 @@ export default function DemoPage() {
                         </li>
                       ))}
                     </ul>
-                    <p className="muted">Oddity: {initialTable.environmentalOddities.join(", ")}</p>
-                    <p className="muted">Hook: {initialTable.dormantHooks.join(", ")}</p>
+                    <p className="muted">
+                      Oddity: {initialTable.environmentalOddities.join(", ")}
+                    </p>
+                    <p className="muted">
+                      Hook: {initialTable.dormantHooks.join(", ")}
+                    </p>
                   </div>
                 </details>
 
@@ -1234,11 +1496,9 @@ export default function DemoPage() {
                 </div>
               </CardSection>
             )}
-
-            {dmMode === "solace-neutral" && !tableAccepted && <Disclaimer />}
           </div>
 
-          {(dmMode === "human" || tableAccepted) && (
+          {(dmMode !== null && (dmMode === "human" || tableAccepted)) && (
             <>
               {/* PRESSURE */}
               <div id={anchorId("pressure")} style={{ scrollMarginTop: 90 }}>
@@ -1257,18 +1517,33 @@ export default function DemoPage() {
                     Players roll individually. Enemy groups roll once per group. Turn order is derived from events.
                   </p>
 
-                  {combatActive && <div className="muted" style={{ marginTop: 8 }}>🔒 Combat is active. Setup is locked to preserve replay integrity.</div>}
-
-                  {combatEnded && derivedCombat && (
-                    <div className="muted" style={{ marginTop: 8 }}>🏁 Combat ended. You can start a new combat (new combatId) if you want.</div>
+                  {combatActive && (
+                    <div className="muted" style={{ marginTop: 8 }}>
+                      🔒 Combat is active. Setup is locked to preserve replay integrity.
+                    </div>
                   )}
 
-                  <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "flex-end" }}>
+                  {combatEnded && derivedCombat && (
+                    <div className="muted" style={{ marginTop: 8 }}>
+                      🏁 Combat ended. You can start a new combat (new combatId) if you want.
+                    </div>
+                  )}
+
+                  <div
+                    style={{
+                      display: "flex",
+                      gap: 12,
+                      flexWrap: "wrap",
+                      alignItems: "flex-end",
+                    }}
+                  >
                     <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                       Players (1–6):
                       <select
                         value={playerCount}
-                        onChange={(e) => setPlayerCount(clampInt(Number(e.target.value), 1, 6))}
+                        onChange={(e) =>
+                          setPlayerCount(clampInt(Number(e.target.value), 1, 6))
+                        }
                         style={{ minWidth: 140 }}
                         disabled={combatActive}
                       >
@@ -1284,7 +1559,9 @@ export default function DemoPage() {
                       Player init mod:
                       <select
                         value={initModPlayers}
-                        onChange={(e) => setInitModPlayers(Math.trunc(Number(e.target.value)))}
+                        onChange={(e) =>
+                          setInitModPlayers(Math.trunc(Number(e.target.value)))
+                        }
                         style={{ minWidth: 140 }}
                         disabled={combatActive}
                       >
@@ -1300,7 +1577,9 @@ export default function DemoPage() {
                       Enemy group init mod:
                       <select
                         value={initModEnemies}
-                        onChange={(e) => setInitModEnemies(Math.trunc(Number(e.target.value)))}
+                        onChange={(e) =>
+                          setInitModEnemies(Math.trunc(Number(e.target.value)))
+                        }
                         style={{ minWidth: 170 }}
                         disabled={combatActive}
                       >
@@ -1312,20 +1591,45 @@ export default function DemoPage() {
                       </select>
                     </label>
 
-                    <div style={{ flex: "1 1 320px", display: "flex", flexDirection: "column", gap: 6 }}>
+                    <div
+                      style={{
+                        flex: "1 1 320px",
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: 6,
+                      }}
+                    >
                       <span className="muted">Enemy groups</span>
-                      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-                        <select value={enemyGroupSelect} onChange={(e) => setEnemyGroupSelect(e.target.value)} style={{ minWidth: 220 }} disabled={combatActive}>
+                      <div
+                        style={{
+                          display: "flex",
+                          gap: 8,
+                          flexWrap: "wrap",
+                          alignItems: "center",
+                        }}
+                      >
+                        <select
+                          value={enemyGroupSelect}
+                          onChange={(e) => setEnemyGroupSelect(e.target.value)}
+                          style={{ minWidth: 220 }}
+                          disabled={combatActive}
+                        >
                           {ENEMY_GROUP_LIBRARY.map((g) => (
                             <option key={g} value={g}>
                               {g}
                             </option>
                           ))}
                         </select>
-                        <button onClick={() => addEnemyGroup(enemyGroupSelect)} disabled={combatActive}>
+                        <button
+                          onClick={() => addEnemyGroup(enemyGroupSelect)}
+                          disabled={combatActive}
+                        >
                           Add
                         </button>
-                        <button onClick={clearEnemyGroups} disabled={combatActive || enemyGroups.length === 0}>
+                        <button
+                          onClick={clearEnemyGroups}
+                          disabled={combatActive || enemyGroups.length === 0}
+                        >
                           Clear
                         </button>
                         <span className="muted" style={{ fontSize: 12 }}>
@@ -1334,7 +1638,14 @@ export default function DemoPage() {
                       </div>
 
                       {enemyGroups.length > 0 ? (
-                        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8 }}>
+                        <div
+                          style={{
+                            display: "flex",
+                            gap: 8,
+                            flexWrap: "wrap",
+                            marginTop: 8,
+                          }}
+                        >
                           {enemyGroups.map((g) => (
                             <span
                               key={g}
@@ -1353,7 +1664,11 @@ export default function DemoPage() {
                                 onClick={() => removeEnemyGroup(g)}
                                 aria-label={`Remove ${g}`}
                                 disabled={combatActive}
-                                style={{ padding: "0 8px", borderRadius: 999, border: "1px solid rgba(255,255,255,0.12)" }}
+                                style={{
+                                  padding: "0 8px",
+                                  borderRadius: 999,
+                                  border: "1px solid rgba(255,255,255,0.12)",
+                                }}
                               >
                                 ×
                               </button>
@@ -1369,7 +1684,14 @@ export default function DemoPage() {
                   </div>
 
                   <div style={{ marginTop: 14 }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
+                    <div
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                        gap: 10,
+                      }}
+                    >
                       <strong>Players</strong>
                       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                         <button onClick={randomizePlayerNames} disabled={combatActive}>
@@ -1378,29 +1700,46 @@ export default function DemoPage() {
                       </div>
                     </div>
 
-                    <div style={{ marginTop: 10, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 10 }}>
-                      {Array.from({ length: clampInt(playerCount, 1, 6) }, (_, idx) => {
-                        const i1 = idx + 1;
-                        const value = playerNames[idx] ?? "";
-                        return (
-                          <label key={i1} style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                            <span className="muted">Player {i1} name (optional)</span>
-                            <input
-                              value={value}
-                              disabled={combatActive}
-                              onChange={(e) => {
-                                const v = e.target.value;
-                                setPlayerNames((prev) => {
-                                  const next = [...prev];
-                                  next[idx] = v;
-                                  return next.slice(0, 6);
-                                });
+                    <div
+                      style={{
+                        marginTop: 10,
+                        display: "grid",
+                        gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+                        gap: 10,
+                      }}
+                    >
+                      {Array.from(
+                        { length: clampInt(playerCount, 1, 6) },
+                        (_, idx) => {
+                          const i1 = idx + 1;
+                          const value = playerNames[idx] ?? "";
+                          return (
+                            <label
+                              key={i1}
+                              style={{
+                                display: "flex",
+                                flexDirection: "column",
+                                gap: 6,
                               }}
-                              placeholder={`Player ${i1}`}
-                            />
-                          </label>
-                        );
-                      })}
+                            >
+                              <span className="muted">Player {i1} name (optional)</span>
+                              <input
+                                value={value}
+                                disabled={combatActive}
+                                onChange={(e) => {
+                                  const v = e.target.value;
+                                  setPlayerNames((prev) => {
+                                    const next = [...prev];
+                                    next[idx] = v;
+                                    return next.slice(0, 6);
+                                  });
+                                }}
+                                placeholder={`Player ${i1}`}
+                              />
+                            </label>
+                          );
+                        }
+                      )}
                     </div>
 
                     <p className="muted" style={{ marginTop: 10, marginBottom: 0 }}>
@@ -1423,19 +1762,25 @@ export default function DemoPage() {
                   {derivedCombat && (
                     <div style={{ marginTop: 12 }}>
                       <div className="muted">
-                        Combat: <strong>{derivedCombat.combatId}</strong> · Round <strong>{derivedCombat.round}</strong>
+                        Combat: <strong>{derivedCombat.combatId}</strong> · Round{" "}
+                        <strong>{derivedCombat.round}</strong>
                         {activeCombatantSpec && (
                           <>
                             {" "}
-                            · Active: <strong>{formatCombatantLabel(activeCombatantSpec)}</strong>
+                            · Active:{" "}
+                            <strong>{formatCombatantLabel(activeCombatantSpec)}</strong>
                           </>
                         )}
                       </div>
 
                       <div style={{ marginTop: 10, display: "grid", gridTemplateColumns: "1fr", gap: 6 }}>
                         {derivedCombat.order.map((id, idx) => {
-                          const spec = derivedCombat.participants.find((p) => p.id === id) ?? null;
-                          const roll = derivedCombat.initiative.find((r) => r.combatantId === id) ?? null;
+                          const spec =
+                            derivedCombat.participants.find((p) => p.id === id) ??
+                            null;
+                          const roll =
+                            derivedCombat.initiative.find((r) => r.combatantId === id) ??
+                            null;
                           const active = derivedCombat.activeCombatantId === id;
 
                           return (
@@ -1444,8 +1789,12 @@ export default function DemoPage() {
                               style={{
                                 padding: "10px 12px",
                                 borderRadius: 8,
-                                border: active ? "1px solid rgba(138,180,255,0.55)" : "1px solid rgba(255,255,255,0.10)",
-                                background: active ? "rgba(138,180,255,0.10)" : "rgba(255,255,255,0.04)",
+                                border: active
+                                  ? "1px solid rgba(138,180,255,0.55)"
+                                  : "1px solid rgba(255,255,255,0.10)",
+                                background: active
+                                  ? "rgba(138,180,255,0.10)"
+                                  : "rgba(255,255,255,0.04)",
                                 display: "flex",
                                 justifyContent: "space-between",
                                 alignItems: "center",
@@ -1458,7 +1807,11 @@ export default function DemoPage() {
                                 </strong>
                                 {active && <span className="muted">{"  "}← active</span>}
                               </div>
-                              <div className="muted">{roll ? `Init ${roll.total} (d20 ${roll.natural} + ${roll.modifier})` : "Init —"}</div>
+                              <div className="muted">
+                                {roll
+                                  ? `Init ${roll.total} (d20 ${roll.natural} + ${roll.modifier})`
+                                  : "Init —"}
+                              </div>
                             </div>
                           );
                         })}
@@ -1473,7 +1826,8 @@ export default function DemoPage() {
                 <CardSection title="Player Action">
                   {combatActive && isEnemyTurn && dmMode !== "human" && (
                     <p className="muted" style={{ marginTop: 0 }}>
-                      Enemy turn. In Solace-neutral, the player cannot declare enemy intent. Switch to Human DM to enter enemy intent.
+                      Enemy turn. In Solace-neutral, the player cannot declare enemy
+                      intent. Switch to Human DM to enter enemy intent.
                     </p>
                   )}
 
@@ -1490,8 +1844,19 @@ export default function DemoPage() {
                       lineHeight: 1.5,
                     }}
                   />
-                  <div style={{ marginTop: 8, display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
-                    <button onClick={handlePlayerAction} disabled={!canPlayerSubmitIntent}>
+                  <div
+                    style={{
+                      marginTop: 8,
+                      display: "flex",
+                      gap: 10,
+                      flexWrap: "wrap",
+                      alignItems: "center",
+                    }}
+                  >
+                    <button
+                      onClick={handlePlayerAction}
+                      disabled={!canPlayerSubmitIntent}
+                    >
                       Submit Action
                     </button>
                     <span className="muted" style={{ fontSize: 12 }}>
@@ -1538,7 +1903,10 @@ export default function DemoPage() {
                     </p>
 
                     <div className="muted" style={{ marginBottom: 10 }}>
-                      Current canon position: <strong>({currentPos.x},{currentPos.y})</strong>
+                      Current canon position:{" "}
+                      <strong>
+                        ({currentPos.x},{currentPos.y})
+                      </strong>
                     </div>
 
                     <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 10 }}>
@@ -1561,7 +1929,15 @@ export default function DemoPage() {
                         <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "flex-end" }}>
                           <label style={{ display: "flex", flexDirection: "column", gap: 6, minWidth: 220 }}>
                             Direction (recommended):
-                            <select value={explorationDraft.direction} onChange={(e) => setExplorationDraft((p) => ({ ...p, direction: e.target.value as any }))}>
+                            <select
+                              value={explorationDraft.direction}
+                              onChange={(e) =>
+                                setExplorationDraft((p) => ({
+                                  ...p,
+                                  direction: e.target.value as any,
+                                }))
+                              }
+                            >
                               <option value="none">None</option>
                               <option value="north">North (↑)</option>
                               <option value="east">East (→)</option>
@@ -1571,14 +1947,28 @@ export default function DemoPage() {
                           </label>
 
                           <div className="muted" style={{ paddingBottom: 4 }}>
-                            Bounds: <strong>0..{MAP_W - 1}</strong> / <strong>0..{MAP_H - 1}</strong> · Suggested destination:{" "}
-                            <strong>{suggestedTo ? `(${suggestedTo.x},${suggestedTo.y})` : "(out of bounds / none)"}</strong>
+                            Bounds: <strong>0..{MAP_W - 1}</strong> /{" "}
+                            <strong>0..{MAP_H - 1}</strong> · Suggested destination:{" "}
+                            <strong>
+                              {suggestedTo
+                                ? `(${suggestedTo.x},${suggestedTo.y})`
+                                : "(out of bounds / none)"}
+                            </strong>
                           </div>
                         </div>
                       )}
 
                       <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                        <input type="checkbox" checked={explorationDraft.enableReveal} onChange={(e) => setExplorationDraft((p) => ({ ...p, enableReveal: e.target.checked }))} />
+                        <input
+                          type="checkbox"
+                          checked={explorationDraft.enableReveal}
+                          onChange={(e) =>
+                            setExplorationDraft((p) => ({
+                              ...p,
+                              enableReveal: e.target.checked,
+                            }))
+                          }
+                        />
                         Reveal tiles (MAP_REVEALED)
                       </label>
 
@@ -1587,7 +1977,12 @@ export default function DemoPage() {
                           Reveal radius:
                           <select
                             value={explorationDraft.revealRadius}
-                            onChange={(e) => setExplorationDraft((p) => ({ ...p, revealRadius: Number(e.target.value) as any }))}
+                            onChange={(e) =>
+                              setExplorationDraft((p) => ({
+                                ...p,
+                                revealRadius: Number(e.target.value) as any,
+                              }))
+                            }
                           >
                             <option value={0}>0 (none)</option>
                             <option value={1}>1 (tight)</option>
@@ -1597,7 +1992,16 @@ export default function DemoPage() {
                       )}
 
                       <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                        <input type="checkbox" checked={explorationDraft.enableMark} onChange={(e) => setExplorationDraft((p) => ({ ...p, enableMark: e.target.checked }))} />
+                        <input
+                          type="checkbox"
+                          checked={explorationDraft.enableMark}
+                          onChange={(e) =>
+                            setExplorationDraft((p) => ({
+                              ...p,
+                              enableMark: e.target.checked,
+                            }))
+                          }
+                        />
                         Mark tile (MAP_MARKED)
                       </label>
 
@@ -1605,7 +2009,15 @@ export default function DemoPage() {
                         <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "flex-end" }}>
                           <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                             Kind:
-                            <select value={explorationDraft.markKind} onChange={(e) => setExplorationDraft((p) => ({ ...p, markKind: e.target.value as MapMarkKind }))}>
+                            <select
+                              value={explorationDraft.markKind}
+                              onChange={(e) =>
+                                setExplorationDraft((p) => ({
+                                  ...p,
+                                  markKind: e.target.value as MapMarkKind,
+                                }))
+                              }
+                            >
                               <option value="door">door 🚪</option>
                               <option value="stairs">stairs ⬇️</option>
                               <option value="altar">altar ✶</option>
@@ -1618,12 +2030,19 @@ export default function DemoPage() {
                             Note (optional):
                             <input
                               value={explorationDraft.markNote}
-                              onChange={(e) => setExplorationDraft((p) => ({ ...p, markNote: e.target.value }))}
+                              onChange={(e) =>
+                                setExplorationDraft((p) => ({
+                                  ...p,
+                                  markNote: e.target.value,
+                                }))
+                              }
                               placeholder="e.g., locked / sealed / humming / glyph"
                             />
                           </label>
 
-                          <span className="muted">(Mark applies to destination if moving; otherwise current tile.)</span>
+                          <span className="muted">
+                            (Mark applies to destination if moving; otherwise current tile.)
+                          </span>
                         </div>
                       )}
                     </div>
@@ -1646,7 +2065,6 @@ export default function DemoPage() {
 
               {/* CANON */}
               <div id={anchorId("canon")} style={{ scrollMarginTop: 90 }}>
-                {/* IMPORTANT: Render CanonEventsPanel ONCE (no duplicates). */}
                 <CanonEventsPanel events={state.events as any[]} />
               </div>
 
