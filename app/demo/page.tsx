@@ -1,3 +1,4 @@
+// app/demo/page.tsx
 "use client";
 
 // ------------------------------------------------------------
@@ -18,6 +19,10 @@
 // - Turn order is per-combat (derived from COMBAT_STARTED + INITIATIVE_ROLLED + TURN_ADVANCED)
 // - Combat setup is locked while combat is active
 //
+// Governance direction:
+// - In Solace-neutral, the *player* should not author enemy groups or start combat from here.
+//   Combat begins from hostile player action + pressure gating (handled by orchestration rules).
+//
 // ------------------------------------------------------------
 
 import { useEffect, useMemo, useState } from "react";
@@ -35,6 +40,7 @@ import DungeonPressurePanel from "@/components/world/DungeonPressurePanel";
 import ExplorationMapPanel from "@/components/world/ExplorationMapPanel";
 import CombatRendererPanel from "@/components/world/CombatRendererPanel";
 import EnemyTurnResolverPanel from "@/components/combat/EnemyTurnResolverPanel";
+import CombatSetupPanel from "@/components/combat/CombatSetupPanel";
 
 import StewardedShell from "@/components/layout/StewardedShell";
 import ModeHeader from "@/components/layout/ModeHeader";
@@ -135,6 +141,16 @@ function deriveLatestParty(events: readonly any[]): PartyDeclaredPayload | null 
   return null;
 }
 
+type PressureTier = "low" | "medium" | "high";
+
+function inferPressureTier(outcomesCount: number): PressureTier {
+  // Simple demo heuristic (swap later for real pressure model):
+  // 0–1: low, 2–5: medium, 6+: high
+  if (outcomesCount <= 1) return "low";
+  if (outcomesCount <= 5) return "medium";
+  return "high";
+}
+
 // ------------------------------------------------------------
 
 export default function DemoPage() {
@@ -161,6 +177,9 @@ export default function DemoPage() {
   const [parsed, setParsed] = useState<any>(null);
   const [options, setOptions] = useState<Option[] | null>(null);
   const [selectedOption, setSelectedOption] = useState<Option | null>(null);
+
+  // Which party member is acting (player must choose / default)
+  const [actingPlayerId, setActingPlayerId] = useState<string>("player_1");
 
   // Combat renderer trigger (parent-driven)
   const [enemyPlayNonce, setEnemyPlayNonce] = useState(0);
@@ -204,6 +223,19 @@ export default function DemoPage() {
     return partyMembers.map((m, idx) => displayName(m, idx + 1));
   }, [partyMembers]);
 
+  // Keep actingPlayerId valid as party changes
+  useEffect(() => {
+    if (!partyMembers.length) {
+      setActingPlayerId("player_1");
+      return;
+    }
+    const exists = partyMembers.some((m) => String(m.id) === String(actingPlayerId));
+    if (exists) return;
+
+    setActingPlayerId(String(partyMembers[0].id ?? "player_1"));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [partyMembers.map((m) => m.id).join("|")]);
+
   // ----------------------------------------------------------
   // Combat state (derived + ended-aware)
   // ----------------------------------------------------------
@@ -228,6 +260,7 @@ export default function DemoPage() {
   }, [derivedCombat]);
 
   const isEnemyTurn = combatActive && activeCombatantSpec?.kind === "enemy_group";
+  const isPlayerTurn = combatActive && activeCombatantSpec?.kind === "player";
 
   // Party lock rules:
   // - once PARTY_DECLARED exists => locked for session
@@ -399,16 +432,46 @@ export default function DemoPage() {
   }, [dmMode]);
 
   // ----------------------------------------------------------
+  // Canon append helper (for components)
+  // ----------------------------------------------------------
+
+  function appendCanon(type: string, payload: any) {
+    setState((prev) =>
+      recordEvent(prev, {
+        id: crypto.randomUUID(),
+        timestamp: Date.now(),
+        actor: "arbiter",
+        type,
+        payload,
+      })
+    );
+  }
+
+  // ----------------------------------------------------------
   // Player submits action (intent)
   // ----------------------------------------------------------
 
-  const canPlayerSubmitIntent = dmMode !== null && ((!combatActive || !isEnemyTurn) || dmMode === "human");
+  const pressureTier = useMemo(() => inferPressureTier(outcomesCount), [outcomesCount]);
+
+  const isWrongPlayerForTurn =
+    combatActive &&
+    isPlayerTurn &&
+    dmMode !== "human" &&
+    !!activeCombatantSpec?.id &&
+    String(activeCombatantSpec.id) !== String(actingPlayerId);
+
+  const canPlayerSubmitIntent =
+    dmMode !== null &&
+    // In Solace-neutral, block intent on enemy turns, and require correct player's turn during player turns.
+    ((dmMode === "human" && true) || (!combatActive && !isEnemyTurn) || (combatActive && !isEnemyTurn && !isWrongPlayerForTurn));
 
   function handlePlayerAction() {
     if (!playerInput.trim()) return;
     if (!canPlayerSubmitIntent) return;
 
-    const parsedAction = parseAction("player_1", playerInput);
+    const actorId = normalizeName(actingPlayerId || "player_1") || "player_1";
+
+    const parsedAction = parseAction(actorId, playerInput);
     const optionSet = generateOptions(parsedAction);
 
     setParsed(parsedAction);
@@ -420,6 +483,7 @@ export default function DemoPage() {
     queueMicrotask(() => scrollToSection("resolution"));
   }
 
+  // Solace-neutral auto-select first option
   useEffect(() => {
     if (dmMode !== "solace-neutral") return;
     if (!options || options.length === 0) return;
@@ -428,6 +492,50 @@ export default function DemoPage() {
     setActiveSection("resolution");
     queueMicrotask(() => scrollToSection("resolution"));
   }, [dmMode, options]);
+
+  // ----------------------------------------------------------
+  // Turn controls
+  // ----------------------------------------------------------
+
+  function advanceTurn() {
+    if (!derivedCombat) return;
+    if (combatEnded) return;
+
+    const payload = nextTurnPointer(derivedCombat);
+
+    setState((prev) =>
+      recordEvent(prev, {
+        id: crypto.randomUUID(),
+        timestamp: Date.now(),
+        actor: "arbiter",
+        type: "TURN_ADVANCED",
+        payload: payload as any,
+      })
+    );
+  }
+
+  function endCombat() {
+    if (!derivedCombat) return;
+    if (combatEnded) return;
+
+    setState((prev) =>
+      recordEvent(prev, {
+        id: crypto.randomUUID(),
+        timestamp: Date.now(),
+        actor: "arbiter",
+        type: "COMBAT_ENDED",
+        payload: { combatId: derivedCombat.combatId } as any,
+      })
+    );
+  }
+
+  function passTurn() {
+    // Governed: passing is just advancing the turn pointer (no fabricated OUTCOME).
+    if (!combatActive) return;
+    if (dmMode !== "human" && isEnemyTurn) return;
+    if (dmMode !== "human" && isPlayerTurn && isWrongPlayerForTurn) return;
+    advanceTurn();
+  }
 
   // ----------------------------------------------------------
   // Record canon (OUTCOME + optional exploration bundle)
@@ -506,7 +614,7 @@ export default function DemoPage() {
     setState((prev) => {
       let next = recordEvent(prev, {
         id: crypto.randomUUID(),
-       timestamp: Date.now(),
+        timestamp: Date.now(),
         actor: "arbiter",
         type: "OUTCOME",
         payload,
@@ -545,162 +653,6 @@ export default function DemoPage() {
     alert("Canon copied to clipboard.");
   }
 
-  // ----------------------------------------------------------
-  // Combat setup (per combat)
-  // ----------------------------------------------------------
-
-  const [enemyGroups, setEnemyGroups] = useState<string[]>(["Skirmishers", "Archers"]);
-  const [enemyGroupSelect, setEnemyGroupSelect] = useState<string>("Skirmishers");
-  const [initModEnemies, setInitModEnemies] = useState(1);
-
-  const INIT_MODS = [-2, -1, 0, 1, 2, 3, 4, 5, 6, 7, 8] as const;
-
-  const ENEMY_GROUP_LIBRARY = useMemo(
-    () => [
-      "Skirmishers",
-      "Archers",
-      "Brutes",
-      "Shields",
-      "Stalkers",
-      "Casters",
-      "Drones",
-      "Sentries",
-      "Wraiths",
-      "Grid Knights",
-      "Firewall Wardens",
-      "Neon Hounds",
-    ],
-    []
-  );
-
-  const partyReadyForCombat = !!partyEffective && (partyEffective.members?.length ?? 0) > 0;
-
-  function startCombatDeterministic() {
-    if (combatActive) return;
-    if (!partyEffective || partyMembers.length === 0) return;
-
-    const members = partyMembers.slice(0, 6);
-    const groups = enemyGroups.map(normalizeName).filter(Boolean).slice(0, 6);
-
-    const combatId = crypto.randomUUID();
-    const seed = crypto.randomUUID();
-
-    const participants: CombatantSpec[] = [];
-
-    // Players from PARTY (session truth)
-    members.forEach((m, idx) => {
-      const i1 = idx + 1;
-      participants.push({
-        id: normalizeName(m.id || `player_${i1}`) || `player_${i1}`,
-        name: displayName(m, i1),
-        kind: "player",
-        initiativeMod: Math.trunc(m.initiativeMod ?? 0),
-      });
-    });
-
-    // Enemy groups (per combat)
-    groups.forEach((name, idx) => {
-      participants.push({
-        id: `enemy_group_${idx + 1}`,
-        name,
-        kind: "enemy_group",
-        initiativeMod: Math.trunc(initModEnemies || 0),
-      });
-    });
-
-    const started: CombatStartedPayload = { combatId, seed, participants };
-    const initRolls = generateDeterministicInitiativeRolls(started);
-
-    setState((prev) => {
-      let next = prev;
-
-      next = recordEvent(next, {
-        id: crypto.randomUUID(),
-        timestamp: Date.now(),
-        actor: "arbiter",
-        type: "COMBAT_STARTED",
-        payload: started as any,
-      });
-
-      for (const r of initRolls) {
-        next = recordEvent(next, {
-          id: crypto.randomUUID(),
-          timestamp: Date.now(),
-          actor: "arbiter",
-          type: "INITIATIVE_ROLLED",
-          payload: r as any,
-        });
-      }
-
-      next = recordEvent(next, {
-        id: crypto.randomUUID(),
-        timestamp: Date.now(),
-        actor: "arbiter",
-        type: "TURN_ADVANCED",
-        payload: { combatId, round: 1, index: 0 } as any,
-      });
-
-      return next;
-    });
-
-    setActiveSection("combat");
-  }
-
-  function advanceTurn() {
-    if (!derivedCombat) return;
-    if (combatEnded) return;
-
-    const payload = nextTurnPointer(derivedCombat);
-
-    setState((prev) =>
-      recordEvent(prev, {
-        id: crypto.randomUUID(),
-        timestamp: Date.now(),
-        actor: "arbiter",
-        type: "TURN_ADVANCED",
-        payload: payload as any,
-      })
-    );
-  }
-
-  function endCombat() {
-    if (!derivedCombat) return;
-    if (combatEnded) return;
-
-    setState((prev) =>
-      recordEvent(prev, {
-        id: crypto.randomUUID(),
-        timestamp: Date.now(),
-        actor: "arbiter",
-        type: "COMBAT_ENDED",
-        payload: { combatId: derivedCombat.combatId } as any,
-      })
-    );
-  }
-
-  function addEnemyGroup(name: string) {
-    if (combatActive) return;
-
-    const v = normalizeName(name);
-    if (!v) return;
-
-    setEnemyGroups((prev) => {
-      if (prev.map((x) => x.toLowerCase()).includes(v.toLowerCase())) return prev;
-      if (prev.length >= 6) return prev;
-      return [...prev, v];
-    });
-  }
-
-  function removeEnemyGroup(name: string) {
-    if (combatActive) return;
-    setEnemyGroups((prev) => prev.filter((g) => g !== name));
-  }
-
-  function clearEnemyGroups() {
-    if (combatActive) return;
-    setEnemyGroups([]);
-  }
-
   const isHumanDM = dmMode === "human";
 
   const outcomesCount = useMemo(() => state.events.filter((e: any) => e?.type === "OUTCOME").length, [state.events]);
@@ -715,8 +667,8 @@ export default function DemoPage() {
       { id: "table", hint: "Start scene + accept table" },
       { id: "pressure", hint: "Advisory state" },
       { id: "map", hint: "Canon view of space" },
-      { id: "combat", hint: "Deterministic turn order" },
-      { id: "action", hint: "Player intent" },
+      { id: "combat", hint: "Turn order + governance" },
+      { id: "action", hint: "Player intent (+ actor)" },
       { id: "resolution", hint: "Roll + record OUTCOME" },
       { id: "canon", hint: "Non-outcome canon log" },
       { id: "ledger", hint: "Outcome narration only" },
@@ -845,202 +797,126 @@ export default function DemoPage() {
 
               {/* COMBAT */}
               <div id={anchorId("combat")} style={{ scrollMarginTop: 90 }}>
-                <CardSection title="Combat (Deterministic, Grouped Enemies)">
-                  <p className="muted" style={{ marginTop: 0 }}>
-                    Players roll individually. Enemy groups roll once per group. Turn order is derived from events.
-                  </p>
+                <CombatSetupPanel
+                  events={state.events as any[]}
+                  onAppendCanon={appendCanon}
+                  dmMode={dmMode}
+                  partyMembers={partyMembers.map((m) => ({
+                    id: String(m.id),
+                    name: displayName(m, 1), // displayName ignores i if name set; pass stable label below:
+                    initiativeMod: m.initiativeMod,
+                  }))}
+                  pressureTier={pressureTier}
+                  allowDevControls={false}
+                />
 
-                  {solaceNeutralEnemyTurnEnabled && (
-                    <div style={{ marginTop: 10, marginBottom: 12 }}>
-                      <EnemyTurnResolverPanel
-                        enabled={true}
-                        activeEnemyGroupName={activeEnemyOverlayName}
-                        activeEnemyGroupId={activeEnemyOverlayId}
-                        playerNames={effectivePlayerNames}
-                        onTelegraph={(info) => {
-                          setEnemyTelegraphHint(info);
-                          setEnemyPlayNonce((n) => n + 1);
-                        }}
-                        onCommitOutcome={(payload) => handleRecordOutcomeOnly(payload)}
-                        onAdvanceTurn={advanceTurn}
-                      />
+                {/* Enemy turn resolver (Solace-neutral) */}
+                {solaceNeutralEnemyTurnEnabled && (
+                  <CardSection title="Enemy Turn Resolution (Solace-neutral)">
+                    <EnemyTurnResolverPanel
+                      enabled={true}
+                      activeEnemyGroupName={activeEnemyOverlayName}
+                      activeEnemyGroupId={activeEnemyOverlayId}
+                      playerNames={effectivePlayerNames}
+                      onTelegraph={(info) => {
+                        setEnemyTelegraphHint(info);
+                        setEnemyPlayNonce((n) => n + 1);
+                      }}
+                      onCommitOutcome={(payload) => handleRecordOutcomeOnly(payload)}
+                      onAdvanceTurn={advanceTurn}
+                    />
 
-                      {enemyTelegraphHint && (
-                        <div className="muted" style={{ marginTop: 8, fontSize: 12 }}>
-                          Telegraph hint: <strong>{enemyTelegraphHint.attackStyleHint}</strong> · Target{" "}
-                          <strong>{enemyTelegraphHint.targetName}</strong>
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  {combatActive && (
-                    <div className="muted" style={{ marginTop: 8 }}>
-                      🔒 Combat is active. Setup is locked to preserve replay integrity.
-                    </div>
-                  )}
-
-                  {combatEnded && derivedCombat && (
-                    <div className="muted" style={{ marginTop: 8 }}>
-                      🏁 Combat ended. You can start a new combat (new combatId) if you want.
-                    </div>
-                  )}
-
-                  <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "flex-end" }}>
-                    <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                      Enemy group init mod:
-                      <select
-                        value={initModEnemies}
-                        onChange={(e) => setInitModEnemies(Math.trunc(Number(e.target.value)))}
-                        style={{ minWidth: 170 }}
-                        disabled={combatActive}
-                      >
-                        {INIT_MODS.map((n) => (
-                          <option key={n} value={n}>
-                            {n >= 0 ? `+${n}` : `${n}`}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-
-                    <div style={{ flex: "1 1 320px", display: "flex", flexDirection: "column", gap: 6 }}>
-                      <span className="muted">Enemy groups</span>
-                      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-                        <select
-                          value={enemyGroupSelect}
-                          onChange={(e) => setEnemyGroupSelect(e.target.value)}
-                          style={{ minWidth: 220 }}
-                          disabled={combatActive}
-                        >
-                          {ENEMY_GROUP_LIBRARY.map((g) => (
-                            <option key={g} value={g}>
-                              {g}
-                            </option>
-                          ))}
-                        </select>
-                        <button onClick={() => addEnemyGroup(enemyGroupSelect)} disabled={combatActive}>
-                          Add
-                        </button>
-                        <button onClick={clearEnemyGroups} disabled={combatActive || enemyGroups.length === 0}>
-                          Clear
-                        </button>
-                        <span className="muted" style={{ fontSize: 12 }}>
-                          (max 6)
-                        </span>
+                    {enemyTelegraphHint && (
+                      <div className="muted" style={{ marginTop: 8, fontSize: 12 }}>
+                        Telegraph hint: <strong>{enemyTelegraphHint.attackStyleHint}</strong> · Target{" "}
+                        <strong>{enemyTelegraphHint.targetName}</strong>
                       </div>
-
-                      {enemyGroups.length > 0 ? (
-                        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8 }}>
-                          {enemyGroups.map((g) => (
-                            <span
-                              key={g}
-                              style={{
-                                display: "inline-flex",
-                                alignItems: "center",
-                                gap: 8,
-                                padding: "6px 10px",
-                                borderRadius: 999,
-                                border: "1px solid rgba(255,255,255,0.12)",
-                                background: "rgba(255,255,255,0.05)",
-                              }}
-                            >
-                              <span>{g}</span>
-                              <button
-                                onClick={() => removeEnemyGroup(g)}
-                                aria-label={`Remove ${g}`}
-                                disabled={combatActive}
-                                style={{
-                                  padding: "0 8px",
-                                  borderRadius: 999,
-                                  border: "1px solid rgba(255,255,255,0.12)",
-                                }}
-                              >
-                                ×
-                              </button>
-                            </span>
-                          ))}
-                        </div>
-                      ) : (
-                        <div className="muted" style={{ marginTop: 8 }}>
-                          No enemy groups yet. Add one.
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  <div style={{ marginTop: 14, display: "flex", gap: 8, flexWrap: "wrap" }}>
-                    <button onClick={startCombatDeterministic} disabled={combatActive || !partyReadyForCombat}>
-                      Start Combat (Seeded)
-                    </button>
-
-                    <button
-                      onClick={advanceTurn}
-                      disabled={!derivedCombat || combatEnded || (dmMode === "solace-neutral" && isEnemyTurn)}
-                    >
-                      Advance Turn
-                    </button>
-
-                    <button onClick={endCombat} disabled={!derivedCombat || combatEnded}>
-                      End Combat
-                    </button>
-
-                    {!partyReadyForCombat && (
-                      <span className="muted" style={{ fontSize: 12, alignSelf: "center" }}>
-                        Declare party first.
-                      </span>
                     )}
+                  </CardSection>
+                )}
+
+                {combatActive && (
+                  <div className="muted" style={{ marginTop: 8 }}>
+                    🔒 Combat is active. Setup is locked to preserve replay integrity.
                   </div>
+                )}
 
-                  {derivedCombat && (
-                    <div style={{ marginTop: 12 }}>
-                      <div className="muted">
-                        Combat: <strong>{derivedCombat.combatId}</strong> · Round <strong>{derivedCombat.round}</strong>
-                        {activeCombatantSpec && (
-                          <>
-                            {" "}
-                            · Active: <strong>{formatCombatantLabel(activeCombatantSpec)}</strong>
-                          </>
-                        )}
-                      </div>
+                {combatEnded && derivedCombat && (
+                  <div className="muted" style={{ marginTop: 8 }}>
+                    🏁 Combat ended. You can start a new combat (new combatId) if you want.
+                  </div>
+                )}
 
-                      <div style={{ marginTop: 10, display: "grid", gridTemplateColumns: "1fr", gap: 6 }}>
-                        {derivedCombat.order.map((id, idx) => {
-                          const spec = derivedCombat.participants.find((p) => p.id === id) ?? null;
-                          const roll = derivedCombat.initiative.find((r) => r.combatantId === id) ?? null;
-                          const active = derivedCombat.activeCombatantId === id;
-
-                          return (
-                            <div
-                              key={id}
-                              style={{
-                                padding: "10px 12px",
-                                borderRadius: 8,
-                                border: active
-                                  ? "1px solid rgba(138,180,255,0.55)"
-                                  : "1px solid rgba(255,255,255,0.10)",
-                                background: active ? "rgba(138,180,255,0.10)" : "rgba(255,255,255,0.04)",
-                                display: "flex",
-                                justifyContent: "space-between",
-                                alignItems: "center",
-                                gap: 10,
-                              }}
-                            >
-                              <div>
-                                <strong>
-                                  {idx + 1}. {spec ? formatCombatantLabel(spec) : id}
-                                </strong>
-                                {active && <span className="muted">{"  "}← active</span>}
-                              </div>
-                              <div className="muted">
-                                {roll ? `Init ${roll.total} (d20 ${roll.natural} + ${roll.modifier})` : "Init —"}
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
+                {derivedCombat && (
+                  <CardSection title="Derived Turn Order">
+                    <div className="muted">
+                      Combat: <strong>{derivedCombat.combatId}</strong> · Round <strong>{derivedCombat.round}</strong>
+                      {activeCombatantSpec && (
+                        <>
+                          {" "}
+                          · Active: <strong>{formatCombatantLabel(activeCombatantSpec)}</strong>
+                        </>
+                      )}
                     </div>
-                  )}
-                </CardSection>
+
+                    <div style={{ marginTop: 10, display: "grid", gridTemplateColumns: "1fr", gap: 6 }}>
+                      {derivedCombat.order.map((id, idx) => {
+                        const spec = derivedCombat.participants.find((p) => p.id === id) ?? null;
+                        const roll = derivedCombat.initiative.find((r) => r.combatantId === id) ?? null;
+                        const active = derivedCombat.activeCombatantId === id;
+
+                        return (
+                          <div
+                            key={id}
+                            style={{
+                              padding: "10px 12px",
+                              borderRadius: 8,
+                              border: active ? "1px solid rgba(138,180,255,0.55)" : "1px solid rgba(255,255,255,0.10)",
+                              background: active ? "rgba(138,180,255,0.10)" : "rgba(255,255,255,0.04)",
+                              display: "flex",
+                              justifyContent: "space-between",
+                              alignItems: "center",
+                              gap: 10,
+                            }}
+                          >
+                            <div>
+                              <strong>
+                                {idx + 1}. {spec ? formatCombatantLabel(spec) : id}
+                              </strong>
+                              {active && <span className="muted">{"  "}← active</span>}
+                            </div>
+                            <div className="muted">
+                              {roll ? `Init ${roll.total} (d20 ${roll.natural} + ${roll.modifier})` : "Init —"}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    <div style={{ marginTop: 12, display: "flex", gap: 8, flexWrap: "wrap" }}>
+                      <button
+                        onClick={advanceTurn}
+                        disabled={!derivedCombat || combatEnded || (dmMode === "solace-neutral" && isEnemyTurn)}
+                      >
+                        Advance Turn
+                      </button>
+
+                      <button onClick={passTurn} disabled={!combatActive || (dmMode === "solace-neutral" && isEnemyTurn) || isWrongPlayerForTurn}>
+                        Pass / End Turn
+                      </button>
+
+                      <button onClick={endCombat} disabled={!derivedCombat || combatEnded}>
+                        End Combat
+                      </button>
+
+                      {isWrongPlayerForTurn && (
+                        <span className="muted" style={{ fontSize: 12, alignSelf: "center" }}>
+                          It’s not {actingPlayerId}’s turn. Select the active player (or switch to Human DM).
+                        </span>
+                      )}
+                    </div>
+                  </CardSection>
+                )}
               </div>
 
               {/* ACTION */}
@@ -1048,10 +924,42 @@ export default function DemoPage() {
                 <CardSection title="Player Action">
                   {combatActive && isEnemyTurn && dmMode !== "human" && (
                     <p className="muted" style={{ marginTop: 0 }}>
-                      Enemy turn. In Solace-neutral, Solace resolves enemy action above (Combat section). After the
-                      outcome is committed, the turn advances automatically.
+                      Enemy turn. In Solace-neutral, Solace resolves enemy action in the Combat section. After the outcome
+                      is committed, the turn advances automatically.
                     </p>
                   )}
+
+                  {combatActive && isPlayerTurn && dmMode !== "human" && activeCombatantSpec?.id && (
+                    <p className="muted" style={{ marginTop: 0 }}>
+                      Player turn: <strong>{String(activeCombatantSpec.id)}</strong>. Select that actor below to submit an action (or Pass).
+                    </p>
+                  )}
+
+                  <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-end", marginBottom: 10 }}>
+                    <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                      Acting player:
+                      <select
+                        value={actingPlayerId}
+                        onChange={(e) => setActingPlayerId(e.target.value)}
+                        disabled={!partyMembers.length}
+                        style={{ minWidth: 220 }}
+                      >
+                        {partyMembers.length ? (
+                          partyMembers.map((m, idx) => (
+                            <option key={m.id} value={m.id}>
+                              {displayName(m, idx + 1)} ({m.id})
+                            </option>
+                          ))
+                        ) : (
+                          <option value="player_1">Player 1 (player_1)</option>
+                        )}
+                      </select>
+                    </label>
+
+                    <button onClick={passTurn} disabled={!combatActive || (dmMode === "solace-neutral" && isEnemyTurn) || isWrongPlayerForTurn}>
+                      Pass / End Turn
+                    </button>
+                  </div>
 
                   <textarea
                     value={playerInput}
@@ -1066,13 +974,21 @@ export default function DemoPage() {
                       lineHeight: 1.5,
                     }}
                   />
+
                   <div style={{ marginTop: 8, display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
                     <button onClick={handlePlayerAction} disabled={!canPlayerSubmitIntent}>
                       Submit Action
                     </button>
+
                     <span className="muted" style={{ fontSize: 12 }}>
                       Tip: After you submit, the page jumps to Resolution automatically.
                     </span>
+
+                    {!canPlayerSubmitIntent && (
+                      <span className="muted" style={{ fontSize: 12 }}>
+                        (Action locked by turn governance.)
+                      </span>
+                    )}
                   </div>
                 </CardSection>
               </div>
