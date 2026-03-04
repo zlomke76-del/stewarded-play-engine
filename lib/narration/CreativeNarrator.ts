@@ -17,83 +17,50 @@
    Types
 ------------------------------------------------------------ */
 
-export type NarrativeLens =
-  | "heroic"
-  | "grim"
-  | "mysterious"
-  | "grounded"
-  | "mythic"; // added
+export type NarrativeLens = "heroic" | "grim" | "mysterious" | "grounded" | "mythic";
 
-export type NarrativePressureLevel = "low" | "rising" | "high" | "critical";
-export type NarrativeAwarenessStatus = "Quiet" | "Suspicious" | "Alerted";
+export type AttackStyleHint = "volley" | "beam" | "charge" | "unknown";
 
-/**
- * Optional, structured truth anchors for richer narration.
- * These DO NOT grant authority; they only constrain flavor to the known facts.
- */
-export type NarrativeTruth = {
-  // Optional recap seed (e.g., initial table / scene setup excerpt)
+export interface TruthAnchors {
   setup?: string;
-
-  // Optional movement anchor (exploration)
   movement?: {
     from?: { x: number; y: number };
     to?: { x: number; y: number };
     direction?: "north" | "east" | "south" | "west" | "none";
   };
-
-  // Optional combat anchor
   combat?: {
-    activeEnemyGroupName?: string | null;
+    activeEnemyGroupName?: string;
     isEnemyTurn?: boolean;
-    attackStyleHint?: "volley" | "beam" | "charge" | "unknown";
+    attackStyleHint?: AttackStyleHint;
   };
-
-  // Optional mechanical anchors (still non-authoritative)
   mechanics?: {
-    dc?: number;
-    roll?: number;
-    margin?: number;
-    success?: boolean;
+    dc: number;
+    roll: number;
+    margin: number;
+    success: boolean;
     optionKind?: "safe" | "environmental" | "risky" | "contested";
   };
-
-  // Optional dungeon tension anchors
-  pressure?: {
-    level: NarrativePressureLevel;
-    label?: string; // e.g. "Low/Rising/High/Critical"
-  };
-  awareness?: {
-    status: NarrativeAwarenessStatus;
-    explanation?: string;
-  };
-
-  // Optional damage/effects anchor (only if the calling system has it)
-  effects?: {
-    damage?: number;
-    damageType?: string;
-    condition?: string;
-  };
-};
+}
 
 export interface NarrationInput {
   intentText: string;
-  margin: number; // roll - dc (kept for backwards compatibility)
+  margin: number; // roll - dc
   lens?: NarrativeLens;
   seed?: number;
 
   /**
-   * Optional truth anchors for deeper, grounded narration.
-   * Safe to omit. When present, the narrator should reference them.
+   * How "thick" the narration should be.
+   * - ~1.0: short
+   * - ~1.5: table-friendly
+   * - ~2.0: deeper (recap + action + consequence)
    */
-  truth?: NarrativeTruth;
+  depth?: number;
 
   /**
-   * Optional: request slightly longer narration (still bounded).
-   * 1.0 = short (old behavior), 1.5 = richer, 2.0 = mythic-with-anchors.
-   * This is still deterministic if seed is provided.
+   * Optional truth anchors to reference what happened.
+   * Purely descriptive; grants no authority.
    */
-  depth?: 1 | 1.5 | 2;
+  truth?: TruthAnchors;
 }
 
 /* ------------------------------------------------------------
@@ -109,267 +76,335 @@ function seededRandom(seed: number) {
   };
 }
 
-function pick<T>(arr: T[], rand: () => number): T {
+function pick<T>(arr: readonly T[], rand: () => number): T {
   return arr[Math.floor(rand() * arr.length)];
 }
 
-function clamp01(x: number) {
-  return Math.max(0, Math.min(1, x));
+function clamp(n: number, lo: number, hi: number) {
+  return Math.max(lo, Math.min(hi, n));
 }
 
-function safeTrim(s: string | undefined | null) {
-  return (s ?? "").trim();
+function cleanOneLine(s: string) {
+  return String(s || "")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
-function dirArrow(d?: string) {
+function dirWord(d?: string) {
   switch (d) {
     case "north":
-      return "↑";
+      return "north";
     case "east":
-      return "→";
+      return "east";
     case "south":
-      return "↓";
+      return "south";
     case "west":
-      return "←";
+      return "west";
     default:
       return "";
   }
 }
 
-function formatTile(p?: { x: number; y: number }) {
-  if (!p) return "";
-  const x = typeof p.x === "number" ? p.x : null;
-  const y = typeof p.y === "number" ? p.y : null;
-  if (x === null || y === null) return "";
-  return `(${x},${y})`;
+function styleToPhrase(style: AttackStyleHint | undefined, enemyName?: string) {
+  const e = enemyName ? `the ${enemyName}` : "they";
+  switch (style) {
+    case "volley":
+      return `${e} set a line and loose in unison`;
+    case "beam":
+      return `${e} channel a focused surge of force`;
+    case "charge":
+      return `${e} lunge forward with sudden weight`;
+    default:
+      return `${e} press their advantage`;
+  }
+}
+
+/* ------------------------------------------------------------
+   Tiering (margin => outcome tone)
+------------------------------------------------------------ */
+
+type Tier = "triumph" | "success" | "mixed" | "fail" | "disaster";
+
+function tierForMargin(margin: number): Tier {
+  if (margin >= 8) return "triumph";
+  if (margin >= 3) return "success";
+  if (margin >= 0) return "mixed";
+  if (margin >= -4) return "fail";
+  return "disaster";
+}
+
+/* ------------------------------------------------------------
+   Phrase banks by lens
+------------------------------------------------------------ */
+
+function banks(lens: NarrativeLens) {
+  // Slightly different “voice” per lens, but still table-usable.
+  const common = {
+    sensory: [
+      "Torchlight trembles against wet stone.",
+      "A draft carries the taste of old iron.",
+      "Your breath fogs, then thins in the cold.",
+      "Somewhere deeper, water ticks like a slow clock.",
+    ],
+    tension: [
+      "The dungeon listens in its own way.",
+      "Silence stretches—then tightens.",
+      "Even small sounds feel like they travel too far.",
+      "For a moment, you can hear your own heartbeat.",
+    ],
+  } as const;
+
+  if (lens === "mythic") {
+    return {
+      ...common,
+      openings: {
+        triumph: [
+          "Fate leans close—and smiles.",
+          "For a heartbeat, the world aligns with your will.",
+          "The moment opens like a door that was always meant for you.",
+        ],
+        success: [
+          "The weave holds.",
+          "You take the moment and shape it.",
+          "Your intent finds purchase in the world.",
+        ],
+        mixed: [
+          "It works—yet not cleanly.",
+          "You gain ground, but pay for it in breath and time.",
+          "The dungeon yields… reluctantly.",
+        ],
+        fail: [
+          "The world resists your hand.",
+          "A small misstep becomes an invitation to trouble.",
+          "Your intent meets stone and shadow—and slips.",
+        ],
+        disaster: [
+          "The moment fractures in your grasp.",
+          "Misfortune arrives with speed and certainty.",
+          "The dungeon answers—loudly.",
+        ],
+      } as const,
+      closings: {
+        triumph: [
+          "You gain more than you sought.",
+          "Momentum is yours, unmistakably.",
+          "Even the dark seems to hesitate.",
+        ],
+        success: [
+          "You keep control—for now.",
+          "Nothing breaks… and that matters.",
+          "You hold the line of the story.",
+        ],
+        mixed: [
+          "You feel how thin the margin was.",
+          "It will echo later.",
+          "You advance—wary, but advancing.",
+        ],
+        fail: [
+          "Attention has been drawn.",
+          "You’re no longer sure what heard you.",
+          "Something shifts in the dark, in answer.",
+        ],
+        disaster: [
+          "You’re reacting now, not choosing.",
+          "Whatever comes next will not wait.",
+          "The dungeon takes its turn.",
+        ],
+      } as const,
+    };
+  }
+
+  if (lens === "grim") {
+    return {
+      ...common,
+      openings: {
+        triumph: ["You win, but it’s ugly.", "It works—against the odds.", "Luck favors you once."],
+        success: ["It works.", "You get what you wanted.", "You force it through."],
+        mixed: ["You scrape by.", "It works, but costs you.", "Not clean. Not safe."],
+        fail: ["It doesn’t take.", "You misjudge the moment.", "The place pushes back."],
+        disaster: ["It goes bad fast.", "The worst version happens.", "Everything slips at once."],
+      } as const,
+      closings: {
+        triumph: ["You’re still standing.", "You bought time.", "You keep breathing."],
+        success: ["You survive it.", "You keep moving.", "You don’t lose ground."],
+        mixed: ["You feel the debt.", "You can’t do that again.", "It leaves a mark."],
+        fail: ["They noticed.", "You’re exposed.", "You’re late by a heartbeat."],
+        disaster: ["Now you bleed for it.", "Now you pay in full.", "Now it’s a fight."],
+      } as const,
+    };
+  }
+
+  if (lens === "mysterious") {
+    return {
+      ...common,
+      openings: {
+        triumph: ["The unseen parts cooperate.", "A pattern reveals itself.", "The silence favors you."],
+        success: ["The threads line up.", "You read the moment right.", "The hidden door opens a crack."],
+        mixed: ["You see enough—barely.", "You gain the clue, not the comfort.", "The answer arrives with a warning."],
+        fail: ["The truth stays out of reach.", "The shadows keep their secret.", "You misread the signs."],
+        disaster: ["Something watches you fail.", "The secret bites back.", "The wrong door opens."],
+      } as const,
+      closings: {
+        triumph: ["You learn more than you meant to.", "The place reveals a weakness.", "The mystery bends."],
+        success: ["You hold the thread.", "You keep the clue.", "You don’t get lost."],
+        mixed: ["The clue costs you.", "The thread frays.", "The answer is partial."],
+        fail: ["The trail goes cold.", "Your presence lingers.", "The shadows shift."],
+        disaster: ["The secret wakes.", "The place remembers you.", "The dark moves first."],
+      } as const,
+    };
+  }
+
+  if (lens === "grounded") {
+    return {
+      ...common,
+      openings: {
+        triumph: ["Everything goes right.", "You execute cleanly.", "You get a clear win."],
+        success: ["You pull it off.", "The plan works.", "You get what you wanted."],
+        mixed: ["You succeed, barely.", "It works with friction.", "You get the result, not the grace."],
+        fail: ["You miss the window.", "You slip.", "The environment resists you."],
+        disaster: ["You lose control.", "It cascades.", "The situation worsens fast."],
+      } as const,
+      closings: {
+        triumph: ["You press the advantage.", "You gain time.", "You improve your position."],
+        success: ["You stay in control.", "You keep moving.", "You don’t give up ground."],
+        mixed: ["You’re exposed a little.", "You burn time.", "It’s not free."],
+        fail: ["You draw attention.", "You lose position.", "You leave a trace."],
+        disaster: ["You’re on the back foot.", "You invite retaliation.", "You’re forced to react."],
+      } as const,
+    };
+  }
+
+  // heroic default
+  return {
+    ...common,
+    openings: {
+      triumph: ["Everything clicks at once.", "For a heartbeat, the world cooperates.", "This is your moment."],
+      success: ["The plan holds.", "Things unfold as hoped.", "Your execution is clean enough to matter."],
+      mixed: ["It works — but only barely.", "The margin is thin.", "You succeed, though not comfortably."],
+      fail: ["Something slips.", "A small error ripples outward.", "The environment resists your intention."],
+      disaster: ["Multiple things go wrong at once.", "The situation unravels fast.", "Control is lost almost immediately."],
+    } as const,
+    closings: {
+      triumph: ["You gain more than you expected.", "Momentum is fully yours."],
+      success: ["You remain in control.", "Nothing presses you — yet."],
+      mixed: ["You’re aware how close that was.", "This will matter later."],
+      fail: ["You are no longer certain you’re unseen.", "Attention has been drawn."],
+      disaster: ["You are reacting now, not choosing.", "Whatever comes next won’t wait."],
+    } as const,
+  };
 }
 
 /* ------------------------------------------------------------
    Core Generator
 ------------------------------------------------------------ */
 
-export function generateNarration({
-  intentText,
-  margin,
-  lens = "heroic",
-  seed,
-  truth,
-  depth = 1.5,
-}: NarrationInput): string {
+export function generateNarration(input: NarrationInput): string {
+  const {
+    intentText,
+    margin,
+    lens = "heroic",
+    seed,
+    depth = 1.25,
+    truth,
+  } = input;
+
   const rand = seed !== undefined ? seededRandom(seed) : Math.random;
+  const tier = tierForMargin(margin);
+  const b = banks(lens);
 
-  const intentLower = intentText.toLowerCase();
+  const wantDepth = clamp(depth, 0.75, 2.25);
 
-  const stealth = /stealth|sneak|scout|hide|shadow/.test(intentLower);
-  const magic = /spell|cantrip|detect|murmur|ritual|arcane|sigil/.test(intentLower);
-  const martial = /sword|blade|grip|ready|guard|strike|shoot|arrow|aim/.test(intentLower);
+  // Heuristic tags (still allowed; truth anchors override where present)
+  const intentLower = String(intentText || "").toLowerCase();
+  const stealth = /stealth|sneak|scout|hide|shadow|quiet/.test(intentLower);
+  const magic = /spell|cantrip|detect|murmur|ritual|ward|sigil/.test(intentLower);
+  const martial = /sword|blade|grip|ready|guard|strike|slash|shoot|arrow|bolt/.test(intentLower);
 
-  // --------------------------------------------
-  // Outcome tier (derived from margin only)
-  // --------------------------------------------
+  // --- Truth-derived snippets (only if provided) ---
+  const setupSnippet = truth?.setup ? cleanOneLine(truth.setup).slice(0, 220) : "";
+  const from = truth?.movement?.from;
+  const to = truth?.movement?.to;
+  const direction = truth?.movement?.direction;
+  const dir = dirWord(direction);
+  const hasMove = !!(from && to && dir && dir !== "none");
+  const moveSnippet = hasMove ? `You shift ${dir} from (${from!.x},${from!.y}) to (${to!.x},${to!.y}).` : "";
 
-  let tier: "triumph" | "success" | "mixed" | "fail" | "disaster";
+  const enemyName = truth?.combat?.activeEnemyGroupName;
+  const styleHint = truth?.combat?.attackStyleHint ?? "unknown";
+  const isEnemyTurn = !!truth?.combat?.isEnemyTurn;
+  const enemySnippet =
+    enemyName && isEnemyTurn
+      ? `Enemy pressure rises: ${styleToPhrase(styleHint, enemyName)}.`
+      : "";
 
-  if (margin >= 8) tier = "triumph";
-  else if (margin >= 3) tier = "success";
-  else if (margin >= 0) tier = "mixed";
-  else if (margin >= -4) tier = "fail";
-  else tier = "disaster";
+  const mechanicsSnippet =
+    truth?.mechanics
+      ? `Roll ${truth.mechanics.roll} vs DC ${truth.mechanics.dc} (${truth.mechanics.margin >= 0 ? "+" : ""}${truth.mechanics.margin}).`
+      : "";
 
-  // --------------------------------------------
-  // Phrase banks (tone)
-  // --------------------------------------------
-
-  const openings = {
-    triumph: [
-      "Everything clicks at once.",
-      "For a heartbeat, the world cooperates.",
-      "This is one of those rare moments where nothing resists.",
-    ],
-    success: ["The plan holds.", "Things unfold as hoped.", "The execution is clean enough to matter."],
-    mixed: ["It works — but only barely.", "The margin is thin.", "You succeed, though not comfortably."],
-    fail: ["Something slips.", "A small error ripples outward.", "The environment resists your intentions."],
-    disaster: ["Multiple things go wrong at once.", "The situation unravels fast.", "Control is lost almost immediately."],
-  };
-
-  // Lens overlay (subtle, never changes truth)
-  const lensSpice: Record<NarrativeLens, string[]> = {
-    heroic: ["Courage carries the moment.", "You hold your nerve.", "You refuse to hesitate."],
-    grim: ["The air feels heavier afterward.", "Nothing here forgives mistakes.", "The dungeon keeps its own tally."],
-    mysterious: ["The silence seems arranged.", "Something watches without revealing itself.", "Meaning gathers in the corners."],
-    grounded: ["It’s simple — and that’s why it works.", "The details matter.", "Your timing saves you."],
-    mythic: [
-      "For an instant, fate leans close.",
-      "The world answers in omen and consequence.",
-      "In this place, intention has weight.",
-    ],
-  };
-
-  const stealthLines = [
-    "Footsteps fade where they shouldn’t.",
-    "A shadow moves where no one should be standing.",
-    "Silence stretches, then tightens.",
-  ];
-
-  const magicLines = [
-    "The magic reveals absence — not safety.",
-    "Your senses brush against something watching back.",
-    "The spell hums, incomplete but suggestive.",
-  ];
-
-  const martialLines = [
-    "Hands tighten on weapons.",
-    "Steel shifts, just slightly too loud.",
-    "Instinct pulls you toward readiness.",
-  ];
-
-  const closings = {
-    triumph: ["You gain more than you expected.", "Momentum is fully yours."],
-    success: ["You remain in control.", "Nothing presses you — yet."],
-    mixed: ["You’re aware how close that was.", "This will matter later."],
-    fail: ["You are no longer certain you’re unseen.", "Attention has been drawn."],
-    disaster: ["You are reacting now, not choosing.", "Whatever comes next won’t wait."],
-  };
-
-  // Pressure / awareness beats (optional truth anchors)
-  const pressureBeats: Record<NarrativePressureLevel, string[]> = {
-    low: ["The dungeon is quiet enough to mistake for mercy.", "For now, the dark keeps its distance."],
-    rising: ["Your presence lingers in the corridors.", "The place feels less empty than it did a moment ago."],
-    high: ["The dungeon is beginning to respond.", "Somewhere nearby, the quiet rearranges itself into attention."],
-    critical: [
-      "This place is no longer merely watched — it is managed.",
-      "The dungeon feels organized now. It is listening for you.",
-    ],
-  };
-
-  const awarenessBeats: Record<NarrativeAwarenessStatus, string[]> = {
-    Quiet: ["No clear reaction follows — only the steady breath of stone.", "If anything heard, it did not answer."],
-    Suspicious: ["You sense curiosity in the dark — not fear, not calm.", "Somewhere, something pauses… and considers."],
-    Alerted: ["The air feels sharpened, as if the dungeon has turned its head.", "Attention has become direction."],
-  };
-
-  // --------------------------------------------
-  // Truth-anchor phrases (movement / combat)
-  // --------------------------------------------
-
-  const move = truth?.movement;
-  const moveFrom = formatTile(move?.from);
-  const moveTo = formatTile(move?.to);
-  const moveArrow = dirArrow(move?.direction);
-  const hasMove = !!move?.to && !!move?.from && moveFrom && moveTo;
-
-  const combat = truth?.combat;
-  const enemyName = safeTrim(combat?.activeEnemyGroupName ?? "");
-  const hasEnemy = enemyName.length > 0;
-
-  // --------------------------------------------
-  // Assembly (bounded, mythic, grounded)
-  // --------------------------------------------
-
+  // --- Assembly ---
   const lines: string[] = [];
 
-  // 0) Optional setup reference (short, never too long)
-  const setup = safeTrim(truth?.setup);
-  if (depth >= 2 && setup) {
-    // Keep it short: one clause, not a paragraph
-    const setupClause = setup.length > 140 ? setup.slice(0, 140).trim() + "…" : setup;
-    lines.push(setupClause);
+  // 0) Optional sensory preface for higher depth
+  if (wantDepth >= 1.75) {
+    lines.push(pick(b.sensory, rand));
   }
 
   // 1) Opening (tier)
-  lines.push(pick(openings[tier], rand));
+  lines.push(pick(b.openings[tier], rand));
 
-  // 2) Lens spice (small chance)
-  if (depth >= 1.5 && rand() > 0.55) {
-    lines.push(pick(lensSpice[lens], rand));
+  // 2) Recap / anchoring (truth-driven) for mythic/solace-deeper
+  if (wantDepth >= 1.6 && setupSnippet) {
+    lines.push(`From the scene’s edge: ${setupSnippet}`);
   }
 
-  // 3) Action anchor: movement + intent (only if truth provided)
-  if (depth >= 1.5 && hasMove) {
-    // Keep this factual but flavorful
-    const moveLineVariants = [
-      `You shift ${moveArrow ? `${moveArrow} ` : ""}from ${moveFrom} to ${moveTo}, keeping your intent steady.`,
-      `You take the ground from ${moveFrom} to ${moveTo}${moveArrow ? ` ${moveArrow}` : ""}, committing to the choice.`,
-      `You advance from ${moveFrom} to ${moveTo}${moveArrow ? ` ${moveArrow}` : ""} — not fast, but deliberate.`,
-    ];
-    lines.push(pick(moveLineVariants, rand));
-  } else if (depth >= 1.5) {
-    // Fallback: reflect intent without claiming specific outcomes
-    const intentLineVariants = [
-      `You commit to it: ${intentText}.`,
-      `You move on your intention — ${intentText}.`,
-      `You try it, exactly as stated: ${intentText}.`,
-    ];
-    lines.push(pick(intentLineVariants, rand));
+  // 3) Action beat (movement + intent)
+  if (wantDepth >= 1.35 && moveSnippet) {
+    lines.push(moveSnippet);
   }
 
-  // 4) Domain flavor (stealth/magic/martial)
-  if (stealth && rand() > 0.3) lines.push(pick(stealthLines, rand));
-  if (magic && rand() > 0.3) lines.push(pick(magicLines, rand));
-  if (martial && rand() > 0.3) lines.push(pick(martialLines, rand));
-
-  // 5) Combat anchor (if enemy is present)
-  if (depth >= 2 && hasEnemy) {
-    const style = combat?.attackStyleHint ?? "unknown";
-    const enemyBeat =
-      style === "volley"
-        ? [`${enemyName} answer with a measured volley, testing your rhythm.`, `${enemyName} loose a coordinated volley — not chaos, a pattern.`]
-        : style === "beam"
-        ? [`${enemyName} shape force into a line of intent — and let it speak.`, `A thin, ruthless beam answers from ${enemyName}.`]
-        : style === "charge"
-        ? [`${enemyName} surge forward, turning distance into threat.`, `${enemyName} turn the corridor into a battering path.`]
-        : [`${enemyName} press the moment, looking for the crack you’ve shown.`, `${enemyName} don’t rush — they time you.`];
-
-    lines.push(pick(enemyBeat as string[], rand));
+  // Intent always included, but phrasing varies with depth
+  if (wantDepth >= 1.75) {
+    lines.push(`You commit: ${cleanOneLine(intentText)}.`);
+  } else {
+    lines.push(cleanOneLine(intentText));
   }
 
-  // 6) Mechanical truth hint (optional): never states more than what’s known
-  const mech = truth?.mechanics;
-  if (depth >= 2 && mech && typeof mech.roll === "number" && typeof mech.dc === "number") {
-    const m = typeof mech.margin === "number" ? mech.margin : mech.roll - mech.dc;
-    const success = typeof mech.success === "boolean" ? mech.success : m >= 0;
-
-    const mechLine = success
-      ? `The edge goes your way — just enough to matter.`
-      : `The moment slips; not failure alone, but consequence.`;
-
-    // Small probability: include a quiet “roll vs DC” tell without showing numbers (keeps table vibe)
-    const includeNumbers = rand() > 0.85;
-    if (includeNumbers) {
-      lines.push(`Fate reads ${mech.roll} against ${mech.dc}. ${mechLine}`);
-    } else {
-      lines.push(mechLine);
-    }
+  // 4) Enemy/combat beat if present (kept short)
+  if (wantDepth >= 1.35 && enemySnippet) {
+    lines.push(enemySnippet);
   }
 
-  // 7) Pressure + awareness beats (this is where “alive dungeon” comes in)
-  if (truth?.pressure?.level) {
-    const pLine = pick(pressureBeats[truth.pressure.level], rand);
-    // For depth 1.5, include sometimes; for depth 2, include almost always
-    const pChance = depth >= 2 ? 0.15 : 0.55;
-    if (rand() > pChance) lines.push(pLine);
+  // 5) Optional “texture” lines based on heuristics
+  const texturePool: string[] = [];
+  if (stealth) texturePool.push("You measure every sound you make.");
+  if (magic) texturePool.push("The air answers your will with a low, uncertain hum.");
+  if (martial) texturePool.push("Steel and instinct align for a single decisive moment.");
+
+  if (wantDepth >= 1.45 && texturePool.length > 0 && rand() > 0.25) {
+    // One texture line max (keeps it table-friendly)
+    lines.push(pick(texturePool, rand));
   }
 
-  if (truth?.awareness?.status) {
-    const aLine = pick(awarenessBeats[truth.awareness.status], rand);
-    const aChance = depth >= 2 ? 0.2 : 0.6;
-    if (rand() > aChance) lines.push(aLine);
+  // 6) Mechanics callout (optional, controlled)
+  if (wantDepth >= 1.9 && mechanicsSnippet) {
+    lines.push(mechanicsSnippet);
   }
 
-  // 8) Closing (tier)
-  lines.push(pick(closings[tier], rand));
+  // 7) Closing (tier)
+  lines.push(pick(b.closings[tier], rand));
 
-  // --------------------------------------------
-  // Final stitching: keep bounded length
-  // --------------------------------------------
+  // Final formatting: ensure it reads as 1–2 paragraphs, not a wall.
+  // For depth >= 2: add a deliberate line break around the middle.
+  const joined = lines.join(" ");
+  if (wantDepth >= 1.95) {
+    const mid = Math.floor(lines.length / 2);
+    const a = lines.slice(0, mid).join(" ");
+    const c = lines.slice(mid).join(" ");
+    return `${a}\n\n${c}`.trim();
+  }
 
-  let out = lines.join(" ");
-
-  // Soft cap to avoid runaway paragraphs in UI
-  const maxChars = depth >= 2 ? 620 : 420;
-  if (out.length > maxChars) out = out.slice(0, maxChars).trimEnd() + "…";
-
-  return out;
+  return joined.trim();
 }
 
 /* ------------------------------------------------------------
