@@ -90,7 +90,7 @@ function cleanOneLine(s: string) {
     .trim();
 }
 
-function dirWord(d?: string) {
+function dirWord(d?: "north" | "east" | "south" | "west" | "none") {
   switch (d) {
     case "north":
       return "north";
@@ -163,11 +163,7 @@ function banks(lens: NarrativeLens) {
           "For a heartbeat, the world aligns with your will.",
           "The moment opens like a door that was always meant for you.",
         ],
-        success: [
-          "The weave holds.",
-          "You take the moment and shape it.",
-          "Your intent finds purchase in the world.",
-        ],
+        success: ["The weave holds.", "You take the moment and shape it.", "Your intent finds purchase in the world."],
         mixed: [
           "It works—yet not cleanly.",
           "You gain ground, but pay for it in breath and time.",
@@ -178,38 +174,14 @@ function banks(lens: NarrativeLens) {
           "A small misstep becomes an invitation to trouble.",
           "Your intent meets stone and shadow—and slips.",
         ],
-        disaster: [
-          "The moment fractures in your grasp.",
-          "Misfortune arrives with speed and certainty.",
-          "The dungeon answers—loudly.",
-        ],
+        disaster: ["The moment fractures in your grasp.", "Misfortune arrives with speed and certainty.", "The dungeon answers—loudly."],
       } as const,
       closings: {
-        triumph: [
-          "You gain more than you sought.",
-          "Momentum is yours, unmistakably.",
-          "Even the dark seems to hesitate.",
-        ],
-        success: [
-          "You keep control—for now.",
-          "Nothing breaks… and that matters.",
-          "You hold the line of the story.",
-        ],
-        mixed: [
-          "You feel how thin the margin was.",
-          "It will echo later.",
-          "You advance—wary, but advancing.",
-        ],
-        fail: [
-          "Attention has been drawn.",
-          "You’re no longer sure what heard you.",
-          "Something shifts in the dark, in answer.",
-        ],
-        disaster: [
-          "You’re reacting now, not choosing.",
-          "Whatever comes next will not wait.",
-          "The dungeon takes its turn.",
-        ],
+        triumph: ["You gain more than you sought.", "Momentum is yours, unmistakably.", "Even the dark seems to hesitate."],
+        success: ["You keep control—for now.", "Nothing breaks… and that matters.", "You hold the line of the story."],
+        mixed: ["You feel how thin the margin was.", "It will echo later.", "You advance—wary, but advancing."],
+        fail: ["Attention has been drawn.", "You’re no longer sure what heard you.", "Something shifts in the dark, in answer."],
+        disaster: ["You’re reacting now, not choosing.", "Whatever comes next will not wait.", "The dungeon takes its turn."],
       } as const,
     };
   }
@@ -299,14 +271,7 @@ function banks(lens: NarrativeLens) {
 ------------------------------------------------------------ */
 
 export function generateNarration(input: NarrationInput): string {
-  const {
-    intentText,
-    margin,
-    lens = "heroic",
-    seed,
-    depth = 1.25,
-    truth,
-  } = input;
+  const { intentText, margin, lens = "heroic", seed, depth = 1.25, truth } = input;
 
   const rand = seed !== undefined ? seededRandom(seed) : Math.random;
   const tier = tierForMargin(margin);
@@ -322,25 +287,30 @@ export function generateNarration(input: NarrationInput): string {
 
   // --- Truth-derived snippets (only if provided) ---
   const setupSnippet = truth?.setup ? cleanOneLine(truth.setup).slice(0, 220) : "";
+
   const from = truth?.movement?.from;
   const to = truth?.movement?.to;
   const direction = truth?.movement?.direction;
+
+  // FIX: compute move-eligibility from the *direction*, not from dirWord() output.
+  // This avoids TS thinking we’re comparing incompatible unions.
+  const hasMove = !!(from && to && direction && direction !== "none");
   const dir = dirWord(direction);
-  const hasMove = !!(from && to && dir && dir !== "none");
-  const moveSnippet = hasMove ? `You shift ${dir} from (${from!.x},${from!.y}) to (${to!.x},${to!.y}).` : "";
+  const moveSnippet = hasMove
+    ? `You shift ${dir} from (${from!.x},${from!.y}) to (${to!.x},${to!.y}).`
+    : "";
 
   const enemyName = truth?.combat?.activeEnemyGroupName;
   const styleHint = truth?.combat?.attackStyleHint ?? "unknown";
   const isEnemyTurn = !!truth?.combat?.isEnemyTurn;
   const enemySnippet =
-    enemyName && isEnemyTurn
-      ? `Enemy pressure rises: ${styleToPhrase(styleHint, enemyName)}.`
-      : "";
+    enemyName && isEnemyTurn ? `Enemy pressure rises: ${styleToPhrase(styleHint, enemyName)}.` : "";
 
-  const mechanicsSnippet =
-    truth?.mechanics
-      ? `Roll ${truth.mechanics.roll} vs DC ${truth.mechanics.dc} (${truth.mechanics.margin >= 0 ? "+" : ""}${truth.mechanics.margin}).`
-      : "";
+  const mechanicsSnippet = truth?.mechanics
+    ? `Roll ${truth.mechanics.roll} vs DC ${truth.mechanics.dc} (${truth.mechanics.margin >= 0 ? "+" : ""}${
+        truth.mechanics.margin
+      }).`
+    : "";
 
   // --- Assembly ---
   const lines: string[] = [];
@@ -396,7 +366,6 @@ export function generateNarration(input: NarrationInput): string {
 
   // Final formatting: ensure it reads as 1–2 paragraphs, not a wall.
   // For depth >= 2: add a deliberate line break around the middle.
-  const joined = lines.join(" ");
   if (wantDepth >= 1.95) {
     const mid = Math.floor(lines.length / 2);
     const a = lines.slice(0, mid).join(" ");
@@ -404,7 +373,7 @@ export function generateNarration(input: NarrationInput): string {
     return `${a}\n\n${c}`.trim();
   }
 
-  return joined.trim();
+  return lines.join(" ").trim();
 }
 
 /* ------------------------------------------------------------
