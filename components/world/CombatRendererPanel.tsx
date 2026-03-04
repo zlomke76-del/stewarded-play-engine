@@ -251,10 +251,9 @@ export default function CombatRendererPanel({
     if (!ctx) return;
 
     function clear() {
-      // Use ctx.canvas (non-null) to avoid TS nullability issues
-      ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
-    }
-
+  if (!ctx) return;
+  ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+}
     function drawTelegraph() {
       const center = tileCenterPx(playerPos);
       const pulse = Math.min(1, (performance.now() - phaseStartedAt) / 650);
