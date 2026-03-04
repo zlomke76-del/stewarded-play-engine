@@ -1,4 +1,3 @@
-// app/demo/page.tsx
 "use client";
 
 // ------------------------------------------------------------
@@ -55,6 +54,7 @@ import {
 import AmbientBackground from "./components/AmbientBackground";
 import DemoHero from "./components/DemoHero";
 import InitialTableSection from "./components/InitialTableSection";
+import PartySetupSection from "./components/PartySetupSection";
 
 import { DMMode, DemoSectionId, DiceMode, RollSource, InitialTable, ExplorationDraft } from "./demoTypes";
 
@@ -275,9 +275,7 @@ export default function DemoPage() {
     setPartyDraft((prev) => {
       if (!prev) return prev;
 
-      const used = new Set<string>(
-        prev.members.map((m) => normalizeName(m.name || "").toLowerCase()).filter(Boolean)
-      );
+      const used = new Set<string>(prev.members.map((m) => normalizeName(m.name || "").toLowerCase()).filter(Boolean));
 
       const next: PartyDeclaredPayload = {
         ...prev,
@@ -308,22 +306,24 @@ export default function DemoPage() {
 
     const cleaned: PartyDeclaredPayload = {
       partyId: partyDraft.partyId || crypto.randomUUID(),
-      members: (partyDraft.members || []).slice(0, 6).map((m, idx) => {
-        const i1 = idx + 1;
-        const id = normalizeName(m.id || `player_${i1}`) || `player_${i1}`;
-        const hpMax = safeInt(m.hpMax, 12, 1, 999);
-        const hpCurrent = safeInt(m.hpCurrent, hpMax, 0, 999);
+      members: (partyDraft.members || [])
+        .slice(0, 6)
+        .map((m, idx) => {
+          const i1 = idx + 1;
+          const id = normalizeName(m.id || `player_${i1}`) || `player_${i1}`;
+          const hpMax = safeInt(m.hpMax, 12, 1, 999);
+          const hpCurrent = safeInt(m.hpCurrent, hpMax, 0, 999);
 
-        return {
-          id,
-          name: normalizeName(m.name || ""),
-          className: normalizeName(m.className || ""),
-          ac: safeInt(m.ac, 14, 1, 40),
-          hpMax,
-          hpCurrent: Math.min(hpCurrent, hpMax),
-          initiativeMod: safeInt(m.initiativeMod, 1, -10, 20),
-        };
-      }),
+          return {
+            id,
+            name: normalizeName(m.name || ""),
+            className: normalizeName(m.className || ""),
+            ac: safeInt(m.ac, 14, 1, 40),
+            hpMax,
+            hpCurrent: Math.min(hpCurrent, hpMax),
+            initiativeMod: safeInt(m.initiativeMod, 1, -10, 20),
+          };
+        }),
     };
 
     setState((prev) =>
@@ -785,184 +785,23 @@ export default function DemoPage() {
             }}
           />
 
-          {/* PARTY SETUP (this is what you pointed to — lives in the "empty space" immediately after mode) */}
+          {/* PARTY SETUP (broken out into component; appears immediately after mode) */}
           {dmMode !== null && (
-            <div style={{ scrollMarginTop: 90 }}>
-              <CardSection title="Party Setup (Session Truth)">
-                <p className="muted" style={{ marginTop: 0 }}>
-                  Declare players once at the start. This roster becomes the source for combatants. After you commit, it
-                  locks for the session.
-                </p>
-
-                <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
-                  <label style={{ display: "flex", flexDirection: "column", gap: 6, minWidth: 220 }}>
-                    Players (1–6)
-                    <select
-                      value={partyDraft?.members?.length ?? 4}
-                      onChange={(e) => setPartySize(Number(e.target.value))}
-                      disabled={partyLocked}
-                    >
-                      {[1, 2, 3, 4, 5, 6].map((n) => (
-                        <option key={n} value={n}>
-                          {n}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-
-                  <button onClick={randomizePartyNames} disabled={partyLocked || !partyDraft}>
-                    🎲 Random names
-                  </button>
-
-                  <button onClick={commitParty} disabled={partyLocked || !partyDraft}>
-                    Commit Party (Append-only)
-                  </button>
-
-                  <span className="muted" style={{ fontSize: 12 }}>
-                    {partyCanonical ? "Canonical party declared ✅ (locked)" : "Draft only (not yet canon)"}
-                    {partyLockedByCombat ? " · Locked (combat active)" : ""}
-                  </span>
-                </div>
-
-                <div style={{ marginTop: 14, overflowX: "auto" }}>
-                  <div
-                    style={{
-                      display: "grid",
-                      gridTemplateColumns: "220px 160px 80px 90px 90px 110px",
-                      gap: 8,
-                      minWidth: 760,
-                      alignItems: "center",
-                    }}
-                  >
-                    <div className="muted" style={{ fontSize: 12 }}>
-                      NAME
-                    </div>
-                    <div className="muted" style={{ fontSize: 12 }}>
-                      CLASS
-                    </div>
-                    <div className="muted" style={{ fontSize: 12 }}>
-                      AC
-                    </div>
-                    <div className="muted" style={{ fontSize: 12 }}>
-                      HP
-                    </div>
-                    <div className="muted" style={{ fontSize: 12 }}>
-                      HP MAX
-                    </div>
-                    <div className="muted" style={{ fontSize: 12 }}>
-                      INIT MOD
-                    </div>
-
-                    {(partyDraft?.members ?? partyMembers).map((m, idx) => {
-                      const i1 = idx + 1;
-                      const editable = !partyLocked && !!partyDraft;
-
-                      const row = editable ? partyDraft!.members[idx] : partyMembers[idx] ?? m;
-
-                      return (
-                        <div key={row.id || `player_${i1}`} style={{ display: "contents" }}>
-                          <input
-                            value={row?.name ?? ""}
-                            disabled={!editable}
-                            onChange={(e) => {
-                              const v = e.target.value;
-                              setPartyDraft((prev) => {
-                                if (!prev) return prev;
-                                const next = { ...prev, members: prev.members.map((x) => ({ ...x })) };
-                                next.members[idx].name = v;
-                                return next;
-                              });
-                            }}
-                            placeholder={`Player ${i1}`}
-                          />
-
-                          <input
-                            value={row?.className ?? ""}
-                            disabled={!editable}
-                            onChange={(e) => {
-                              const v = e.target.value;
-                              setPartyDraft((prev) => {
-                                if (!prev) return prev;
-                                const next = { ...prev, members: prev.members.map((x) => ({ ...x })) };
-                                next.members[idx].className = v;
-                                return next;
-                              });
-                            }}
-                            placeholder="Class"
-                          />
-
-                          <input
-                            value={String(row?.ac ?? 14)}
-                            disabled={!editable}
-                            onChange={(e) => {
-                              const v = safeInt(e.target.value, 14, 1, 40);
-                              setPartyDraft((prev) => {
-                                if (!prev) return prev;
-                                const next = { ...prev, members: prev.members.map((x) => ({ ...x })) };
-                                next.members[idx].ac = v;
-                                return next;
-                              });
-                            }}
-                            inputMode="numeric"
-                          />
-
-                          <input
-                            value={String(row?.hpCurrent ?? 12)}
-                            disabled={!editable}
-                            onChange={(e) => {
-                              const v = safeInt(e.target.value, 12, 0, 999);
-                              setPartyDraft((prev) => {
-                                if (!prev) return prev;
-                                const next = { ...prev, members: prev.members.map((x) => ({ ...x })) };
-                                next.members[idx].hpCurrent = v;
-                                return next;
-                              });
-                            }}
-                            inputMode="numeric"
-                          />
-
-                          <input
-                            value={String(row?.hpMax ?? 12)}
-                            disabled={!editable}
-                            onChange={(e) => {
-                              const v = safeInt(e.target.value, 12, 1, 999);
-                              setPartyDraft((prev) => {
-                                if (!prev) return prev;
-                                const next = { ...prev, members: prev.members.map((x) => ({ ...x })) };
-                                next.members[idx].hpMax = v;
-                                if (next.members[idx].hpCurrent > v) next.members[idx].hpCurrent = v;
-                                return next;
-                              });
-                            }}
-                            inputMode="numeric"
-                          />
-
-                          <input
-                            value={String(row?.initiativeMod ?? 1)}
-                            disabled={!editable}
-                            onChange={(e) => {
-                              const v = safeInt(e.target.value, 1, -10, 20);
-                              setPartyDraft((prev) => {
-                                if (!prev) return prev;
-                                const next = { ...prev, members: prev.members.map((x) => ({ ...x })) };
-                                next.members[idx].initiativeMod = v;
-                                return next;
-                              });
-                            }}
-                            inputMode="numeric"
-                          />
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                <div className="muted" style={{ marginTop: 10, fontSize: 12 }}>
-                  Recommended: keep this roster stable. Combat turn order is still per combat, but *who the players are*
-                  is session truth.
-                </div>
-              </CardSection>
-            </div>
+            <CardSection title="Party Setup (Session Truth)">
+              <PartySetupSection
+                enabled={true}
+                partyDraft={partyDraft}
+                partyMembersFallback={partyMembers}
+                partyCanonicalExists={!!partyCanonical}
+                partyLocked={partyLocked}
+                partyLockedByCombat={partyLockedByCombat}
+                setPartySize={setPartySize}
+                randomizePartyNames={randomizePartyNames}
+                commitParty={commitParty}
+                safeInt={safeInt}
+                setPartyDraft={setPartyDraft}
+              />
+            </CardSection>
           )}
 
           {/* TABLE (hidden until mode selected) */}
