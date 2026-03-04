@@ -9,11 +9,15 @@
 // UI is broken into components under app/demo/components.
 //
 // (Upgraded toward "real game" direction)
+//
+// Session-level truth:
 // - Party roster is declared ONCE per session (append-only event: PARTY_DECLARED)
-// - Combat turn order is per-combat (derived from COMBAT_STARTED + INITIATIVE_ROLLED + TURN_ADVANCED)
-// - Party sheet is shown read-only by default; editable only when:
-//   - dmMode === "human"
-//   - and no combat is active
+// - After PARTY_DECLARED exists, party editing is LOCKED for the session
+// - Combat participants draw from the party roster
+//
+// Combat-level truth:
+// - Turn order is per-combat (derived from COMBAT_STARTED + INITIATIVE_ROLLED + TURN_ADVANCED)
+// - Combat setup is locked while combat is active
 //
 // ------------------------------------------------------------
 
@@ -57,7 +61,6 @@ import { DMMode, DemoSectionId, DiceMode, RollSource, InitialTable, ExplorationD
 import {
   anchorId,
   scrollToSection,
-  pick,
   clampInt,
   normalizeName,
   randomName,
@@ -93,6 +96,16 @@ type PartyDeclaredPayload = {
   members: PartyMember[];
 };
 
+function safeInt(n: unknown, fallback: number, lo: number, hi: number) {
+  const x = Number.isFinite(Number(n)) ? Math.trunc(Number(n)) : fallback;
+  return Math.max(lo, Math.min(hi, x));
+}
+
+function displayName(m: PartyMember, i1: number) {
+  const n = normalizeName(m.name || "");
+  return n.length > 0 ? n : `Player ${i1}`;
+}
+
 function defaultParty(count: number): PartyDeclaredPayload {
   const n = clampInt(count, 1, 6);
   return {
@@ -121,16 +134,6 @@ function deriveLatestParty(events: readonly any[]): PartyDeclaredPayload | null 
     return p;
   }
   return null;
-}
-
-function safeInt(n: unknown, fallback: number, lo: number, hi: number) {
-  const x = Number.isFinite(Number(n)) ? Math.trunc(Number(n)) : fallback;
-  return Math.max(lo, Math.min(hi, x));
-}
-
-function displayName(m: PartyMember, i1: number) {
-  const n = normalizeName(m.name || "");
-  return n.length > 0 ? n : `Player ${i1}`;
 }
 
 // ------------------------------------------------------------
@@ -174,100 +177,65 @@ export default function DemoPage() {
   // Party sheet (session-level)
   // ----------------------------------------------------------
 
-  const derivedParty = useMemo(() => deriveLatestParty(state.events as any[]) ?? null, [state.events]);
+  const partyCanonical = useMemo(() => deriveLatestParty(state.events as any[]) ?? null, [state.events]);
 
-  // Local draft for party editing (only commits when Arbiter clicks "Commit Party")
+  // Draft editor lives in session UI; only becomes canon when Arbiter commits (PARTY_DECLARED).
   const [partyDraft, setPartyDraft] = useState<PartyDeclaredPayload | null>(null);
-  const [partyEditing, setPartyEditing] = useState(false);
 
-  // Ensure we have a party draft once mode is selected (so sheet appears early)
+  // Ensure a draft exists once mode is selected (so Party Setup appears immediately after mode)
   useEffect(() => {
     if (dmMode === null) return;
 
-    // If we already have canonical party, use it as draft baseline.
-    if (derivedParty) {
-      setPartyDraft((prev) => prev ?? derivedParty);
+    // If canonical exists, mirror it into draft for display consistency (still locked).
+    if (partyCanonical) {
+      setPartyDraft((prev) => prev ?? partyCanonical);
       return;
     }
 
-    // Otherwise generate a default party draft once.
+    // Otherwise create a default draft once.
     setPartyDraft((prev) => prev ?? defaultParty(4));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dmMode, derivedParty?.partyId]);
+  }, [dmMode, partyCanonical?.partyId]);
 
-  const partyCanonical: PartyDeclaredPayload | null = derivedParty ?? null;
+  // Effective party is canonical if present, otherwise draft.
   const partyEffective: PartyDeclaredPayload | null = partyCanonical ?? partyDraft;
-
-  const canEditParty = dmMode === "human"; // AND no combatActive (applied below)
   const partyMembers = partyEffective?.members ?? [];
 
   const effectivePlayerNames = useMemo(() => {
     return partyMembers.map((m, idx) => displayName(m, idx + 1));
   }, [partyMembers]);
 
-  function commitParty() {
-    if (!partyDraft) return;
+  // ----------------------------------------------------------
+  // Combat state (derived + ended-aware)
+  // ----------------------------------------------------------
 
-    const cleaned: PartyDeclaredPayload = {
-      partyId: partyDraft.partyId || crypto.randomUUID(),
-      members: (partyDraft.members || []).slice(0, 6).map((m, idx) => {
-        const i1 = idx + 1;
-        return {
-          id: normalizeName(m.id || `player_${i1}`) || `player_${i1}`,
-          name: normalizeName(m.name || ""),
-          className: normalizeName(m.className || ""),
-          ac: safeInt(m.ac, 14, 1, 40),
-          hpMax: safeInt(m.hpMax, 12, 1, 999),
-          hpCurrent: safeInt(m.hpCurrent, safeInt(m.hpMax, 12, 1, 999), 0, 999),
-          initiativeMod: safeInt(m.initiativeMod, 1, -10, 20),
-        };
-      }),
-    };
+  const latestCombatId = useMemo(() => findLatestCombatId(state.events as any) ?? null, [state.events]);
 
-    setState((prev) =>
-      recordEvent(prev, {
-        id: crypto.randomUUID(),
-        timestamp: Date.now(),
-        actor: "arbiter",
-        type: "PARTY_DECLARED",
-        payload: cleaned as any,
-      })
-    );
+  const derivedCombat = useMemo(() => {
+    if (!latestCombatId) return null;
+    return deriveCombatState(latestCombatId, state.events as any);
+  }, [latestCombatId, state.events]);
 
-    setPartyEditing(false);
-  }
+  const combatEnded = useMemo(() => {
+    if (!derivedCombat?.combatId) return false;
+    return isCombatEndedForId(derivedCombat.combatId, state.events as any[]);
+  }, [derivedCombat?.combatId, state.events]);
 
-  function randomizePartyNames() {
-    if (!partyDraft) return;
+  const combatActive = !!derivedCombat && !combatEnded;
 
-    setPartyDraft((prev) => {
-      if (!prev) return prev;
-      const used = new Set<string>(
-        prev.members.map((m) => normalizeName(m.name || "").toLowerCase()).filter(Boolean)
-      );
+  const activeCombatantSpec = useMemo(() => {
+    if (!derivedCombat?.activeCombatantId) return null;
+    return derivedCombat.participants.find((p) => p.id === derivedCombat.activeCombatantId) ?? null;
+  }, [derivedCombat]);
 
-      const next = {
-        ...prev,
-        members: prev.members.map((m) => ({ ...m })),
-      };
+  const isEnemyTurn = combatActive && activeCombatantSpec?.kind === "enemy_group";
 
-      for (let i = 0; i < next.members.length; i++) {
-        const current = normalizeName(next.members[i].name || "");
-        if (current) continue;
-
-        let tries = 0;
-        let name = randomName();
-        while (used.has(name.toLowerCase()) && tries < 12) {
-          name = randomName();
-          tries++;
-        }
-        used.add(name.toLowerCase());
-        next.members[i].name = name;
-      }
-
-      return next;
-    });
-  }
+  // Party lock rules:
+  // - once PARTY_DECLARED exists => locked for session
+  // - also locked while combat is active (even for draft)
+  const partyLockedByCanon = !!partyCanonical;
+  const partyLockedByCombat = combatActive;
+  const partyLocked = partyLockedByCanon || partyLockedByCombat;
 
   function setPartySize(nextCount: number) {
     const n = clampInt(nextCount, 1, 6);
@@ -301,33 +269,73 @@ export default function DemoPage() {
     });
   }
 
-  // ----------------------------------------------------------
-  // Combat state (derived + ended-aware)
-  // ----------------------------------------------------------
+  function randomizePartyNames() {
+    if (!partyDraft) return;
 
-  const latestCombatId = useMemo(() => findLatestCombatId(state.events as any) ?? null, [state.events]);
+    setPartyDraft((prev) => {
+      if (!prev) return prev;
 
-  const derivedCombat = useMemo(() => {
-    if (!latestCombatId) return null;
-    return deriveCombatState(latestCombatId, state.events as any);
-  }, [latestCombatId, state.events]);
+      const used = new Set<string>(
+        prev.members.map((m) => normalizeName(m.name || "").toLowerCase()).filter(Boolean)
+      );
 
-  const combatEnded = useMemo(() => {
-    if (!derivedCombat?.combatId) return false;
-    return isCombatEndedForId(derivedCombat.combatId, state.events as any[]);
-  }, [derivedCombat?.combatId, state.events]);
+      const next: PartyDeclaredPayload = {
+        ...prev,
+        members: prev.members.map((m) => ({ ...m })),
+      };
 
-  const combatActive = !!derivedCombat && !combatEnded;
+      for (let i = 0; i < next.members.length; i++) {
+        const current = normalizeName(next.members[i].name || "");
+        if (current) continue;
 
-  const activeCombatantSpec = useMemo(() => {
-    if (!derivedCombat?.activeCombatantId) return null;
-    return derivedCombat.participants.find((p) => p.id === derivedCombat.activeCombatantId) ?? null;
-  }, [derivedCombat]);
+        let tries = 0;
+        let name = randomName();
+        while (used.has(name.toLowerCase()) && tries < 12) {
+          name = randomName();
+          tries++;
+        }
+        used.add(name.toLowerCase());
+        next.members[i].name = name;
+      }
 
-  const isEnemyTurn = combatActive && activeCombatantSpec?.kind === "enemy_group";
+      return next;
+    });
+  }
 
-  // Party edit lock: only editable when no combat is active
-  const partyEditLocked = combatActive;
+  function commitParty() {
+    if (!partyDraft) return;
+    if (partyLocked) return;
+
+    const cleaned: PartyDeclaredPayload = {
+      partyId: partyDraft.partyId || crypto.randomUUID(),
+      members: (partyDraft.members || []).slice(0, 6).map((m, idx) => {
+        const i1 = idx + 1;
+        const id = normalizeName(m.id || `player_${i1}`) || `player_${i1}`;
+        const hpMax = safeInt(m.hpMax, 12, 1, 999);
+        const hpCurrent = safeInt(m.hpCurrent, hpMax, 0, 999);
+
+        return {
+          id,
+          name: normalizeName(m.name || ""),
+          className: normalizeName(m.className || ""),
+          ac: safeInt(m.ac, 14, 1, 40),
+          hpMax,
+          hpCurrent: Math.min(hpCurrent, hpMax),
+          initiativeMod: safeInt(m.initiativeMod, 1, -10, 20),
+        };
+      }),
+    };
+
+    setState((prev) =>
+      recordEvent(prev, {
+        id: crypto.randomUUID(),
+        timestamp: Date.now(),
+        actor: "arbiter",
+        type: "PARTY_DECLARED",
+        payload: cleaned as any,
+      })
+    );
+  }
 
   // ----------------------------------------------------------
   // Exploration draft (auto-prepared AFTER intent + option)
@@ -344,13 +352,6 @@ export default function DemoPage() {
     markKind: "door",
     markNote: "",
   });
-
-  const suggestedTo = useMemo(() => {
-    if (!explorationDraft.enableMove) return null;
-    if (explorationDraft.direction === "none") return null;
-    const to = stepFrom(currentPos, explorationDraft.direction);
-    return withinBounds(to, MAP_W, MAP_H) ? to : null;
-  }, [explorationDraft.enableMove, explorationDraft.direction, currentPos]);
 
   useEffect(() => {
     if (!selectedOption) return;
@@ -425,7 +426,6 @@ export default function DemoPage() {
     if (!options || options.length === 0) return;
     setSelectedOption(options[0]);
 
-    // Nudge flow forward
     setActiveSection("resolution");
     queueMicrotask(() => scrollToSection("resolution"));
   }, [dmMode, options]);
@@ -439,9 +439,7 @@ export default function DemoPage() {
     let next = nextState;
 
     const here = deriveCurrentPosition(next.events as any[], MAP_W, MAP_H);
-
     const to = d.enableMove && d.direction !== "none" ? stepFrom(here, d.direction) : null;
-
     const canMove = to ? withinBounds(to, MAP_W, MAP_H) : false;
 
     if (d.enableMove && canMove && to) {
@@ -519,7 +517,6 @@ export default function DemoPage() {
       return next;
     });
 
-    // Nudge flow forward
     setActiveSection("canon");
     queueMicrotask(() => scrollToSection("canon"));
   }
@@ -577,13 +574,13 @@ export default function DemoPage() {
     []
   );
 
+  const partyReadyForCombat = !!partyEffective && (partyEffective.members?.length ?? 0) > 0;
+
   function startCombatDeterministic() {
     if (combatActive) return;
     if (!partyEffective || partyMembers.length === 0) return;
 
-    // Party must be declared (or at least drafted) before combat
     const members = partyMembers.slice(0, 6);
-
     const groups = enemyGroups.map(normalizeName).filter(Boolean).slice(0, 6);
 
     const combatId = crypto.randomUUID();
@@ -730,6 +727,8 @@ export default function DemoPage() {
 
   function selectMode(nextMode: DMMode) {
     setDmMode(nextMode);
+
+    // After mode: we want party setup immediately available, then table.
     setActiveSection("table");
     queueMicrotask(() => scrollToSection("table"));
   }
@@ -749,8 +748,6 @@ export default function DemoPage() {
 
   // Map demo DMMode -> Resolution panel dmMode (scoped fix: only Solace-neutral locks narration)
   const resolutionDmMode = useMemo(() => (dmMode === "solace-neutral" ? "solace_neutral" : "human"), [dmMode]);
-
-  const partyReadyForCombat = !!partyEffective && (partyEffective.members?.length ?? 0) > 0;
 
   return (
     <AmbientBackground>
@@ -788,6 +785,186 @@ export default function DemoPage() {
             }}
           />
 
+          {/* PARTY SETUP (this is what you pointed to — lives in the "empty space" immediately after mode) */}
+          {dmMode !== null && (
+            <div style={{ scrollMarginTop: 90 }}>
+              <CardSection title="Party Setup (Session Truth)">
+                <p className="muted" style={{ marginTop: 0 }}>
+                  Declare players once at the start. This roster becomes the source for combatants. After you commit, it
+                  locks for the session.
+                </p>
+
+                <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+                  <label style={{ display: "flex", flexDirection: "column", gap: 6, minWidth: 220 }}>
+                    Players (1–6)
+                    <select
+                      value={partyDraft?.members?.length ?? 4}
+                      onChange={(e) => setPartySize(Number(e.target.value))}
+                      disabled={partyLocked}
+                    >
+                      {[1, 2, 3, 4, 5, 6].map((n) => (
+                        <option key={n} value={n}>
+                          {n}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+
+                  <button onClick={randomizePartyNames} disabled={partyLocked || !partyDraft}>
+                    🎲 Random names
+                  </button>
+
+                  <button onClick={commitParty} disabled={partyLocked || !partyDraft}>
+                    Commit Party (Append-only)
+                  </button>
+
+                  <span className="muted" style={{ fontSize: 12 }}>
+                    {partyCanonical ? "Canonical party declared ✅ (locked)" : "Draft only (not yet canon)"}
+                    {partyLockedByCombat ? " · Locked (combat active)" : ""}
+                  </span>
+                </div>
+
+                <div style={{ marginTop: 14, overflowX: "auto" }}>
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "220px 160px 80px 90px 90px 110px",
+                      gap: 8,
+                      minWidth: 760,
+                      alignItems: "center",
+                    }}
+                  >
+                    <div className="muted" style={{ fontSize: 12 }}>
+                      NAME
+                    </div>
+                    <div className="muted" style={{ fontSize: 12 }}>
+                      CLASS
+                    </div>
+                    <div className="muted" style={{ fontSize: 12 }}>
+                      AC
+                    </div>
+                    <div className="muted" style={{ fontSize: 12 }}>
+                      HP
+                    </div>
+                    <div className="muted" style={{ fontSize: 12 }}>
+                      HP MAX
+                    </div>
+                    <div className="muted" style={{ fontSize: 12 }}>
+                      INIT MOD
+                    </div>
+
+                    {(partyDraft?.members ?? partyMembers).map((m, idx) => {
+                      const i1 = idx + 1;
+                      const editable = !partyLocked && !!partyDraft;
+
+                      const row = editable ? partyDraft!.members[idx] : partyMembers[idx] ?? m;
+
+                      return (
+                        <div key={row.id || `player_${i1}`} style={{ display: "contents" }}>
+                          <input
+                            value={row?.name ?? ""}
+                            disabled={!editable}
+                            onChange={(e) => {
+                              const v = e.target.value;
+                              setPartyDraft((prev) => {
+                                if (!prev) return prev;
+                                const next = { ...prev, members: prev.members.map((x) => ({ ...x })) };
+                                next.members[idx].name = v;
+                                return next;
+                              });
+                            }}
+                            placeholder={`Player ${i1}`}
+                          />
+
+                          <input
+                            value={row?.className ?? ""}
+                            disabled={!editable}
+                            onChange={(e) => {
+                              const v = e.target.value;
+                              setPartyDraft((prev) => {
+                                if (!prev) return prev;
+                                const next = { ...prev, members: prev.members.map((x) => ({ ...x })) };
+                                next.members[idx].className = v;
+                                return next;
+                              });
+                            }}
+                            placeholder="Class"
+                          />
+
+                          <input
+                            value={String(row?.ac ?? 14)}
+                            disabled={!editable}
+                            onChange={(e) => {
+                              const v = safeInt(e.target.value, 14, 1, 40);
+                              setPartyDraft((prev) => {
+                                if (!prev) return prev;
+                                const next = { ...prev, members: prev.members.map((x) => ({ ...x })) };
+                                next.members[idx].ac = v;
+                                return next;
+                              });
+                            }}
+                            inputMode="numeric"
+                          />
+
+                          <input
+                            value={String(row?.hpCurrent ?? 12)}
+                            disabled={!editable}
+                            onChange={(e) => {
+                              const v = safeInt(e.target.value, 12, 0, 999);
+                              setPartyDraft((prev) => {
+                                if (!prev) return prev;
+                                const next = { ...prev, members: prev.members.map((x) => ({ ...x })) };
+                                next.members[idx].hpCurrent = v;
+                                return next;
+                              });
+                            }}
+                            inputMode="numeric"
+                          />
+
+                          <input
+                            value={String(row?.hpMax ?? 12)}
+                            disabled={!editable}
+                            onChange={(e) => {
+                              const v = safeInt(e.target.value, 12, 1, 999);
+                              setPartyDraft((prev) => {
+                                if (!prev) return prev;
+                                const next = { ...prev, members: prev.members.map((x) => ({ ...x })) };
+                                next.members[idx].hpMax = v;
+                                if (next.members[idx].hpCurrent > v) next.members[idx].hpCurrent = v;
+                                return next;
+                              });
+                            }}
+                            inputMode="numeric"
+                          />
+
+                          <input
+                            value={String(row?.initiativeMod ?? 1)}
+                            disabled={!editable}
+                            onChange={(e) => {
+                              const v = safeInt(e.target.value, 1, -10, 20);
+                              setPartyDraft((prev) => {
+                                if (!prev) return prev;
+                                const next = { ...prev, members: prev.members.map((x) => ({ ...x })) };
+                                next.members[idx].initiativeMod = v;
+                                return next;
+                              });
+                            }}
+                            inputMode="numeric"
+                          />
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div className="muted" style={{ marginTop: 10, fontSize: 12 }}>
+                  Recommended: keep this roster stable. Combat turn order is still per combat, but *who the players are*
+                  is session truth.
+                </div>
+              </CardSection>
+            </div>
+          )}
+
           {/* TABLE (hidden until mode selected) */}
           <div id={anchorId("table")} style={{ scrollMarginTop: 90 }}>
             <InitialTableSection
@@ -806,208 +983,6 @@ export default function DemoPage() {
 
           {(dmMode !== null && (dmMode === "human" || tableAccepted)) && (
             <>
-              {/* PARTY SHEET (Session-level) */}
-              <div style={{ scrollMarginTop: 90 }}>
-                <CardSection title="Party Sheet (Session Truth)">
-                  <p className="muted" style={{ marginTop: 0 }}>
-                    Declare players once. Combat participants draw from this roster. Turn order is still per combat.
-                  </p>
-
-                  <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
-                    <button
-                      onClick={() => setPartyEditing((v) => !v)}
-                      disabled={!canEditParty || partyEditLocked}
-                      title={
-                        !canEditParty
-                          ? "Party editing is only available in Human DM mode."
-                          : partyEditLocked
-                          ? "Party is locked during active combat."
-                          : "Edit party"
-                      }
-                    >
-                      {partyEditing ? "Close Editor" : "Edit Party"}
-                    </button>
-
-                    <button onClick={commitParty} disabled={!partyEditing || !canEditParty || partyEditLocked}>
-                      Commit Party (Append-only)
-                    </button>
-
-                    <button onClick={randomizePartyNames} disabled={!partyEditing || !canEditParty || partyEditLocked}>
-                      🎲 Random names
-                    </button>
-
-                    <span className="muted" style={{ fontSize: 12 }}>
-                      {partyCanonical ? "Canonical party declared ✅" : "No canonical party yet (draft only)"}
-                      {partyEditLocked ? " · Locked (combat active)" : ""}
-                    </span>
-                  </div>
-
-                  {partyDraft && partyEditing && (
-                    <div style={{ marginTop: 12 }}>
-                      <label style={{ display: "flex", flexDirection: "column", gap: 6, maxWidth: 260 }}>
-                        Party size (1–6)
-                        <select
-                          value={partyDraft.members.length}
-                          onChange={(e) => setPartySize(Number(e.target.value))}
-                          disabled={!canEditParty || partyEditLocked}
-                        >
-                          {[1, 2, 3, 4, 5, 6].map((n) => (
-                            <option key={n} value={n}>
-                              {n}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-                    </div>
-                  )}
-
-                  <div style={{ marginTop: 14, overflowX: "auto" }}>
-                    <div
-                      style={{
-                        display: "grid",
-                        gridTemplateColumns: "220px 160px 80px 90px 90px 110px",
-                        gap: 8,
-                        minWidth: 760,
-                        alignItems: "center",
-                      }}
-                    >
-                      <div className="muted" style={{ fontSize: 12 }}>
-                        NAME
-                      </div>
-                      <div className="muted" style={{ fontSize: 12 }}>
-                        CLASS
-                      </div>
-                      <div className="muted" style={{ fontSize: 12 }}>
-                        AC
-                      </div>
-                      <div className="muted" style={{ fontSize: 12 }}>
-                        HP
-                      </div>
-                      <div className="muted" style={{ fontSize: 12 }}>
-                        HP MAX
-                      </div>
-                      <div className="muted" style={{ fontSize: 12 }}>
-                        INIT MOD
-                      </div>
-
-                      {partyMembers.map((m, idx) => {
-                        const i1 = idx + 1;
-                        const editable = partyEditing && canEditParty && !partyEditLocked;
-
-                        const valueSource = partyEditing ? partyDraft : partyEffective;
-                        const row = valueSource?.members?.[idx] ?? m;
-
-                        return (
-                          <div
-                            key={m.id || `player_${i1}`}
-                            style={{
-                              display: "contents",
-                            }}
-                          >
-                            <input
-                              value={row?.name ?? ""}
-                              disabled={!editable}
-                              onChange={(e) => {
-                                const v = e.target.value;
-                                setPartyDraft((prev) => {
-                                  if (!prev) return prev;
-                                  const next = { ...prev, members: prev.members.map((x) => ({ ...x })) };
-                                  next.members[idx].name = v;
-                                  return next;
-                                });
-                              }}
-                              placeholder={`Player ${i1}`}
-                            />
-
-                            <input
-                              value={row?.className ?? ""}
-                              disabled={!editable}
-                              onChange={(e) => {
-                                const v = e.target.value;
-                                setPartyDraft((prev) => {
-                                  if (!prev) return prev;
-                                  const next = { ...prev, members: prev.members.map((x) => ({ ...x })) };
-                                  next.members[idx].className = v;
-                                  return next;
-                                });
-                              }}
-                              placeholder="Class"
-                            />
-
-                            <input
-                              value={String(row?.ac ?? 14)}
-                              disabled={!editable}
-                              onChange={(e) => {
-                                const v = safeInt(e.target.value, 14, 1, 40);
-                                setPartyDraft((prev) => {
-                                  if (!prev) return prev;
-                                  const next = { ...prev, members: prev.members.map((x) => ({ ...x })) };
-                                  next.members[idx].ac = v;
-                                  return next;
-                                });
-                              }}
-                              inputMode="numeric"
-                            />
-
-                            <input
-                              value={String(row?.hpCurrent ?? 12)}
-                              disabled={!editable}
-                              onChange={(e) => {
-                                const v = safeInt(e.target.value, 12, 0, 999);
-                                setPartyDraft((prev) => {
-                                  if (!prev) return prev;
-                                  const next = { ...prev, members: prev.members.map((x) => ({ ...x })) };
-                                  next.members[idx].hpCurrent = v;
-                                  return next;
-                                });
-                              }}
-                              inputMode="numeric"
-                            />
-
-                            <input
-                              value={String(row?.hpMax ?? 12)}
-                              disabled={!editable}
-                              onChange={(e) => {
-                                const v = safeInt(e.target.value, 12, 1, 999);
-                                setPartyDraft((prev) => {
-                                  if (!prev) return prev;
-                                  const next = { ...prev, members: prev.members.map((x) => ({ ...x })) };
-                                  next.members[idx].hpMax = v;
-                                  // keep current <= max
-                                  if (next.members[idx].hpCurrent > v) next.members[idx].hpCurrent = v;
-                                  return next;
-                                });
-                              }}
-                              inputMode="numeric"
-                            />
-
-                            <input
-                              value={String(row?.initiativeMod ?? 1)}
-                              disabled={!editable}
-                              onChange={(e) => {
-                                const v = safeInt(e.target.value, 1, -10, 20);
-                                setPartyDraft((prev) => {
-                                  if (!prev) return prev;
-                                  const next = { ...prev, members: prev.members.map((x) => ({ ...x })) };
-                                  next.members[idx].initiativeMod = v;
-                                  return next;
-                                });
-                              }}
-                              inputMode="numeric"
-                            />
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-
-                  <div className="muted" style={{ marginTop: 10, fontSize: 12 }}>
-                    This sheet is session truth (append-only). In Solace-neutral it stays read-only. In Human DM you can
-                    update it only while no combat is active.
-                  </div>
-                </CardSection>
-              </div>
-
               {/* PRESSURE */}
               <div id={anchorId("pressure")} style={{ scrollMarginTop: 90 }}>
                 <DungeonPressurePanel turn={outcomesCount} events={state.events} />
