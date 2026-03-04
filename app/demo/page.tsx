@@ -22,14 +22,15 @@
 // - WorldLedgerPanelLegacy shows OUTCOME narration
 // - CanonEventsPanel shows all OTHER canon events (movement/map/combat)
 //
+// UI (this version)
+// - Adds a “hero” and chapter navigation so the page feels alive
+// - Breaks the long demo into anchored sections (no new files)
+// - Keeps event-sourced invariants intact
+//
 // ------------------------------------------------------------
 
 import { useEffect, useMemo, useState } from "react";
-import {
-  createSession,
-  recordEvent,
-  SessionState,
-} from "@/lib/session/SessionState";
+import { createSession, recordEvent, SessionState } from "@/lib/session/SessionState";
 
 import { parseAction } from "@/lib/parser/ActionParser";
 import { generateOptions, Option } from "@/lib/options/OptionGenerator";
@@ -40,9 +41,7 @@ import ResolutionDraftAdvisoryPanel from "@/components/resolution/ResolutionDraf
 import NextActionHint from "@/components/NextActionHint";
 import WorldLedgerPanelLegacy from "@/components/world/WorldLedgerPanel.legacy";
 import DungeonPressurePanel from "@/components/world/DungeonPressurePanel";
-import ExplorationMapPanel, {
-  MapMarkKind,
-} from "@/components/world/ExplorationMapPanel";
+import ExplorationMapPanel, { MapMarkKind } from "@/components/world/ExplorationMapPanel";
 
 import StewardedShell from "@/components/layout/StewardedShell";
 import ModeHeader from "@/components/layout/ModeHeader";
@@ -64,8 +63,11 @@ import {
 // ------------------------------------------------------------
 
 type DMMode = "human" | "solace-neutral";
-
 type OptionKind = "safe" | "environmental" | "risky" | "contested";
+
+// Keep local dice types aligned with ResolutionDraftAdvisoryPanel
+type DiceMode = "d4" | "d6" | "d8" | "d10" | "d12" | "d20";
+type RollSource = "manual" | "solace";
 
 type InitialTable = {
   openingFrame: string;
@@ -79,13 +81,29 @@ type InitialTable = {
   dormantHooks: string[];
 };
 
-// Keep local dice types aligned with ResolutionDraftAdvisoryPanel
-type DiceMode = "d4" | "d6" | "d8" | "d10" | "d12" | "d20";
-type RollSource = "manual" | "solace";
-
 type XY = { x: number; y: number };
-
 type Direction = "north" | "south" | "east" | "west";
+
+type ExplorationDraft = {
+  enableMove: boolean;
+  direction: Direction | "none";
+  enableReveal: boolean;
+  revealRadius: 0 | 1 | 2;
+  enableMark: boolean;
+  markKind: MapMarkKind;
+  markNote: string;
+};
+
+type DemoSectionId =
+  | "mode"
+  | "table"
+  | "pressure"
+  | "map"
+  | "combat"
+  | "action"
+  | "resolution"
+  | "canon"
+  | "ledger";
 
 // ------------------------------------------------------------
 // Random helpers
@@ -196,22 +214,14 @@ function generateInitialTable(): InitialTable {
       "Voices echo where they shouldn’t, carrying fragments of argument.",
       "The city hums, unaware of the pressure building beneath it.",
     ]),
-    locationTraits: [
-      pick(["crowded", "echoing", "claustrophobic", "uneasily quiet"]),
-      pick(["ancient stone", "rotting wood", "slick cobblestone"]),
-    ],
+    locationTraits: [pick(["crowded", "echoing", "claustrophobic", "uneasily quiet"]), pick(["ancient stone", "rotting wood", "slick cobblestone"])],
     latentFactions: chosenNames.map((name) => ({
       name,
       desire: pick(desires),
       pressure: pick(pressures),
     })),
     environmentalOddities: [
-      pick([
-        "Lantern flames gutter without wind",
-        "Stone walls seem to absorb sound",
-        "Whispers surface near old drains",
-        "Footsteps echo twice",
-      ]),
+      pick(["Lantern flames gutter without wind", "Stone walls seem to absorb sound", "Whispers surface near old drains", "Footsteps echo twice"]),
     ],
     dormantHooks: [
       pick([
@@ -234,17 +244,13 @@ function renderInitialTableNarration(t: InitialTable): string {
   lines.push(`The place feels ${traitA}, and the air carries the stink of ${traitB}.`);
 
   if (/footsteps echo twice/i.test(oddity)) {
-    lines.push(
-      "Every step answers itself — once, then again — like the street remembers you a beat too late."
-    );
+    lines.push("Every step answers itself — once, then again — like the street remembers you a beat too late.");
   } else if (/lantern/i.test(oddity.toLowerCase())) {
     lines.push("Lanternlight can’t decide what it wants to be — steady one second, starving the next.");
   } else if (/absorb sound/i.test(oddity.toLowerCase())) {
     lines.push("Sound doesn’t travel right. Words die early, like the walls are swallowing them.");
   } else if (/whispers/i.test(oddity.toLowerCase())) {
-    lines.push(
-      "You keep catching whispers at the edge of hearing — not loud enough to understand, not quiet enough to ignore."
-    );
+    lines.push("You keep catching whispers at the edge of hearing — not loud enough to understand, not quiet enough to ignore.");
   } else {
     lines.push(`${oddity}.`);
   }
@@ -262,15 +268,9 @@ function renderInitialTableNarration(t: InitialTable): string {
 
 function inferOptionKind(description: string): OptionKind {
   const text = description.toLowerCase();
-  if (text.includes("attack") || text.includes("fight") || text.includes("oppose") || text.includes("contest")) {
-    return "contested";
-  }
-  if (text.includes("climb") || text.includes("cross") || text.includes("navigate") || text.includes("environment")) {
-    return "environmental";
-  }
-  if (text.includes("steal") || text.includes("sneak") || text.includes("risk")) {
-    return "risky";
-  }
+  if (text.includes("attack") || text.includes("fight") || text.includes("oppose") || text.includes("contest")) return "contested";
+  if (text.includes("climb") || text.includes("cross") || text.includes("navigate") || text.includes("environment")) return "environmental";
+  if (text.includes("steal") || text.includes("sneak") || text.includes("risk")) return "risky";
   return "safe";
 }
 
@@ -338,16 +338,6 @@ function textSuggestsLocked(text: string) {
   return /\b(locked|sealed|barred|jammed)\b/.test(t);
 }
 
-type ExplorationDraft = {
-  enableMove: boolean;
-  direction: Direction | "none";
-  enableReveal: boolean;
-  revealRadius: 0 | 1 | 2;
-  enableMark: boolean;
-  markKind: MapMarkKind;
-  markNote: string;
-};
-
 // ------------------------------------------------------------
 // Combat-ended detection (local, because deriveCombatState doesn’t account for COMBAT_ENDED)
 // ------------------------------------------------------------
@@ -370,6 +360,43 @@ function isCombatEndedForId(combatId: string, events: readonly any[]) {
 }
 
 // ------------------------------------------------------------
+// UI helpers: chapter nav + anchors
+// ------------------------------------------------------------
+
+function anchorId(section: DemoSectionId) {
+  return `demo-${section}`;
+}
+
+function scrollToSection(section: DemoSectionId) {
+  const el = document.getElementById(anchorId(section));
+  if (!el) return;
+  el.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+function sectionLabel(section: DemoSectionId) {
+  switch (section) {
+    case "mode":
+      return "Mode";
+    case "table":
+      return "Table";
+    case "pressure":
+      return "Pressure";
+    case "map":
+      return "Map";
+    case "combat":
+      return "Combat";
+    case "action":
+      return "Action";
+    case "resolution":
+      return "Resolution";
+    case "canon":
+      return "Canon";
+    case "ledger":
+      return "Ledger";
+  }
+}
+
+// ------------------------------------------------------------
 
 export default function DemoPage() {
   const role: "arbiter" = "arbiter";
@@ -384,6 +411,9 @@ export default function DemoPage() {
   const [initialTable, setInitialTable] = useState<InitialTable | null>(null);
   const [tableAccepted, setTableAccepted] = useState(false);
   const [tableDraftText, setTableDraftText] = useState("");
+
+  // Chapter UI (visual only)
+  const [activeSection, setActiveSection] = useState<DemoSectionId>("mode");
 
   // Action parsing + options
   const [playerInput, setPlayerInput] = useState("");
@@ -499,12 +529,20 @@ export default function DemoPage() {
     setParsed(parsedAction);
     setOptions([...optionSet.options]);
     setSelectedOption(null);
+
+    // Nudge flow forward
+    setActiveSection("resolution");
+    queueMicrotask(() => scrollToSection("resolution"));
   }
 
   useEffect(() => {
     if (dmMode !== "solace-neutral") return;
     if (!options || options.length === 0) return;
     setSelectedOption(options[0]);
+
+    // Nudge flow forward
+    setActiveSection("resolution");
+    queueMicrotask(() => scrollToSection("resolution"));
   }, [dmMode, options]);
 
   // ----------------------------------------------------------
@@ -517,8 +555,7 @@ export default function DemoPage() {
 
     const here = deriveCurrentPosition(next.events as any[], MAP_W, MAP_H);
 
-    const to =
-      d.enableMove && d.direction !== "none" ? stepFrom(here, d.direction) : null;
+    const to = d.enableMove && d.direction !== "none" ? stepFrom(here, d.direction) : null;
 
     const canMove = to ? withinBounds(to, MAP_W, MAP_H) : false;
 
@@ -581,12 +618,7 @@ export default function DemoPage() {
 
   function handleRecord(payload: {
     description: string;
-    dice: {
-      mode: DiceMode;
-      roll: number;
-      dc: number;
-      source: RollSource;
-    };
+    dice: { mode: DiceMode; roll: number; dc: number; source: RollSource };
     audit: string[];
   }) {
     setState((prev) => {
@@ -601,6 +633,10 @@ export default function DemoPage() {
       next = commitExplorationBundle(next);
       return next;
     });
+
+    // Nudge flow forward
+    setActiveSection("canon");
+    queueMicrotask(() => scrollToSection("canon"));
   }
 
   function shareCanon() {
@@ -662,7 +698,6 @@ export default function DemoPage() {
     if (combatActive) return;
 
     const pc = clampInt(playerCount, 1, 6);
-
     const groups = enemyGroups.map(normalizeName).filter(Boolean).slice(0, 6);
 
     const combatId = crypto.randomUUID();
@@ -722,6 +757,8 @@ export default function DemoPage() {
 
       return next;
     });
+
+    setActiveSection("combat");
   }
 
   function advanceTurn() {
@@ -807,6 +844,24 @@ export default function DemoPage() {
 
   const isHumanDM = dmMode === "human";
 
+  const outcomesCount = useMemo(() => state.events.filter((e: any) => e?.type === "OUTCOME").length, [state.events]);
+  const canonCount = useMemo(() => state.events.filter((e: any) => e?.type && e?.type !== "OUTCOME").length, [state.events]);
+
+  const chapterButtons: { id: DemoSectionId; hint: string }[] = useMemo(
+    () => [
+      { id: "mode", hint: "Set facilitator mode" },
+      { id: "table", hint: "Start scene + accept table" },
+      { id: "pressure", hint: "Advisory state" },
+      { id: "map", hint: "Canon view of space" },
+      { id: "combat", hint: "Deterministic turn order" },
+      { id: "action", hint: "Player intent" },
+      { id: "resolution", hint: "Roll + record OUTCOME" },
+      { id: "canon", hint: "Non-outcome canon log" },
+      { id: "ledger", hint: "Outcome narration only" },
+    ],
+    []
+  );
+
   // ----------------------------------------------------------
   // UI
   // ----------------------------------------------------------
@@ -823,499 +878,675 @@ export default function DemoPage() {
         ]}
       />
 
-      <CardSection title="Facilitation Mode">
-        <label>
-          <input type="radio" checked={dmMode === "human"} onChange={() => setDmMode("human")} /> Human DM (options
-          visible + editable setup)
-        </label>
-        <br />
-        <label>
-          <input type="radio" checked={dmMode === "solace-neutral"} onChange={() => setDmMode("solace-neutral")} /> Solace
-          (Neutral Facilitator)
-        </label>
-      </CardSection>
-
-      {dmMode === "solace-neutral" && initialTable && !tableAccepted && (
-        <CardSection title="Initial Table (Solace)">
-          <p className="muted" style={{ marginBottom: 8 }}>
-            Table-play narration (finalized):
-          </p>
-
-          <div
-            style={{
-              whiteSpace: "pre-wrap",
-              lineHeight: 1.6,
-              background: "rgba(0,0,0,0.25)",
-              padding: "16px",
-              borderRadius: "6px",
-            }}
-          >
-            {tableDraftText}
-          </div>
-
-          <details style={{ marginTop: 12 }}>
-            <summary className="muted">Show underlying table signals</summary>
-            <div style={{ marginTop: 10 }}>
-              <p>{initialTable.openingFrame}</p>
-              <p className="muted">Traits: {initialTable.locationTraits.join(", ")}</p>
-              <ul>
-                {initialTable.latentFactions.map((f, i) => (
-                  <li key={i}>
-                    <strong>{f.name}</strong> — {f.desire} ({f.pressure})
-                  </li>
-                ))}
-              </ul>
-              <p className="muted">Oddity: {initialTable.environmentalOddities.join(", ")}</p>
-              <p className="muted">Hook: {initialTable.dormantHooks.join(", ")}</p>
+      {/* HERO + CHAPTER NAV (visual only) */}
+      <div
+        style={{
+          borderRadius: 12,
+          border: "1px solid rgba(255,255,255,0.10)",
+          background:
+            "radial-gradient(1200px 240px at 20% 0%, rgba(138,180,255,0.20), transparent 60%), radial-gradient(900px 220px at 80% 20%, rgba(255,120,120,0.12), transparent 55%), rgba(255,255,255,0.03)",
+          padding: 18,
+          marginBottom: 14,
+        }}
+      >
+        <div style={{ display: "flex", justifyContent: "space-between", gap: 14, alignItems: "flex-start", flexWrap: "wrap" }}>
+          <div style={{ minWidth: 260, flex: "1 1 520px" }}>
+            <div style={{ fontSize: 12, letterSpacing: 0.6, opacity: 0.85 }}>
+              EVENT-SOURCED PLAY · FAIL-CLOSED CANON
             </div>
-          </details>
-
-          <div style={{ marginTop: 10 }}>
-            <button onClick={() => setTableAccepted(true)}>Accept Table</button>
-          </div>
-        </CardSection>
-      )}
-
-      {dmMode === "human" && initialTable && !tableAccepted && (
-        <CardSection title="Solace Setup Helper (Optional)">
-          <p className="muted" style={{ marginTop: 0 }}>
-            If you want a fast-start table, edit it, then run the game.
-          </p>
-
-          <textarea
-            rows={10}
-            value={tableDraftText}
-            onChange={(e) => setTableDraftText(e.target.value)}
-            style={{ width: "100%" }}
-          />
-
-          <details style={{ marginTop: 12 }}>
-            <summary className="muted">Show underlying table signals</summary>
-            <div style={{ marginTop: 10 }}>
-              <p>{initialTable.openingFrame}</p>
-              <p className="muted">Traits: {initialTable.locationTraits.join(", ")}</p>
-              <ul>
-                {initialTable.latentFactions.map((f, i) => (
-                  <li key={i}>
-                    <strong>{f.name}</strong> — {f.desire} ({f.pressure})
-                  </li>
-                ))}
-              </ul>
-              <p className="muted">Oddity: {initialTable.environmentalOddities.join(", ")}</p>
-              <p className="muted">Hook: {initialTable.dormantHooks.join(", ")}</p>
+            <div style={{ marginTop: 6, fontSize: 22, fontWeight: 800, lineHeight: 1.15 }}>
+              A governed tabletop loop: intent → resolution → canon.
             </div>
-          </details>
+            <div className="muted" style={{ marginTop: 10, maxWidth: 760, lineHeight: 1.55 }}>
+              This page is a working demo. It’s long by nature — so it’s now organized into “chapters.”
+              Nothing here rewrites the world: the UI only renders what the event log contains.
+            </div>
 
-          <div style={{ marginTop: 10 }}>
-            <button onClick={() => setTableAccepted(true)}>Accept Table</button>
+            <div style={{ marginTop: 12, display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+              <button
+                onClick={() => {
+                  setActiveSection("mode");
+                  scrollToSection("mode");
+                }}
+              >
+                Start here
+              </button>
+              <button
+                onClick={() => {
+                  setActiveSection("action");
+                  scrollToSection("action");
+                }}
+              >
+                Jump to action
+              </button>
+              <div className="muted" style={{ fontSize: 12 }}>
+                outcomes: <strong>{outcomesCount}</strong> · canon events: <strong>{canonCount}</strong>
+              </div>
+            </div>
           </div>
-        </CardSection>
-      )}
 
-      {dmMode === "solace-neutral" && !tableAccepted && <Disclaimer />}
+          <div style={{ flex: "0 1 360px", minWidth: 280 }}>
+            <div className="muted" style={{ fontSize: 12, marginBottom: 8 }}>
+              Chapters
+            </div>
+
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+                gap: 8,
+              }}
+            >
+              {chapterButtons.map((b) => {
+                const active = activeSection === b.id;
+                return (
+                  <button
+                    key={b.id}
+                    onClick={() => {
+                      setActiveSection(b.id);
+                      scrollToSection(b.id);
+                    }}
+                    style={{
+                      padding: "10px 10px",
+                      borderRadius: 10,
+                      border: active ? "1px solid rgba(138,180,255,0.55)" : "1px solid rgba(255,255,255,0.10)",
+                      background: active ? "rgba(138,180,255,0.10)" : "rgba(255,255,255,0.04)",
+                      textAlign: "left",
+                    }}
+                    aria-label={`Go to ${sectionLabel(b.id)}`}
+                    title={b.hint}
+                  >
+                    <div style={{ fontWeight: 800, fontSize: 12 }}>{sectionLabel(b.id)}</div>
+                    <div className="muted" style={{ fontSize: 11, marginTop: 4, lineHeight: 1.2 }}>
+                      {b.hint}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* MODE */}
+      <div id={anchorId("mode")} style={{ scrollMarginTop: 90 }}>
+        <CardSection title="Facilitation Mode">
+          <label>
+            <input
+              type="radio"
+              checked={dmMode === "human"}
+              onChange={() => {
+                setDmMode("human");
+                setActiveSection("table");
+                queueMicrotask(() => scrollToSection("table"));
+              }}
+            />{" "}
+            Human DM (options visible + editable setup)
+          </label>
+          <br />
+          <label>
+            <input
+              type="radio"
+              checked={dmMode === "solace-neutral"}
+              onChange={() => {
+                setDmMode("solace-neutral");
+                setActiveSection("table");
+                queueMicrotask(() => scrollToSection("table"));
+              }}
+            />{" "}
+            Solace (Neutral Facilitator)
+          </label>
+        </CardSection>
+      </div>
+
+      {/* TABLE */}
+      <div id={anchorId("table")} style={{ scrollMarginTop: 90 }}>
+        {dmMode === "solace-neutral" && initialTable && !tableAccepted && (
+          <CardSection title="Initial Table (Solace)">
+            <p className="muted" style={{ marginBottom: 8 }}>
+              Table-play narration (finalized):
+            </p>
+
+            <div
+              style={{
+                whiteSpace: "pre-wrap",
+                lineHeight: 1.6,
+                background: "rgba(0,0,0,0.25)",
+                padding: "16px",
+                borderRadius: "6px",
+              }}
+            >
+              {tableDraftText}
+            </div>
+
+            <details style={{ marginTop: 12 }}>
+              <summary className="muted">Show underlying table signals</summary>
+              <div style={{ marginTop: 10 }}>
+                <p>{initialTable.openingFrame}</p>
+                <p className="muted">Traits: {initialTable.locationTraits.join(", ")}</p>
+                <ul>
+                  {initialTable.latentFactions.map((f, i) => (
+                    <li key={i}>
+                      <strong>{f.name}</strong> — {f.desire} ({f.pressure})
+                    </li>
+                  ))}
+                </ul>
+                <p className="muted">Oddity: {initialTable.environmentalOddities.join(", ")}</p>
+                <p className="muted">Hook: {initialTable.dormantHooks.join(", ")}</p>
+              </div>
+            </details>
+
+            <div style={{ marginTop: 10 }}>
+              <button
+                onClick={() => {
+                  setTableAccepted(true);
+                  setActiveSection("pressure");
+                  queueMicrotask(() => scrollToSection("pressure"));
+                }}
+              >
+                Accept Table
+              </button>
+            </div>
+          </CardSection>
+        )}
+
+        {dmMode === "human" && initialTable && !tableAccepted && (
+          <CardSection title="Solace Setup Helper (Optional)">
+            <p className="muted" style={{ marginTop: 0 }}>
+              If you want a fast-start table, edit it, then run the game.
+            </p>
+
+            <textarea
+              rows={10}
+              value={tableDraftText}
+              onChange={(e) => setTableDraftText(e.target.value)}
+              style={{ width: "100%" }}
+            />
+
+            <details style={{ marginTop: 12 }}>
+              <summary className="muted">Show underlying table signals</summary>
+              <div style={{ marginTop: 10 }}>
+                <p>{initialTable.openingFrame}</p>
+                <p className="muted">Traits: {initialTable.locationTraits.join(", ")}</p>
+                <ul>
+                  {initialTable.latentFactions.map((f, i) => (
+                    <li key={i}>
+                      <strong>{f.name}</strong> — {f.desire} ({f.pressure})
+                    </li>
+                  ))}
+                </ul>
+                <p className="muted">Oddity: {initialTable.environmentalOddities.join(", ")}</p>
+                <p className="muted">Hook: {initialTable.dormantHooks.join(", ")}</p>
+              </div>
+            </details>
+
+            <div style={{ marginTop: 10 }}>
+              <button
+                onClick={() => {
+                  setTableAccepted(true);
+                  setActiveSection("pressure");
+                  queueMicrotask(() => scrollToSection("pressure"));
+                }}
+              >
+                Accept Table
+              </button>
+            </div>
+          </CardSection>
+        )}
+
+        {dmMode === "solace-neutral" && !tableAccepted && <Disclaimer />}
+      </div>
 
       {(dmMode === "human" || tableAccepted) && (
         <>
-          <DungeonPressurePanel turn={state.events.filter((e) => e.type === "OUTCOME").length} events={state.events} />
+          {/* PRESSURE */}
+          <div id={anchorId("pressure")} style={{ scrollMarginTop: 90 }}>
+            <DungeonPressurePanel turn={outcomesCount} events={state.events} />
+          </div>
 
-          <ExplorationMapPanel events={state.events} mapW={MAP_W} mapH={MAP_H} />
+          {/* MAP */}
+          <div id={anchorId("map")} style={{ scrollMarginTop: 90 }}>
+            <ExplorationMapPanel events={state.events} mapW={MAP_W} mapH={MAP_H} />
+          </div>
 
-          <CardSection title="Combat (Deterministic, Grouped Enemies)">
-            <p className="muted" style={{ marginTop: 0 }}>
-              Players roll individually. Enemy groups roll once per group. Turn order is derived from events.
-            </p>
+          {/* COMBAT */}
+          <div id={anchorId("combat")} style={{ scrollMarginTop: 90 }}>
+            <CardSection title="Combat (Deterministic, Grouped Enemies)">
+              <p className="muted" style={{ marginTop: 0 }}>
+                Players roll individually. Enemy groups roll once per group. Turn order is derived from events.
+              </p>
 
-            {combatActive && (
-              <div className="muted" style={{ marginTop: 8 }}>
-                🔒 Combat is active. Setup is locked to preserve replay integrity.
-              </div>
-            )}
+              {combatActive && (
+                <div className="muted" style={{ marginTop: 8 }}>
+                  🔒 Combat is active. Setup is locked to preserve replay integrity.
+                </div>
+              )}
 
-            {combatEnded && derivedCombat && (
-              <div className="muted" style={{ marginTop: 8 }}>
-                🏁 Combat ended. You can start a new combat (new combatId) if you want.
-              </div>
-            )}
+              {combatEnded && derivedCombat && (
+                <div className="muted" style={{ marginTop: 8 }}>
+                  🏁 Combat ended. You can start a new combat (new combatId) if you want.
+                </div>
+              )}
 
-            <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "flex-end" }}>
-              <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                Players (1–6):
-                <select
-                  value={playerCount}
-                  onChange={(e) => setPlayerCount(clampInt(Number(e.target.value), 1, 6))}
-                  style={{ minWidth: 140 }}
-                  disabled={combatActive}
-                >
-                  {PLAYER_COUNTS.map((n) => (
-                    <option key={n} value={n}>
-                      {n}
-                    </option>
-                  ))}
-                </select>
-              </label>
-
-              <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                Player init mod:
-                <select
-                  value={initModPlayers}
-                  onChange={(e) => setInitModPlayers(Math.trunc(Number(e.target.value)))}
-                  style={{ minWidth: 140 }}
-                  disabled={combatActive}
-                >
-                  {INIT_MODS.map((n) => (
-                    <option key={n} value={n}>
-                      {n >= 0 ? `+${n}` : `${n}`}
-                    </option>
-                  ))}
-                </select>
-              </label>
-
-              <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                Enemy group init mod:
-                <select
-                  value={initModEnemies}
-                  onChange={(e) => setInitModEnemies(Math.trunc(Number(e.target.value)))}
-                  style={{ minWidth: 170 }}
-                  disabled={combatActive}
-                >
-                  {INIT_MODS.map((n) => (
-                    <option key={n} value={n}>
-                      {n >= 0 ? `+${n}` : `${n}`}
-                    </option>
-                  ))}
-                </select>
-              </label>
-
-              <div style={{ flex: "1 1 320px", display: "flex", flexDirection: "column", gap: 6 }}>
-                <span className="muted">Enemy groups</span>
-                <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+              <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "flex-end" }}>
+                <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                  Players (1–6):
                   <select
-                    value={enemyGroupSelect}
-                    onChange={(e) => setEnemyGroupSelect(e.target.value)}
-                    style={{ minWidth: 220 }}
+                    value={playerCount}
+                    onChange={(e) => setPlayerCount(clampInt(Number(e.target.value), 1, 6))}
+                    style={{ minWidth: 140 }}
                     disabled={combatActive}
                   >
-                    {ENEMY_GROUP_LIBRARY.map((g) => (
-                      <option key={g} value={g}>
-                        {g}
+                    {PLAYER_COUNTS.map((n) => (
+                      <option key={n} value={n}>
+                        {n}
                       </option>
                     ))}
                   </select>
-                  <button onClick={() => addEnemyGroup(enemyGroupSelect)} disabled={combatActive}>
-                    Add
-                  </button>
-                  <button onClick={clearEnemyGroups} disabled={combatActive || enemyGroups.length === 0}>
-                    Clear
-                  </button>
-                  <span className="muted" style={{ fontSize: 12 }}>
-                    (max 6)
-                  </span>
-                </div>
+                </label>
 
-                {enemyGroups.length > 0 ? (
-                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8 }}>
-                    {enemyGroups.map((g) => (
-                      <span
-                        key={g}
-                        style={{
-                          display: "inline-flex",
-                          alignItems: "center",
-                          gap: 8,
-                          padding: "6px 10px",
-                          borderRadius: 999,
-                          border: "1px solid rgba(255,255,255,0.12)",
-                          background: "rgba(255,255,255,0.05)",
-                        }}
-                      >
-                        <span>{g}</span>
-                        <button
-                          onClick={() => removeEnemyGroup(g)}
-                          aria-label={`Remove ${g}`}
-                          disabled={combatActive}
-                          style={{ padding: "0 8px", borderRadius: 999, border: "1px solid rgba(255,255,255,0.12)" }}
-                        >
-                          ×
-                        </button>
-                      </span>
+                <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                  Player init mod:
+                  <select
+                    value={initModPlayers}
+                    onChange={(e) => setInitModPlayers(Math.trunc(Number(e.target.value)))}
+                    style={{ minWidth: 140 }}
+                    disabled={combatActive}
+                  >
+                    {INIT_MODS.map((n) => (
+                      <option key={n} value={n}>
+                        {n >= 0 ? `+${n}` : `${n}`}
+                      </option>
                     ))}
+                  </select>
+                </label>
+
+                <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                  Enemy group init mod:
+                  <select
+                    value={initModEnemies}
+                    onChange={(e) => setInitModEnemies(Math.trunc(Number(e.target.value)))}
+                    style={{ minWidth: 170 }}
+                    disabled={combatActive}
+                  >
+                    {INIT_MODS.map((n) => (
+                      <option key={n} value={n}>
+                        {n >= 0 ? `+${n}` : `${n}`}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <div style={{ flex: "1 1 320px", display: "flex", flexDirection: "column", gap: 6 }}>
+                  <span className="muted">Enemy groups</span>
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                    <select
+                      value={enemyGroupSelect}
+                      onChange={(e) => setEnemyGroupSelect(e.target.value)}
+                      style={{ minWidth: 220 }}
+                      disabled={combatActive}
+                    >
+                      {ENEMY_GROUP_LIBRARY.map((g) => (
+                        <option key={g} value={g}>
+                          {g}
+                        </option>
+                      ))}
+                    </select>
+                    <button onClick={() => addEnemyGroup(enemyGroupSelect)} disabled={combatActive}>
+                      Add
+                    </button>
+                    <button onClick={clearEnemyGroups} disabled={combatActive || enemyGroups.length === 0}>
+                      Clear
+                    </button>
+                    <span className="muted" style={{ fontSize: 12 }}>
+                      (max 6)
+                    </span>
                   </div>
-                ) : (
-                  <div className="muted" style={{ marginTop: 8 }}>
-                    No enemy groups yet. Add one.
-                  </div>
-                )}
-              </div>
-            </div>
 
-            <div style={{ marginTop: 14 }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
-                <strong>Players</strong>
-                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                  <button onClick={randomizePlayerNames} disabled={combatActive}>
-                    🎲 Random names
-                  </button>
-                </div>
-              </div>
-
-              <div style={{ marginTop: 10, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 10 }}>
-                {Array.from({ length: clampInt(playerCount, 1, 6) }, (_, idx) => {
-                  const i1 = idx + 1;
-                  const value = playerNames[idx] ?? "";
-                  return (
-                    <label key={i1} style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                      <span className="muted">Player {i1} name (optional)</span>
-                      <input
-                        value={value}
-                        disabled={combatActive}
-                        onChange={(e) => {
-                          const v = e.target.value;
-                          setPlayerNames((prev) => {
-                            const next = [...prev];
-                            next[idx] = v;
-                            return next.slice(0, 6);
-                          });
-                        }}
-                        placeholder={`Player ${i1}`}
-                      />
-                    </label>
-                  );
-                })}
-              </div>
-
-              <p className="muted" style={{ marginTop: 10, marginBottom: 0 }}>
-                Blank names will display as “Player 1…N”. Names are used for initiative labels and canon readability.
-              </p>
-            </div>
-
-            <div style={{ marginTop: 14, display: "flex", gap: 8, flexWrap: "wrap" }}>
-              <button onClick={startCombatDeterministic} disabled={combatActive}>
-                Start Combat (Seeded)
-              </button>
-              <button onClick={advanceTurn} disabled={!derivedCombat || combatEnded}>
-                Advance Turn
-              </button>
-              <button onClick={endCombat} disabled={!derivedCombat || combatEnded}>
-                End Combat
-              </button>
-            </div>
-
-            {derivedCombat && (
-              <div style={{ marginTop: 12 }}>
-                <div className="muted">
-                  Combat: <strong>{derivedCombat.combatId}</strong> · Round <strong>{derivedCombat.round}</strong>
-                  {activeCombatantSpec && (
-                    <>
-                      {" "}
-                      · Active: <strong>{formatCombatantLabel(activeCombatantSpec)}</strong>
-                    </>
+                  {enemyGroups.length > 0 ? (
+                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8 }}>
+                      {enemyGroups.map((g) => (
+                        <span
+                          key={g}
+                          style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: 8,
+                            padding: "6px 10px",
+                            borderRadius: 999,
+                            border: "1px solid rgba(255,255,255,0.12)",
+                            background: "rgba(255,255,255,0.05)",
+                          }}
+                        >
+                          <span>{g}</span>
+                          <button
+                            onClick={() => removeEnemyGroup(g)}
+                            aria-label={`Remove ${g}`}
+                            disabled={combatActive}
+                            style={{ padding: "0 8px", borderRadius: 999, border: "1px solid rgba(255,255,255,0.12)" }}
+                          >
+                            ×
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="muted" style={{ marginTop: 8 }}>
+                      No enemy groups yet. Add one.
+                    </div>
                   )}
                 </div>
+              </div>
 
-                <div style={{ marginTop: 10, display: "grid", gridTemplateColumns: "1fr", gap: 6 }}>
-                  {derivedCombat.order.map((id, idx) => {
-                    const spec = derivedCombat.participants.find((p) => p.id === id) ?? null;
-                    const roll = derivedCombat.initiative.find((r) => r.combatantId === id) ?? null;
-                    const active = derivedCombat.activeCombatantId === id;
+              <div style={{ marginTop: 14 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
+                  <strong>Players</strong>
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                    <button onClick={randomizePlayerNames} disabled={combatActive}>
+                      🎲 Random names
+                    </button>
+                  </div>
+                </div>
 
+                <div
+                  style={{
+                    marginTop: 10,
+                    display: "grid",
+                    gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+                    gap: 10,
+                  }}
+                >
+                  {Array.from({ length: clampInt(playerCount, 1, 6) }, (_, idx) => {
+                    const i1 = idx + 1;
+                    const value = playerNames[idx] ?? "";
                     return (
-                      <div
-                        key={id}
-                        style={{
-                          padding: "10px 12px",
-                          borderRadius: 8,
-                          border: active ? "1px solid rgba(138,180,255,0.55)" : "1px solid rgba(255,255,255,0.10)",
-                          background: active ? "rgba(138,180,255,0.10)" : "rgba(255,255,255,0.04)",
-                          display: "flex",
-                          justifyContent: "space-between",
-                          alignItems: "center",
-                          gap: 10,
-                        }}
-                      >
-                        <div>
-                          <strong>
-                            {idx + 1}. {spec ? formatCombatantLabel(spec) : id}
-                          </strong>
-                          {active && <span className="muted">{"  "}← active</span>}
-                        </div>
-                        <div className="muted">{roll ? `Init ${roll.total} (d20 ${roll.natural} + ${roll.modifier})` : "Init —"}</div>
-                      </div>
+                      <label key={i1} style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                        <span className="muted">Player {i1} name (optional)</span>
+                        <input
+                          value={value}
+                          disabled={combatActive}
+                          onChange={(e) => {
+                            const v = e.target.value;
+                            setPlayerNames((prev) => {
+                              const next = [...prev];
+                              next[idx] = v;
+                              return next.slice(0, 6);
+                            });
+                          }}
+                          placeholder={`Player ${i1}`}
+                        />
+                      </label>
                     );
                   })}
                 </div>
+
+                <p className="muted" style={{ marginTop: 10, marginBottom: 0 }}>
+                  Blank names will display as “Player 1…N”. Names are used for initiative labels and canon readability.
+                </p>
               </div>
-            )}
-          </CardSection>
 
-          <CardSection title="Player Action">
-            {combatActive && isEnemyTurn && dmMode !== "human" && (
-              <p className="muted" style={{ marginTop: 0 }}>
-                Enemy turn. In Solace-neutral, the player cannot declare enemy intent.
-                Switch to Human DM to enter enemy intent.
-              </p>
-            )}
+              <div style={{ marginTop: 14, display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <button onClick={startCombatDeterministic} disabled={combatActive}>
+                  Start Combat (Seeded)
+                </button>
+                <button onClick={advanceTurn} disabled={!derivedCombat || combatEnded}>
+                  Advance Turn
+                </button>
+                <button onClick={endCombat} disabled={!derivedCombat || combatEnded}>
+                  End Combat
+                </button>
+              </div>
 
-            <textarea
-              value={playerInput}
-              onChange={(e) => setPlayerInput(e.target.value)}
-              placeholder="Describe what your character does…"
-              disabled={!canPlayerSubmitIntent}
-              style={{ width: "100%", minHeight: "120px", resize: "vertical", boxSizing: "border-box", lineHeight: 1.5 }}
-            />
-            <div style={{ marginTop: 8 }}>
-              <button onClick={handlePlayerAction} disabled={!canPlayerSubmitIntent}>
-                Submit Action
-              </button>
-            </div>
-          </CardSection>
+              {derivedCombat && (
+                <div style={{ marginTop: 12 }}>
+                  <div className="muted">
+                    Combat: <strong>{derivedCombat.combatId}</strong> · Round <strong>{derivedCombat.round}</strong>
+                    {activeCombatantSpec && (
+                      <>
+                        {" "}
+                        · Active: <strong>{formatCombatantLabel(activeCombatantSpec)}</strong>
+                      </>
+                    )}
+                  </div>
 
+                  <div style={{ marginTop: 10, display: "grid", gridTemplateColumns: "1fr", gap: 6 }}>
+                    {derivedCombat.order.map((id, idx) => {
+                      const spec = derivedCombat.participants.find((p) => p.id === id) ?? null;
+                      const roll = derivedCombat.initiative.find((r) => r.combatantId === id) ?? null;
+                      const active = derivedCombat.activeCombatantId === id;
+
+                      return (
+                        <div
+                          key={id}
+                          style={{
+                            padding: "10px 12px",
+                            borderRadius: 8,
+                            border: active ? "1px solid rgba(138,180,255,0.55)" : "1px solid rgba(255,255,255,0.10)",
+                            background: active ? "rgba(138,180,255,0.10)" : "rgba(255,255,255,0.04)",
+                            display: "flex",
+                            justifyContent: "space-between",
+                            alignItems: "center",
+                            gap: 10,
+                          }}
+                        >
+                          <div>
+                            <strong>
+                              {idx + 1}. {spec ? formatCombatantLabel(spec) : id}
+                            </strong>
+                            {active && <span className="muted">{"  "}← active</span>}
+                          </div>
+                          <div className="muted">
+                            {roll ? `Init ${roll.total} (d20 ${roll.natural} + ${roll.modifier})` : "Init —"}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </CardSection>
+          </div>
+
+          {/* ACTION */}
+          <div id={anchorId("action")} style={{ scrollMarginTop: 90 }}>
+            <CardSection title="Player Action">
+              {combatActive && isEnemyTurn && dmMode !== "human" && (
+                <p className="muted" style={{ marginTop: 0 }}>
+                  Enemy turn. In Solace-neutral, the player cannot declare enemy intent. Switch to Human DM to enter enemy intent.
+                </p>
+              )}
+
+              <textarea
+                value={playerInput}
+                onChange={(e) => setPlayerInput(e.target.value)}
+                placeholder="Describe what your character does…"
+                disabled={!canPlayerSubmitIntent}
+                style={{
+                  width: "100%",
+                  minHeight: "120px",
+                  resize: "vertical",
+                  boxSizing: "border-box",
+                  lineHeight: 1.5,
+                }}
+              />
+              <div style={{ marginTop: 8, display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+                <button onClick={handlePlayerAction} disabled={!canPlayerSubmitIntent}>
+                  Submit Action
+                </button>
+                <span className="muted" style={{ fontSize: 12 }}>
+                  Tip: After you submit, the page jumps to Resolution automatically.
+                </span>
+              </div>
+            </CardSection>
+          </div>
+
+          {/* PARSED */}
           {parsed && (
             <CardSection title="Parsed Action">
               <pre>{JSON.stringify(parsed, null, 2)}</pre>
             </CardSection>
           )}
 
+          {/* OPTIONS (Human DM) */}
           {options && isHumanDM && (
             <CardSection title="Options">
               <ul>
                 {options.map((opt) => (
                   <li key={opt.id}>
-                    <button onClick={() => setSelectedOption(opt)}>{opt.description}</button>
+                    <button
+                      onClick={() => {
+                        setSelectedOption(opt);
+                        setActiveSection("resolution");
+                        queueMicrotask(() => scrollToSection("resolution"));
+                      }}
+                    >
+                      {opt.description}
+                    </button>
                   </li>
                 ))}
               </ul>
             </CardSection>
           )}
 
-          {selectedOption && (
-            <CardSection title="Proposed Exploration Canon (Draft)">
-              <p className="muted" style={{ marginTop: 0 }}>
-                Auto-suggested from intent text. Not canon until you record the outcome.
-              </p>
+          {/* RESOLUTION */}
+          <div id={anchorId("resolution")} style={{ scrollMarginTop: 90 }}>
+            {selectedOption && (
+              <CardSection title="Proposed Exploration Canon (Draft)">
+                <p className="muted" style={{ marginTop: 0 }}>
+                  Auto-suggested from intent text. Not canon until you record the outcome.
+                </p>
 
-              <div className="muted" style={{ marginBottom: 10 }}>
-                Current canon position: <strong>({currentPos.x},{currentPos.y})</strong>
-              </div>
+                <div className="muted" style={{ marginBottom: 10 }}>
+                  Current canon position: <strong>({currentPos.x},{currentPos.y})</strong>
+                </div>
 
-              <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 10 }}>
-                <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  <input
-                    type="checkbox"
-                    checked={explorationDraft.enableMove}
-                    onChange={(e) =>
-                      setExplorationDraft((p) => ({
-                        ...p,
-                        enableMove: e.target.checked,
-                        direction: e.target.checked ? p.direction : "none",
-                      }))
-                    }
-                  />
-                  Commit movement (PLAYER_MOVED)
-                </label>
-
-                {explorationDraft.enableMove && (
-                  <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "flex-end" }}>
-                    <label style={{ display: "flex", flexDirection: "column", gap: 6, minWidth: 220 }}>
-                      Direction (recommended):
-                      <select
-                        value={explorationDraft.direction}
-                        onChange={(e) => setExplorationDraft((p) => ({ ...p, direction: e.target.value as any }))}
-                      >
-                        <option value="none">None</option>
-                        <option value="north">North (↑)</option>
-                        <option value="east">East (→)</option>
-                        <option value="south">South (↓)</option>
-                        <option value="west">West (←)</option>
-                      </select>
-                    </label>
-
-                    <div className="muted" style={{ paddingBottom: 4 }}>
-                      Bounds: <strong>0..{MAP_W - 1}</strong> / <strong>0..{MAP_H - 1}</strong> · Suggested destination:{" "}
-                      <strong>{suggestedTo ? `(${suggestedTo.x},${suggestedTo.y})` : "(out of bounds / none)"}</strong>
-                    </div>
-                  </div>
-                )}
-
-                <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  <input
-                    type="checkbox"
-                    checked={explorationDraft.enableReveal}
-                    onChange={(e) => setExplorationDraft((p) => ({ ...p, enableReveal: e.target.checked }))}
-                  />
-                  Reveal tiles (MAP_REVEALED)
-                </label>
-
-                {explorationDraft.enableReveal && (
-                  <label style={{ display: "flex", flexDirection: "column", gap: 6, maxWidth: 220 }}>
-                    Reveal radius:
-                    <select
-                      value={explorationDraft.revealRadius}
-                      onChange={(e) => setExplorationDraft((p) => ({ ...p, revealRadius: Number(e.target.value) as any }))}
-                    >
-                      <option value={0}>0 (none)</option>
-                      <option value={1}>1 (tight)</option>
-                      <option value={2}>2 (wide)</option>
-                    </select>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 10 }}>
+                  <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <input
+                      type="checkbox"
+                      checked={explorationDraft.enableMove}
+                      onChange={(e) =>
+                        setExplorationDraft((p) => ({
+                          ...p,
+                          enableMove: e.target.checked,
+                          direction: e.target.checked ? p.direction : "none",
+                        }))
+                      }
+                    />
+                    Commit movement (PLAYER_MOVED)
                   </label>
-                )}
 
-                <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  <input
-                    type="checkbox"
-                    checked={explorationDraft.enableMark}
-                    onChange={(e) => setExplorationDraft((p) => ({ ...p, enableMark: e.target.checked }))}
-                  />
-                  Mark tile (MAP_MARKED)
-                </label>
+                  {explorationDraft.enableMove && (
+                    <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "flex-end" }}>
+                      <label style={{ display: "flex", flexDirection: "column", gap: 6, minWidth: 220 }}>
+                        Direction (recommended):
+                        <select
+                          value={explorationDraft.direction}
+                          onChange={(e) => setExplorationDraft((p) => ({ ...p, direction: e.target.value as any }))}
+                        >
+                          <option value="none">None</option>
+                          <option value="north">North (↑)</option>
+                          <option value="east">East (→)</option>
+                          <option value="south">South (↓)</option>
+                          <option value="west">West (←)</option>
+                        </select>
+                      </label>
 
-                {explorationDraft.enableMark && (
-                  <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "flex-end" }}>
-                    <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                      Kind:
+                      <div className="muted" style={{ paddingBottom: 4 }}>
+                        Bounds: <strong>0..{MAP_W - 1}</strong> / <strong>0..{MAP_H - 1}</strong> · Suggested destination:{" "}
+                        <strong>{suggestedTo ? `(${suggestedTo.x},${suggestedTo.y})` : "(out of bounds / none)"}</strong>
+                      </div>
+                    </div>
+                  )}
+
+                  <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <input
+                      type="checkbox"
+                      checked={explorationDraft.enableReveal}
+                      onChange={(e) => setExplorationDraft((p) => ({ ...p, enableReveal: e.target.checked }))}
+                    />
+                    Reveal tiles (MAP_REVEALED)
+                  </label>
+
+                  {explorationDraft.enableReveal && (
+                    <label style={{ display: "flex", flexDirection: "column", gap: 6, maxWidth: 220 }}>
+                      Reveal radius:
                       <select
-                        value={explorationDraft.markKind}
-                        onChange={(e) => setExplorationDraft((p) => ({ ...p, markKind: e.target.value as MapMarkKind }))}
+                        value={explorationDraft.revealRadius}
+                        onChange={(e) => setExplorationDraft((p) => ({ ...p, revealRadius: Number(e.target.value) as any }))}
                       >
-                        <option value="door">door 🚪</option>
-                        <option value="stairs">stairs ⬇️</option>
-                        <option value="altar">altar ✶</option>
-                        <option value="cache">cache ⬚</option>
-                        <option value="hazard">hazard ⚠️</option>
+                        <option value={0}>0 (none)</option>
+                        <option value={1}>1 (tight)</option>
+                        <option value={2}>2 (wide)</option>
                       </select>
                     </label>
+                  )}
 
-                    <label style={{ display: "flex", flexDirection: "column", gap: 6, flex: "1 1 220px" }}>
-                      Note (optional):
-                      <input
-                        value={explorationDraft.markNote}
-                        onChange={(e) => setExplorationDraft((p) => ({ ...p, markNote: e.target.value }))}
-                        placeholder="e.g., locked / sealed / humming / glyph"
-                      />
-                    </label>
+                  <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <input
+                      type="checkbox"
+                      checked={explorationDraft.enableMark}
+                      onChange={(e) => setExplorationDraft((p) => ({ ...p, enableMark: e.target.checked }))}
+                    />
+                    Mark tile (MAP_MARKED)
+                  </label>
 
-                    <span className="muted">(Mark applies to destination if moving; otherwise current tile.)</span>
-                  </div>
-                )}
-              </div>
-            </CardSection>
-          )}
+                  {explorationDraft.enableMark && (
+                    <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "flex-end" }}>
+                      <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                        Kind:
+                        <select
+                          value={explorationDraft.markKind}
+                          onChange={(e) => setExplorationDraft((p) => ({ ...p, markKind: e.target.value as MapMarkKind }))}
+                        >
+                          <option value="door">door 🚪</option>
+                          <option value="stairs">stairs ⬇️</option>
+                          <option value="altar">altar ✶</option>
+                          <option value="cache">cache ⬚</option>
+                          <option value="hazard">hazard ⚠️</option>
+                        </select>
+                      </label>
 
-          {selectedOption && (
-            <ResolutionDraftAdvisoryPanel
-              role={role}
-              context={{
-                optionDescription: selectedOption.description,
-                optionKind: inferOptionKind(selectedOption.description),
-              }}
-              onRecord={handleRecord}
-            />
-          )}
+                      <label style={{ display: "flex", flexDirection: "column", gap: 6, flex: "1 1 220px" }}>
+                        Note (optional):
+                        <input
+                          value={explorationDraft.markNote}
+                          onChange={(e) => setExplorationDraft((p) => ({ ...p, markNote: e.target.value }))}
+                          placeholder="e.g., locked / sealed / humming / glyph"
+                        />
+                      </label>
+
+                      <span className="muted">(Mark applies to destination if moving; otherwise current tile.)</span>
+                    </div>
+                  )}
+                </div>
+              </CardSection>
+            )}
+
+            {selectedOption && (
+              <ResolutionDraftAdvisoryPanel
+                role={role}
+                context={{
+                  optionDescription: selectedOption.description,
+                  optionKind: inferOptionKind(selectedOption.description),
+                }}
+                onRecord={handleRecord}
+              />
+            )}
+          </div>
 
           <NextActionHint state={state} />
 
-          {/* IMPORTANT: Render CanonEventsPanel ONCE (no duplicates). */}
-          <CanonEventsPanel events={state.events as any[]} />
+          {/* CANON */}
+          <div id={anchorId("canon")} style={{ scrollMarginTop: 90 }}>
+            {/* IMPORTANT: Render CanonEventsPanel ONCE (no duplicates). */}
+            <CanonEventsPanel events={state.events as any[]} />
+          </div>
 
-          <WorldLedgerPanelLegacy events={state.events} />
+          {/* LEDGER */}
+          <div id={anchorId("ledger")} style={{ scrollMarginTop: 90 }}>
+            <WorldLedgerPanelLegacy events={state.events} />
+          </div>
         </>
       )}
 
