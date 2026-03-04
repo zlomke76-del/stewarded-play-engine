@@ -42,6 +42,7 @@ import {
 import AmbientBackground from "./components/AmbientBackground";
 import DemoHero from "./components/DemoHero";
 import InitialTableSection from "./components/InitialTableSection";
+import ActionSection from "./components/ActionSection";
 
 import {
   DMMode,
@@ -319,11 +320,16 @@ export default function DemoPage() {
     return next;
   }
 
-  function handleRecord(payload: {
-    description: string;
-    dice: { mode: DiceMode; roll: number; dc: number; source: RollSource };
-    audit: string[];
-  }) {
+  function handleRecord(
+    payload: {
+      description: string;
+      dice: { mode: DiceMode; roll: number; dc: number; source: RollSource };
+      audit: string[];
+    },
+    opts?: { commitExploration?: boolean }
+  ) {
+    const commitExploration = opts?.commitExploration ?? true;
+
     setState((prev) => {
       let next = recordEvent(prev, {
         id: crypto.randomUUID(),
@@ -333,7 +339,10 @@ export default function DemoPage() {
         payload,
       });
 
-      next = commitExplorationBundle(next);
+      if (commitExploration) {
+        next = commitExplorationBundle(next);
+      }
+
       return next;
     });
 
@@ -565,7 +574,7 @@ export default function DemoPage() {
       { id: "pressure", hint: "Advisory state" },
       { id: "map", hint: "Canon view of space" },
       { id: "combat", hint: "Deterministic turn order" },
-      { id: "action", hint: "Player intent" },
+      { id: "action", hint: "Player intent / enemy pacing" },
       { id: "resolution", hint: "Roll + record OUTCOME" },
       { id: "canon", hint: "Non-outcome canon log" },
       { id: "ledger", hint: "Outcome narration only" },
@@ -888,38 +897,20 @@ export default function DemoPage() {
                 </CardSection>
               </div>
 
-              {/* ACTION */}
+              {/* ACTION (EXTRACTED) */}
               <div id={anchorId("action")} style={{ scrollMarginTop: 90 }}>
-                <CardSection title="Player Action">
-                  {combatActive && isEnemyTurn && dmMode !== "human" && (
-                    <p className="muted" style={{ marginTop: 0 }}>
-                      Enemy turn. In Solace-neutral, the player cannot declare enemy intent. Switch to Human DM to enter
-                      enemy intent.
-                    </p>
-                  )}
-
-                  <textarea
-                    value={playerInput}
-                    onChange={(e) => setPlayerInput(e.target.value)}
-                    placeholder="Describe what your character does…"
-                    disabled={!canPlayerSubmitIntent}
-                    style={{
-                      width: "100%",
-                      minHeight: "120px",
-                      resize: "vertical",
-                      boxSizing: "border-box",
-                      lineHeight: 1.5,
-                    }}
-                  />
-                  <div style={{ marginTop: 8, display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
-                    <button onClick={handlePlayerAction} disabled={!canPlayerSubmitIntent}>
-                      Submit Action
-                    </button>
-                    <span className="muted" style={{ fontSize: 12 }}>
-                      Tip: After you submit, the page jumps to Resolution automatically.
-                    </span>
-                  </div>
-                </CardSection>
+                <ActionSection
+                  dmMode={dmMode}
+                  combatActive={combatActive}
+                  isEnemyTurn={isEnemyTurn}
+                  activeCombatantSpec={activeCombatantSpec as any}
+                  playerInput={playerInput}
+                  setPlayerInput={setPlayerInput}
+                  canPlayerSubmitIntent={canPlayerSubmitIntent}
+                  onSubmitPlayerAction={handlePlayerAction}
+                  onRecordOutcome={handleRecord}
+                  onAdvanceTurn={advanceTurn}
+                />
               </div>
 
               {/* PARSED */}
@@ -1103,7 +1094,7 @@ export default function DemoPage() {
                       optionDescription: selectedOption.description,
                       optionKind: inferOptionKind(selectedOption.description),
                     }}
-                    onRecord={handleRecord}
+                    onRecord={(payload) => handleRecord(payload, { commitExploration: true })}
                   />
                 )}
               </div>
