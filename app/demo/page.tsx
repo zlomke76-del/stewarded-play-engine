@@ -13,9 +13,10 @@
 // - Arbiter commits the bundle alongside OUTCOME (one click)
 //
 // Combat
-// - Combat setup locks once COMBAT_STARTED exists (preserves replay integrity)
+// - Combat setup locks ONLY while combat is ACTIVE (preserves replay integrity)
+// - Combat becomes inactive after COMBAT_ENDED for that combatId
 // - Active combatant is derived from canon (initiative + TURN_ADVANCED)
-// - Player cannot submit intent on enemy turns (unless Human DM)
+// - In Solace-neutral: player cannot submit intent on enemy turns
 //
 // Canon panels
 // - WorldLedgerPanelLegacy shows OUTCOME narration
@@ -285,7 +286,7 @@ function generateInitialTable(): InitialTable {
     "the city above is starting to notice",
   ];
 
-  const factionCount = pick([2, 3, 3]); // bias toward 3
+  const factionCount = pick([2, 3, 3]);
   const chosenNames = pickManyUnique(factionNames, factionCount);
 
   return {
@@ -322,7 +323,6 @@ function generateInitialTable(): InitialTable {
   };
 }
 
-// NON-CANONICAL narration based ONLY on table signals
 function renderInitialTableNarration(t: InitialTable): string {
   const [traitA, traitB] = t.locationTraits;
   const oddity = t.environmentalOddities[0] ?? "Something feels off";
@@ -375,7 +375,7 @@ function inferOptionKind(description: string): OptionKind {
 }
 
 // ------------------------------------------------------------
-// Exploration derivation + drafting helpers
+// Exploration helpers
 // ------------------------------------------------------------
 
 function withinBounds(p: XY, w: number, h: number) {
@@ -383,17 +383,11 @@ function withinBounds(p: XY, w: number, h: number) {
 }
 
 function deriveCurrentPosition(events: readonly any[], w: number, h: number): XY {
-  // default: center-ish
   let pos: XY = { x: Math.floor(w / 2), y: Math.floor(h / 2) };
   for (const e of events) {
     if (e?.type === "PLAYER_MOVED") {
       const to = e?.payload?.to;
-      if (
-        to &&
-        typeof to.x === "number" &&
-        typeof to.y === "number" &&
-        withinBounds(to, w, h)
-      ) {
+      if (to && typeof to.x === "number" && typeof to.y === "number" && withinBounds(to, w, h)) {
         pos = { x: to.x, y: to.y };
       }
     }
@@ -455,25 +449,40 @@ type ExplorationDraft = {
 };
 
 // ------------------------------------------------------------
+// Combat-ended detection (local, because deriveCombatState doesn’t account for COMBAT_ENDED)
+// ------------------------------------------------------------
+
+function isCombatEndedForId(combatId: string, events: readonly any[]) {
+  // If we see COMBAT_ENDED for this combatId AFTER its COMBAT_STARTED, treat as ended.
+  let seenStart = false;
+
+  for (const e of events) {
+    if (e?.type === "COMBAT_STARTED" && e?.payload?.combatId === combatId) {
+      seenStart = true;
+      continue;
+    }
+    if (seenStart && e?.type === "COMBAT_ENDED" && e?.payload?.combatId === combatId) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+// ------------------------------------------------------------
 
 export default function DemoPage() {
   const role: "arbiter" = "arbiter";
 
-  const [state, setState] = useState<SessionState>(
-    createSession("demo-session", "demo")
-  );
-
+  const [state, setState] = useState<SessionState>(createSession("demo-session", "demo"));
   const [dmMode, setDmMode] = useState<DMMode>("solace-neutral");
 
-  // Map size (MVP grid)
   const MAP_W = 13;
   const MAP_H = 9;
 
   // Initial Table Gate
   const [initialTable, setInitialTable] = useState<InitialTable | null>(null);
   const [tableAccepted, setTableAccepted] = useState(false);
-
-  // Editable narration buffer (DM-controlled)
   const [tableDraftText, setTableDraftText] = useState("");
 
   // Action parsing + options
@@ -483,38 +492,35 @@ export default function DemoPage() {
   const [selectedOption, setSelectedOption] = useState<Option | null>(null);
 
   // ----------------------------------------------------------
-  // Combat state (derived)
+  // Combat state (derived + ended-aware)
   // ----------------------------------------------------------
 
-  const latestCombatId = useMemo(() => {
-    return findLatestCombatId(state.events as any) ?? null;
-  }, [state.events]);
+  const latestCombatId = useMemo(() => findLatestCombatId(state.events as any) ?? null, [state.events]);
 
   const derivedCombat = useMemo(() => {
     if (!latestCombatId) return null;
     return deriveCombatState(latestCombatId, state.events as any);
   }, [latestCombatId, state.events]);
 
-  const combatActive = !!derivedCombat;
+  const combatEnded = useMemo(() => {
+    if (!derivedCombat?.combatId) return false;
+    return isCombatEndedForId(derivedCombat.combatId, state.events as any[]);
+  }, [derivedCombat?.combatId, state.events]);
+
+  const combatActive = !!derivedCombat && !combatEnded;
 
   const activeCombatantSpec = useMemo(() => {
     if (!derivedCombat?.activeCombatantId) return null;
-    return (
-      derivedCombat.participants.find((p) => p.id === derivedCombat.activeCombatantId) ??
-      null
-    );
+    return derivedCombat.participants.find((p) => p.id === derivedCombat.activeCombatantId) ?? null;
   }, [derivedCombat]);
 
-  const isEnemyTurn = activeCombatantSpec?.kind === "enemy_group";
+  const isEnemyTurn = combatActive && activeCombatantSpec?.kind === "enemy_group";
 
   // ----------------------------------------------------------
   // Exploration draft (auto-prepared AFTER intent + option)
   // ----------------------------------------------------------
 
-  const currentPos = useMemo(
-    () => deriveCurrentPosition(state.events as any[], MAP_W, MAP_H),
-    [state.events]
-  );
+  const currentPos = useMemo(() => deriveCurrentPosition(state.events as any[], MAP_W, MAP_H), [state.events]);
 
   const [explorationDraft, setExplorationDraft] = useState<ExplorationDraft>({
     enableMove: false,
@@ -533,28 +539,20 @@ export default function DemoPage() {
     return withinBounds(to, MAP_W, MAP_H) ? to : null;
   }, [explorationDraft.enableMove, explorationDraft.direction, currentPos]);
 
-  // When an option is selected (i.e., we are about to resolve), auto-draft exploration.
   useEffect(() => {
     if (!selectedOption) return;
 
     const intentText = `${playerInput}\n${selectedOption.description}`.trim();
-
     const dir = inferDirection(intentText);
     const door = textSuggestsDoor(intentText);
     const locked = textSuggestsLocked(intentText);
 
     setExplorationDraft((prev) => ({
       ...prev,
-
-      // move draft: only if a direction is inferred; DM can override dropdown
       enableMove: !!dir,
       direction: dir ?? "none",
-
-      // reveal is cheap + feels good; keep on by default
       enableReveal: true,
       revealRadius: 1,
-
-      // mark suggestion: only if door mentioned; DM can override
       enableMark: door,
       markKind: "door",
       markNote: door ? (locked ? "locked" : prev.markNote || "") : prev.markNote,
@@ -578,12 +576,9 @@ export default function DemoPage() {
 
   useEffect(() => {
     if (!initialTable) return;
-    if (tableDraftText.trim() === "") {
-      setTableDraftText(renderedTableNarration);
-    }
+    if (tableDraftText.trim() === "") setTableDraftText(renderedTableNarration);
   }, [initialTable, renderedTableNarration, tableDraftText]);
 
-  // Mode switching: Solace requires accept gate again
   useEffect(() => {
     if (dmMode === "solace-neutral") setTableAccepted(false);
   }, [dmMode]);
@@ -592,9 +587,7 @@ export default function DemoPage() {
   // Player submits action (intent)
   // ----------------------------------------------------------
 
-  const canPlayerSubmitIntent =
-    // in combat: only allow player to submit intent on player turns (or any turn in Human DM mode)
-    (!combatActive || !isEnemyTurn) || dmMode === "human";
+  const canPlayerSubmitIntent = (!combatActive || !isEnemyTurn) || dmMode === "human";
 
   function handlePlayerAction() {
     if (!playerInput.trim()) return;
@@ -608,7 +601,6 @@ export default function DemoPage() {
     setSelectedOption(null);
   }
 
-  // Solace selects an option in neutral facilitator mode
   useEffect(() => {
     if (dmMode !== "solace-neutral") return;
     if (!options || options.length === 0) return;
@@ -626,13 +618,10 @@ export default function DemoPage() {
     const here = deriveCurrentPosition(next.events as any[], MAP_W, MAP_H);
 
     const to =
-      d.enableMove && d.direction !== "none"
-        ? stepFrom(here, d.direction)
-        : null;
+      d.enableMove && d.direction !== "none" ? stepFrom(here, d.direction) : null;
 
     const canMove = to ? withinBounds(to, MAP_W, MAP_H) : false;
 
-    // Movement is the resolution of intent → only commit if enabled + valid
     if (d.enableMove && canMove && to) {
       next = recordEvent(next, {
         id: crypto.randomUUID(),
@@ -652,7 +641,6 @@ export default function DemoPage() {
         });
       }
 
-      // Mark at the destination (e.g., “you arrive at a locked door”)
       if (d.enableMark) {
         const note = d.markNote.trim() ? d.markNote.trim() : null;
         next = recordEvent(next, {
@@ -667,8 +655,6 @@ export default function DemoPage() {
       return next;
     }
 
-    // No move: allow reveal/mark at current tile ONLY if explicitly enabled.
-    // (Supports “I inspect / listen / search” without moving.)
     if (d.enableReveal && d.revealRadius > 0) {
       next = recordEvent(next, {
         id: crypto.randomUUID(),
@@ -704,7 +690,6 @@ export default function DemoPage() {
     audit: string[];
   }) {
     setState((prev) => {
-      // OUTCOME is canon first…
       let next = recordEvent(prev, {
         id: crypto.randomUUID(),
         timestamp: Date.now(),
@@ -713,16 +698,10 @@ export default function DemoPage() {
         payload,
       });
 
-      // …then exploration bundle (append-only, still arbiter-gated)
       next = commitExplorationBundle(next);
-
       return next;
     });
   }
-
-  // ----------------------------------------------------------
-  // Share canon
-  // ----------------------------------------------------------
 
   function shareCanon() {
     navigator.clipboard.writeText(exportCanon(state.events));
@@ -730,19 +709,15 @@ export default function DemoPage() {
   }
 
   // ----------------------------------------------------------
-  // Combat setup inputs (locked once combat starts)
+  // Combat setup inputs (locked while combatActive)
   // ----------------------------------------------------------
 
   const [playerCount, setPlayerCount] = useState(4);
-
-  // Player names indexed 0..5 (render only first N)
   const [playerNames, setPlayerNames] = useState<string[]>(["", "", "", "", "", ""]);
 
-  // Enemy groups as chips
   const [enemyGroups, setEnemyGroups] = useState<string[]>(["Skirmishers", "Archers"]);
   const [enemyGroupSelect, setEnemyGroupSelect] = useState<string>("Skirmishers");
 
-  // Init mods
   const [initModPlayers, setInitModPlayers] = useState(1);
   const [initModEnemies, setInitModEnemies] = useState(1);
 
@@ -767,7 +742,6 @@ export default function DemoPage() {
     []
   );
 
-  // Ensure playerNames always has length 6
   useEffect(() => {
     setPlayerNames((prev) => {
       if (prev.length === 6) return prev;
@@ -789,13 +763,10 @@ export default function DemoPage() {
 
     const pc = clampInt(playerCount, 1, 6);
 
-    const groups = enemyGroups
-      .map((g) => normalizeName(g))
-      .filter(Boolean)
-      .slice(0, 6);
+    const groups = enemyGroups.map(normalizeName).filter(Boolean).slice(0, 6);
 
     const combatId = crypto.randomUUID();
-    const seed = crypto.randomUUID(); // deterministic within-combat once committed
+    const seed = crypto.randomUUID();
 
     const participants: CombatantSpec[] = [];
 
@@ -809,21 +780,15 @@ export default function DemoPage() {
     }
 
     groups.forEach((name, idx) => {
-      const id = `enemy_group_${idx + 1}`;
       participants.push({
-        id,
+        id: `enemy_group_${idx + 1}`,
         name,
         kind: "enemy_group",
         initiativeMod: Math.trunc(initModEnemies || 0),
       });
     });
 
-    const started: CombatStartedPayload = {
-      combatId,
-      seed,
-      participants,
-    };
-
+    const started: CombatStartedPayload = { combatId, seed, participants };
     const initRolls = generateDeterministicInitiativeRolls(started);
 
     setState((prev) => {
@@ -847,17 +812,12 @@ export default function DemoPage() {
         });
       }
 
-      // Initialize pointer at round 1, index 0
       next = recordEvent(next, {
         id: crypto.randomUUID(),
         timestamp: Date.now(),
         actor: "arbiter",
         type: "TURN_ADVANCED",
-        payload: {
-          combatId,
-          round: 1,
-          index: 0,
-        } as any,
+        payload: { combatId, round: 1, index: 0 } as any,
       });
 
       return next;
@@ -866,6 +826,8 @@ export default function DemoPage() {
 
   function advanceTurn() {
     if (!derivedCombat) return;
+    if (combatEnded) return;
+
     const payload = nextTurnPointer(derivedCombat);
 
     setState((prev) =>
@@ -881,6 +843,7 @@ export default function DemoPage() {
 
   function endCombat() {
     if (!derivedCombat) return;
+    if (combatEnded) return;
 
     setState((prev) =>
       recordEvent(prev, {
@@ -893,7 +856,6 @@ export default function DemoPage() {
     );
   }
 
-  // Enemy group builder actions
   function addEnemyGroup(name: string) {
     if (combatActive) return;
 
@@ -923,9 +885,7 @@ export default function DemoPage() {
     const pc = clampInt(playerCount, 1, 6);
     setPlayerNames((prev) => {
       const next = [...prev];
-      const used = new Set<string>(
-        next.map((x) => normalizeName(x).toLowerCase()).filter(Boolean)
-      );
+      const used = new Set<string>(next.map((x) => normalizeName(x).toLowerCase()).filter(Boolean));
 
       for (let i = 0; i < pc; i++) {
         const current = normalizeName(next[i] ?? "");
@@ -963,28 +923,18 @@ export default function DemoPage() {
         ]}
       />
 
-      {/* FACILITATION MODE */}
       <CardSection title="Facilitation Mode">
         <label>
-          <input
-            type="radio"
-            checked={dmMode === "human"}
-            onChange={() => setDmMode("human")}
-          />{" "}
-          Human DM (options visible + editable setup)
+          <input type="radio" checked={dmMode === "human"} onChange={() => setDmMode("human")} /> Human DM (options
+          visible + editable setup)
         </label>
         <br />
         <label>
-          <input
-            type="radio"
-            checked={dmMode === "solace-neutral"}
-            onChange={() => setDmMode("solace-neutral")}
-          />{" "}
-          Solace (Neutral Facilitator)
+          <input type="radio" checked={dmMode === "solace-neutral"} onChange={() => setDmMode("solace-neutral")} /> Solace
+          (Neutral Facilitator)
         </label>
       </CardSection>
 
-      {/* INITIAL TABLE GATE — SOLACE */}
       {dmMode === "solace-neutral" && initialTable && !tableAccepted && (
         <CardSection title="Initial Table (Solace)">
           <p className="muted" style={{ marginBottom: 8 }}>
@@ -1007,9 +957,7 @@ export default function DemoPage() {
             <summary className="muted">Show underlying table signals</summary>
             <div style={{ marginTop: 10 }}>
               <p>{initialTable.openingFrame}</p>
-
               <p className="muted">Traits: {initialTable.locationTraits.join(", ")}</p>
-
               <ul>
                 {initialTable.latentFactions.map((f, i) => (
                   <li key={i}>
@@ -1017,9 +965,7 @@ export default function DemoPage() {
                   </li>
                 ))}
               </ul>
-
               <p className="muted">Oddity: {initialTable.environmentalOddities.join(", ")}</p>
-
               <p className="muted">Hook: {initialTable.dormantHooks.join(", ")}</p>
             </div>
           </details>
@@ -1030,7 +976,6 @@ export default function DemoPage() {
         </CardSection>
       )}
 
-      {/* HUMAN DM: editable table (AUTO-GENERATED) */}
       {dmMode === "human" && initialTable && !tableAccepted && (
         <CardSection title="Solace Setup Helper (Optional)">
           <p className="muted" style={{ marginTop: 0 }}>
@@ -1048,9 +993,7 @@ export default function DemoPage() {
             <summary className="muted">Show underlying table signals</summary>
             <div style={{ marginTop: 10 }}>
               <p>{initialTable.openingFrame}</p>
-
               <p className="muted">Traits: {initialTable.locationTraits.join(", ")}</p>
-
               <ul>
                 {initialTable.latentFactions.map((f, i) => (
                   <li key={i}>
@@ -1058,9 +1001,7 @@ export default function DemoPage() {
                   </li>
                 ))}
               </ul>
-
               <p className="muted">Oddity: {initialTable.environmentalOddities.join(", ")}</p>
-
               <p className="muted">Hook: {initialTable.dormantHooks.join(", ")}</p>
             </div>
           </details>
@@ -1071,21 +1012,14 @@ export default function DemoPage() {
         </CardSection>
       )}
 
-      {/* BLOCK PLAY UNTIL ACCEPTED */}
       {dmMode === "solace-neutral" && !tableAccepted && <Disclaimer />}
 
-      {/* GAME FLOW */}
       {(dmMode === "human" || tableAccepted) && (
         <>
-          <DungeonPressurePanel
-            turn={state.events.filter((e) => e.type === "OUTCOME").length}
-            events={state.events}
-          />
+          <DungeonPressurePanel turn={state.events.filter((e) => e.type === "OUTCOME").length} events={state.events} />
 
-          {/* Exploration Map (canon view; no pre-intent controls) */}
           <ExplorationMapPanel events={state.events} mapW={MAP_W} mapH={MAP_H} />
 
-          {/* COMBAT */}
           <CardSection title="Combat (Deterministic, Grouped Enemies)">
             <p className="muted" style={{ marginTop: 0 }}>
               Players roll individually. Enemy groups roll once per group. Turn order is derived from events.
@@ -1097,7 +1031,12 @@ export default function DemoPage() {
               </div>
             )}
 
-            {/* Setup */}
+            {combatEnded && derivedCombat && (
+              <div className="muted" style={{ marginTop: 8 }}>
+                🏁 Combat ended. You can start a new combat (new combatId) if you want.
+              </div>
+            )}
+
             <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "flex-end" }}>
               <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                 Players (1–6):
@@ -1193,11 +1132,7 @@ export default function DemoPage() {
                           onClick={() => removeEnemyGroup(g)}
                           aria-label={`Remove ${g}`}
                           disabled={combatActive}
-                          style={{
-                            padding: "0 8px",
-                            borderRadius: 999,
-                            border: "1px solid rgba(255,255,255,0.12)",
-                          }}
+                          style={{ padding: "0 8px", borderRadius: 999, border: "1px solid rgba(255,255,255,0.12)" }}
                         >
                           ×
                         </button>
@@ -1212,7 +1147,6 @@ export default function DemoPage() {
               </div>
             </div>
 
-            {/* Player Names */}
             <div style={{ marginTop: 14 }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
                 <strong>Players</strong>
@@ -1223,14 +1157,7 @@ export default function DemoPage() {
                 </div>
               </div>
 
-              <div
-                style={{
-                  marginTop: 10,
-                  display: "grid",
-                  gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-                  gap: 10,
-                }}
-              >
+              <div style={{ marginTop: 10, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 10 }}>
                 {Array.from({ length: clampInt(playerCount, 1, 6) }, (_, idx) => {
                   const i1 = idx + 1;
                   const value = playerNames[idx] ?? "";
@@ -1260,15 +1187,14 @@ export default function DemoPage() {
               </p>
             </div>
 
-            {/* Controls */}
             <div style={{ marginTop: 14, display: "flex", gap: 8, flexWrap: "wrap" }}>
               <button onClick={startCombatDeterministic} disabled={combatActive}>
                 Start Combat (Seeded)
               </button>
-              <button onClick={advanceTurn} disabled={!derivedCombat}>
+              <button onClick={advanceTurn} disabled={!derivedCombat || combatEnded}>
                 Advance Turn
               </button>
-              <button onClick={endCombat} disabled={!derivedCombat}>
+              <button onClick={endCombat} disabled={!derivedCombat || combatEnded}>
                 End Combat
               </button>
             </div>
@@ -1276,8 +1202,7 @@ export default function DemoPage() {
             {derivedCombat && (
               <div style={{ marginTop: 12 }}>
                 <div className="muted">
-                  Combat: <strong>{derivedCombat.combatId}</strong> · Round{" "}
-                  <strong>{derivedCombat.round}</strong>
+                  Combat: <strong>{derivedCombat.combatId}</strong> · Round <strong>{derivedCombat.round}</strong>
                   {activeCombatantSpec && (
                     <>
                       {" "}
@@ -1298,9 +1223,7 @@ export default function DemoPage() {
                         style={{
                           padding: "10px 12px",
                           borderRadius: 8,
-                          border: active
-                            ? "1px solid rgba(138,180,255,0.55)"
-                            : "1px solid rgba(255,255,255,0.10)",
+                          border: active ? "1px solid rgba(138,180,255,0.55)" : "1px solid rgba(255,255,255,0.10)",
                           background: active ? "rgba(138,180,255,0.10)" : "rgba(255,255,255,0.04)",
                           display: "flex",
                           justifyContent: "space-between",
@@ -1314,9 +1237,7 @@ export default function DemoPage() {
                           </strong>
                           {active && <span className="muted">{"  "}← active</span>}
                         </div>
-                        <div className="muted">
-                          {roll ? `Init ${roll.total} (d20 ${roll.natural} + ${roll.modifier})` : "Init —"}
-                        </div>
+                        <div className="muted">{roll ? `Init ${roll.total} (d20 ${roll.natural} + ${roll.modifier})` : "Init —"}</div>
                       </div>
                     );
                   })}
@@ -1325,18 +1246,11 @@ export default function DemoPage() {
             )}
           </CardSection>
 
-          {/* Player Action */}
-          <CardSection
-            title={
-              combatActive && activeCombatantSpec
-                ? `Intent (Active: ${formatCombatantLabel(activeCombatantSpec)})`
-                : "Player Action"
-            }
-          >
+          <CardSection title="Player Action">
             {combatActive && isEnemyTurn && dmMode !== "human" && (
               <p className="muted" style={{ marginTop: 0 }}>
                 Enemy turn. In Solace-neutral, the player cannot declare enemy intent.
-                Switch to Human DM to enter enemy intent, then commit with the Arbiter.
+                Switch to Human DM to enter enemy intent.
               </p>
             )}
 
@@ -1345,14 +1259,7 @@ export default function DemoPage() {
               onChange={(e) => setPlayerInput(e.target.value)}
               placeholder="Describe what your character does…"
               disabled={!canPlayerSubmitIntent}
-              style={{
-                width: "100%",
-                minHeight: "120px",
-                resize: "vertical",
-                boxSizing: "border-box",
-                lineHeight: 1.5,
-                opacity: !canPlayerSubmitIntent ? 0.6 : 1,
-              }}
+              style={{ width: "100%", minHeight: "120px", resize: "vertical", boxSizing: "border-box", lineHeight: 1.5 }}
             />
             <div style={{ marginTop: 8 }}>
               <button onClick={handlePlayerAction} disabled={!canPlayerSubmitIntent}>
@@ -1379,7 +1286,6 @@ export default function DemoPage() {
             </CardSection>
           )}
 
-          {/* Drafted exploration bundle (only after intent -> option selected) */}
           {selectedOption && (
             <CardSection title="Proposed Exploration Canon (Draft)">
               <p className="muted" style={{ marginTop: 0 }}>
@@ -1391,7 +1297,6 @@ export default function DemoPage() {
               </div>
 
               <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 10 }}>
-                {/* MOVE */}
                 <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
                   <input
                     type="checkbox"
@@ -1413,12 +1318,7 @@ export default function DemoPage() {
                       Direction (recommended):
                       <select
                         value={explorationDraft.direction}
-                        onChange={(e) =>
-                          setExplorationDraft((p) => ({
-                            ...p,
-                            direction: e.target.value as any,
-                          }))
-                        }
+                        onChange={(e) => setExplorationDraft((p) => ({ ...p, direction: e.target.value as any }))}
                       >
                         <option value="none">None</option>
                         <option value="north">North (↑)</option>
@@ -1429,17 +1329,12 @@ export default function DemoPage() {
                     </label>
 
                     <div className="muted" style={{ paddingBottom: 4 }}>
-                      Bounds: <strong>0..{MAP_W - 1}</strong> / <strong>0..{MAP_H - 1}</strong>
-                      {" · "}
-                      Suggested destination:{" "}
-                      <strong>
-                        {suggestedTo ? `(${suggestedTo.x},${suggestedTo.y})` : "(out of bounds / none)"}
-                      </strong>
+                      Bounds: <strong>0..{MAP_W - 1}</strong> / <strong>0..{MAP_H - 1}</strong> · Suggested destination:{" "}
+                      <strong>{suggestedTo ? `(${suggestedTo.x},${suggestedTo.y})` : "(out of bounds / none)"}</strong>
                     </div>
                   </div>
                 )}
 
-                {/* REVEAL */}
                 <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
                   <input
                     type="checkbox"
@@ -1454,12 +1349,7 @@ export default function DemoPage() {
                     Reveal radius:
                     <select
                       value={explorationDraft.revealRadius}
-                      onChange={(e) =>
-                        setExplorationDraft((p) => ({
-                          ...p,
-                          revealRadius: Number(e.target.value) as any,
-                        }))
-                      }
+                      onChange={(e) => setExplorationDraft((p) => ({ ...p, revealRadius: Number(e.target.value) as any }))}
                     >
                       <option value={0}>0 (none)</option>
                       <option value={1}>1 (tight)</option>
@@ -1468,7 +1358,6 @@ export default function DemoPage() {
                   </label>
                 )}
 
-                {/* MARK */}
                 <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
                   <input
                     type="checkbox"
@@ -1484,12 +1373,7 @@ export default function DemoPage() {
                       Kind:
                       <select
                         value={explorationDraft.markKind}
-                        onChange={(e) =>
-                          setExplorationDraft((p) => ({
-                            ...p,
-                            markKind: e.target.value as MapMarkKind,
-                          }))
-                        }
+                        onChange={(e) => setExplorationDraft((p) => ({ ...p, markKind: e.target.value as MapMarkKind }))}
                       >
                         <option value="door">door 🚪</option>
                         <option value="stairs">stairs ⬇️</option>
@@ -1508,9 +1392,7 @@ export default function DemoPage() {
                       />
                     </label>
 
-                    <span className="muted">
-                      Mark applies to destination if moving; otherwise current tile.
-                    </span>
+                    <span className="muted">(Mark applies to destination if moving; otherwise current tile.)</span>
                   </div>
                 )}
               </div>
@@ -1530,10 +1412,9 @@ export default function DemoPage() {
 
           <NextActionHint state={state} />
 
-          {/* Canon non-OUTCOME events (movement/map/combat) */}
+          {/* IMPORTANT: Render CanonEventsPanel ONCE (no duplicates). */}
           <CanonEventsPanel events={state.events as any[]} />
 
-          {/* OUTCOME narration ledger */}
           <WorldLedgerPanelLegacy events={state.events} />
         </>
       )}
