@@ -13,9 +13,21 @@ import {
   nextTurnPointer,
 } from "@/lib/combat/CombatState";
 
+type PartyMemberLite = {
+  id: string;
+  name: string;
+  initiativeMod: number;
+};
+
 type Props = {
   events: readonly any[];
   onAppendCanon: (type: string, payload: any) => void;
+
+  // NEW (to match app/demo/page.tsx usage)
+  dmMode: "human" | "solace-neutral";
+  partyMembers: PartyMemberLite[];
+  pressureTier: any; // kept permissive to avoid type coupling across folders
+  allowDevControls: boolean;
 };
 
 function clampInt(n: number, min: number, max: number) {
@@ -27,53 +39,6 @@ function normalizeName(s: string) {
   return String(s ?? "").replace(/\s+/g, " ").trim();
 }
 
-function pick<T>(arr: T[]) {
-  return arr[Math.floor(Math.random() * arr.length)];
-}
-
-function randomName(): string {
-  const a = [
-    "Astra",
-    "Kara",
-    "Thorne",
-    "Hex",
-    "Rook",
-    "Nyx",
-    "Vex",
-    "Dax",
-    "Mara",
-    "Rune",
-    "Sable",
-    "Orin",
-    "Juno",
-    "Kade",
-    "Iris",
-    "Zeph",
-  ];
-  const b = [
-    "of Ember",
-    "of Glass",
-    "of Iron",
-    "of Neon",
-    "of Ash",
-    "of Dawn",
-    "of Night",
-    "of the Grid",
-    "the Quiet",
-    "the Bold",
-    "the Warden",
-    "the Runner",
-    "the Signal",
-    "the Echo",
-  ];
-  const base = pick(a);
-  const tail = pick([true, false, false]) ? ` ${pick(b)}` : "";
-  return `${base}${tail}`;
-}
-
-// Locking rule (canon-based):
-// - setup is editable until COMBAT_STARTED
-// - stays locked until COMBAT_ENDED
 function computeCombatLocked(events: readonly any[]) {
   let lastStarted = -1;
   let lastEnded = -1;
@@ -156,19 +121,10 @@ function selectStyle(disabled?: boolean): React.CSSProperties {
   };
 }
 
-function inputStyle(disabled?: boolean): React.CSSProperties {
-  return {
-    padding: "10px 12px",
-    borderRadius: 10,
-    border: "1px solid rgba(255,255,255,0.12)",
-    background: disabled ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.28)",
-    color: "inherit",
-    outline: "none",
-    boxShadow: "inset 0 1px 0 rgba(255,255,255,0.05)",
-  };
-}
-
-function buttonStyle(tone: "primary" | "ghost" | "danger", disabled?: boolean): React.CSSProperties {
+function buttonStyle(
+  tone: "primary" | "ghost" | "danger",
+  disabled?: boolean
+): React.CSSProperties {
   const base: React.CSSProperties = {
     padding: "10px 12px",
     borderRadius: 10,
@@ -186,7 +142,8 @@ function buttonStyle(tone: "primary" | "ghost" | "danger", disabled?: boolean): 
     return {
       ...base,
       border: "1px solid rgba(138,180,255,0.28)",
-      background: "linear-gradient(180deg, rgba(138,180,255,0.14), rgba(138,180,255,0.06))",
+      background:
+        "linear-gradient(180deg, rgba(138,180,255,0.14), rgba(138,180,255,0.06))",
       boxShadow:
         "inset 0 1px 0 rgba(255,255,255,0.06), 0 10px 22px rgba(0,0,0,0.22)",
     };
@@ -196,36 +153,115 @@ function buttonStyle(tone: "primary" | "ghost" | "danger", disabled?: boolean): 
     return {
       ...base,
       border: "1px solid rgba(255,120,120,0.24)",
-      background: "linear-gradient(180deg, rgba(255,120,120,0.14), rgba(255,120,120,0.06))",
+      background:
+        "linear-gradient(180deg, rgba(255,120,120,0.14), rgba(255,120,120,0.06))",
     };
   }
 
-  // ghost
   return {
     ...base,
     background: "rgba(255,255,255,0.04)",
   };
 }
 
-export default function CombatSetupPanel({ events, onAppendCanon }: Props) {
+// Small deterministic hash -> [0, 2^32)
+function hash32(s: string): number {
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return h >>> 0;
+}
+
+function uniqCaseInsensitive(items: string[]) {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const raw of items) {
+    const v = normalizeName(raw);
+    if (!v) continue;
+    const k = v.toLowerCase();
+    if (seen.has(k)) continue;
+    seen.add(k);
+    out.push(v);
+  }
+  return out;
+}
+
+// Pressure -> mild init mod heuristic (kept intentionally simple)
+function inferEnemyInitModFromPressure(pressureTier: any): number {
+  const t = String(pressureTier ?? "").toLowerCase();
+
+  if (t.includes("low") || t.includes("calm") || t.includes("tier_1") || t === "1") return 0;
+  if (t.includes("med") || t.includes("tier_2") || t === "2") return 1;
+  if (t.includes("high") || t.includes("tier_3") || t === "3") return 2;
+  if (t.includes("extreme") || t.includes("tier_4") || t === "4") return 3;
+
+  // default
+  return 1;
+}
+
+// Pressure -> enemy theme pool (implicit difficulty flavor)
+function enemyPoolForPressure(pressureTier: any) {
+  const t = String(pressureTier ?? "").toLowerCase();
+
+  const low = ["Skirmishers", "Archers", "Shields", "Stalkers", "Sentries", "Neon Hounds"];
+  const med = ["Brutes", "Skirmishers", "Archers", "Casters", "Drones", "Grid Knights"];
+  const high = ["Wraiths", "Firewall Wardens", "Casters", "Drones", "Grid Knights", "Brutes"];
+
+  if (t.includes("low") || t.includes("calm") || t.includes("tier_1") || t === "1") return low;
+  if (t.includes("med") || t.includes("tier_2") || t === "2") return med;
+  if (t.includes("high") || t.includes("tier_3") || t === "3") return high;
+  if (t.includes("extreme") || t.includes("tier_4") || t === "4") return [...high, "Wraiths", "Firewall Wardens"];
+
+  return med;
+}
+
+function pickDeterministicUnique(pool: string[], count: number, seed: string): string[] {
+  const p = uniqCaseInsensitive(pool);
+  const n = clampInt(count, 0, 6);
+  if (n === 0) return [];
+
+  // Deterministic “shuffle” by sorting with seeded hash
+  const keyed = p.map((name, idx) => {
+    const h = hash32(`${seed}::${idx}::${name.toLowerCase()}`);
+    return { name, h };
+  });
+
+  keyed.sort((a, b) => a.h - b.h);
+
+  // If pool is smaller than requested, we wrap with a second pass using a different key
+  const out: string[] = [];
+  let pass = 0;
+  while (out.length < n && pass < 3) {
+    for (const k of keyed) {
+      if (out.length >= n) break;
+      if (!out.map((x) => x.toLowerCase()).includes(k.name.toLowerCase())) out.push(k.name);
+    }
+    pass++;
+    // diversify a bit if we had to wrap
+    if (out.length < n) {
+      keyed.forEach((k) => (k.h = hash32(`${seed}::pass${pass}::${k.name.toLowerCase()}`)));
+      keyed.sort((a, b) => a.h - b.h);
+    }
+  }
+
+  return out.slice(0, n);
+}
+
+export default function CombatSetupPanel({
+  events,
+  onAppendCanon,
+  dmMode,
+  partyMembers,
+  pressureTier,
+  allowDevControls,
+}: Props) {
   const locked = useMemo(() => computeCombatLocked(events), [events]);
 
-  // -----------------------------
-  // Setup state (owned here)
-  // -----------------------------
+  const isHuman = dmMode === "human";
+  const canEdit = !locked && (isHuman || allowDevControls);
 
-  const [playerCount, setPlayerCount] = useState(4);
-
-  // Always keep 6 slots; render first N
-  const [playerNames, setPlayerNames] = useState<string[]>(["", "", "", "", "", ""]);
-
-  const [enemyGroups, setEnemyGroups] = useState<string[]>(["Skirmishers", "Archers"]);
-  const [enemyGroupSelect, setEnemyGroupSelect] = useState<string>("Skirmishers");
-
-  const [initModPlayers, setInitModPlayers] = useState(1);
-  const [initModEnemies, setInitModEnemies] = useState(1);
-
-  const PLAYER_COUNTS = [1, 2, 3, 4, 5, 6] as const;
   const INIT_MODS = [-2, -1, 0, 1, 2, 3, 4, 5, 6, 7, 8] as const;
 
   const ENEMY_GROUP_LIBRARY = useMemo(
@@ -246,64 +282,74 @@ export default function CombatSetupPanel({ events, onAppendCanon }: Props) {
     []
   );
 
-  useEffect(() => {
-    setPlayerNames((prev) => {
-      const next = [...prev];
-      while (next.length < 6) next.push("");
-      return next.slice(0, 6);
-    });
-  }, []);
+  const partySize = useMemo(() => clampInt(partyMembers?.length ?? 0, 0, 6), [partyMembers]);
+  const pressureSeed = useMemo(() => {
+    // keep stable enough for a session: pressureTier + outcomes count + party size
+    const outcomes = events.filter((e: any) => e?.type === "OUTCOME").length;
+    return `pressure=${String(pressureTier ?? "unknown")}::outcomes=${outcomes}::party=${partySize}`;
+  }, [events, partySize, pressureTier]);
 
-  function getEffectivePlayerName(i1Based: number) {
-    const idx = i1Based - 1;
-    const raw = playerNames[idx] ?? "";
-    const name = normalizeName(raw);
-    return name.length > 0 ? name : `Player ${i1Based}`;
-  }
+  // -----------------------------
+  // Enemy groups (Solace-owned unless Human/Dev)
+  // -----------------------------
+
+  const [enemyGroups, setEnemyGroups] = useState<string[]>(["Skirmishers", "Archers"]);
+  const [enemyGroupSelect, setEnemyGroupSelect] = useState<string>("Skirmishers");
+
+  const [initModEnemies, setInitModEnemies] = useState<number>(1);
+
+  // Solace: implicit difficulty → init mod + 1:1 groups to party size.
+  useEffect(() => {
+    if (isHuman && !allowDevControls) return;
+
+    // In Solace-neutral (or dev), infer a suggested init mod from pressure.
+    const inferred = inferEnemyInitModFromPressure(pressureTier);
+    setInitModEnemies((prev) => {
+      // Only auto-set when not actively being edited in human mode.
+      if (isHuman && allowDevControls) return prev;
+      return inferred;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pressureTier, isHuman, allowDevControls]);
+
+  useEffect(() => {
+    if (isHuman && !allowDevControls) return;
+
+    // Solace-neutral: always keep groups 1:1 with party size (0..6),
+    // picked deterministically from a pressure-themed pool.
+    const desired = clampInt(partySize, 0, 6);
+
+    const pool = enemyPoolForPressure(pressureTier);
+    const picked = pickDeterministicUnique(pool.length ? pool : ENEMY_GROUP_LIBRARY, desired, pressureSeed);
+
+    setEnemyGroups((prev) => {
+      // If human dev controls are allowed, don’t stomp their choices.
+      if (isHuman && allowDevControls) return prev;
+      return picked;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [partySize, pressureTier, pressureSeed, isHuman, allowDevControls, ENEMY_GROUP_LIBRARY.join("|")]);
 
   function addEnemyGroup(name: string) {
+    if (!canEdit) return;
     const v = normalizeName(name);
     if (!v) return;
 
     setEnemyGroups((prev) => {
-      if (prev.map((x) => x.toLowerCase()).includes(v.toLowerCase())) return prev;
-      if (prev.length >= 6) return prev;
-      return [...prev, v];
+      const next = uniqCaseInsensitive([...prev, v]);
+      return next.slice(0, 6);
     });
   }
 
   function removeEnemyGroup(name: string) {
-    setEnemyGroups((prev) => prev.filter((g) => g !== name));
+    if (!canEdit) return;
+    const v = normalizeName(name);
+    setEnemyGroups((prev) => prev.filter((g) => g.toLowerCase() !== v.toLowerCase()));
   }
 
   function clearEnemyGroups() {
+    if (!canEdit) return;
     setEnemyGroups([]);
-  }
-
-  function randomizePlayerNames() {
-    const pc = clampInt(playerCount, 1, 6);
-    setPlayerNames((prev) => {
-      const next = [...prev];
-      while (next.length < 6) next.push("");
-
-      const used = new Set<string>(next.map((x) => normalizeName(x).toLowerCase()).filter(Boolean));
-
-      for (let i = 0; i < pc; i++) {
-        const current = normalizeName(next[i] ?? "");
-        if (current) continue;
-
-        let tries = 0;
-        let name = randomName();
-        while (used.has(name.toLowerCase()) && tries < 12) {
-          name = randomName();
-          tries++;
-        }
-        used.add(name.toLowerCase());
-        next[i] = name;
-      }
-
-      return next.slice(0, 6);
-    });
   }
 
   // -----------------------------
@@ -327,36 +373,50 @@ export default function CombatSetupPanel({ events, onAppendCanon }: Props) {
   // Canon actions
   // -----------------------------
 
+  // Governance:
+  // - In Solace-neutral, the PLAYER should not be manually “building combat”.
+  // - Combat should be triggered by pressure + hostile intent elsewhere.
+  // This panel supports dev-mode start, and human DM start.
+  const canStartCombat = !locked && (isHuman || allowDevControls);
+
   function startCombatDeterministic() {
-    if (locked) return;
+    if (!canStartCombat) return;
 
-    const pc = clampInt(playerCount, 1, 6);
+    const members = (partyMembers ?? []).slice(0, 6);
+    if (members.length === 0) return;
 
-    const groups = enemyGroups
-      .map((g) => normalizeName(g))
-      .filter(Boolean)
-      .slice(0, 6);
+    const desiredGroups = clampInt(members.length, 1, 6);
+    const groups = uniqCaseInsensitive(enemyGroups).slice(0, desiredGroups);
+
+    // If somehow empty, fall back to deterministic pick
+    const ensuredGroups =
+      groups.length > 0
+        ? groups
+        : pickDeterministicUnique(enemyPoolForPressure(pressureTier), desiredGroups, pressureSeed);
 
     const combatId = crypto.randomUUID();
-    const seed = crypto.randomUUID(); // deterministic within this combat once committed
+    const seed = crypto.randomUUID();
 
     const participants: CombatantSpec[] = [];
 
-    for (let i = 1; i <= pc; i++) {
+    // Players come from PARTY (session truth)
+    members.forEach((m, idx) => {
+      const i1 = idx + 1;
       participants.push({
-        id: `player_${i}`,
-        name: getEffectivePlayerName(i),
+        id: normalizeName(m.id || `player_${i1}`) || `player_${i1}`,
+        name: normalizeName(m.name || "") || `Player ${i1}`,
         kind: "player",
-        initiativeMod: Math.trunc(initModPlayers || 0),
+        initiativeMod: Math.trunc(Number(m.initiativeMod ?? 0)),
       });
-    }
+    });
 
-    groups.forEach((name, idx) => {
+    // Enemy groups (Solace-owned unless human/dev)
+    ensuredGroups.forEach((name, idx) => {
       participants.push({
         id: `enemy_group_${idx + 1}`,
         name,
         kind: "enemy_group",
-        initiativeMod: Math.trunc(initModEnemies || 0),
+        initiativeMod: Math.trunc(Number(initModEnemies ?? 0)),
       });
     });
 
@@ -364,12 +424,7 @@ export default function CombatSetupPanel({ events, onAppendCanon }: Props) {
     const initRolls = generateDeterministicInitiativeRolls(started);
 
     onAppendCanon("COMBAT_STARTED", started);
-
-    for (const r of initRolls) {
-      onAppendCanon("INITIATIVE_ROLLED", r);
-    }
-
-    // pointer at round 1, index 0
+    for (const r of initRolls) onAppendCanon("INITIATIVE_ROLLED", r);
     onAppendCanon("TURN_ADVANCED", { combatId, round: 1, index: 0 });
   }
 
@@ -397,12 +452,21 @@ export default function CombatSetupPanel({ events, onAppendCanon }: Props) {
     <CardSection title="Combat (Deterministic, Grouped Enemies)">
       <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center", marginTop: 2 }}>
         <Pill tone="info">Event-sourced turn order</Pill>
-        {locked ? <Pill tone="warn">🔒 Combat active — setup locked</Pill> : <Pill>Setup editable</Pill>}
+        {locked ? <Pill tone="warn">🔒 Combat active — setup locked</Pill> : <Pill>Setup ready</Pill>}
+        {!isHuman && !allowDevControls && <Pill tone="warn">Solace-owned setup</Pill>}
       </div>
 
       <p className="muted" style={{ marginTop: 10 }}>
         Players roll individually. Enemy groups roll once per group. Turn order is derived from events.
       </p>
+
+      {!isHuman && !allowDevControls && (
+        <div className="muted" style={{ marginTop: 10 }}>
+          Combat materialization is derived from <strong>pressure + hostile intent</strong>. This panel shows the{" "}
+          <strong>implicit</strong> setup Solace would use (1:1 enemy groups to party size), but does not allow manual
+          “Start Combat” unless dev controls are enabled.
+        </div>
+      )}
 
       {/* Setup console */}
       <div
@@ -411,48 +475,28 @@ export default function CombatSetupPanel({ events, onAppendCanon }: Props) {
           padding: 14,
           borderRadius: 14,
           border: "1px solid rgba(255,255,255,0.10)",
-          background:
-            "linear-gradient(180deg, rgba(0,0,0,0.18), rgba(0,0,0,0.10))",
+          background: "linear-gradient(180deg, rgba(0,0,0,0.18), rgba(0,0,0,0.10))",
           boxShadow: "inset 0 1px 0 rgba(255,255,255,0.05)",
         }}
       >
         <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "flex-end" }}>
-          <ControlLabel label="Players (1–6)">
-            <select
-              value={playerCount}
-              disabled={locked}
-              onChange={(e) => setPlayerCount(clampInt(Number(e.target.value), 1, 6))}
-              style={selectStyle(locked)}
-            >
-              {PLAYER_COUNTS.map((n) => (
-                <option key={n} value={n}>
-                  {n}
-                </option>
-              ))}
-            </select>
+          <ControlLabel label="Party size (session truth)">
+            <div style={{ ...selectStyle(true), display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+              <span>
+                <strong>{partySize}</strong> {partySize === 1 ? "member" : "members"}
+              </span>
+              <span className="muted" style={{ fontSize: 12 }}>
+                locked
+              </span>
+            </div>
           </ControlLabel>
 
-          <ControlLabel label="Player init mod">
-            <select
-              value={initModPlayers}
-              disabled={locked}
-              onChange={(e) => setInitModPlayers(Math.trunc(Number(e.target.value)))}
-              style={selectStyle(locked)}
-            >
-              {INIT_MODS.map((n) => (
-                <option key={n} value={n}>
-                  {n >= 0 ? `+${n}` : `${n}`}
-                </option>
-              ))}
-            </select>
-          </ControlLabel>
-
-          <ControlLabel label="Enemy group init mod">
+          <ControlLabel label="Enemy group init mod (pressure-derived)">
             <select
               value={initModEnemies}
-              disabled={locked}
+              disabled={!canEdit}
               onChange={(e) => setInitModEnemies(Math.trunc(Number(e.target.value)))}
-              style={selectStyle(locked)}
+              style={selectStyle(!canEdit)}
             >
               {INIT_MODS.map((n) => (
                 <option key={n} value={n}>
@@ -464,15 +508,18 @@ export default function CombatSetupPanel({ events, onAppendCanon }: Props) {
 
           <div style={{ flex: "1 1 360px", display: "flex", flexDirection: "column", gap: 6 }}>
             <span className="muted" style={{ fontSize: 12 }}>
-              Enemy groups
+              Enemy groups{" "}
+              <span className="muted" style={{ fontSize: 12 }}>
+                (1:1 with party size)
+              </span>
             </span>
 
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
               <select
                 value={enemyGroupSelect}
-                disabled={locked}
+                disabled={!canEdit}
                 onChange={(e) => setEnemyGroupSelect(e.target.value)}
-                style={{ ...selectStyle(locked), minWidth: 240 }}
+                style={{ ...selectStyle(!canEdit), minWidth: 240 }}
               >
                 {ENEMY_GROUP_LIBRARY.map((g) => (
                   <option key={g} value={g}>
@@ -483,16 +530,17 @@ export default function CombatSetupPanel({ events, onAppendCanon }: Props) {
 
               <button
                 onClick={() => addEnemyGroup(enemyGroupSelect)}
-                disabled={locked}
-                style={buttonStyle("primary", locked)}
+                disabled={!canEdit}
+                style={buttonStyle("primary", !canEdit)}
+                title={!canEdit ? "Solace-owned (or combat locked)" : "Add enemy group"}
               >
                 Add
               </button>
 
               <button
                 onClick={clearEnemyGroups}
-                disabled={locked || enemyGroups.length === 0}
-                style={buttonStyle("ghost", locked || enemyGroups.length === 0)}
+                disabled={!canEdit || enemyGroups.length === 0}
+                style={buttonStyle("ghost", !canEdit || enemyGroups.length === 0)}
               >
                 Clear
               </button>
@@ -504,7 +552,7 @@ export default function CombatSetupPanel({ events, onAppendCanon }: Props) {
 
             {enemyGroups.length > 0 ? (
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 10 }}>
-                {enemyGroups.map((g) => (
+                {enemyGroups.slice(0, 6).map((g) => (
                   <span
                     key={g}
                     style={{
@@ -520,7 +568,7 @@ export default function CombatSetupPanel({ events, onAppendCanon }: Props) {
                     <span>{g}</span>
                     <button
                       onClick={() => removeEnemyGroup(g)}
-                      disabled={locked}
+                      disabled={!canEdit}
                       aria-label={`Remove ${g}`}
                       style={{
                         padding: "0 10px",
@@ -529,8 +577,8 @@ export default function CombatSetupPanel({ events, onAppendCanon }: Props) {
                         border: "1px solid rgba(255,255,255,0.12)",
                         background: "rgba(0,0,0,0.22)",
                         color: "inherit",
-                        opacity: locked ? 0.55 : 1,
-                        cursor: locked ? "not-allowed" : "pointer",
+                        opacity: !canEdit ? 0.55 : 1,
+                        cursor: !canEdit ? "not-allowed" : "pointer",
                       }}
                     >
                       ×
@@ -540,85 +588,101 @@ export default function CombatSetupPanel({ events, onAppendCanon }: Props) {
               </div>
             ) : (
               <div className="muted" style={{ marginTop: 10 }}>
-                No enemy groups yet. Add one.
+                No enemy groups. (Solace will normally pick these automatically.)
               </div>
             )}
+
+            <div className="muted" style={{ marginTop: 10, fontSize: 12 }}>
+              Pressure tier signal: <strong>{String(pressureTier ?? "unknown")}</strong>
+            </div>
           </div>
         </div>
 
-        {/* Players */}
+        {/* Players (read-only; session truth) */}
         <div style={{ marginTop: 16 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
-            <strong>Players</strong>
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-              <button onClick={randomizePlayerNames} disabled={locked} style={buttonStyle("ghost", locked)}>
-                🎲 Random names
-              </button>
+          <strong>Players (session truth)</strong>
+
+          {partySize === 0 ? (
+            <div className="muted" style={{ marginTop: 10 }}>
+              No party declared yet.
             </div>
-          </div>
-
-          <div
-            style={{
-              marginTop: 10,
-              display: "grid",
-              gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-              gap: 10,
-            }}
-          >
-            {Array.from({ length: clampInt(playerCount, 1, 6) }, (_, idx) => {
-              const i1 = idx + 1;
-              const value = playerNames[idx] ?? "";
-              return (
-                <label key={i1} style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                  <span className="muted" style={{ fontSize: 12 }}>
-                    Player {i1} name (optional)
-                  </span>
-                  <input
-                    value={value}
-                    disabled={locked}
-                    onChange={(e) => {
-                      const v = e.target.value;
-                      setPlayerNames((prev) => {
-                        const next = [...prev];
-                        while (next.length < 6) next.push("");
-                        next[idx] = v;
-                        return next.slice(0, 6);
-                      });
+          ) : (
+            <div
+              style={{
+                marginTop: 10,
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+                gap: 10,
+              }}
+            >
+              {partyMembers.slice(0, 6).map((m, idx) => {
+                const i1 = idx + 1;
+                const name = normalizeName(m.name || "") || `Player ${i1}`;
+                const mod = Math.trunc(Number(m.initiativeMod ?? 0));
+                return (
+                  <div
+                    key={String(m.id ?? `player_${i1}`)}
+                    style={{
+                      padding: "10px 12px",
+                      borderRadius: 12,
+                      border: "1px solid rgba(255,255,255,0.10)",
+                      background: "rgba(255,255,255,0.04)",
                     }}
-                    placeholder={`Player ${i1}`}
-                    style={inputStyle(locked)}
-                  />
-                </label>
-              );
-            })}
-          </div>
-
-          <p className="muted" style={{ marginTop: 10, marginBottom: 0 }}>
-            Blank names will display as “Player 1…N”. Names are used for initiative labels and canon readability.
-          </p>
+                  >
+                    <div>
+                      <strong>{name}</strong>
+                    </div>
+                    <div className="muted" style={{ marginTop: 6, fontSize: 12 }}>
+                      id: {String(m.id)} · init mod: {mod >= 0 ? `+${mod}` : `${mod}`}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       </div>
 
       {/* Actions */}
       <div style={{ marginTop: 14, display: "flex", gap: 8, flexWrap: "wrap" }}>
-        <button onClick={startCombatDeterministic} disabled={locked} style={buttonStyle("primary", locked)}>
+        <button
+          onClick={startCombatDeterministic}
+          disabled={!canStartCombat || partySize === 0}
+          style={buttonStyle("primary", !canStartCombat || partySize === 0)}
+          title={
+            !canStartCombat && !isHuman && !allowDevControls
+              ? "Combat is derived from pressure + hostile intent (dev controls required to force-start)."
+              : undefined
+          }
+        >
           Start Combat (Seeded)
         </button>
 
-        <button onClick={advanceTurn} disabled={!derivedCombat} style={buttonStyle("ghost", !derivedCombat)}>
+        <button
+          onClick={advanceTurn}
+          disabled={!derivedCombat}
+          style={buttonStyle("ghost", !derivedCombat)}
+        >
           Advance Turn
         </button>
 
         <button onClick={endCombat} disabled={!locked} style={buttonStyle("danger", !locked)}>
           End Combat
         </button>
+
+        {partySize === 0 && (
+          <span className="muted" style={{ fontSize: 12, alignSelf: "center" }}>
+            Declare party first.
+          </span>
+        )}
       </div>
 
       {/* Derived order */}
       {derivedCombat && (
         <div style={{ marginTop: 14 }}>
           <div className="muted">
-            Combat: <strong>{derivedCombat.combatId}</strong> · Round <strong>{derivedCombat.round}</strong>
+            Combat: <strong>{derivedCombat.combatId}</strong> · Round{" "}
+            <strong>{derivedCombat.round}</strong>
           </div>
 
           <div style={{ marginTop: 10, display: "grid", gridTemplateColumns: "1fr", gap: 8 }}>
@@ -633,7 +697,9 @@ export default function CombatSetupPanel({ events, onAppendCanon }: Props) {
                   style={{
                     padding: "12px 12px",
                     borderRadius: 12,
-                    border: active ? "1px solid rgba(138,180,255,0.35)" : "1px solid rgba(255,255,255,0.10)",
+                    border: active
+                      ? "1px solid rgba(138,180,255,0.35)"
+                      : "1px solid rgba(255,255,255,0.10)",
                     background: active
                       ? "linear-gradient(180deg, rgba(138,180,255,0.10), rgba(0,0,0,0.10))"
                       : "rgba(255,255,255,0.04)",
@@ -651,7 +717,9 @@ export default function CombatSetupPanel({ events, onAppendCanon }: Props) {
                         width: 10,
                         height: 10,
                         borderRadius: 999,
-                        border: active ? "1px solid rgba(138,180,255,0.60)" : "1px solid rgba(255,255,255,0.16)",
+                        border: active
+                          ? "1px solid rgba(138,180,255,0.60)"
+                          : "1px solid rgba(255,255,255,0.16)",
                         background: active ? "rgba(138,180,255,0.18)" : "rgba(255,255,255,0.05)",
                         boxShadow: active ? "0 0 14px rgba(138,180,255,0.25)" : "none",
                       }}
