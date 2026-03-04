@@ -5,14 +5,8 @@
 // Demo Page — Stewarded Play (Full Governed Flow)
 // ------------------------------------------------------------
 //
-// Focus fixes (requested):
-// A) Top header area: make the title/roles feel like they “belong” to the hero card
-//    - Wrap ModeHeader inside the same styled surface as the hero (single “stage”)
-//    - Reduce the floating-on-background feeling with shared border/background/shadow
-//
-// B) Bottom disclaimer area: remove duplication + reduce visual weight
-//    - Ensure Disclaimer renders exactly once (at the bottom)
-//    - Replace the early “dmMode null” Disclaimer with a small inline gate note
+// This file is now the *orchestrator* only.
+// UI is broken into components under app/demo/components.
 //
 // ------------------------------------------------------------
 
@@ -45,390 +39,52 @@ import {
   nextTurnPointer,
 } from "@/lib/combat/CombatState";
 
-// ------------------------------------------------------------
-// Types
-// ------------------------------------------------------------
+import AmbientBackground from "./components/AmbientBackground";
+import DemoHero from "./components/DemoHero";
+import InitialTableSection from "./components/InitialTableSection";
 
-type DMMode = "human" | "solace-neutral";
-type OptionKind = "safe" | "environmental" | "risky" | "contested";
+import {
+  DMMode,
+  DemoSectionId,
+  DiceMode,
+  RollSource,
+  InitialTable,
+  XY,
+  Direction,
+  ExplorationDraft,
+  OptionKind,
+} from "./demoTypes";
 
-// Keep local dice types aligned with ResolutionDraftAdvisoryPanel
-type DiceMode = "d4" | "d6" | "d8" | "d10" | "d12" | "d20";
-type RollSource = "manual" | "solace";
-
-type InitialTable = {
-  openingFrame: string;
-  locationTraits: string[];
-  latentFactions: {
-    name: string;
-    desire: string;
-    pressure: string;
-  }[];
-  environmentalOddities: string[];
-  dormantHooks: string[];
-};
-
-type XY = { x: number; y: number };
-type Direction = "north" | "south" | "east" | "west";
-
-type ExplorationDraft = {
-  enableMove: boolean;
-  direction: Direction | "none";
-  enableReveal: boolean;
-  revealRadius: 0 | 1 | 2;
-  enableMark: boolean;
-  markKind: MapMarkKind;
-  markNote: string;
-};
-
-type DemoSectionId =
-  | "mode"
-  | "table"
-  | "pressure"
-  | "map"
-  | "combat"
-  | "action"
-  | "resolution"
-  | "canon"
-  | "ledger";
-
-// ------------------------------------------------------------
-// Random helpers
-// ------------------------------------------------------------
-
-function pick<T>(arr: T[]) {
-  return arr[Math.floor(Math.random() * arr.length)];
-}
-
-function pickManyUnique<T>(arr: T[], count: number): T[] {
-  const pool = [...arr];
-  const out: T[] = [];
-  while (pool.length > 0 && out.length < count) {
-    const idx = Math.floor(Math.random() * pool.length);
-    out.push(pool.splice(idx, 1)[0]);
-  }
-  return out;
-}
-
-function clampInt(n: number, min: number, max: number) {
-  const x = Number.isFinite(n) ? Math.trunc(n) : min;
-  return Math.max(min, Math.min(max, x));
-}
-
-function normalizeName(s: string) {
-  return s.replace(/\s+/g, " ").trim();
-}
-
-function randomName(): string {
-  const a = [
-    "Astra",
-    "Kara",
-    "Thorne",
-    "Hex",
-    "Rook",
-    "Nyx",
-    "Vex",
-    "Dax",
-    "Mara",
-    "Rune",
-    "Sable",
-    "Orin",
-    "Juno",
-    "Kade",
-    "Iris",
-    "Zeph",
-  ];
-  const b = [
-    "of Ember",
-    "of Glass",
-    "of Iron",
-    "of Neon",
-    "of Ash",
-    "of Dawn",
-    "of Night",
-    "of the Grid",
-    "the Quiet",
-    "the Bold",
-    "the Warden",
-    "the Runner",
-    "the Signal",
-    "the Echo",
-  ];
-  const base = pick(a);
-  const tail = pick([true, false, false]) ? ` ${pick(b)}` : "";
-  return `${base}${tail}`;
-}
-
-// ------------------------------------------------------------
-// Initial table helpers
-// ------------------------------------------------------------
-
-function generateInitialTable(): InitialTable {
-  const factionNames = [
-    "The Whisperers",
-    "The Vaultwardens",
-    "The Ash Circle",
-    "The Night Ledger",
-    "The Bell-Silent",
-    "The Cobble Court",
-  ];
-
-  const desires = [
-    "control what sleeps below",
-    "seal the vaults forever",
-    "profit from forbidden knowledge",
-    "redeem an ancient failure",
-    "expose the truth no matter the cost",
-    "keep the city calm at any price",
-  ];
-
-  const pressures = [
-    "time is running out",
-    "someone is leaking secrets",
-    "an old oath is failing",
-    "a rival faction is moving first",
-    "witnesses keep vanishing",
-    "the city above is starting to notice",
-  ];
-
-  const factionCount = pick([2, 3, 3]);
-  const chosenNames = pickManyUnique(factionNames, factionCount);
-
-  return {
-    openingFrame: pick([
-      "A low fog coils between narrow streets as evening bells fade.",
-      "Rain-dark stone reflects lanternlight in uneasy patterns.",
-      "Voices echo where they shouldn’t, carrying fragments of argument.",
-      "The city hums, unaware of the pressure building beneath it.",
-    ]),
-    locationTraits: [
-      pick(["crowded", "echoing", "claustrophobic", "uneasily quiet"]),
-      pick(["ancient stone", "rotting wood", "slick cobblestone"]),
-    ],
-    latentFactions: chosenNames.map((name) => ({
-      name,
-      desire: pick(desires),
-      pressure: pick(pressures),
-    })),
-    environmentalOddities: [
-      pick([
-        "Lantern flames gutter without wind",
-        "Stone walls seem to absorb sound",
-        "Whispers surface near old drains",
-        "Footsteps echo twice",
-      ]),
-    ],
-    dormantHooks: [
-      pick([
-        "A name scratched into stone repeats across districts",
-        "A missing city clerk last seen near the underways",
-        "A sealed door recently disturbed",
-      ]),
-    ],
-  };
-}
-
-function renderInitialTableNarration(t: InitialTable): string {
-  const [traitA, traitB] = t.locationTraits;
-  const oddity = t.environmentalOddities[0] ?? "Something feels off";
-  const hook = t.dormantHooks[0] ?? "A sign repeats";
-  const factions = t.latentFactions;
-
-  const lines: string[] = [];
-  lines.push(t.openingFrame);
-  lines.push(`The place feels ${traitA}, and the air carries the stink of ${traitB}.`);
-
-  if (/footsteps echo twice/i.test(oddity)) {
-    lines.push(
-      "Every step answers itself — once, then again — like the street remembers you a beat too late."
-    );
-  } else if (/lantern/i.test(oddity.toLowerCase())) {
-    lines.push("Lanternlight can’t decide what it wants to be — steady one second, starving the next.");
-  } else if (/absorb sound/i.test(oddity.toLowerCase())) {
-    lines.push("Sound doesn’t travel right. Words die early, like the walls are swallowing them.");
-  } else if (/whispers/i.test(oddity.toLowerCase())) {
-    lines.push(
-      "You keep catching whispers at the edge of hearing — not loud enough to understand, not quiet enough to ignore."
-    );
-  } else {
-    lines.push(`${oddity}.`);
-  }
-
-  if (factions.length > 0) {
-    lines.push("There are pressures under the surface:");
-    factions.forEach((f) => lines.push(`• ${f.name} want to ${f.desire} — but ${f.pressure}.`));
-  }
-
-  lines.push(`${hook}.`);
-  lines.push("That repetition feels deliberate. And it feels recent.");
-
-  return lines.join("\n\n");
-}
-
-function inferOptionKind(description: string): OptionKind {
-  const text = description.toLowerCase();
-  if (text.includes("attack") || text.includes("fight") || text.includes("oppose") || text.includes("contest"))
-    return "contested";
-  if (text.includes("climb") || text.includes("cross") || text.includes("navigate") || text.includes("environment"))
-    return "environmental";
-  if (text.includes("steal") || text.includes("sneak") || text.includes("risk")) return "risky";
-  return "safe";
-}
-
-// ------------------------------------------------------------
-// Exploration helpers
-// ------------------------------------------------------------
-
-function withinBounds(p: XY, w: number, h: number) {
-  return p.x >= 0 && p.y >= 0 && p.x < w && p.y < h;
-}
-
-function deriveCurrentPosition(events: readonly any[], w: number, h: number): XY {
-  let pos: XY = { x: Math.floor(w / 2), y: Math.floor(h / 2) };
-  for (const e of events) {
-    if (e?.type === "PLAYER_MOVED") {
-      const to = e?.payload?.to;
-      if (to && typeof to.x === "number" && typeof to.y === "number" && withinBounds(to, w, h)) {
-        pos = { x: to.x, y: to.y };
-      }
-    }
-  }
-  return pos;
-}
-
-function revealRadius(center: XY, radius: number, w: number, h: number): XY[] {
-  const out: XY[] = [];
-  for (let dy = -radius; dy <= radius; dy++) {
-    for (let dx = -radius; dx <= radius; dx++) {
-      const p = { x: center.x + dx, y: center.y + dy };
-      if (withinBounds(p, w, h)) out.push(p);
-    }
-  }
-  return out;
-}
-
-function inferDirection(text: string): Direction | null {
-  const t = text.toLowerCase();
-  if (/\b(north|up|forward|ahead)\b/.test(t)) return "north";
-  if (/\b(south|down|back|backward)\b/.test(t)) return "south";
-  if (/\b(east|right)\b/.test(t)) return "east";
-  if (/\b(west|left)\b/.test(t)) return "west";
-  return null;
-}
-
-function stepFrom(pos: XY, dir: Direction): XY {
-  switch (dir) {
-    case "north":
-      return { x: pos.x, y: pos.y - 1 };
-    case "south":
-      return { x: pos.x, y: pos.y + 1 };
-    case "east":
-      return { x: pos.x + 1, y: pos.y };
-    case "west":
-      return { x: pos.x - 1, y: pos.y };
-  }
-}
-
-function textSuggestsDoor(text: string) {
-  const t = text.toLowerCase();
-  return /\b(door|gate|hatch|threshold|archway)\b/.test(t);
-}
-
-function textSuggestsLocked(text: string) {
-  const t = text.toLowerCase();
-  return /\b(locked|sealed|barred|jammed)\b/.test(t);
-}
-
-// ------------------------------------------------------------
-// Combat-ended detection (local, because deriveCombatState doesn’t account for COMBAT_ENDED)
-// ------------------------------------------------------------
-
-function isCombatEndedForId(combatId: string, events: readonly any[]) {
-  let seenStart = false;
-
-  for (const e of events) {
-    if (e?.type === "COMBAT_STARTED" && e?.payload?.combatId === combatId) {
-      seenStart = true;
-      continue;
-    }
-    if (seenStart && e?.type === "COMBAT_ENDED" && e?.payload?.combatId === combatId) {
-      return true;
-    }
-  }
-
-  return false;
-}
-
-// ------------------------------------------------------------
-// UI helpers: chapter nav + anchors
-// ------------------------------------------------------------
-
-function anchorId(section: DemoSectionId) {
-  return `demo-${section}`;
-}
-
-function scrollToSection(section: DemoSectionId) {
-  const el = document.getElementById(anchorId(section));
-  if (!el) return;
-  el.scrollIntoView({ behavior: "smooth", block: "start" });
-}
-
-function sectionLabel(section: DemoSectionId) {
-  switch (section) {
-    case "mode":
-      return "Mode";
-    case "table":
-      return "Table";
-    case "pressure":
-      return "Pressure";
-    case "map":
-      return "Map";
-    case "combat":
-      return "Combat";
-    case "action":
-      return "Action";
-    case "resolution":
-      return "Resolution";
-    case "canon":
-      return "Canon";
-    case "ledger":
-      return "Ledger";
-  }
-}
-
-// ------------------------------------------------------------
-// Ambient FX: fog + torchlight (no new files)
-// ------------------------------------------------------------
-
-function clamp01(n: number) {
-  if (!Number.isFinite(n)) return 0;
-  return Math.max(0, Math.min(1, n));
-}
-
-function easeInOutCubic(t: number) {
-  const x = clamp01(t);
-  return x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2;
-}
-
-function lerp(a: number, b: number, t: number) {
-  return a + (b - a) * t;
-}
-
-function flickerValue(nowMs: number, seed: number) {
-  const t = (nowMs / 1000) * (0.9 + (seed % 7) * 0.03);
-  const s1 = Math.sin(t * 2.3 + seed);
-  const s2 = Math.sin(t * 5.1 + seed * 1.7);
-  const s3 = Math.sin(t * 9.2 + seed * 0.6);
-  const raw = (s1 * 0.6 + s2 * 0.3 + s3 * 0.1) * 0.5 + 0.5;
-  return easeInOutCubic(clamp01(raw));
-}
+import {
+  anchorId,
+  scrollToSection,
+  sectionLabel,
+  pick,
+  pickManyUnique,
+  clampInt,
+  normalizeName,
+  randomName,
+  generateInitialTable,
+  renderInitialTableNarration,
+  inferOptionKind,
+  withinBounds,
+  deriveCurrentPosition,
+  revealRadius,
+  inferDirection,
+  stepFrom,
+  textSuggestsDoor,
+  textSuggestsLocked,
+  isCombatEndedForId,
+} from "./demoUtils";
 
 // ------------------------------------------------------------
 
 export default function DemoPage() {
   const role: "arbiter" = "arbiter";
 
-  const [state, setState] = useState<SessionState>(createSession("demo-session", "demo"));
+  const [state, setState] = useState<SessionState>(
+    createSession("demo-session", "demo")
+  );
 
   // IMPORTANT UX CHANGE: mode must be explicitly selected
   const [dmMode, setDmMode] = useState<DMMode | null>(null);
@@ -451,44 +107,13 @@ export default function DemoPage() {
   const [selectedOption, setSelectedOption] = useState<Option | null>(null);
 
   // ----------------------------------------------------------
-  // Ambient FX state
-  // ----------------------------------------------------------
-
-  const [fxNow, setFxNow] = useState<number>(() => Date.now());
-
-  useEffect(() => {
-    let raf = 0;
-    const tick = () => {
-      setFxNow(Date.now());
-      raf = requestAnimationFrame(tick);
-    };
-    raf = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(raf);
-  }, []);
-
-  const fogShiftA = useMemo(() => {
-    const t = fxNow / 1000;
-    const x = (t * 6) % 240;
-    const y = (t * 3.5) % 180;
-    return { x, y };
-  }, [fxNow]);
-
-  const fogShiftB = useMemo(() => {
-    const t = fxNow / 1000;
-    const x = (t * 3.2 + 120) % 260;
-    const y = (t * 2.1 + 80) % 200;
-    return { x, y };
-  }, [fxNow]);
-
-  const torchFlicker = useMemo(() => {
-    return flickerValue(fxNow, 1337);
-  }, [fxNow]);
-
-  // ----------------------------------------------------------
   // Combat state (derived + ended-aware)
   // ----------------------------------------------------------
 
-  const latestCombatId = useMemo(() => findLatestCombatId(state.events as any) ?? null, [state.events]);
+  const latestCombatId = useMemo(
+    () => findLatestCombatId(state.events as any) ?? null,
+    [state.events]
+  );
 
   const derivedCombat = useMemo(() => {
     if (!latestCombatId) return null;
@@ -504,7 +129,11 @@ export default function DemoPage() {
 
   const activeCombatantSpec = useMemo(() => {
     if (!derivedCombat?.activeCombatantId) return null;
-    return derivedCombat.participants.find((p) => p.id === derivedCombat.activeCombatantId) ?? null;
+    return (
+      derivedCombat.participants.find(
+        (p) => p.id === derivedCombat.activeCombatantId
+      ) ?? null
+    );
   }, [derivedCombat]);
 
   const isEnemyTurn = combatActive && activeCombatantSpec?.kind === "enemy_group";
@@ -513,7 +142,10 @@ export default function DemoPage() {
   // Exploration draft (auto-prepared AFTER intent + option)
   // ----------------------------------------------------------
 
-  const currentPos = useMemo(() => deriveCurrentPosition(state.events as any[], MAP_W, MAP_H), [state.events]);
+  const currentPos = useMemo(
+    () => deriveCurrentPosition(state.events as any[], MAP_W, MAP_H),
+    [state.events]
+  );
 
   const [explorationDraft, setExplorationDraft] = useState<ExplorationDraft>({
     enableMove: false,
@@ -582,7 +214,8 @@ export default function DemoPage() {
   // Player submits action (intent)
   // ----------------------------------------------------------
 
-  const canPlayerSubmitIntent = dmMode !== null && ((!combatActive || !isEnemyTurn) || dmMode === "human");
+  const canPlayerSubmitIntent =
+    dmMode !== null && ((!combatActive || !isEnemyTurn) || dmMode === "human");
 
   function handlePlayerAction() {
     if (!playerInput.trim()) return;
@@ -620,7 +253,8 @@ export default function DemoPage() {
 
     const here = deriveCurrentPosition(next.events as any[], MAP_W, MAP_H);
 
-    const to = d.enableMove && d.direction !== "none" ? stepFrom(here, d.direction) : null;
+    const to =
+      d.enableMove && d.direction !== "none" ? stepFrom(here, d.direction) : null;
 
     const canMove = to ? withinBounds(to, MAP_W, MAP_H) : false;
 
@@ -891,7 +525,9 @@ export default function DemoPage() {
     const pc = clampInt(playerCount, 1, 6);
     setPlayerNames((prev) => {
       const next = [...prev];
-      const used = new Set<string>(next.map((x) => normalizeName(x).toLowerCase()).filter(Boolean));
+      const used = new Set<string>(
+        next.map((x) => normalizeName(x).toLowerCase()).filter(Boolean)
+      );
 
       for (let i = 0; i < pc; i++) {
         const current = normalizeName(next[i] ?? "");
@@ -913,7 +549,10 @@ export default function DemoPage() {
 
   const isHumanDM = dmMode === "human";
 
-  const outcomesCount = useMemo(() => state.events.filter((e: any) => e?.type === "OUTCOME").length, [state.events]);
+  const outcomesCount = useMemo(
+    () => state.events.filter((e: any) => e?.type === "OUTCOME").length,
+    [state.events]
+  );
   const canonCount = useMemo(
     () => state.events.filter((e: any) => e?.type && e?.type !== "OUTCOME").length,
     [state.events]
@@ -934,648 +573,62 @@ export default function DemoPage() {
     []
   );
 
-  const torchAlphaLeft = lerp(0.10, 0.22, torchFlicker);
-  const torchAlphaRight = lerp(0.08, 0.19, torchFlicker);
-
   function selectMode(nextMode: DMMode) {
     setDmMode(nextMode);
     setActiveSection("table");
     queueMicrotask(() => scrollToSection("table"));
   }
 
-  const step1Done = dmMode !== null;
-  const step2Done = dmMode !== null && tableAccepted;
-  const step3Done = dmMode !== null && tableAccepted;
-
-  const modeLabel = dmMode === "human" ? "Human DM" : dmMode === "solace-neutral" ? "Solace-neutral" : "Unselected";
-
-  function StepPill(props: { step: string; label: string; done: boolean; subtle?: boolean }) {
-    const done = props.done;
-    const subtle = !!props.subtle;
-    return (
-      <div
-        style={{
-          display: "inline-flex",
-          alignItems: "center",
-          gap: 8,
-          padding: "8px 10px",
-          borderRadius: 999,
-          border: done ? "1px solid rgba(138,180,255,0.45)" : "1px solid rgba(255,255,255,0.12)",
-          background: done ? "rgba(138,180,255,0.10)" : subtle ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.18)",
-          boxShadow: done ? "0 0 0 1px rgba(138,180,255,0.10), 0 8px 26px rgba(0,0,0,0.35)" : "none",
-          opacity: done ? 1 : 0.95,
-        }}
-      >
-        <span
-          style={{
-            width: 18,
-            height: 18,
-            borderRadius: 999,
-            display: "inline-flex",
-            alignItems: "center",
-            justifyContent: "center",
-            fontSize: 12,
-            fontWeight: 800,
-            border: done ? "1px solid rgba(138,180,255,0.55)" : "1px solid rgba(255,255,255,0.18)",
-            background: done ? "rgba(138,180,255,0.18)" : "rgba(255,255,255,0.04)",
-          }}
-        >
-          {done ? "✓" : props.step}
-        </span>
-        <div style={{ lineHeight: 1.1 }}>
-          <div style={{ fontSize: 11, fontWeight: 900, letterSpacing: 0.2 }}>{props.label}</div>
-          <div className="muted" style={{ fontSize: 11 }}>
-            {done ? "Ready" : "Required"}
-          </div>
-        </div>
-      </div>
-    );
-  }
-
   return (
-    <div
-      style={{
-        minHeight: "100vh",
-        backgroundImage: "url('/dungeon_background.png')",
-        backgroundSize: "cover",
-        backgroundPosition: "center",
-        backgroundAttachment: "fixed",
-        position: "relative",
-        overflow: "hidden",
-      }}
-    >
-      {/* Base readability overlay + subtle blur */}
-      <div
-        style={{
-          position: "absolute",
-          inset: 0,
-          background:
-            "radial-gradient(circle at center, rgba(0,0,0,0.88) 0%, rgba(0,0,0,0.84) 40%, rgba(0,0,0,0.75) 70%, rgba(0,0,0,0.65) 100%)",
-          backdropFilter: "blur(2px)",
-          pointerEvents: "none",
-        }}
-      />
-
-      {/* Torchlight flicker */}
-      <div
-        style={{
-          position: "absolute",
-          inset: 0,
-          pointerEvents: "none",
-          background: [
-            `radial-gradient(520px 820px at 8% 55%, rgba(255,170,90,${torchAlphaLeft.toFixed(3)}), transparent 62%)`,
-            `radial-gradient(460px 760px at 92% 60%, rgba(255,150,70,${torchAlphaRight.toFixed(3)}), transparent 60%)`,
-            "radial-gradient(700px 520px at 50% 110%, rgba(255,140,80,0.06), transparent 65%)",
-          ].join(", "),
-          mixBlendMode: "screen",
-          opacity: 0.85,
-        }}
-      />
-
-      {/* Fog drift */}
-      <div
-        style={{
-          position: "absolute",
-          inset: 0,
-          pointerEvents: "none",
-          opacity: 0.22,
-          filter: "blur(10px)",
-          background: [
-            `radial-gradient(600px 380px at ${30 + (fogShiftA.x % 40)}% ${30 + (fogShiftA.y % 30)}%, rgba(255,255,255,0.12), transparent 68%)`,
-            `radial-gradient(780px 520px at ${60 + (fogShiftB.x % 35)}% ${55 + (fogShiftB.y % 25)}%, rgba(255,255,255,0.10), transparent 70%)`,
-            "radial-gradient(900px 600px at 50% 40%, rgba(255,255,255,0.06), transparent 72%)",
-          ].join(", "),
-          transform: `translate3d(${(fogShiftA.x % 120) - 60}px, ${(fogShiftA.y % 80) - 40}px, 0)`,
-        }}
-      />
-
+    <AmbientBackground>
       <div style={{ position: "relative", zIndex: 1 }}>
         <StewardedShell>
-          {/* -----------------------------
-              Unified “Stage” surface:
-              ModeHeader + Hero share one card
-             ----------------------------- */}
-          <div
-            style={{
-              borderRadius: 14,
-              border: "1px solid rgba(255,255,255,0.10)",
-              background:
-                "radial-gradient(1200px 280px at 18% 0%, rgba(138,180,255,0.22), transparent 60%), radial-gradient(900px 240px at 82% 10%, rgba(255,120,120,0.14), transparent 55%), rgba(255,255,255,0.03)",
-              boxShadow: "0 22px 80px rgba(0,0,0,0.55)",
-              overflow: "hidden",
-              marginBottom: 18,
+          <ModeHeader
+            title="Stewarded Play — Full Flow"
+            onShare={shareCanon}
+            roles={[
+              { label: "Player", description: "Declares intent" },
+              { label: "Solace", description: "Prepares the resolution and narrates outcome" },
+              { label: "Arbiter", description: "Commits canon" },
+            ]}
+          />
+
+          <DemoHero
+            dmMode={dmMode}
+            tableAccepted={tableAccepted}
+            activeSection={activeSection}
+            outcomesCount={outcomesCount}
+            canonCount={canonCount}
+            chapterButtons={chapterButtons}
+            onStartHere={() => {
+              setActiveSection("mode");
+              scrollToSection("mode");
             }}
-          >
-            <div style={{ padding: "14px 14px 0 14px" }}>
-              <ModeHeader
-                title="Stewarded Play — Full Flow"
-                onShare={shareCanon}
-                roles={[
-                  { label: "Player", description: "Declares intent" },
-                  { label: "Solace", description: "Prepares the resolution and narrates outcome" },
-                  { label: "Arbiter", description: "Commits canon" },
-                ]}
-              />
-            </div>
-
-            {/* HERO + DUNGEON IMAGE + CHAPTER NAV + MODE SELECTOR */}
-            <div style={{ padding: 14, paddingTop: 10 }}>
-              <div
-                style={{
-                  borderRadius: 12,
-                  border: "1px solid rgba(255,255,255,0.10)",
-                  background:
-                    "radial-gradient(1200px 240px at 20% 0%, rgba(138,180,255,0.14), transparent 60%), radial-gradient(900px 220px at 80% 20%, rgba(255,120,120,0.10), transparent 55%), rgba(0,0,0,0.18)",
-                  padding: 18,
-                }}
-              >
-                <div
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: "minmax(260px, 1.1fr) minmax(260px, 0.9fr)",
-                    gap: 14,
-                    alignItems: "stretch",
-                  }}
-                >
-                  {/* LEFT */}
-                  <div style={{ minWidth: 0 }}>
-                    <div style={{ fontSize: 12, letterSpacing: 0.6, opacity: 0.85 }}>
-                      EVENT-SOURCED PLAY · FAIL-CLOSED CANON
-                    </div>
-
-                    <div style={{ marginTop: 6, fontSize: 22, fontWeight: 800, lineHeight: 1.15 }}>
-                      A governed tabletop loop: intent → resolution → canon.
-                    </div>
-
-                    <div className="muted" style={{ marginTop: 10, maxWidth: 760, lineHeight: 1.55 }}>
-                      This page is a working demo. It’s long by nature — so it’s organized into “chapters.” Nothing here
-                      rewrites the world: the UI only renders what the event log contains.
-                    </div>
-
-                    {/* Progress / steps */}
-                    <div style={{ marginTop: 12, display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
-                      <StepPill step="1" label="Choose Mode" done={step1Done} />
-                      <StepPill step="2" label="Accept Table" done={step2Done} />
-                      <StepPill step="3" label="Play Unlocked" done={step3Done} subtle />
-                      {dmMode !== null && (
-                        <span
-                          style={{
-                            marginLeft: 4,
-                            fontSize: 11,
-                            padding: "6px 10px",
-                            borderRadius: 999,
-                            border: "1px solid rgba(255,255,255,0.12)",
-                            background: "rgba(0,0,0,0.20)",
-                          }}
-                          className="muted"
-                        >
-                          Mode: <strong style={{ color: "rgba(255,255,255,0.92)" }}>{modeLabel}</strong>
-                        </span>
-                      )}
-                    </div>
-
-                    <div style={{ marginTop: 12, display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
-                      <button
-                        onClick={() => {
-                          setActiveSection("mode");
-                          scrollToSection("mode");
-                        }}
-                      >
-                        Start here
-                      </button>
-
-                      <button
-                        onClick={() => {
-                          setActiveSection("action");
-                          scrollToSection("action");
-                        }}
-                        disabled={dmMode === null || !tableAccepted}
-                        title={
-                          dmMode === null
-                            ? "Choose a facilitator mode first"
-                            : !tableAccepted
-                            ? "Accept the initial table first"
-                            : "Jump to Player Action"
-                        }
-                      >
-                        Play me
-                      </button>
-
-                      <div className="muted" style={{ fontSize: 12 }}>
-                        outcomes: <strong>{outcomesCount}</strong> · canon events: <strong>{canonCount}</strong>
-                      </div>
-                    </div>
-
-                    {/* Mode not chosen notice (small inline gate note, NOT Disclaimer) */}
-                    {dmMode === null && (
-                      <div
-                        style={{
-                          marginTop: 10,
-                          padding: "10px 12px",
-                          borderRadius: 12,
-                          border: "1px solid rgba(255,255,255,0.10)",
-                          background: "rgba(255,255,255,0.04)",
-                        }}
-                      >
-                        <div style={{ fontWeight: 900, fontSize: 12 }}>Setup required</div>
-                        <div className="muted" style={{ fontSize: 12, marginTop: 2, lineHeight: 1.35 }}>
-                          Choose a facilitation mode to reveal the Initial Table. Then accept the table to unlock play.
-                        </div>
-                      </div>
-                    )}
-
-                    {/* MODE (moved into hero empty space) */}
-                    <div
-                      id={anchorId("mode")}
-                      style={{
-                        scrollMarginTop: 90,
-                        marginTop: 14,
-                        borderRadius: 12,
-                        border: "1px solid rgba(255,255,255,0.10)",
-                        background: "rgba(0,0,0,0.22)",
-                        padding: 14,
-                      }}
-                    >
-                      <div style={{ fontWeight: 800, fontSize: 16 }}>Facilitation Mode</div>
-                      <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>
-                        Select who is allowed to declare intent and how options are chosen.
-                      </div>
-
-                      <div style={{ marginTop: 10, display: "grid", gap: 8 }}>
-                        <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                          <input type="radio" checked={dmMode === "human"} onChange={() => selectMode("human")} />
-                          <span>
-                            <strong>Human DM</strong> <span className="muted">(options visible + editable setup)</span>
-                          </span>
-                        </label>
-
-                        <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                          <input
-                            type="radio"
-                            checked={dmMode === "solace-neutral"}
-                            onChange={() => selectMode("solace-neutral")}
-                          />
-                          <span>
-                            <strong>Solace</strong> <span className="muted">(Neutral Facilitator)</span>
-                          </span>
-                        </label>
-
-                        {dmMode !== null && !tableAccepted && (
-                          <div
-                            className="muted"
-                            style={{
-                              fontSize: 12,
-                              marginTop: 6,
-                              padding: "10px 10px",
-                              borderRadius: 10,
-                              border: "1px solid rgba(255,255,255,0.10)",
-                              background: "rgba(255,255,255,0.04)",
-                            }}
-                          >
-                            Next: review the Initial Table and click <strong>Accept</strong> to unlock play.
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* RIGHT */}
-                  <div style={{ minWidth: 0, display: "grid", gap: 10 }}>
-                    {/* Image */}
-                    <div
-                      style={{
-                        borderRadius: 12,
-                        overflow: "hidden",
-                        border: "1px solid rgba(255,255,255,0.10)",
-                        background: "rgba(0,0,0,0.22)",
-                        position: "relative",
-                        minHeight: 190,
-                      }}
-                    >
-                      <div
-                        style={{
-                          position: "absolute",
-                          inset: 0,
-                          backgroundImage: "url('/Hero_dungeon.png')",
-                          backgroundSize: "cover",
-                          backgroundPosition: "center",
-                          filter: "contrast(1.05) saturate(1.05)",
-                          transform: "scale(1.02)",
-                        }}
-                      />
-                      <div
-                        style={{
-                          position: "absolute",
-                          inset: 0,
-                          background:
-                            "linear-gradient(90deg, rgba(0,0,0,0.70), rgba(0,0,0,0.30) 55%, rgba(0,0,0,0.65))",
-                        }}
-                      />
-                      <div
-                        style={{
-                          position: "absolute",
-                          inset: 0,
-                          display: "flex",
-                          alignItems: "flex-end",
-                          justifyContent: "space-between",
-                          padding: 12,
-                          gap: 10,
-                        }}
-                      >
-                        <div style={{ minWidth: 0 }}>
-                          <div style={{ fontWeight: 800, fontSize: 14 }}>Enter the dungeon</div>
-                          <div className="muted" style={{ fontSize: 12, marginTop: 2 }}>
-                            You declare intent. The world remembers only what canon records.
-                          </div>
-                        </div>
-
-                        <button
-                          onClick={() => {
-                            setActiveSection("action");
-                            scrollToSection("action");
-                          }}
-                          disabled={dmMode === null || !tableAccepted}
-                          style={{
-                            padding: "10px 12px",
-                            borderRadius: 10,
-                            border: "1px solid rgba(255,255,255,0.14)",
-                            background: "rgba(255,255,255,0.06)",
-                            whiteSpace: "nowrap",
-                          }}
-                          title={
-                            dmMode === null
-                              ? "Choose a facilitator mode first"
-                              : !tableAccepted
-                              ? "Accept the initial table first"
-                              : "Jump to Player Action"
-                          }
-                        >
-                          ▶ Play
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* Chapters */}
-                    <div>
-                      <div className="muted" style={{ fontSize: 12, marginBottom: 8 }}>
-                        Chapters
-                      </div>
-
-                      <div
-                        style={{
-                          display: "grid",
-                          gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
-                          gap: 8,
-                        }}
-                      >
-                        {chapterButtons.map((b) => {
-                          const active = activeSection === b.id;
-                          const needsSetup =
-                            b.id === "pressure" ||
-                            b.id === "map" ||
-                            b.id === "combat" ||
-                            b.id === "action" ||
-                            b.id === "resolution" ||
-                            b.id === "canon" ||
-                            b.id === "ledger";
-
-                          const disabled = needsSetup && (dmMode === null || !tableAccepted);
-
-                          return (
-                            <button
-                              key={b.id}
-                              onClick={() => {
-                                setActiveSection(b.id);
-                                scrollToSection(b.id);
-                              }}
-                              disabled={disabled}
-                              style={{
-                                padding: "10px 10px",
-                                borderRadius: 10,
-                                border: active
-                                  ? "1px solid rgba(138,180,255,0.55)"
-                                  : "1px solid rgba(255,255,255,0.10)",
-                                background: active ? "rgba(138,180,255,0.10)" : "rgba(255,255,255,0.04)",
-                                textAlign: "left",
-                                opacity: disabled ? 0.55 : 1,
-                              }}
-                              aria-label={`Go to ${sectionLabel(b.id)}`}
-                              title={disabled ? "Choose a mode and accept the table first" : b.hint}
-                            >
-                              <div style={{ fontWeight: 800, fontSize: 12 }}>{sectionLabel(b.id)}</div>
-                              <div className="muted" style={{ fontSize: 11, marginTop: 4, lineHeight: 1.2 }}>
-                                {b.hint}
-                              </div>
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
+            onPlayJump={() => {
+              setActiveSection("action");
+              scrollToSection("action");
+            }}
+            onSelectMode={selectMode}
+            onNavigate={(id) => {
+              setActiveSection(id);
+              scrollToSection(id);
+            }}
+          />
 
           {/* TABLE (hidden until mode selected) */}
           <div id={anchorId("table")} style={{ scrollMarginTop: 90 }}>
-            {/* NOTE: removed the early <Disclaimer /> render to avoid duplication and huge blank-feel */}
-
-            {dmMode !== null && initialTable && !tableAccepted && (
-              <div
-                style={{
-                  borderRadius: 14,
-                  border: "1px solid rgba(255,255,255,0.12)",
-                  background:
-                    "linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.03) 55%, rgba(0,0,0,0.18))",
-                  boxShadow: "0 24px 90px rgba(0,0,0,0.60)",
-                  overflow: "hidden",
-                }}
-              >
-                <div
-                  style={{
-                    height: 2,
-                    background:
-                      "linear-gradient(90deg, rgba(255,170,90,0.55), rgba(138,180,255,0.55) 55%, rgba(255,120,120,0.40))",
-                  }}
-                />
-
-                <div style={{ padding: 16 }}>
-                  <div
-                    style={{
-                      display: "flex",
-                      justifyContent: "space-between",
-                      alignItems: "flex-start",
-                      gap: 12,
-                      flexWrap: "wrap",
-                    }}
-                  >
-                    <div>
-                      <div style={{ fontWeight: 900, fontSize: 18, letterSpacing: 0.2 }}>Step 2 — Initial Table</div>
-                      <div className="muted" style={{ marginTop: 4, fontSize: 12, lineHeight: 1.35 }}>
-                        Review the scene setup. <strong>Accept</strong> to unlock Pressure → Map → Combat → Action → Resolution.
-                      </div>
-                    </div>
-
-                    <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                      <span
-                        style={{
-                          padding: "6px 10px",
-                          borderRadius: 999,
-                          border: "1px solid rgba(255,255,255,0.14)",
-                          background: "rgba(0,0,0,0.22)",
-                          fontSize: 12,
-                          fontWeight: 900,
-                        }}
-                      >
-                        {dmMode === "human" ? "Human DM" : "Solace-neutral"}
-                      </span>
-
-                      <span
-                        className="muted"
-                        style={{
-                          padding: "6px 10px",
-                          borderRadius: 999,
-                          border: "1px solid rgba(255,255,255,0.10)",
-                          background: "rgba(255,255,255,0.04)",
-                          fontSize: 12,
-                        }}
-                      >
-                        Status: <strong style={{ color: "rgba(255,255,255,0.92)" }}>Locked</strong>
-                      </span>
-                    </div>
-                  </div>
-
-                  <div style={{ marginTop: 14 }}>
-                    {dmMode === "solace-neutral" && (
-                      <div className="muted" style={{ fontSize: 12, marginBottom: 8 }}>
-                        Table-play narration (finalized)
-                      </div>
-                    )}
-                    {dmMode === "human" && (
-                      <div className="muted" style={{ fontSize: 12, marginBottom: 8 }}>
-                        Solace setup helper (editable)
-                      </div>
-                    )}
-
-                    {dmMode === "solace-neutral" ? (
-                      <div
-                        style={{
-                          whiteSpace: "pre-wrap",
-                          lineHeight: 1.7,
-                          padding: "18px 18px",
-                          borderRadius: 12,
-                          border: "1px solid rgba(255,255,255,0.10)",
-                          background:
-                            "radial-gradient(900px 240px at 18% 0%, rgba(255,170,90,0.10), transparent 60%), radial-gradient(900px 240px at 82% 0%, rgba(138,180,255,0.10), transparent 60%), rgba(0,0,0,0.26)",
-                          boxShadow: "inset 0 1px 0 rgba(255,255,255,0.06)",
-                          fontSize: 14,
-                        }}
-                      >
-                        {tableDraftText}
-                      </div>
-                    ) : (
-                      <textarea
-                        rows={10}
-                        value={tableDraftText}
-                        onChange={(e) => setTableDraftText(e.target.value)}
-                        style={{
-                          width: "100%",
-                          minHeight: 220,
-                          boxSizing: "border-box",
-                          lineHeight: 1.6,
-                          padding: "14px 14px",
-                          borderRadius: 12,
-                          border: "1px solid rgba(255,255,255,0.14)",
-                          background: "rgba(0,0,0,0.22)",
-                          color: "inherit",
-                        }}
-                      />
-                    )}
-
-                    <details style={{ marginTop: 12 }} open={dmMode === "human"}>
-                      <summary className="muted" style={{ cursor: "pointer" }}>
-                        Underlying table signals
-                        {dmMode === "solace-neutral" && (
-                          <span className="muted" style={{ marginLeft: 8, fontSize: 12 }}>
-                            (optional)
-                          </span>
-                        )}
-                      </summary>
-
-                      <div
-                        style={{
-                          marginTop: 10,
-                          borderRadius: 12,
-                          border: "1px solid rgba(255,255,255,0.10)",
-                          background: "rgba(255,255,255,0.03)",
-                          padding: "12px 12px",
-                        }}
-                      >
-                        <p style={{ marginTop: 0 }}>{initialTable.openingFrame}</p>
-                        <p className="muted" style={{ marginTop: 6 }}>
-                          Traits: {initialTable.locationTraits.join(", ")}
-                        </p>
-                        <ul style={{ marginTop: 8 }}>
-                          {initialTable.latentFactions.map((f, i) => (
-                            <li key={i}>
-                              <strong>{f.name}</strong> — {f.desire} ({f.pressure})
-                            </li>
-                          ))}
-                        </ul>
-                        <p className="muted" style={{ marginTop: 8 }}>
-                          Oddity: {initialTable.environmentalOddities.join(", ")}
-                        </p>
-                        <p className="muted" style={{ marginTop: 6, marginBottom: 0 }}>
-                          Hook: {initialTable.dormantHooks.join(", ")}
-                        </p>
-                      </div>
-                    </details>
-
-                    <div
-                      style={{
-                        marginTop: 14,
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "space-between",
-                        gap: 12,
-                        flexWrap: "wrap",
-                        padding: "12px 12px",
-                        borderRadius: 12,
-                        border: "1px solid rgba(255,255,255,0.10)",
-                        background: "rgba(0,0,0,0.20)",
-                      }}
-                    >
-                      <div style={{ minWidth: 240 }}>
-                        <div style={{ fontWeight: 900, fontSize: 12 }}>Unlock gate</div>
-                        <div className="muted" style={{ fontSize: 12, marginTop: 2, lineHeight: 1.35 }}>
-                          Accepting the table unlocks the rest of the demo flow.
-                        </div>
-                      </div>
-
-                      <button
-                        onClick={() => {
-                          setTableAccepted(true);
-                          setActiveSection("pressure");
-                          queueMicrotask(() => scrollToSection("pressure"));
-                        }}
-                        style={{
-                          padding: "12px 14px",
-                          borderRadius: 12,
-                          border: "1px solid rgba(255,255,255,0.18)",
-                          background: "linear-gradient(180deg, rgba(255,255,255,0.10), rgba(255,255,255,0.06))",
-                          boxShadow: "0 18px 40px rgba(0,0,0,0.45)",
-                          fontWeight: 900,
-                          whiteSpace: "nowrap",
-                        }}
-                      >
-                        Accept Table → Unlock
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
+            <InitialTableSection
+              dmMode={dmMode}
+              initialTable={initialTable}
+              tableAccepted={tableAccepted}
+              tableDraftText={tableDraftText}
+              setTableDraftText={setTableDraftText}
+              onAccept={() => {
+                setTableAccepted(true);
+                setActiveSection("pressure");
+                queueMicrotask(() => scrollToSection("pressure"));
+              }}
+            />
           </div>
 
           {(dmMode !== null && (dmMode === "human" || tableAccepted)) && (
@@ -1785,7 +838,8 @@ export default function DemoPage() {
                   {derivedCombat && (
                     <div style={{ marginTop: 12 }}>
                       <div className="muted">
-                        Combat: <strong>{derivedCombat.combatId}</strong> · Round <strong>{derivedCombat.round}</strong>
+                        Combat: <strong>{derivedCombat.combatId}</strong> · Round{" "}
+                        <strong>{derivedCombat.round}</strong>
                         {activeCombatantSpec && (
                           <>
                             {" "}
@@ -1839,7 +893,8 @@ export default function DemoPage() {
                 <CardSection title="Player Action">
                   {combatActive && isEnemyTurn && dmMode !== "human" && (
                     <p className="muted" style={{ marginTop: 0 }}>
-                      Enemy turn. In Solace-neutral, the player cannot declare enemy intent. Switch to Human DM to enter enemy intent.
+                      Enemy turn. In Solace-neutral, the player cannot declare enemy intent. Switch to Human DM to enter
+                      enemy intent.
                     </p>
                   )}
 
@@ -1929,7 +984,12 @@ export default function DemoPage() {
                             Direction (recommended):
                             <select
                               value={explorationDraft.direction}
-                              onChange={(e) => setExplorationDraft((p) => ({ ...p, direction: e.target.value as any }))}
+                              onChange={(e) =>
+                                setExplorationDraft((p) => ({
+                                  ...p,
+                                  direction: e.target.value as any,
+                                }))
+                              }
                             >
                               <option value="none">None</option>
                               <option value="north">North (↑)</option>
@@ -1940,7 +1000,8 @@ export default function DemoPage() {
                           </label>
 
                           <div className="muted" style={{ paddingBottom: 4 }}>
-                            Bounds: <strong>0..{MAP_W - 1}</strong> / <strong>0..{MAP_H - 1}</strong> · Suggested destination:{" "}
+                            Bounds: <strong>0..{MAP_W - 1}</strong> / <strong>0..{MAP_H - 1}</strong> · Suggested
+                            destination:{" "}
                             <strong>{suggestedTo ? `(${suggestedTo.x},${suggestedTo.y})` : "(out of bounds / none)"}</strong>
                           </div>
                         </div>
@@ -1950,7 +1011,12 @@ export default function DemoPage() {
                         <input
                           type="checkbox"
                           checked={explorationDraft.enableReveal}
-                          onChange={(e) => setExplorationDraft((p) => ({ ...p, enableReveal: e.target.checked }))}
+                          onChange={(e) =>
+                            setExplorationDraft((p) => ({
+                              ...p,
+                              enableReveal: e.target.checked,
+                            }))
+                          }
                         />
                         Reveal tiles (MAP_REVEALED)
                       </label>
@@ -1960,7 +1026,12 @@ export default function DemoPage() {
                           Reveal radius:
                           <select
                             value={explorationDraft.revealRadius}
-                            onChange={(e) => setExplorationDraft((p) => ({ ...p, revealRadius: Number(e.target.value) as any }))}
+                            onChange={(e) =>
+                              setExplorationDraft((p) => ({
+                                ...p,
+                                revealRadius: Number(e.target.value) as any,
+                              }))
+                            }
                           >
                             <option value={0}>0 (none)</option>
                             <option value={1}>1 (tight)</option>
@@ -1973,7 +1044,12 @@ export default function DemoPage() {
                         <input
                           type="checkbox"
                           checked={explorationDraft.enableMark}
-                          onChange={(e) => setExplorationDraft((p) => ({ ...p, enableMark: e.target.checked }))}
+                          onChange={(e) =>
+                            setExplorationDraft((p) => ({
+                              ...p,
+                              enableMark: e.target.checked,
+                            }))
+                          }
                         />
                         Mark tile (MAP_MARKED)
                       </label>
@@ -1985,7 +1061,10 @@ export default function DemoPage() {
                             <select
                               value={explorationDraft.markKind}
                               onChange={(e) =>
-                                setExplorationDraft((p) => ({ ...p, markKind: e.target.value as MapMarkKind }))
+                                setExplorationDraft((p) => ({
+                                  ...p,
+                                  markKind: e.target.value as MapMarkKind,
+                                }))
                               }
                             >
                               <option value="door">door 🚪</option>
@@ -2000,7 +1079,12 @@ export default function DemoPage() {
                             Note (optional):
                             <input
                               value={explorationDraft.markNote}
-                              onChange={(e) => setExplorationDraft((p) => ({ ...p, markNote: e.target.value }))}
+                              onChange={(e) =>
+                                setExplorationDraft((p) => ({
+                                  ...p,
+                                  markNote: e.target.value,
+                                }))
+                              }
                               placeholder="e.g., locked / sealed / humming / glyph"
                             />
                           </label>
@@ -2038,12 +1122,9 @@ export default function DemoPage() {
             </>
           )}
 
-          {/* Single Disclaimer render (no duplicates) */}
-          <div style={{ marginTop: 18, opacity: 0.92 }}>
-            <Disclaimer />
-          </div>
+          <Disclaimer />
         </StewardedShell>
       </div>
-    </div>
+    </AmbientBackground>
   );
 }
