@@ -5,15 +5,14 @@
 // Demo Page — Stewarded Play (Full Governed Flow)
 // ------------------------------------------------------------
 //
-// UX UPGRADES (requested):
-// 1) Move Facilitation Mode selector up into the hero empty space
-// 2) Hide the Initial Table section until a facilitator mode is explicitly selected
-//    - Once selected, reveal the Initial Table area and auto-scroll to it
-// 3) Elevate the Initial Table view so it feels like a “ceremony checkpoint”
-//    - Clear Step 2 framing + mode badge + “accept to unlock” instruction
-//    - Narration becomes primary; signals become secondary (collapsed by default in Solace-neutral)
-//    - “Accept Table” becomes a primary CTA row (status + big button)
-//    - Cleaner spacing + stronger hierarchy
+// Focus fixes (requested):
+// A) Top header area: make the title/roles feel like they “belong” to the hero card
+//    - Wrap ModeHeader inside the same styled surface as the hero (single “stage”)
+//    - Reduce the floating-on-background feeling with shared border/background/shadow
+//
+// B) Bottom disclaimer area: remove duplication + reduce visual weight
+//    - Ensure Disclaimer renders exactly once (at the bottom)
+//    - Replace the early “dmMode null” Disclaimer with a small inline gate note
 //
 // ------------------------------------------------------------
 
@@ -1025,9 +1024,7 @@ export default function DemoPage() {
           pointerEvents: "none",
           background: [
             `radial-gradient(520px 820px at 8% 55%, rgba(255,170,90,${torchAlphaLeft.toFixed(3)}), transparent 62%)`,
-            `radial-gradient(460px 760px at 92% 60%, rgba(255,150,70,${torchAlphaRight.toFixed(
-              3
-            )}), transparent 60%)`,
+            `radial-gradient(460px 760px at 92% 60%, rgba(255,150,70,${torchAlphaRight.toFixed(3)}), transparent 60%)`,
             "radial-gradient(700px 520px at 50% 110%, rgba(255,140,80,0.06), transparent 65%)",
           ].join(", "),
           mixBlendMode: "screen",
@@ -1054,291 +1051,326 @@ export default function DemoPage() {
 
       <div style={{ position: "relative", zIndex: 1 }}>
         <StewardedShell>
-          <ModeHeader
-            title="Stewarded Play — Full Flow"
-            onShare={shareCanon}
-            roles={[
-              { label: "Player", description: "Declares intent" },
-              { label: "Solace", description: "Prepares the resolution and narrates outcome" },
-              { label: "Arbiter", description: "Commits canon" },
-            ]}
-          />
-
-          {/* HERO + DUNGEON IMAGE + CHAPTER NAV + MODE SELECTOR (moved up) */}
+          {/* -----------------------------
+              Unified “Stage” surface:
+              ModeHeader + Hero share one card
+             ----------------------------- */}
           <div
             style={{
-              borderRadius: 12,
+              borderRadius: 14,
               border: "1px solid rgba(255,255,255,0.10)",
               background:
-                "radial-gradient(1200px 240px at 20% 0%, rgba(138,180,255,0.20), transparent 60%), radial-gradient(900px 220px at 80% 20%, rgba(255,120,120,0.12), transparent 55%), rgba(255,255,255,0.03)",
-              padding: 18,
+                "radial-gradient(1200px 280px at 18% 0%, rgba(138,180,255,0.22), transparent 60%), radial-gradient(900px 240px at 82% 10%, rgba(255,120,120,0.14), transparent 55%), rgba(255,255,255,0.03)",
+              boxShadow: "0 22px 80px rgba(0,0,0,0.55)",
+              overflow: "hidden",
               marginBottom: 18,
-              boxShadow: "0 18px 60px rgba(0,0,0,0.55)",
             }}
           >
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "minmax(260px, 1.1fr) minmax(260px, 0.9fr)",
-                gap: 14,
-                alignItems: "stretch",
-              }}
-            >
-              {/* LEFT */}
-              <div style={{ minWidth: 0 }}>
-                <div style={{ fontSize: 12, letterSpacing: 0.6, opacity: 0.85 }}>EVENT-SOURCED PLAY · FAIL-CLOSED CANON</div>
+            <div style={{ padding: "14px 14px 0 14px" }}>
+              <ModeHeader
+                title="Stewarded Play — Full Flow"
+                onShare={shareCanon}
+                roles={[
+                  { label: "Player", description: "Declares intent" },
+                  { label: "Solace", description: "Prepares the resolution and narrates outcome" },
+                  { label: "Arbiter", description: "Commits canon" },
+                ]}
+              />
+            </div>
 
-                <div style={{ marginTop: 6, fontSize: 22, fontWeight: 800, lineHeight: 1.15 }}>
-                  A governed tabletop loop: intent → resolution → canon.
-                </div>
-
-                <div className="muted" style={{ marginTop: 10, maxWidth: 760, lineHeight: 1.55 }}>
-                  This page is a working demo. It’s long by nature — so it’s organized into “chapters.” Nothing here rewrites the
-                  world: the UI only renders what the event log contains.
-                </div>
-
-                {/* Progress / steps */}
-                <div style={{ marginTop: 12, display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
-                  <StepPill step="1" label="Choose Mode" done={step1Done} />
-                  <StepPill step="2" label="Accept Table" done={step2Done} />
-                  <StepPill step="3" label="Play Unlocked" done={step3Done} subtle />
-                  {dmMode !== null && (
-                    <span
-                      style={{
-                        marginLeft: 4,
-                        fontSize: 11,
-                        padding: "6px 10px",
-                        borderRadius: 999,
-                        border: "1px solid rgba(255,255,255,0.12)",
-                        background: "rgba(0,0,0,0.20)",
-                      }}
-                      className="muted"
-                    >
-                      Mode: <strong style={{ color: "rgba(255,255,255,0.92)" }}>{modeLabel}</strong>
-                    </span>
-                  )}
-                </div>
-
-                <div style={{ marginTop: 12, display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
-                  <button
-                    onClick={() => {
-                      setActiveSection("mode");
-                      scrollToSection("mode");
-                    }}
-                  >
-                    Start here
-                  </button>
-
-                  <button
-                    onClick={() => {
-                      setActiveSection("action");
-                      scrollToSection("action");
-                    }}
-                    disabled={dmMode === null || !tableAccepted}
-                    title={
-                      dmMode === null ? "Choose a facilitator mode first" : !tableAccepted ? "Accept the initial table first" : "Jump to Player Action"
-                    }
-                  >
-                    Play me
-                  </button>
-
-                  <div className="muted" style={{ fontSize: 12 }}>
-                    outcomes: <strong>{outcomesCount}</strong> · canon events: <strong>{canonCount}</strong>
-                  </div>
-                </div>
-
-                {/* Mode not chosen notice */}
-                {dmMode === null && (
-                  <div
-                    style={{
-                      marginTop: 10,
-                      padding: "10px 12px",
-                      borderRadius: 12,
-                      border: "1px solid rgba(255,255,255,0.10)",
-                      background: "rgba(255,255,255,0.04)",
-                    }}
-                  >
-                    <div style={{ fontWeight: 900, fontSize: 12 }}>Setup required</div>
-                    <div className="muted" style={{ fontSize: 12, marginTop: 2, lineHeight: 1.35 }}>
-                      Choose a facilitation mode to reveal the Initial Table. Then accept the table to unlock play.
-                    </div>
-                  </div>
-                )}
-
-                {/* MODE (moved into hero empty space) */}
+            {/* HERO + DUNGEON IMAGE + CHAPTER NAV + MODE SELECTOR */}
+            <div style={{ padding: 14, paddingTop: 10 }}>
+              <div
+                style={{
+                  borderRadius: 12,
+                  border: "1px solid rgba(255,255,255,0.10)",
+                  background:
+                    "radial-gradient(1200px 240px at 20% 0%, rgba(138,180,255,0.14), transparent 60%), radial-gradient(900px 220px at 80% 20%, rgba(255,120,120,0.10), transparent 55%), rgba(0,0,0,0.18)",
+                  padding: 18,
+                }}
+              >
                 <div
-                  id={anchorId("mode")}
                   style={{
-                    scrollMarginTop: 90,
-                    marginTop: 14,
-                    borderRadius: 12,
-                    border: "1px solid rgba(255,255,255,0.10)",
-                    background: "rgba(0,0,0,0.22)",
-                    padding: 14,
+                    display: "grid",
+                    gridTemplateColumns: "minmax(260px, 1.1fr) minmax(260px, 0.9fr)",
+                    gap: 14,
+                    alignItems: "stretch",
                   }}
                 >
-                  <div style={{ fontWeight: 800, fontSize: 16 }}>Facilitation Mode</div>
-                  <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>
-                    Select who is allowed to declare intent and how options are chosen.
-                  </div>
+                  {/* LEFT */}
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontSize: 12, letterSpacing: 0.6, opacity: 0.85 }}>
+                      EVENT-SOURCED PLAY · FAIL-CLOSED CANON
+                    </div>
 
-                  <div style={{ marginTop: 10, display: "grid", gap: 8 }}>
-                    <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                      <input type="radio" checked={dmMode === "human"} onChange={() => selectMode("human")} />
-                      <span>
-                        <strong>Human DM</strong> <span className="muted">(options visible + editable setup)</span>
-                      </span>
-                    </label>
+                    <div style={{ marginTop: 6, fontSize: 22, fontWeight: 800, lineHeight: 1.15 }}>
+                      A governed tabletop loop: intent → resolution → canon.
+                    </div>
 
-                    <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                      <input type="radio" checked={dmMode === "solace-neutral"} onChange={() => selectMode("solace-neutral")} />
-                      <span>
-                        <strong>Solace</strong> <span className="muted">(Neutral Facilitator)</span>
-                      </span>
-                    </label>
+                    <div className="muted" style={{ marginTop: 10, maxWidth: 760, lineHeight: 1.55 }}>
+                      This page is a working demo. It’s long by nature — so it’s organized into “chapters.” Nothing here
+                      rewrites the world: the UI only renders what the event log contains.
+                    </div>
 
-                    {dmMode !== null && !tableAccepted && (
+                    {/* Progress / steps */}
+                    <div style={{ marginTop: 12, display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
+                      <StepPill step="1" label="Choose Mode" done={step1Done} />
+                      <StepPill step="2" label="Accept Table" done={step2Done} />
+                      <StepPill step="3" label="Play Unlocked" done={step3Done} subtle />
+                      {dmMode !== null && (
+                        <span
+                          style={{
+                            marginLeft: 4,
+                            fontSize: 11,
+                            padding: "6px 10px",
+                            borderRadius: 999,
+                            border: "1px solid rgba(255,255,255,0.12)",
+                            background: "rgba(0,0,0,0.20)",
+                          }}
+                          className="muted"
+                        >
+                          Mode: <strong style={{ color: "rgba(255,255,255,0.92)" }}>{modeLabel}</strong>
+                        </span>
+                      )}
+                    </div>
+
+                    <div style={{ marginTop: 12, display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+                      <button
+                        onClick={() => {
+                          setActiveSection("mode");
+                          scrollToSection("mode");
+                        }}
+                      >
+                        Start here
+                      </button>
+
+                      <button
+                        onClick={() => {
+                          setActiveSection("action");
+                          scrollToSection("action");
+                        }}
+                        disabled={dmMode === null || !tableAccepted}
+                        title={
+                          dmMode === null
+                            ? "Choose a facilitator mode first"
+                            : !tableAccepted
+                            ? "Accept the initial table first"
+                            : "Jump to Player Action"
+                        }
+                      >
+                        Play me
+                      </button>
+
+                      <div className="muted" style={{ fontSize: 12 }}>
+                        outcomes: <strong>{outcomesCount}</strong> · canon events: <strong>{canonCount}</strong>
+                      </div>
+                    </div>
+
+                    {/* Mode not chosen notice (small inline gate note, NOT Disclaimer) */}
+                    {dmMode === null && (
                       <div
-                        className="muted"
                         style={{
-                          fontSize: 12,
-                          marginTop: 6,
-                          padding: "10px 10px",
-                          borderRadius: 10,
+                          marginTop: 10,
+                          padding: "10px 12px",
+                          borderRadius: 12,
                           border: "1px solid rgba(255,255,255,0.10)",
                           background: "rgba(255,255,255,0.04)",
                         }}
                       >
-                        Next: review the Initial Table and click <strong>Accept</strong> to unlock play.
+                        <div style={{ fontWeight: 900, fontSize: 12 }}>Setup required</div>
+                        <div className="muted" style={{ fontSize: 12, marginTop: 2, lineHeight: 1.35 }}>
+                          Choose a facilitation mode to reveal the Initial Table. Then accept the table to unlock play.
+                        </div>
                       </div>
                     )}
-                  </div>
-                </div>
-              </div>
 
-              {/* RIGHT */}
-              <div style={{ minWidth: 0, display: "grid", gap: 10 }}>
-                {/* Image */}
-                <div
-                  style={{
-                    borderRadius: 12,
-                    overflow: "hidden",
-                    border: "1px solid rgba(255,255,255,0.10)",
-                    background: "rgba(0,0,0,0.22)",
-                    position: "relative",
-                    minHeight: 190,
-                  }}
-                >
-                  <div
-                    style={{
-                      position: "absolute",
-                      inset: 0,
-                      backgroundImage: "url('/Hero_dungeon.png')",
-                      backgroundSize: "cover",
-                      backgroundPosition: "center",
-                      filter: "contrast(1.05) saturate(1.05)",
-                      transform: "scale(1.02)",
-                    }}
-                  />
-                  <div
-                    style={{
-                      position: "absolute",
-                      inset: 0,
-                      background: "linear-gradient(90deg, rgba(0,0,0,0.70), rgba(0,0,0,0.30) 55%, rgba(0,0,0,0.65))",
-                    }}
-                  />
-                  <div
-                    style={{
-                      position: "absolute",
-                      inset: 0,
-                      display: "flex",
-                      alignItems: "flex-end",
-                      justifyContent: "space-between",
-                      padding: 12,
-                      gap: 10,
-                    }}
-                  >
-                    <div style={{ minWidth: 0 }}>
-                      <div style={{ fontWeight: 800, fontSize: 14 }}>Enter the dungeon</div>
-                      <div className="muted" style={{ fontSize: 12, marginTop: 2 }}>
-                        You declare intent. The world remembers only what canon records.
+                    {/* MODE (moved into hero empty space) */}
+                    <div
+                      id={anchorId("mode")}
+                      style={{
+                        scrollMarginTop: 90,
+                        marginTop: 14,
+                        borderRadius: 12,
+                        border: "1px solid rgba(255,255,255,0.10)",
+                        background: "rgba(0,0,0,0.22)",
+                        padding: 14,
+                      }}
+                    >
+                      <div style={{ fontWeight: 800, fontSize: 16 }}>Facilitation Mode</div>
+                      <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>
+                        Select who is allowed to declare intent and how options are chosen.
+                      </div>
+
+                      <div style={{ marginTop: 10, display: "grid", gap: 8 }}>
+                        <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                          <input type="radio" checked={dmMode === "human"} onChange={() => selectMode("human")} />
+                          <span>
+                            <strong>Human DM</strong> <span className="muted">(options visible + editable setup)</span>
+                          </span>
+                        </label>
+
+                        <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                          <input
+                            type="radio"
+                            checked={dmMode === "solace-neutral"}
+                            onChange={() => selectMode("solace-neutral")}
+                          />
+                          <span>
+                            <strong>Solace</strong> <span className="muted">(Neutral Facilitator)</span>
+                          </span>
+                        </label>
+
+                        {dmMode !== null && !tableAccepted && (
+                          <div
+                            className="muted"
+                            style={{
+                              fontSize: 12,
+                              marginTop: 6,
+                              padding: "10px 10px",
+                              borderRadius: 10,
+                              border: "1px solid rgba(255,255,255,0.10)",
+                              background: "rgba(255,255,255,0.04)",
+                            }}
+                          >
+                            Next: review the Initial Table and click <strong>Accept</strong> to unlock play.
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* RIGHT */}
+                  <div style={{ minWidth: 0, display: "grid", gap: 10 }}>
+                    {/* Image */}
+                    <div
+                      style={{
+                        borderRadius: 12,
+                        overflow: "hidden",
+                        border: "1px solid rgba(255,255,255,0.10)",
+                        background: "rgba(0,0,0,0.22)",
+                        position: "relative",
+                        minHeight: 190,
+                      }}
+                    >
+                      <div
+                        style={{
+                          position: "absolute",
+                          inset: 0,
+                          backgroundImage: "url('/Hero_dungeon.png')",
+                          backgroundSize: "cover",
+                          backgroundPosition: "center",
+                          filter: "contrast(1.05) saturate(1.05)",
+                          transform: "scale(1.02)",
+                        }}
+                      />
+                      <div
+                        style={{
+                          position: "absolute",
+                          inset: 0,
+                          background:
+                            "linear-gradient(90deg, rgba(0,0,0,0.70), rgba(0,0,0,0.30) 55%, rgba(0,0,0,0.65))",
+                        }}
+                      />
+                      <div
+                        style={{
+                          position: "absolute",
+                          inset: 0,
+                          display: "flex",
+                          alignItems: "flex-end",
+                          justifyContent: "space-between",
+                          padding: 12,
+                          gap: 10,
+                        }}
+                      >
+                        <div style={{ minWidth: 0 }}>
+                          <div style={{ fontWeight: 800, fontSize: 14 }}>Enter the dungeon</div>
+                          <div className="muted" style={{ fontSize: 12, marginTop: 2 }}>
+                            You declare intent. The world remembers only what canon records.
+                          </div>
+                        </div>
+
+                        <button
+                          onClick={() => {
+                            setActiveSection("action");
+                            scrollToSection("action");
+                          }}
+                          disabled={dmMode === null || !tableAccepted}
+                          style={{
+                            padding: "10px 12px",
+                            borderRadius: 10,
+                            border: "1px solid rgba(255,255,255,0.14)",
+                            background: "rgba(255,255,255,0.06)",
+                            whiteSpace: "nowrap",
+                          }}
+                          title={
+                            dmMode === null
+                              ? "Choose a facilitator mode first"
+                              : !tableAccepted
+                              ? "Accept the initial table first"
+                              : "Jump to Player Action"
+                          }
+                        >
+                          ▶ Play
+                        </button>
                       </div>
                     </div>
 
-                    <button
-                      onClick={() => {
-                        setActiveSection("action");
-                        scrollToSection("action");
-                      }}
-                      disabled={dmMode === null || !tableAccepted}
-                      style={{
-                        padding: "10px 12px",
-                        borderRadius: 10,
-                        border: "1px solid rgba(255,255,255,0.14)",
-                        background: "rgba(255,255,255,0.06)",
-                        whiteSpace: "nowrap",
-                      }}
-                      title={
-                        dmMode === null ? "Choose a facilitator mode first" : !tableAccepted ? "Accept the initial table first" : "Jump to Player Action"
-                      }
-                    >
-                      ▶ Play
-                    </button>
-                  </div>
-                </div>
+                    {/* Chapters */}
+                    <div>
+                      <div className="muted" style={{ fontSize: 12, marginBottom: 8 }}>
+                        Chapters
+                      </div>
 
-                {/* Chapters */}
-                <div>
-                  <div className="muted" style={{ fontSize: 12, marginBottom: 8 }}>
-                    Chapters
-                  </div>
+                      <div
+                        style={{
+                          display: "grid",
+                          gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+                          gap: 8,
+                        }}
+                      >
+                        {chapterButtons.map((b) => {
+                          const active = activeSection === b.id;
+                          const needsSetup =
+                            b.id === "pressure" ||
+                            b.id === "map" ||
+                            b.id === "combat" ||
+                            b.id === "action" ||
+                            b.id === "resolution" ||
+                            b.id === "canon" ||
+                            b.id === "ledger";
 
-                  <div
-                    style={{
-                      display: "grid",
-                      gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
-                      gap: 8,
-                    }}
-                  >
-                    {chapterButtons.map((b) => {
-                      const active = activeSection === b.id;
-                      const needsSetup =
-                        b.id === "pressure" ||
-                        b.id === "map" ||
-                        b.id === "combat" ||
-                        b.id === "action" ||
-                        b.id === "resolution" ||
-                        b.id === "canon" ||
-                        b.id === "ledger";
+                          const disabled = needsSetup && (dmMode === null || !tableAccepted);
 
-                      const disabled = needsSetup && (dmMode === null || !tableAccepted);
-
-                      return (
-                        <button
-                          key={b.id}
-                          onClick={() => {
-                            setActiveSection(b.id);
-                            scrollToSection(b.id);
-                          }}
-                          disabled={disabled}
-                          style={{
-                            padding: "10px 10px",
-                            borderRadius: 10,
-                            border: active ? "1px solid rgba(138,180,255,0.55)" : "1px solid rgba(255,255,255,0.10)",
-                            background: active ? "rgba(138,180,255,0.10)" : "rgba(255,255,255,0.04)",
-                            textAlign: "left",
-                            opacity: disabled ? 0.55 : 1,
-                          }}
-                          aria-label={`Go to ${sectionLabel(b.id)}`}
-                          title={disabled ? "Choose a mode and accept the table first" : b.hint}
-                        >
-                          <div style={{ fontWeight: 800, fontSize: 12 }}>{sectionLabel(b.id)}</div>
-                          <div className="muted" style={{ fontSize: 11, marginTop: 4, lineHeight: 1.2 }}>
-                            {b.hint}
-                          </div>
-                        </button>
-                      );
-                    })}
+                          return (
+                            <button
+                              key={b.id}
+                              onClick={() => {
+                                setActiveSection(b.id);
+                                scrollToSection(b.id);
+                              }}
+                              disabled={disabled}
+                              style={{
+                                padding: "10px 10px",
+                                borderRadius: 10,
+                                border: active
+                                  ? "1px solid rgba(138,180,255,0.55)"
+                                  : "1px solid rgba(255,255,255,0.10)",
+                                background: active ? "rgba(138,180,255,0.10)" : "rgba(255,255,255,0.04)",
+                                textAlign: "left",
+                                opacity: disabled ? 0.55 : 1,
+                              }}
+                              aria-label={`Go to ${sectionLabel(b.id)}`}
+                              title={disabled ? "Choose a mode and accept the table first" : b.hint}
+                            >
+                              <div style={{ fontWeight: 800, fontSize: 12 }}>{sectionLabel(b.id)}</div>
+                              <div className="muted" style={{ fontSize: 11, marginTop: 4, lineHeight: 1.2 }}>
+                                {b.hint}
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -1347,9 +1379,8 @@ export default function DemoPage() {
 
           {/* TABLE (hidden until mode selected) */}
           <div id={anchorId("table")} style={{ scrollMarginTop: 90 }}>
-            {dmMode === null && <Disclaimer />}
+            {/* NOTE: removed the early <Disclaimer /> render to avoid duplication and huge blank-feel */}
 
-            {/* “Ceremony Card” wrapper to elevate table */}
             {dmMode !== null && initialTable && !tableAccepted && (
               <div
                 style={{
@@ -1361,7 +1392,6 @@ export default function DemoPage() {
                   overflow: "hidden",
                 }}
               >
-                {/* Accent bar */}
                 <div
                   style={{
                     height: 2,
@@ -1371,7 +1401,6 @@ export default function DemoPage() {
                 />
 
                 <div style={{ padding: 16 }}>
-                  {/* Header row */}
                   <div
                     style={{
                       display: "flex",
@@ -1382,9 +1411,7 @@ export default function DemoPage() {
                     }}
                   >
                     <div>
-                      <div style={{ fontWeight: 900, fontSize: 18, letterSpacing: 0.2 }}>
-                        Step 2 — Initial Table
-                      </div>
+                      <div style={{ fontWeight: 900, fontSize: 18, letterSpacing: 0.2 }}>Step 2 — Initial Table</div>
                       <div className="muted" style={{ marginTop: 4, fontSize: 12, lineHeight: 1.35 }}>
                         Review the scene setup. <strong>Accept</strong> to unlock Pressure → Map → Combat → Action → Resolution.
                       </div>
@@ -1419,7 +1446,6 @@ export default function DemoPage() {
                     </div>
                   </div>
 
-                  {/* Body */}
                   <div style={{ marginTop: 14 }}>
                     {dmMode === "solace-neutral" && (
                       <div className="muted" style={{ fontSize: 12, marginBottom: 8 }}>
@@ -1432,7 +1458,6 @@ export default function DemoPage() {
                       </div>
                     )}
 
-                    {/* Narration primary */}
                     {dmMode === "solace-neutral" ? (
                       <div
                         style={{
@@ -1468,7 +1493,6 @@ export default function DemoPage() {
                       />
                     )}
 
-                    {/* Signals secondary */}
                     <details style={{ marginTop: 12 }} open={dmMode === "human"}>
                       <summary className="muted" style={{ cursor: "pointer" }}>
                         Underlying table signals
@@ -1508,7 +1532,6 @@ export default function DemoPage() {
                       </div>
                     </details>
 
-                    {/* Primary CTA row */}
                     <div
                       style={{
                         marginTop: 14,
@@ -1540,8 +1563,7 @@ export default function DemoPage() {
                           padding: "12px 14px",
                           borderRadius: 12,
                           border: "1px solid rgba(255,255,255,0.18)",
-                          background:
-                            "linear-gradient(180deg, rgba(255,255,255,0.10), rgba(255,255,255,0.06))",
+                          background: "linear-gradient(180deg, rgba(255,255,255,0.10), rgba(255,255,255,0.06))",
                           boxShadow: "0 18px 40px rgba(0,0,0,0.45)",
                           fontWeight: 900,
                           whiteSpace: "nowrap",
@@ -1682,7 +1704,11 @@ export default function DemoPage() {
                                 onClick={() => removeEnemyGroup(g)}
                                 aria-label={`Remove ${g}`}
                                 disabled={combatActive}
-                                style={{ padding: "0 8px", borderRadius: 999, border: "1px solid rgba(255,255,255,0.12)" }}
+                                style={{
+                                  padding: "0 8px",
+                                  borderRadius: 999,
+                                  border: "1px solid rgba(255,255,255,0.12)",
+                                }}
                               >
                                 ×
                               </button>
@@ -1780,7 +1806,9 @@ export default function DemoPage() {
                               style={{
                                 padding: "10px 12px",
                                 borderRadius: 8,
-                                border: active ? "1px solid rgba(138,180,255,0.55)" : "1px solid rgba(255,255,255,0.10)",
+                                border: active
+                                  ? "1px solid rgba(138,180,255,0.55)"
+                                  : "1px solid rgba(255,255,255,0.10)",
                                 background: active ? "rgba(138,180,255,0.10)" : "rgba(255,255,255,0.04)",
                                 display: "flex",
                                 justifyContent: "space-between",
@@ -2010,7 +2038,10 @@ export default function DemoPage() {
             </>
           )}
 
-          <Disclaimer />
+          {/* Single Disclaimer render (no duplicates) */}
+          <div style={{ marginTop: 18, opacity: 0.92 }}>
+            <Disclaimer />
+          </div>
         </StewardedShell>
       </div>
     </div>
