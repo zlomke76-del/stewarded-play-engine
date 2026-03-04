@@ -45,14 +45,7 @@ import AmbientBackground from "./components/AmbientBackground";
 import DemoHero from "./components/DemoHero";
 import InitialTableSection from "./components/InitialTableSection";
 
-import {
-  DMMode,
-  DemoSectionId,
-  DiceMode,
-  RollSource,
-  InitialTable,
-  ExplorationDraft,
-} from "./demoTypes";
+import { DMMode, DemoSectionId, DiceMode, RollSource, InitialTable, ExplorationDraft } from "./demoTypes";
 
 import {
   anchorId,
@@ -104,6 +97,13 @@ export default function DemoPage() {
   // Combat renderer trigger (parent-driven)
   const [enemyPlayNonce, setEnemyPlayNonce] = useState(0);
 
+  // (NEW) Enemy telegraph metadata (Solace-neutral only)
+  const [enemyTelegraphHint, setEnemyTelegraphHint] = useState<{
+    enemyName: string;
+    targetName: string;
+    attackStyleHint: "volley" | "beam" | "charge" | "unknown";
+  } | null>(null);
+
   // ----------------------------------------------------------
   // Combat state (derived + ended-aware)
   // ----------------------------------------------------------
@@ -133,10 +133,7 @@ export default function DemoPage() {
   // Exploration draft (auto-prepared AFTER intent + option)
   // ----------------------------------------------------------
 
-  const currentPos = useMemo(
-    () => deriveCurrentPosition(state.events as any[], MAP_W, MAP_H),
-    [state.events]
-  );
+  const currentPos = useMemo(() => deriveCurrentPosition(state.events as any[], MAP_W, MAP_H), [state.events]);
 
   const [explorationDraft, setExplorationDraft] = useState<ExplorationDraft>({
     enableMove: false,
@@ -205,8 +202,7 @@ export default function DemoPage() {
   // Player submits action (intent)
   // ----------------------------------------------------------
 
-  const canPlayerSubmitIntent =
-    dmMode !== null && ((!combatActive || !isEnemyTurn) || dmMode === "human");
+  const canPlayerSubmitIntent = dmMode !== null && ((!combatActive || !isEnemyTurn) || dmMode === "human");
 
   function handlePlayerAction() {
     if (!playerInput.trim()) return;
@@ -244,8 +240,7 @@ export default function DemoPage() {
 
     const here = deriveCurrentPosition(next.events as any[], MAP_W, MAP_H);
 
-    const to =
-      d.enableMove && d.direction !== "none" ? stepFrom(here, d.direction) : null;
+    const to = d.enableMove && d.direction !== "none" ? stepFrom(here, d.direction) : null;
 
     const canMove = to ? withinBounds(to, MAP_W, MAP_H) : false;
 
@@ -264,9 +259,7 @@ export default function DemoPage() {
           timestamp: Date.now(),
           actor: "arbiter",
           type: "MAP_REVEALED",
-          payload: {
-            tiles: revealRadius(to, d.revealRadius, MAP_W, MAP_H),
-          } as any,
+          payload: { tiles: revealRadius(to, d.revealRadius, MAP_W, MAP_H) } as any,
         });
       }
 
@@ -290,9 +283,7 @@ export default function DemoPage() {
         timestamp: Date.now(),
         actor: "arbiter",
         type: "MAP_REVEALED",
-        payload: {
-          tiles: revealRadius(here, d.revealRadius, MAP_W, MAP_H),
-        } as any,
+        payload: { tiles: revealRadius(here, d.revealRadius, MAP_W, MAP_H) } as any,
       });
     }
 
@@ -558,10 +549,7 @@ export default function DemoPage() {
 
   const isHumanDM = dmMode === "human";
 
-  const outcomesCount = useMemo(
-    () => state.events.filter((e: any) => e?.type === "OUTCOME").length,
-    [state.events]
-  );
+  const outcomesCount = useMemo(() => state.events.filter((e: any) => e?.type === "OUTCOME").length, [state.events]);
   const canonCount = useMemo(
     () => state.events.filter((e: any) => e?.type && e?.type !== "OUTCOME").length,
     [state.events]
@@ -610,30 +598,7 @@ export default function DemoPage() {
   }, [playerCount, playerNames]);
 
   // Map demo DMMode -> Resolution panel dmMode (scoped fix: only Solace-neutral locks narration)
-  const resolutionDmMode = useMemo(() => {
-    return dmMode === "solace-neutral" ? "solace_neutral" : "human";
-  }, [dmMode]);
-
-  // Truth anchors for narration (available at resolution time)
-  const resolutionMovement = useMemo(() => {
-    if (!selectedOption) return null;
-    if (!explorationDraft.enableMove) return null;
-    if (!suggestedTo) return null;
-    return {
-      from: currentPos,
-      to: suggestedTo,
-      direction: explorationDraft.direction,
-    };
-  }, [selectedOption, explorationDraft.enableMove, explorationDraft.direction, suggestedTo, currentPos]);
-
-  const resolutionCombat = useMemo(() => {
-    if (!combatActive) return null;
-    return {
-      activeEnemyGroupName: activeEnemyOverlayName,
-      isEnemyTurn,
-      attackStyleHint: "unknown" as const,
-    };
-  }, [combatActive, activeEnemyOverlayName, isEnemyTurn]);
+  const resolutionDmMode = useMemo(() => (dmMode === "solace-neutral" ? "solace_neutral" : "human"), [dmMode]);
 
   return (
     <AmbientBackground>
@@ -641,10 +606,7 @@ export default function DemoPage() {
         <StewardedShell>
           <ModeHeader
             title="Stewarded Play — Full Flow"
-            onShare={() => {
-              navigator.clipboard.writeText(exportCanon(state.events));
-              alert("Canon copied to clipboard.");
-            }}
+            onShare={shareCanon}
             roles={[
               { label: "Player", description: "Declares intent" },
               { label: "Solace", description: "Prepares the resolution and narrates outcome" },
@@ -701,6 +663,7 @@ export default function DemoPage() {
               <div id={anchorId("map")} style={{ scrollMarginTop: 90 }}>
                 <div style={{ position: "relative" }}>
                   <ExplorationMapPanel events={state.events} mapW={MAP_W} mapH={MAP_H} />
+
                   {/* Visual-only combat theater overlay */}
                   <CombatRendererPanel
                     events={state.events}
@@ -727,10 +690,22 @@ export default function DemoPage() {
                         activeEnemyGroupName={activeEnemyOverlayName}
                         activeEnemyGroupId={activeEnemyOverlayId}
                         playerNames={effectivePlayerNames}
-                        onTelegraph={() => setEnemyPlayNonce((n) => n + 1)}
+                        onTelegraph={(info) => {
+                          // Solace-neutral only: drive theater + capture hint for richer narration later
+                          setEnemyTelegraphHint(info);
+                          setEnemyPlayNonce((n) => n + 1);
+                        }}
                         onCommitOutcome={(payload) => handleRecordOutcomeOnly(payload)}
                         onAdvanceTurn={advanceTurn}
                       />
+
+                      {/* Optional tiny debug line (visual only). Safe to remove anytime. */}
+                      {enemyTelegraphHint && (
+                        <div className="muted" style={{ marginTop: 8, fontSize: 12 }}>
+                          Telegraph hint: <strong>{enemyTelegraphHint.attackStyleHint}</strong> · Target{" "}
+                          <strong>{enemyTelegraphHint.targetName}</strong>
+                        </div>
+                      )}
                     </div>
                   )}
 
@@ -746,7 +721,181 @@ export default function DemoPage() {
                     </div>
                   )}
 
-                  {/* ... rest of your combat UI unchanged ... */}
+                  <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "flex-end" }}>
+                    <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                      Players (1–6):
+                      <select
+                        value={playerCount}
+                        onChange={(e) => setPlayerCount(clampInt(Number(e.target.value), 1, 6))}
+                        style={{ minWidth: 140 }}
+                        disabled={combatActive}
+                      >
+                        {PLAYER_COUNTS.map((n) => (
+                          <option key={n} value={n}>
+                            {n}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+
+                    <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                      Player init mod:
+                      <select
+                        value={initModPlayers}
+                        onChange={(e) => setInitModPlayers(Math.trunc(Number(e.target.value)))}
+                        style={{ minWidth: 140 }}
+                        disabled={combatActive}
+                      >
+                        {INIT_MODS.map((n) => (
+                          <option key={n} value={n}>
+                            {n >= 0 ? `+${n}` : `${n}`}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+
+                    <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                      Enemy group init mod:
+                      <select
+                        value={initModEnemies}
+                        onChange={(e) => setInitModEnemies(Math.trunc(Number(e.target.value)))}
+                        style={{ minWidth: 170 }}
+                        disabled={combatActive}
+                      >
+                        {INIT_MODS.map((n) => (
+                          <option key={n} value={n}>
+                            {n >= 0 ? `+${n}` : `${n}`}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+
+                    <div style={{ flex: "1 1 320px", display: "flex", flexDirection: "column", gap: 6 }}>
+                      <span className="muted">Enemy groups</span>
+                      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                        <select
+                          value={enemyGroupSelect}
+                          onChange={(e) => setEnemyGroupSelect(e.target.value)}
+                          style={{ minWidth: 220 }}
+                          disabled={combatActive}
+                        >
+                          {ENEMY_GROUP_LIBRARY.map((g) => (
+                            <option key={g} value={g}>
+                              {g}
+                            </option>
+                          ))}
+                        </select>
+                        <button onClick={() => addEnemyGroup(enemyGroupSelect)} disabled={combatActive}>
+                          Add
+                        </button>
+                        <button onClick={clearEnemyGroups} disabled={combatActive || enemyGroups.length === 0}>
+                          Clear
+                        </button>
+                        <span className="muted" style={{ fontSize: 12 }}>
+                          (max 6)
+                        </span>
+                      </div>
+
+                      {enemyGroups.length > 0 ? (
+                        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8 }}>
+                          {enemyGroups.map((g) => (
+                            <span
+                              key={g}
+                              style={{
+                                display: "inline-flex",
+                                alignItems: "center",
+                                gap: 8,
+                                padding: "6px 10px",
+                                borderRadius: 999,
+                                border: "1px solid rgba(255,255,255,0.12)",
+                                background: "rgba(255,255,255,0.05)",
+                              }}
+                            >
+                              <span>{g}</span>
+                              <button
+                                onClick={() => removeEnemyGroup(g)}
+                                aria-label={`Remove ${g}`}
+                                disabled={combatActive}
+                                style={{
+                                  padding: "0 8px",
+                                  borderRadius: 999,
+                                  border: "1px solid rgba(255,255,255,0.12)",
+                                }}
+                              >
+                                ×
+                              </button>
+                            </span>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="muted" style={{ marginTop: 8 }}>
+                          No enemy groups yet. Add one.
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  <div style={{ marginTop: 14 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
+                      <strong>Players</strong>
+                      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                        <button onClick={randomizePlayerNames} disabled={combatActive}>
+                          🎲 Random names
+                        </button>
+                      </div>
+                    </div>
+
+                    <div
+                      style={{
+                        marginTop: 10,
+                        display: "grid",
+                        gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+                        gap: 10,
+                      }}
+                    >
+                      {Array.from({ length: clampInt(playerCount, 1, 6) }, (_, idx) => {
+                        const i1 = idx + 1;
+                        const value = playerNames[idx] ?? "";
+                        return (
+                          <label key={i1} style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                            <span className="muted">Player {i1} name (optional)</span>
+                            <input
+                              value={value}
+                              disabled={combatActive}
+                              onChange={(e) => {
+                                const v = e.target.value;
+                                setPlayerNames((prev) => {
+                                  const next = [...prev];
+                                  next[idx] = v;
+                                  return next.slice(0, 6);
+                                });
+                              }}
+                              placeholder={`Player ${i1}`}
+                            />
+                          </label>
+                        );
+                      })}
+                    </div>
+
+                    <p className="muted" style={{ marginTop: 10, marginBottom: 0 }}>
+                      Blank names will display as “Player 1…N”. Names are used for initiative labels and canon readability.
+                    </p>
+                  </div>
+
+                  <div style={{ marginTop: 14, display: "flex", gap: 8, flexWrap: "wrap" }}>
+                    <button onClick={startCombatDeterministic} disabled={combatActive}>
+                      Start Combat (Seeded)
+                    </button>
+
+                    {/* In Solace-neutral enemy turns, EnemyTurnResolverPanel advances turns after commit. */}
+                    <button onClick={advanceTurn} disabled={!derivedCombat || combatEnded || (dmMode === "solace-neutral" && isEnemyTurn)}>
+                      Advance Turn
+                    </button>
+
+                    <button onClick={endCombat} disabled={!derivedCombat || combatEnded}>
+                      End Combat
+                    </button>
+                  </div>
 
                   {derivedCombat && (
                     <div style={{ marginTop: 12 }}>
@@ -759,6 +908,40 @@ export default function DemoPage() {
                           </>
                         )}
                       </div>
+
+                      <div style={{ marginTop: 10, display: "grid", gridTemplateColumns: "1fr", gap: 6 }}>
+                        {derivedCombat.order.map((id, idx) => {
+                          const spec = derivedCombat.participants.find((p) => p.id === id) ?? null;
+                          const roll = derivedCombat.initiative.find((r) => r.combatantId === id) ?? null;
+                          const active = derivedCombat.activeCombatantId === id;
+
+                          return (
+                            <div
+                              key={id}
+                              style={{
+                                padding: "10px 12px",
+                                borderRadius: 8,
+                                border: active ? "1px solid rgba(138,180,255,0.55)" : "1px solid rgba(255,255,255,0.10)",
+                                background: active ? "rgba(138,180,255,0.10)" : "rgba(255,255,255,0.04)",
+                                display: "flex",
+                                justifyContent: "space-between",
+                                alignItems: "center",
+                                gap: 10,
+                              }}
+                            >
+                              <div>
+                                <strong>
+                                  {idx + 1}. {spec ? formatCombatantLabel(spec) : id}
+                                </strong>
+                                {active && <span className="muted">{"  "}← active</span>}
+                              </div>
+                              <div className="muted">
+                                {roll ? `Init ${roll.total} (d20 ${roll.natural} + ${roll.modifier})` : "Init —"}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
                     </div>
                   )}
                 </CardSection>
@@ -769,8 +952,8 @@ export default function DemoPage() {
                 <CardSection title="Player Action">
                   {combatActive && isEnemyTurn && dmMode !== "human" && (
                     <p className="muted" style={{ marginTop: 0 }}>
-                      Enemy turn. In Solace-neutral, Solace resolves enemy action above (Combat section). After the
-                      outcome is committed, the turn advances automatically.
+                      Enemy turn. In Solace-neutral, Solace resolves enemy action above (Combat section). After the outcome is committed,
+                      the turn advances automatically.
                     </p>
                   )}
 
@@ -828,15 +1011,10 @@ export default function DemoPage() {
 
               {/* RESOLUTION */}
               <div id={anchorId("resolution")} style={{ scrollMarginTop: 90 }}>
-                {/* (your Proposed Exploration Canon Draft card stays as-is) */}
-
                 {selectedOption && (
                   <ResolutionDraftAdvisoryPanel
                     role={role}
                     dmMode={resolutionDmMode}
-                    setupText={tableDraftText}
-                    movement={resolutionMovement}
-                    combat={resolutionCombat}
                     context={{
                       optionDescription: selectedOption.description,
                       optionKind: inferOptionKind(selectedOption.description),
