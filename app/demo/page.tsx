@@ -34,6 +34,7 @@ import {
 import { parseAction } from "@/lib/parser/ActionParser";
 import { generateOptions, Option } from "@/lib/options/OptionGenerator";
 import { exportCanon } from "@/lib/export/exportCanon";
+import CanonEventsPanel from "@/components/world/CanonEventsPanel";
 
 import ResolutionDraftAdvisoryPanel from "@/components/resolution/ResolutionDraftAdvisoryPanel";
 import NextActionHint from "@/components/NextActionHint";
@@ -85,107 +86,6 @@ type RollSource = "manual" | "solace";
 type XY = { x: number; y: number };
 
 type Direction = "north" | "south" | "east" | "west";
-
-// ------------------------------------------------------------
-// CanonEventsPanel (non-OUTCOME canon ledger)
-// ------------------------------------------------------------
-
-type CanonPanelProps = {
-  events: readonly any[];
-};
-
-function fmtXY(xy: any) {
-  if (!xy || typeof xy.x !== "number" || typeof xy.y !== "number") return "(?,?)";
-  return `(${xy.x},${xy.y})`;
-}
-
-function renderCanonEventLine(e: any) {
-  const p: any = e?.payload;
-
-  switch (e?.type) {
-    case "PLAYER_MOVED": {
-      const from = fmtXY(p?.from);
-      const to = fmtXY(p?.to);
-      return `🧭 Move ${from} → ${to}`;
-    }
-    case "MAP_REVEALED": {
-      const tiles = Array.isArray(p?.tiles) ? p.tiles : [];
-      const n = tiles.length;
-      return `🗺️ Reveal ${n} tile${n === 1 ? "" : "s"}`;
-    }
-    case "MAP_MARKED": {
-      const at = fmtXY(p?.at);
-      const kind = typeof p?.kind === "string" ? p.kind : "mark";
-      const note =
-        typeof p?.note === "string" && p.note.trim() ? ` — ${p.note.trim()}` : "";
-      return `📍 Mark ${kind} at ${at}${note}`;
-    }
-    case "COMBAT_STARTED": {
-      const combatId = p?.combatId ? String(p.combatId) : "(unknown)";
-      const participants = Array.isArray(p?.participants) ? p.participants.length : 0;
-      return `⚔️ Combat started (${combatId}) — ${participants} participants`;
-    }
-    case "COMBAT_ENDED": {
-      const combatId = p?.combatId ? String(p.combatId) : "(combat)";
-      return `🏁 Combat ended (${combatId})`;
-    }
-    case "INITIATIVE_ROLLED": {
-      const who = p?.combatantId ? String(p.combatantId) : "(combatant)";
-      const total = typeof p?.total === "number" ? p.total : "?";
-      const natural = typeof p?.natural === "number" ? p.natural : "?";
-      const mod = typeof p?.modifier === "number" ? p.modifier : "?";
-      return `🎲 Initiative ${who}: ${total} (d20 ${natural} + ${mod})`;
-    }
-    case "TURN_ADVANCED": {
-      const combatId = p?.combatId ? String(p.combatId) : "(combat)";
-      const round = typeof p?.round === "number" ? p.round : "?";
-      const index = typeof p?.index === "number" ? p.index : "?";
-      return `⏭️ Turn advanced — ${combatId} (round ${round}, index ${index})`;
-    }
-    default: {
-      const safe = (() => {
-        try {
-          return JSON.stringify(p ?? {}, null, 0);
-        } catch {
-          return "{}";
-        }
-      })();
-      return `• ${String(e?.type ?? "UNKNOWN")}${safe !== "{}" ? ` — ${safe}` : ""}`;
-    }
-  }
-}
-
-function CanonEventsPanel({ events }: CanonPanelProps) {
-  const canon = (events ?? []).filter((e: any) => e?.type !== "OUTCOME");
-
-  return (
-    <CardSection title="Canon Events">
-      {canon.length === 0 ? (
-        <p className="muted">No canon events yet.</p>
-      ) : (
-        <ul>
-          {canon.map((e: any) => (
-            <li key={e.id} style={{ marginBottom: 10 }}>
-              <div style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
-                <div>
-                  <strong>{renderCanonEventLine(e)}</strong>
-                  <div className="muted" style={{ marginTop: 4 }}>
-                    actor: {e.actor} · type: {e.type}
-                  </div>
-                </div>
-                <div className="muted" style={{ whiteSpace: "nowrap" }}>
-                  {typeof e.timestamp === "number"
-                    ? new Date(e.timestamp).toLocaleTimeString()
-                    : ""}
-                </div>
-              </div>
-            </li>
-          ))}
-        </ul>
-      )}
-    </CardSection>
-  );
-}
 
 // ------------------------------------------------------------
 // Random helpers
