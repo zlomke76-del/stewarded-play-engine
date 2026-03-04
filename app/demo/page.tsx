@@ -609,6 +609,11 @@ export default function DemoPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [playerCount, playerNames]);
 
+  // Map demo DMMode -> Resolution panel dmMode (scoped fix: only Solace-neutral locks narration)
+  const resolutionDmMode = useMemo(() => {
+    return dmMode === "solace-neutral" ? "solace_neutral" : "human";
+  }, [dmMode]);
+
   return (
     <AmbientBackground>
       <div style={{ position: "relative", zIndex: 1 }}>
@@ -701,6 +706,7 @@ export default function DemoPage() {
                         onTelegraph={() => setEnemyPlayNonce((n) => n + 1)}
                         onCommitOutcome={(payload) => handleRecordOutcomeOnly(payload)}
                         onAdvanceTurn={advanceTurn}
+                        onCommitOutcome={(payload) => handleRecordOutcomeOnly(payload)}
                       />
                     </div>
                   )}
@@ -885,7 +891,10 @@ export default function DemoPage() {
                     </button>
 
                     {/* In Solace-neutral enemy turns, EnemyTurnResolverPanel advances turns after commit. */}
-                    <button onClick={advanceTurn} disabled={!derivedCombat || combatEnded || (dmMode === "solace-neutral" && isEnemyTurn)}>
+                    <button
+                      onClick={advanceTurn}
+                      disabled={!derivedCombat || combatEnded || (dmMode === "solace-neutral" && isEnemyTurn)}
+                    >
                       Advance Turn
                     </button>
 
@@ -1159,6 +1168,7 @@ export default function DemoPage() {
                 {selectedOption && (
                   <ResolutionDraftAdvisoryPanel
                     role={role}
+                    dmMode={resolutionDmMode}
                     context={{
                       optionDescription: selectedOption.description,
                       optionKind: inferOptionKind(selectedOption.description),
