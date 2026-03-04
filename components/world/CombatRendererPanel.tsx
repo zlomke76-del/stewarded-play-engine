@@ -6,7 +6,7 @@
 // ------------------------------------------------------------
 // Visual-only combat theater overlay for the Exploration Map.
 // - Reads events + current enemy group name
-// - Plays suspenseful animations (telegraph → fire → impact)
+// - Plays suspenseful animations (telegraph → release → flight → impact)
 // - NEVER writes canon. NEVER mutates state. Renderer only.
 // ------------------------------------------------------------
 
@@ -121,7 +121,7 @@ export default function CombatRendererPanel({
     [events, mapW, mapH]
   );
 
-  // (kept for future branching, currently shared pacing)
+  // Not strictly required for V1 rendering yet, but kept for V2 branching.
   const archetype = useMemo(
     () => guessEnemyArchetype(activeEnemyGroupName),
     [activeEnemyGroupName]
@@ -133,6 +133,7 @@ export default function CombatRendererPanel({
 
     async function go() {
       const enemyUrl = getEnemySprite(activeEnemyGroupName);
+
       const [e, a, i, r] = await Promise.all([
         loadImage(enemyUrl),
         loadImage(Projectiles.arrow),
@@ -141,6 +142,7 @@ export default function CombatRendererPanel({
       ]);
 
       if (!alive) return;
+
       setEnemyImg(e);
       setArrowImg(a);
       setImpactImg(i);
@@ -148,6 +150,7 @@ export default function CombatRendererPanel({
     }
 
     go();
+
     return () => {
       alive = false;
     };
@@ -170,16 +173,14 @@ export default function CombatRendererPanel({
     };
   }
 
-  // Enemy “spawn” positions (left edge, staggered)
+  // Enemy “spawn” positions (left edge, staggered by player's y)
   function enemyVolleyOrigins() {
     const baseY = playerPos.y;
     const ys = [baseY - 1, baseY, baseY + 1].filter(
       (y) => y >= 0 && y < mapH
     );
     const origins: XY[] = ys.map((y) => ({ x: 0, y }));
-    return origins.length > 0
-      ? origins
-      : [{ x: 0, y: Math.floor(mapH / 2) }];
+    return origins.length > 0 ? origins : [{ x: 0, y: Math.floor(mapH / 2) }];
   }
 
   const volley = useRef<VolleyParticle[]>([]);
@@ -195,13 +196,14 @@ export default function CombatRendererPanel({
     volley.current = [];
   }
 
-  async function playEnemyAnimation() {
+  function playEnemyAnimation() {
     if (!activeEnemyGroupName) return;
     if (busy) return;
 
     setBusy(true);
 
-    // V1: all archetypes share telegraph→release→flight/impact pacing.
+    // V1: all archetypes share telegraph → release → flight → impact pacing.
+    // (We branch by archetype in V2 for different projectile/effects.)
     startPhase("telegraph");
   }
 
@@ -222,12 +224,15 @@ export default function CombatRendererPanel({
     const now = performance.now();
     const elapsed = now - phaseStartedAt;
 
+    // Telegraph time
     if (phase === "telegraph" && elapsed > 650) {
       startPhase("release");
       return;
     }
 
+    // Release “beat”
     if (phase === "release" && elapsed > 250) {
+      // Build volley particles aimed at player
       const target = tileCenterPx(playerPos);
       const origins = enemyVolleyOrigins().map(tileCenterPx);
 
@@ -237,7 +242,7 @@ export default function CombatRendererPanel({
         y0: o.y,
         x1: target.x,
         y1: target.y,
-        t0: t0 + idx * 60,
+        t0: t0 + idx * 60, // slight stagger
         dur: 520,
       }));
 
@@ -245,6 +250,7 @@ export default function CombatRendererPanel({
       return;
     }
 
+    // Flight ends when last projectile would land
     if (phase === "flight") {
       const parts = volley.current;
       const last = parts[parts.length - 1];
@@ -259,11 +265,13 @@ export default function CombatRendererPanel({
       }
     }
 
+    // Impact “flash”
     if (phase === "impact" && elapsed > 380) {
       startPhase("cooldown");
       return;
     }
 
+    // Cooldown ends
     if (phase === "cooldown" && elapsed > 450) {
       reset();
       return;
@@ -275,11 +283,36 @@ export default function CombatRendererPanel({
     const canvas = canvasRef.current;
     if (!canvas) return;
 
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
+    const g = canvas.getContext("2d");
+    if (!g) return;
 
-    // Narrow once: use g everywhere so TS never reintroduces nullability
-    const g = ctx;
+    // Clean, portable rounded-rect path: uses roundRect if available, else draws fallback.
+    function roundRectPath(
+      x: number,
+      y: number,
+      w: number,
+      h: number,
+      r: number
+    ) {
+      const rr = Math.max(0, Math.min(r, Math.min(w, h) / 2));
+
+      const anyG = g as any;
+      if (typeof anyG.roundRect === "function") {
+        anyG.roundRect(x, y, w, h, rr);
+        return;
+      }
+
+      // fallback path (no roundRect)
+      g.moveTo(x + rr, y);
+      g.lineTo(x + w - rr, y);
+      g.quadraticCurveTo(x + w, y, x + w, y + rr);
+      g.lineTo(x + w, y + h - rr);
+      g.quadraticCurveTo(x + w, y + h, x + w - rr, y + h);
+      g.lineTo(x + rr, y + h);
+      g.quadraticCurveTo(x, y + h, x, y + h - rr);
+      g.lineTo(x, y + rr);
+      g.quadraticCurveTo(x, y, x + rr, y);
+    }
 
     function clear() {
       g.clearRect(0, 0, g.canvas.width, g.canvas.height);
@@ -311,17 +344,18 @@ export default function CombatRendererPanel({
       const size = 42;
 
       for (const o of origins) {
+        // subtle background plate
         g.globalAlpha = 0.9;
         g.fillStyle = "rgba(0,0,0,0.35)";
         g.beginPath();
-        // @ts-expect-error roundRect exists in modern browsers; safe in Vercel runtime
-        g.roundRect(o.x - size / 2, o.y - size / 2, size, size, 10);
+        roundRectPath(o.x - size / 2, o.y - size / 2, size, size, 10);
         g.fill();
         g.globalAlpha = 1;
 
         if (enemyImg) {
           g.drawImage(enemyImg, o.x - size / 2, o.y - size / 2, size, size);
         } else {
+          // fallback glyph
           g.fillStyle = "rgba(255,255,255,0.85)";
           g.font = "16px system-ui";
           g.textAlign = "center";
@@ -342,6 +376,7 @@ export default function CombatRendererPanel({
         const x = p.x0 + (p.x1 - p.x0) * t;
         const y = p.y0 + (p.y1 - p.y0) * t;
 
+        // Trail
         g.globalAlpha = 0.55;
         g.strokeStyle = "rgba(200,220,255,0.55)";
         g.lineWidth = 2;
@@ -351,6 +386,7 @@ export default function CombatRendererPanel({
         g.stroke();
         g.globalAlpha = 1;
 
+        // Arrow sprite or fallback
         if (arrowImg) {
           const s = 22;
           const ang = Math.atan2(p.y1 - p.y0, p.x1 - p.x0);
@@ -372,11 +408,11 @@ export default function CombatRendererPanel({
       const center = tileCenterPx(playerPos);
       const t = Math.min(1, (performance.now() - phaseStartedAt) / 380);
 
+      // tile flash
       g.globalAlpha = 0.25 + 0.25 * (1 - t);
       g.fillStyle = "rgba(255,200,120,0.7)";
       g.beginPath();
-      // @ts-expect-error roundRect exists in modern browsers; safe in Vercel runtime
-      g.roundRect(
+      roundRectPath(
         center.x - tileSize / 2,
         center.y - tileSize / 2,
         tileSize,
@@ -386,6 +422,7 @@ export default function CombatRendererPanel({
       g.fill();
       g.globalAlpha = 1;
 
+      // impact sprite
       if (impactImg) {
         const s = 64;
         g.globalAlpha = 0.9 * (1 - t * 0.35);
@@ -403,6 +440,7 @@ export default function CombatRendererPanel({
     function frame() {
       clear();
 
+      // Always show enemy badges during non-idle enemy phase
       if (activeEnemyGroupName && (busy || phase !== "idle")) {
         drawEnemyBadges();
       }
@@ -443,7 +481,13 @@ export default function CombatRendererPanel({
   const canPlay = !!activeEnemyGroupName && !busy;
 
   return (
-    <div style={{ position: "absolute", inset: 0, pointerEvents: "none" }}>
+    <div
+      style={{
+        position: "absolute",
+        inset: 0,
+        pointerEvents: "none", // renderer is visual-only by default
+      }}
+    >
       <canvas
         ref={canvasRef}
         width={canvasW}
@@ -461,7 +505,7 @@ export default function CombatRendererPanel({
             position: "absolute",
             top: 10,
             right: 10,
-            pointerEvents: "auto",
+            pointerEvents: "auto", // allow clicking UI
             display: "flex",
             flexDirection: "column",
             gap: 8,
@@ -479,7 +523,10 @@ export default function CombatRendererPanel({
               maxWidth: 260,
             }}
           >
-            <div style={{ fontWeight: 700, marginBottom: 4 }}>Combat Theater</div>
+            <div style={{ fontWeight: 700, marginBottom: 4 }}>
+              Combat Theater
+            </div>
+
             <div style={{ fontSize: 12, opacity: 0.85 }}>
               {activeEnemyGroupName ? (
                 <>
