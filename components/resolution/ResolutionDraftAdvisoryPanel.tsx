@@ -1,3 +1,4 @@
+// components/resolution/ResolutionDraftAdvisoryPanel.tsx
 "use client";
 
 // ------------------------------------------------------------
@@ -5,14 +6,14 @@
 // ------------------------------------------------------------
 // Authority contract:
 // - Dice decide success/failure
-// - CreativeNarrator drafts narration (NON-AUTHORITATIVE)
+// - CreativeNarrator drafts narration (NON-AUTHORITATIVE flavor)
 // - Human DM mode: Arbiter may EDIT narration
-// - Solace (Neutral Facilitator) DM mode: narration is NOT editable
+// - Solace (Neutral Facilitator) DM mode: narration is NOT editable (read-only)
 // - Arbiter commits canon (Record Outcome)
 // ------------------------------------------------------------
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { generateNarration, NarrativeLens } from "@/lib/narration/CreativeNarrator";
+import { generateNarration } from "@/lib/narration/CreativeNarrator";
 
 /* ------------------------------------------------------------
    Types
@@ -28,6 +29,8 @@ export type ResolutionContext = {
 
 type DMMode = "human" | "solace_neutral";
 
+type XY = { x: number; y: number };
+
 type Props = {
   context: ResolutionContext;
   role: "arbiter";
@@ -40,6 +43,24 @@ type Props = {
    * Defaults to "human" to avoid changing existing flows unless explicitly set.
    */
   dmMode?: DMMode;
+
+  /**
+   * Optional truth anchors (passed from orchestrator).
+   * These do NOT grant authority; they just let narration reference what actually happened.
+   */
+  setupText?: string | null;
+
+  movement?: {
+    from?: XY | null;
+    to?: XY | null;
+    direction?: "north" | "east" | "south" | "west" | "none" | null;
+  } | null;
+
+  combat?: {
+    activeEnemyGroupName?: string | null;
+    isEnemyTurn?: boolean;
+    attackStyleHint?: "volley" | "beam" | "charge" | "unknown";
+  } | null;
 
   onRecord: (payload: {
     description: string;
@@ -72,12 +93,19 @@ function difficultyFor(kind?: ResolutionContext["optionKind"]): number {
   }
 }
 
+function clampInt(n: number, lo: number, hi: number) {
+  return Math.max(lo, Math.min(hi, n));
+}
+
 /* ------------------------------------------------------------ */
 
 export default function ResolutionDraftAdvisoryPanel({
   context,
   role,
   dmMode = "human",
+  setupText = null,
+  movement = null,
+  combat = null,
   onRecord,
 }: Props) {
   const dc = difficultyFor(context.optionKind);
@@ -105,7 +133,7 @@ export default function ResolutionDraftAdvisoryPanel({
   ---------------------------------------------------------- */
 
   function rollDice() {
-    const max = Number(diceMode.slice(1));
+    const max = clampInt(Number(diceMode.slice(1)), 2, 100);
     setRoll(Math.ceil(Math.random() * max));
   }
 
@@ -116,23 +144,65 @@ export default function ResolutionDraftAdvisoryPanel({
   }
 
   /* ----------------------------------------------------------
-     Creative narration (NON-AUTHORITATIVE)
+     Creative narration (NON-AUTHORITATIVE flavor)
+     - Human DM: keep shorter + editable
+     - Solace Neutral: deeper + grounded + read-only
   ---------------------------------------------------------- */
 
   const generatedNarration = useMemo(() => {
     if (roll === null) return "";
 
+    const margin = roll - dc;
+
+    // Build truth anchors only when Solace Neutral is active
+    const truth = isSolaceNeutral
+      ? {
+          setup: (setupText ?? "").trim() || undefined,
+          movement: movement
+            ? {
+                from: movement.from ?? undefined,
+                to: movement.to ?? undefined,
+                direction: movement.direction ?? undefined,
+              }
+            : undefined,
+          combat: combat
+            ? {
+                activeEnemyGroupName: combat.activeEnemyGroupName ?? undefined,
+                isEnemyTurn: !!combat.isEnemyTurn,
+                attackStyleHint: combat.attackStyleHint ?? "unknown",
+              }
+            : undefined,
+          mechanics: {
+            dc,
+            roll,
+            margin,
+            success: margin >= 0,
+            optionKind: context.optionKind,
+          },
+        }
+      : undefined;
+
     return generateNarration({
       intentText: context.optionDescription,
-      margin: roll - dc,
-      // Mythic tone requested (cast keeps compatibility with your existing lens type)
-      lens: "mythic" as NarrativeLens,
+      margin,
+      lens: isSolaceNeutral ? "mythic" : "heroic",
+      depth: isSolaceNeutral ? 2 : 1.5,
+      truth,
     });
-  }, [roll, dc, context.optionDescription]);
+  }, [
+    roll,
+    dc,
+    context.optionDescription,
+    context.optionKind,
+    isSolaceNeutral,
+    setupText,
+    movement,
+    combat,
+  ]);
 
   // Seed draft text:
   // - Human DM mode: seed once, then allow edits
-  // - Solace Neutral mode: always keep draftText aligned to generated narration
+  // - Solace Neutral mode: always keep aligned to generated narration (read-only)
   useEffect(() => {
     if (roll === null) return;
 
@@ -175,6 +245,14 @@ export default function ResolutionDraftAdvisoryPanel({
 
   /* ---------------------------------------------------------- */
 
+  const showAnchors =
+    isSolaceNeutral &&
+    roll !== null &&
+    (!!setupText ||
+      !!movement?.from ||
+      !!movement?.to ||
+      !!combat?.activeEnemyGroupName);
+
   return (
     <section
       style={{
@@ -188,10 +266,7 @@ export default function ResolutionDraftAdvisoryPanel({
 
       <label>
         Dice:
-        <select
-          value={diceMode}
-          onChange={(e) => setDiceMode(e.target.value as DiceMode)}
-        >
+        <select value={diceMode} onChange={(e) => setDiceMode(e.target.value as DiceMode)}>
           <option>d4</option>
           <option>d6</option>
           <option>d8</option>
@@ -216,8 +291,7 @@ export default function ResolutionDraftAdvisoryPanel({
 
       {roll !== null && (
         <p>
-          🎲 {diceMode} rolled <strong>{roll}</strong> vs DC{" "}
-          <strong>{dc}</strong>
+          🎲 {diceMode} rolled <strong>{roll}</strong> vs DC <strong>{dc}</strong>
         </p>
       )}
 
@@ -225,10 +299,7 @@ export default function ResolutionDraftAdvisoryPanel({
         <>
           {isSolaceNeutral ? (
             <>
-              <div
-                className="muted"
-                style={{ marginTop: 10, marginBottom: 6, fontSize: 12 }}
-              >
+              <div className="muted" style={{ marginTop: 10, marginBottom: 6, fontSize: 12 }}>
                 Arbiter Narration — <strong>Solace (Neutral Facilitator)</strong>{" "}
                 <span style={{ opacity: 0.75 }}>(read-only)</span>
               </div>
@@ -240,15 +311,53 @@ export default function ResolutionDraftAdvisoryPanel({
                   padding: "10px 12px",
                   background: "rgba(0,0,0,0.35)",
                   whiteSpace: "pre-wrap",
-                  lineHeight: 1.45,
+                  lineHeight: 1.55,
                 }}
               >
                 {draftText || generatedNarration || "—"}
               </div>
 
               <div style={{ marginTop: 6, fontSize: 11, opacity: 0.75 }}>
-                Narration is DM-authoritative in Solace mode and cannot be edited.
+                Narration is read-only in Solace Neutral mode.
               </div>
+
+              {showAnchors && (
+                <details style={{ marginTop: 10 }}>
+                  <summary style={{ cursor: "pointer", opacity: 0.9 }}>
+                    Truth anchors (why the narration says what it says)
+                  </summary>
+                  <div style={{ marginTop: 8, fontSize: 12, opacity: 0.85, lineHeight: 1.5 }}>
+                    {!!setupText && (
+                      <div style={{ marginBottom: 6 }}>
+                        <strong>Setup:</strong> {String(setupText).slice(0, 240)}
+                        {String(setupText).length > 240 ? "…" : ""}
+                      </div>
+                    )}
+
+                    {(movement?.from || movement?.to) && (
+                      <div style={{ marginBottom: 6 }}>
+                        <strong>Movement:</strong>{" "}
+                        {movement?.from ? `(${movement.from.x},${movement.from.y})` : "(?)"}{" "}
+                        {movement?.direction && movement.direction !== "none" ? `→ ${movement.direction}` : ""}
+                        {"  "}
+                        {movement?.to ? `(${movement.to.x},${movement.to.y})` : "(?)"}
+                      </div>
+                    )}
+
+                    {!!combat?.activeEnemyGroupName && (
+                      <div style={{ marginBottom: 6 }}>
+                        <strong>Combat:</strong> {combat.activeEnemyGroupName}
+                        {combat.isEnemyTurn ? " (enemy turn)" : ""}
+                      </div>
+                    )}
+
+                    <div>
+                      <strong>Mechanics:</strong> margin {roll - dc >= 0 ? "+" : ""}
+                      {roll - dc} (roll {roll} vs DC {dc})
+                    </div>
+                  </div>
+                </details>
+              )}
             </>
           ) : (
             <>
