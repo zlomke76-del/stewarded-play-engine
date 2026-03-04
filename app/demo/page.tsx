@@ -949,7 +949,27 @@ export default function DemoPage() {
   // ----------------------------------------------------------
 
   return (
-    <StewardedShell>
+  <div
+    style={{
+      minHeight: "100vh",
+      backgroundImage: "url('/dungeon_background.png')",
+      backgroundSize: "cover",
+      backgroundPosition: "center",
+      backgroundAttachment: "fixed",
+      position: "relative",
+    }}
+  >
+    <div
+      style={{
+        position: "absolute",
+        inset: 0,
+        background: "rgba(0,0,0,0.82)",
+        pointerEvents: "none",
+      }}
+    />
+
+    <div style={{ position: "relative", zIndex: 1 }}>
+      <StewardedShell>
       <ModeHeader
         title="Stewarded Play — Full Flow"
         onShare={shareCanon}
@@ -1934,6 +1954,8 @@ export default function DemoPage() {
       )}
 
       <Disclaimer />
-    </StewardedShell>
-  );
+</StewardedShell>
+</div>
+</div>
+);
 }
