@@ -235,21 +235,22 @@ export default function CombatRendererPanel({
 
   // Main render loop
   useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
+    const c = canvasRef.current;
+    if (!c) return;
 
-    const maybe = canvas.getContext("2d");
+    const maybe = c.getContext("2d");
     if (!maybe) return;
 
-    // Rebind as non-null to satisfy TS inside nested functions.
+    // Capture non-null, stable bindings for nested fns (TS-safe)
+    const canvasEl: HTMLCanvasElement = c;
     const ctx: CanvasRenderingContext2D = maybe;
 
     function clear() {
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.clearRect(0, 0, canvasEl.width, canvasEl.height);
     }
 
     function drawTelegraph() {
-      const c = tileCenterPx(playerPos);
+      const center = tileCenterPx(playerPos);
       const pulse = Math.min(1, (performance.now() - phaseStartedAt) / 650);
       const r = 10 + pulse * 14;
 
@@ -257,13 +258,13 @@ export default function CombatRendererPanel({
       if (targetRingImg) {
         const s = 48;
         ctx.globalAlpha = 0.65 + 0.25 * Math.sin(pulse * Math.PI);
-        ctx.drawImage(targetRingImg, c.x - s / 2, c.y - s / 2, s, s);
+        ctx.drawImage(targetRingImg, center.x - s / 2, center.y - s / 2, s, s);
         ctx.globalAlpha = 1;
       } else {
         ctx.strokeStyle = "rgba(138,180,255,0.75)";
         ctx.lineWidth = 2;
         ctx.beginPath();
-        ctx.arc(c.x, c.y, r, 0, Math.PI * 2);
+        ctx.arc(center.x, center.y, r, 0, Math.PI * 2);
         ctx.stroke();
       }
     }
@@ -282,7 +283,6 @@ export default function CombatRendererPanel({
         const x = o.x - size / 2;
         const y = o.y - size / 2;
 
-        // roundRect exists in modern browsers; if not, fall back to rect.
         const anyCtx = ctx as any;
         if (typeof anyCtx.roundRect === "function") {
           ctx.beginPath();
@@ -348,15 +348,15 @@ export default function CombatRendererPanel({
     }
 
     function drawImpact() {
-      const c = tileCenterPx(playerPos);
+      const center = tileCenterPx(playerPos);
       const t = Math.min(1, (performance.now() - phaseStartedAt) / 380);
 
       // tile flash
       ctx.globalAlpha = 0.25 + 0.25 * (1 - t);
       ctx.fillStyle = "rgba(255,200,120,0.7)";
 
-      const x = c.x - tileSize / 2;
-      const y = c.y - tileSize / 2;
+      const x = center.x - tileSize / 2;
+      const y = center.y - tileSize / 2;
 
       const anyCtx = ctx as any;
       if (typeof anyCtx.roundRect === "function") {
@@ -373,13 +373,13 @@ export default function CombatRendererPanel({
       if (impactImg) {
         const s = 64;
         ctx.globalAlpha = 0.9 * (1 - t * 0.35);
-        ctx.drawImage(impactImg, c.x - s / 2, c.y - s / 2, s, s);
+        ctx.drawImage(impactImg, center.x - s / 2, center.y - s / 2, s, s);
         ctx.globalAlpha = 1;
       } else {
         ctx.strokeStyle = "rgba(255,200,120,0.9)";
         ctx.lineWidth = 2;
         ctx.beginPath();
-        ctx.arc(c.x, c.y, 10 + t * 16, 0, Math.PI * 2);
+        ctx.arc(center.x, center.y, 10 + t * 16, 0, Math.PI * 2);
         ctx.stroke();
       }
     }
