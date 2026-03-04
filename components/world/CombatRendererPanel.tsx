@@ -184,10 +184,14 @@ export default function CombatRendererPanel({
     [events, mapW, mapH]
   );
 
-  const archetype = useMemo(
-    () => guessEnemyArchetype(activeEnemyGroupName),
-    [activeEnemyGroupName]
-  );
+  // IMPORTANT:
+  // `guessEnemyArchetype`'s return type in SpriteRegistry may be narrower than
+  // the full string set the renderer supports (e.g. missing "sentries").
+  // We intentionally widen to `string` here to keep comparisons type-safe.
+  const archetype = useMemo<string>(() => {
+    const a = guessEnemyArchetype(activeEnemyGroupName);
+    return typeof a === "string" ? a : String(a);
+  }, [activeEnemyGroupName]);
 
   // Preload images when enemy changes
   useEffect(() => {
@@ -242,7 +246,11 @@ export default function CombatRendererPanel({
     const ys = [baseY - 1, baseY, baseY + 1].filter((y) => y >= 0 && y < mapH);
 
     // default: left edge “ambush line”
-    if (archetype === "archers" || archetype === "sentries" || archetype === "drones") {
+    if (
+      archetype === "archers" ||
+      archetype === "sentries" ||
+      archetype === "drones"
+    ) {
       const origins: XY[] = ys.map((y) => ({ x: 0, y }));
       return origins.length > 0 ? origins : [{ x: 0, y: Math.floor(mapH / 2) }];
     }
@@ -250,20 +258,28 @@ export default function CombatRendererPanel({
     // brutes/shields: closer “frontline” (x=2)
     if (archetype === "brutes" || archetype === "shields") {
       const origins: XY[] = ys.map((y) => ({ x: Math.min(2, mapW - 1), y }));
-      return origins.length > 0 ? origins : [{ x: Math.min(2, mapW - 1), y: Math.floor(mapH / 2) }];
+      return origins.length > 0
+        ? origins
+        : [{ x: Math.min(2, mapW - 1), y: Math.floor(mapH / 2) }];
     }
 
     // casters/wraiths: backline (x=1) but slightly higher rows
     if (archetype === "casters" || archetype === "wraiths") {
-      const ys2 = [baseY - 2, baseY, baseY + 2].filter((y) => y >= 0 && y < mapH);
+      const ys2 = [baseY - 2, baseY, baseY + 2].filter(
+        (y) => y >= 0 && y < mapH
+      );
       const origins: XY[] = ys2.map((y) => ({ x: Math.min(1, mapW - 1), y }));
-      return origins.length > 0 ? origins : [{ x: Math.min(1, mapW - 1), y: Math.floor(mapH / 2) }];
+      return origins.length > 0
+        ? origins
+        : [{ x: Math.min(1, mapW - 1), y: Math.floor(mapH / 2) }];
     }
 
     // stalkers: right edge (flank)
     if (archetype === "stalkers") {
       const origins: XY[] = ys.map((y) => ({ x: mapW - 1, y }));
-      return origins.length > 0 ? origins : [{ x: mapW - 1, y: Math.floor(mapH / 2) }];
+      return origins.length > 0
+        ? origins
+        : [{ x: mapW - 1, y: Math.floor(mapH / 2) }];
     }
 
     // fallback
