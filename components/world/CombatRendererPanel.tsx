@@ -12,7 +12,12 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { SessionEvent } from "@/lib/session/SessionState";
-import { Effects, getEnemySprite, guessEnemyArchetype, Projectiles } from "@/lib/render/SpriteRegistry";
+import {
+  Effects,
+  getEnemySprite,
+  guessEnemyArchetype,
+  Projectiles,
+} from "@/lib/render/SpriteRegistry";
 
 type XY = { x: number; y: number };
 
@@ -41,13 +46,22 @@ function withinBounds(p: XY, w: number, h: number) {
 }
 
 // Derive player position deterministically from events (same core as map)
-function derivePlayerPosition(events: readonly SessionEvent[], mapW: number, mapH: number): XY {
+function derivePlayerPosition(
+  events: readonly SessionEvent[],
+  mapW: number,
+  mapH: number
+): XY {
   let pos: XY = { x: Math.floor(mapW / 2), y: Math.floor(mapH / 2) };
 
   for (const e of events as any[]) {
     if (e?.type === "PLAYER_MOVED") {
       const to = e?.payload?.to;
-      if (to && typeof to.x === "number" && typeof to.y === "number" && withinBounds(to, mapW, mapH)) {
+      if (
+        to &&
+        typeof to.x === "number" &&
+        typeof to.y === "number" &&
+        withinBounds(to, mapW, mapH)
+      ) {
         pos = { x: to.x, y: to.y };
       }
     }
@@ -98,10 +112,20 @@ export default function CombatRendererPanel({
   const [enemyImg, setEnemyImg] = useState<HTMLImageElement | null>(null);
   const [arrowImg, setArrowImg] = useState<HTMLImageElement | null>(null);
   const [impactImg, setImpactImg] = useState<HTMLImageElement | null>(null);
-  const [targetRingImg, setTargetRingImg] = useState<HTMLImageElement | null>(null);
+  const [targetRingImg, setTargetRingImg] = useState<HTMLImageElement | null>(
+    null
+  );
 
-  const playerPos = useMemo(() => derivePlayerPosition(events, mapW, mapH), [events, mapW, mapH]);
-  const archetype = useMemo(() => guessEnemyArchetype(activeEnemyGroupName), [activeEnemyGroupName]);
+  const playerPos = useMemo(
+    () => derivePlayerPosition(events, mapW, mapH),
+    [events, mapW, mapH]
+  );
+
+  // (kept for future branching, currently shared pacing)
+  const archetype = useMemo(
+    () => guessEnemyArchetype(activeEnemyGroupName),
+    [activeEnemyGroupName]
+  );
 
   // Preload images when enemy changes
   useEffect(() => {
@@ -130,8 +154,14 @@ export default function CombatRendererPanel({
   }, [activeEnemyGroupName]);
 
   // Canvas sizing to match the map grid container
-  const canvasW = useMemo(() => padding * 2 + mapW * tileSize + (mapW - 1) * gap, [padding, mapW, tileSize, gap]);
-  const canvasH = useMemo(() => padding * 2 + mapH * tileSize + (mapH - 1) * gap, [padding, mapH, tileSize, gap]);
+  const canvasW = useMemo(
+    () => padding * 2 + mapW * tileSize + (mapW - 1) * gap,
+    [padding, mapW, tileSize, gap]
+  );
+  const canvasH = useMemo(
+    () => padding * 2 + mapH * tileSize + (mapH - 1) * gap,
+    [padding, mapH, tileSize, gap]
+  );
 
   function tileCenterPx(p: XY) {
     return {
@@ -143,9 +173,13 @@ export default function CombatRendererPanel({
   // Enemy “spawn” positions (left edge, staggered)
   function enemyVolleyOrigins() {
     const baseY = playerPos.y;
-    const ys = [baseY - 1, baseY, baseY + 1].filter((y) => y >= 0 && y < mapH);
+    const ys = [baseY - 1, baseY, baseY + 1].filter(
+      (y) => y >= 0 && y < mapH
+    );
     const origins: XY[] = ys.map((y) => ({ x: 0, y }));
-    return origins.length > 0 ? origins : [{ x: 0, y: Math.floor(mapH / 2) }];
+    return origins.length > 0
+      ? origins
+      : [{ x: 0, y: Math.floor(mapH / 2) }];
   }
 
   const volley = useRef<VolleyParticle[]>([]);
@@ -176,7 +210,7 @@ export default function CombatRendererPanel({
     if (playSignal === undefined) return;
     if (!activeEnemyGroupName) return;
     if (busy) return;
-    // trigger
+
     playEnemyAnimation();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [playSignal]);
@@ -188,15 +222,12 @@ export default function CombatRendererPanel({
     const now = performance.now();
     const elapsed = now - phaseStartedAt;
 
-    // Telegraph time
     if (phase === "telegraph" && elapsed > 650) {
       startPhase("release");
       return;
     }
 
-    // Release “beat”
     if (phase === "release" && elapsed > 250) {
-      // Build volley particles aimed at player
       const target = tileCenterPx(playerPos);
       const origins = enemyVolleyOrigins().map(tileCenterPx);
 
@@ -206,7 +237,7 @@ export default function CombatRendererPanel({
         y0: o.y,
         x1: target.x,
         y1: target.y,
-        t0: t0 + idx * 60, // slight stagger
+        t0: t0 + idx * 60,
         dur: 520,
       }));
 
@@ -214,7 +245,6 @@ export default function CombatRendererPanel({
       return;
     }
 
-    // Flight ends when last projectile would land
     if (phase === "flight") {
       const parts = volley.current;
       const last = parts[parts.length - 1];
@@ -229,13 +259,11 @@ export default function CombatRendererPanel({
       }
     }
 
-    // Impact “flash”
     if (phase === "impact" && elapsed > 380) {
       startPhase("cooldown");
       return;
     }
 
-    // Cooldown ends
     if (phase === "cooldown" && elapsed > 450) {
       reset();
       return;
@@ -244,16 +272,19 @@ export default function CombatRendererPanel({
 
   // Main render loop
   useEffect(() => {
-    const c = canvasRef.current;
-    if (!c) return;
+    const canvas = canvasRef.current;
+    if (!canvas) return;
 
-    const ctx = c.getContext("2d");
+    const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
+    // Narrow once: use g everywhere so TS never reintroduces nullability
+    const g = ctx;
+
     function clear() {
-  if (!ctx) return;
-  ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
-}
+      g.clearRect(0, 0, g.canvas.width, g.canvas.height);
+    }
+
     function drawTelegraph() {
       const center = tileCenterPx(playerPos);
       const pulse = Math.min(1, (performance.now() - phaseStartedAt) / 650);
@@ -261,15 +292,15 @@ export default function CombatRendererPanel({
 
       if (targetRingImg) {
         const s = 48;
-        ctx.globalAlpha = 0.65 + 0.25 * Math.sin(pulse * Math.PI);
-        ctx.drawImage(targetRingImg, center.x - s / 2, center.y - s / 2, s, s);
-        ctx.globalAlpha = 1;
+        g.globalAlpha = 0.65 + 0.25 * Math.sin(pulse * Math.PI);
+        g.drawImage(targetRingImg, center.x - s / 2, center.y - s / 2, s, s);
+        g.globalAlpha = 1;
       } else {
-        ctx.strokeStyle = "rgba(138,180,255,0.75)";
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.arc(center.x, center.y, r, 0, Math.PI * 2);
-        ctx.stroke();
+        g.strokeStyle = "rgba(138,180,255,0.75)";
+        g.lineWidth = 2;
+        g.beginPath();
+        g.arc(center.x, center.y, r, 0, Math.PI * 2);
+        g.stroke();
       }
     }
 
@@ -280,22 +311,22 @@ export default function CombatRendererPanel({
       const size = 42;
 
       for (const o of origins) {
-        ctx.globalAlpha = 0.9;
-        ctx.fillStyle = "rgba(0,0,0,0.35)";
-        ctx.beginPath();
+        g.globalAlpha = 0.9;
+        g.fillStyle = "rgba(0,0,0,0.35)";
+        g.beginPath();
         // @ts-expect-error roundRect exists in modern browsers; safe in Vercel runtime
-        ctx.roundRect(o.x - size / 2, o.y - size / 2, size, size, 10);
-        ctx.fill();
-        ctx.globalAlpha = 1;
+        g.roundRect(o.x - size / 2, o.y - size / 2, size, size, 10);
+        g.fill();
+        g.globalAlpha = 1;
 
         if (enemyImg) {
-          ctx.drawImage(enemyImg, o.x - size / 2, o.y - size / 2, size, size);
+          g.drawImage(enemyImg, o.x - size / 2, o.y - size / 2, size, size);
         } else {
-          ctx.fillStyle = "rgba(255,255,255,0.85)";
-          ctx.font = "16px system-ui";
-          ctx.textAlign = "center";
-          ctx.textBaseline = "middle";
-          ctx.fillText("EN", o.x, o.y);
+          g.fillStyle = "rgba(255,255,255,0.85)";
+          g.font = "16px system-ui";
+          g.textAlign = "center";
+          g.textBaseline = "middle";
+          g.fillText("EN", o.x, o.y);
         }
       }
     }
@@ -311,28 +342,28 @@ export default function CombatRendererPanel({
         const x = p.x0 + (p.x1 - p.x0) * t;
         const y = p.y0 + (p.y1 - p.y0) * t;
 
-        ctx.globalAlpha = 0.55;
-        ctx.strokeStyle = "rgba(200,220,255,0.55)";
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.moveTo(p.x0, p.y0);
-        ctx.lineTo(x, y);
-        ctx.stroke();
-        ctx.globalAlpha = 1;
+        g.globalAlpha = 0.55;
+        g.strokeStyle = "rgba(200,220,255,0.55)";
+        g.lineWidth = 2;
+        g.beginPath();
+        g.moveTo(p.x0, p.y0);
+        g.lineTo(x, y);
+        g.stroke();
+        g.globalAlpha = 1;
 
         if (arrowImg) {
           const s = 22;
           const ang = Math.atan2(p.y1 - p.y0, p.x1 - p.x0);
-          ctx.save();
-          ctx.translate(x, y);
-          ctx.rotate(ang);
-          ctx.drawImage(arrowImg, -s / 2, -s / 2, s, s);
-          ctx.restore();
+          g.save();
+          g.translate(x, y);
+          g.rotate(ang);
+          g.drawImage(arrowImg, -s / 2, -s / 2, s, s);
+          g.restore();
         } else {
-          ctx.fillStyle = "rgba(255,255,255,0.9)";
-          ctx.beginPath();
-          ctx.arc(x, y, 2.2, 0, Math.PI * 2);
-          ctx.fill();
+          g.fillStyle = "rgba(255,255,255,0.9)";
+          g.beginPath();
+          g.arc(x, y, 2.2, 0, Math.PI * 2);
+          g.fill();
         }
       }
     }
@@ -341,25 +372,31 @@ export default function CombatRendererPanel({
       const center = tileCenterPx(playerPos);
       const t = Math.min(1, (performance.now() - phaseStartedAt) / 380);
 
-      ctx.globalAlpha = 0.25 + 0.25 * (1 - t);
-      ctx.fillStyle = "rgba(255,200,120,0.7)";
-      ctx.beginPath();
+      g.globalAlpha = 0.25 + 0.25 * (1 - t);
+      g.fillStyle = "rgba(255,200,120,0.7)";
+      g.beginPath();
       // @ts-expect-error roundRect exists in modern browsers; safe in Vercel runtime
-      ctx.roundRect(center.x - tileSize / 2, center.y - tileSize / 2, tileSize, tileSize, 6);
-      ctx.fill();
-      ctx.globalAlpha = 1;
+      g.roundRect(
+        center.x - tileSize / 2,
+        center.y - tileSize / 2,
+        tileSize,
+        tileSize,
+        6
+      );
+      g.fill();
+      g.globalAlpha = 1;
 
       if (impactImg) {
         const s = 64;
-        ctx.globalAlpha = 0.9 * (1 - t * 0.35);
-        ctx.drawImage(impactImg, center.x - s / 2, center.y - s / 2, s, s);
-        ctx.globalAlpha = 1;
+        g.globalAlpha = 0.9 * (1 - t * 0.35);
+        g.drawImage(impactImg, center.x - s / 2, center.y - s / 2, s, s);
+        g.globalAlpha = 1;
       } else {
-        ctx.strokeStyle = "rgba(255,200,120,0.9)";
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.arc(center.x, center.y, 10 + t * 16, 0, Math.PI * 2);
-        ctx.stroke();
+        g.strokeStyle = "rgba(255,200,120,0.9)";
+        g.lineWidth = 2;
+        g.beginPath();
+        g.arc(center.x, center.y, 10 + t * 16, 0, Math.PI * 2);
+        g.stroke();
       }
     }
 
@@ -371,10 +408,12 @@ export default function CombatRendererPanel({
       }
 
       if (phase === "telegraph" || phase === "release") drawTelegraph();
+
       if (phase === "flight") {
         drawTelegraph();
         drawArrows();
       }
+
       if (phase === "impact") drawImpact();
 
       rafRef.current = requestAnimationFrame(frame);
@@ -453,13 +492,22 @@ export default function CombatRendererPanel({
               )}
             </div>
 
-            <div style={{ marginTop: 8, display: "flex", gap: 8, justifyContent: "flex-end" }}>
+            <div
+              style={{
+                marginTop: 8,
+                display: "flex",
+                gap: 8,
+                justifyContent: "flex-end",
+              }}
+            >
               <button onClick={playEnemyAnimation} disabled={!canPlay}>
                 {busy ? "Playing…" : "Play Enemy Animation"}
               </button>
             </div>
 
-            <div style={{ marginTop: 6, fontSize: 11, opacity: 0.8 }}>Renderer only — does not write canon.</div>
+            <div style={{ marginTop: 6, fontSize: 11, opacity: 0.8 }}>
+              Renderer only — does not write canon.
+            </div>
           </div>
         </div>
       )}
