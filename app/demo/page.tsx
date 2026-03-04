@@ -4,27 +4,31 @@
 // Demo Page — Stewarded Play (Full Governed Flow)
 // ------------------------------------------------------------
 //
-// Upgrades included in this file:
-// ✅ Combat setup broken out into <CombatSetupPanel /> (locks once COMBAT_STARTED)
-// ✅ Turn-aware action entry (enemy turns are Arbiter-authored; player turns are player-authored)
-// ✅ Exploration map is canon-only view (derived from events)
-// ✅ After intent + option selection, we auto-draft exploration canon (move/reveal/mark)
-// ✅ On Record Outcome, we commit OUTCOME + exploration bundle atomically (single append-only transaction)
-// ✅ MAP_MARKED supported (auto-suggest door/locked based on text)
-// ✅ Proposed movement uses a DIRECTION DROPDOWN (no raw To X/Y by default; optional custom)
-// ✅ CanonEventsPanel lists non-OUTCOME canon events (movement/map/combat)
+// FIXED EXPLORATION + COMBAT GOVERNANCE:
 //
-// Invariants remain:
-// - Player declares intent.
-// - Solace drafts options/narration (non-authoritative).
-// - Dice decide success/failure.
-// - Arbiter is the only authority that commits canon.
-// - Canon is append-only events; no silent mutation.
+// Exploration
+// - Map is READ-ONLY (canon view). No pre-intent movement.
+// - After player intent + option selection, we AUTO-DRAFT exploration canon:
+//     PLAYER_MOVED / MAP_REVEALED / MAP_MARKED
+// - Arbiter commits the bundle alongside OUTCOME (one click)
+//
+// Combat
+// - Combat setup locks once COMBAT_STARTED exists (preserves replay integrity)
+// - Active combatant is derived from canon (initiative + TURN_ADVANCED)
+// - Player cannot submit intent on enemy turns (unless Human DM)
+//
+// Canon panels
+// - WorldLedgerPanelLegacy shows OUTCOME narration
+// - CanonEventsPanel shows all OTHER canon events (movement/map/combat)
 //
 // ------------------------------------------------------------
 
 import { useEffect, useMemo, useState } from "react";
-import { createSession, recordEvent, SessionState } from "@/lib/session/SessionState";
+import {
+  createSession,
+  recordEvent,
+  SessionState,
+} from "@/lib/session/SessionState";
 
 import { parseAction } from "@/lib/parser/ActionParser";
 import { generateOptions, Option } from "@/lib/options/OptionGenerator";
@@ -34,15 +38,24 @@ import ResolutionDraftAdvisoryPanel from "@/components/resolution/ResolutionDraf
 import NextActionHint from "@/components/NextActionHint";
 import WorldLedgerPanelLegacy from "@/components/world/WorldLedgerPanel.legacy";
 import DungeonPressurePanel from "@/components/world/DungeonPressurePanel";
-import ExplorationMapPanel, { MapMarkKind } from "@/components/world/ExplorationMapPanel";
+import ExplorationMapPanel, {
+  MapMarkKind,
+} from "@/components/world/ExplorationMapPanel";
 
 import StewardedShell from "@/components/layout/StewardedShell";
 import ModeHeader from "@/components/layout/ModeHeader";
 import CardSection from "@/components/layout/CardSection";
 import Disclaimer from "@/components/layout/Disclaimer";
 
-import CombatSetupPanel from "@/components/combat/CombatSetupPanel";
-import { deriveCombatState, findLatestCombatId, formatCombatantLabel } from "@/lib/combat/CombatState";
+import {
+  CombatStartedPayload,
+  CombatantSpec,
+  deriveCombatState,
+  findLatestCombatId,
+  formatCombatantLabel,
+  generateDeterministicInitiativeRolls,
+  nextTurnPointer,
+} from "@/lib/combat/CombatState";
 
 // ------------------------------------------------------------
 // Types
@@ -71,24 +84,9 @@ type RollSource = "manual" | "solace";
 type XY = { x: number; y: number };
 
 type Direction = "north" | "south" | "east" | "west";
-type MoveMode = "direction" | "custom";
-
-type ExplorationDraft = {
-  enableMove: boolean;
-  moveMode: MoveMode;
-  direction: Direction;
-  to: XY | null;
-
-  enableReveal: boolean;
-  revealRadius: 0 | 1 | 2;
-
-  enableMark: boolean;
-  markKind: MapMarkKind;
-  markNote: string;
-};
 
 // ------------------------------------------------------------
-// CanonEventsPanel (inline; non-OUTCOME canon ledger)
+// CanonEventsPanel (non-OUTCOME canon ledger)
 // ------------------------------------------------------------
 
 type CanonPanelProps = {
@@ -117,7 +115,8 @@ function renderCanonEventLine(e: any) {
     case "MAP_MARKED": {
       const at = fmtXY(p?.at);
       const kind = typeof p?.kind === "string" ? p.kind : "mark";
-      const note = typeof p?.note === "string" && p.note.trim() ? ` — ${p.note.trim()}` : "";
+      const note =
+        typeof p?.note === "string" && p.note.trim() ? ` — ${p.note.trim()}` : "";
       return `📍 Mark ${kind} at ${at}${note}`;
     }
     case "COMBAT_STARTED": {
@@ -126,7 +125,7 @@ function renderCanonEventLine(e: any) {
       return `⚔️ Combat started (${combatId}) — ${participants} participants`;
     }
     case "COMBAT_ENDED": {
-      const combatId = p?.combatId ? String(p.combatId) : "(unknown)";
+      const combatId = p?.combatId ? String(p.combatId) : "(combat)";
       return `🏁 Combat ended (${combatId})`;
     }
     case "INITIATIVE_ROLLED": {
@@ -150,7 +149,7 @@ function renderCanonEventLine(e: any) {
           return "{}";
         }
       })();
-      return `• ${String(e?.type ?? "UNKNOWN")} ${safe !== "{}" ? `— ${safe}` : ""}`;
+      return `• ${String(e?.type ?? "UNKNOWN")}${safe !== "{}" ? ` — ${safe}` : ""}`;
     }
   }
 }
@@ -174,7 +173,9 @@ function CanonEventsPanel({ events }: CanonPanelProps) {
                   </div>
                 </div>
                 <div className="muted" style={{ whiteSpace: "nowrap" }}>
-                  {typeof e.timestamp === "number" ? new Date(e.timestamp).toLocaleTimeString() : ""}
+                  {typeof e.timestamp === "number"
+                    ? new Date(e.timestamp).toLocaleTimeString()
+                    : ""}
                 </div>
               </div>
             </li>
@@ -208,8 +209,173 @@ function clampInt(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, x));
 }
 
+function normalizeName(s: string) {
+  return s.replace(/\s+/g, " ").trim();
+}
+
+function randomName(): string {
+  const a = [
+    "Astra",
+    "Kara",
+    "Thorne",
+    "Hex",
+    "Rook",
+    "Nyx",
+    "Vex",
+    "Dax",
+    "Mara",
+    "Rune",
+    "Sable",
+    "Orin",
+    "Juno",
+    "Kade",
+    "Iris",
+    "Zeph",
+  ];
+  const b = [
+    "of Ember",
+    "of Glass",
+    "of Iron",
+    "of Neon",
+    "of Ash",
+    "of Dawn",
+    "of Night",
+    "of the Grid",
+    "the Quiet",
+    "the Bold",
+    "the Warden",
+    "the Runner",
+    "the Signal",
+    "the Echo",
+  ];
+  const base = pick(a);
+  const tail = pick([true, false, false]) ? ` ${pick(b)}` : "";
+  return `${base}${tail}`;
+}
+
 // ------------------------------------------------------------
-// Exploration derivation + drafting helpers (local to demo)
+// Initial table helpers
+// ------------------------------------------------------------
+
+function generateInitialTable(): InitialTable {
+  const factionNames = [
+    "The Whisperers",
+    "The Vaultwardens",
+    "The Ash Circle",
+    "The Night Ledger",
+    "The Bell-Silent",
+    "The Cobble Court",
+  ];
+
+  const desires = [
+    "control what sleeps below",
+    "seal the vaults forever",
+    "profit from forbidden knowledge",
+    "redeem an ancient failure",
+    "expose the truth no matter the cost",
+    "keep the city calm at any price",
+  ];
+
+  const pressures = [
+    "time is running out",
+    "someone is leaking secrets",
+    "an old oath is failing",
+    "a rival faction is moving first",
+    "witnesses keep vanishing",
+    "the city above is starting to notice",
+  ];
+
+  const factionCount = pick([2, 3, 3]); // bias toward 3
+  const chosenNames = pickManyUnique(factionNames, factionCount);
+
+  return {
+    openingFrame: pick([
+      "A low fog coils between narrow streets as evening bells fade.",
+      "Rain-dark stone reflects lanternlight in uneasy patterns.",
+      "Voices echo where they shouldn’t, carrying fragments of argument.",
+      "The city hums, unaware of the pressure building beneath it.",
+    ]),
+    locationTraits: [
+      pick(["crowded", "echoing", "claustrophobic", "uneasily quiet"]),
+      pick(["ancient stone", "rotting wood", "slick cobblestone"]),
+    ],
+    latentFactions: chosenNames.map((name) => ({
+      name,
+      desire: pick(desires),
+      pressure: pick(pressures),
+    })),
+    environmentalOddities: [
+      pick([
+        "Lantern flames gutter without wind",
+        "Stone walls seem to absorb sound",
+        "Whispers surface near old drains",
+        "Footsteps echo twice",
+      ]),
+    ],
+    dormantHooks: [
+      pick([
+        "A name scratched into stone repeats across districts",
+        "A missing city clerk last seen near the underways",
+        "A sealed door recently disturbed",
+      ]),
+    ],
+  };
+}
+
+// NON-CANONICAL narration based ONLY on table signals
+function renderInitialTableNarration(t: InitialTable): string {
+  const [traitA, traitB] = t.locationTraits;
+  const oddity = t.environmentalOddities[0] ?? "Something feels off";
+  const hook = t.dormantHooks[0] ?? "A sign repeats";
+  const factions = t.latentFactions;
+
+  const lines: string[] = [];
+  lines.push(t.openingFrame);
+  lines.push(`The place feels ${traitA}, and the air carries the stink of ${traitB}.`);
+
+  if (/footsteps echo twice/i.test(oddity)) {
+    lines.push(
+      "Every step answers itself — once, then again — like the street remembers you a beat too late."
+    );
+  } else if (/lantern/i.test(oddity.toLowerCase())) {
+    lines.push("Lanternlight can’t decide what it wants to be — steady one second, starving the next.");
+  } else if (/absorb sound/i.test(oddity.toLowerCase())) {
+    lines.push("Sound doesn’t travel right. Words die early, like the walls are swallowing them.");
+  } else if (/whispers/i.test(oddity.toLowerCase())) {
+    lines.push(
+      "You keep catching whispers at the edge of hearing — not loud enough to understand, not quiet enough to ignore."
+    );
+  } else {
+    lines.push(`${oddity}.`);
+  }
+
+  if (factions.length > 0) {
+    lines.push("There are pressures under the surface:");
+    factions.forEach((f) => lines.push(`• ${f.name} want to ${f.desire} — but ${f.pressure}.`));
+  }
+
+  lines.push(`${hook}.`);
+  lines.push("That repetition feels deliberate. And it feels recent.");
+
+  return lines.join("\n\n");
+}
+
+function inferOptionKind(description: string): OptionKind {
+  const text = description.toLowerCase();
+  if (text.includes("attack") || text.includes("fight") || text.includes("oppose") || text.includes("contest")) {
+    return "contested";
+  }
+  if (text.includes("climb") || text.includes("cross") || text.includes("navigate") || text.includes("environment")) {
+    return "environmental";
+  }
+  if (text.includes("steal") || text.includes("sneak") || text.includes("risk")) {
+    return "risky";
+  }
+  return "safe";
+}
+
+// ------------------------------------------------------------
+// Exploration derivation + drafting helpers
 // ------------------------------------------------------------
 
 function withinBounds(p: XY, w: number, h: number) {
@@ -217,11 +383,17 @@ function withinBounds(p: XY, w: number, h: number) {
 }
 
 function deriveCurrentPosition(events: readonly any[], w: number, h: number): XY {
+  // default: center-ish
   let pos: XY = { x: Math.floor(w / 2), y: Math.floor(h / 2) };
   for (const e of events) {
     if (e?.type === "PLAYER_MOVED") {
       const to = e?.payload?.to;
-      if (to && typeof to.x === "number" && typeof to.y === "number" && withinBounds(to, w, h)) {
+      if (
+        to &&
+        typeof to.x === "number" &&
+        typeof to.y === "number" &&
+        withinBounds(to, w, h)
+      ) {
         pos = { x: to.x, y: to.y };
       }
     }
@@ -272,147 +444,28 @@ function textSuggestsLocked(text: string) {
   return /\b(locked|sealed|barred|jammed)\b/.test(t);
 }
 
-// ------------------------------------------------------------
-// Initial table helpers
-// ------------------------------------------------------------
-
-function generateInitialTable(): InitialTable {
-  const factionNames = [
-    "The Whisperers",
-    "The Vaultwardens",
-    "The Ash Circle",
-    "The Night Ledger",
-    "The Bell-Silent",
-    "The Cobble Court",
-  ];
-
-  const desires = [
-    "control what sleeps below",
-    "seal the vaults forever",
-    "profit from forbidden knowledge",
-    "redeem an ancient failure",
-    "expose the truth no matter the cost",
-    "keep the city calm at any price",
-  ];
-
-  const pressures = [
-    "time is running out",
-    "someone is leaking secrets",
-    "an old oath is failing",
-    "a rival faction is moving first",
-    "witnesses keep vanishing",
-    "the city above is starting to notice",
-  ];
-
-  const factionCount = pick([2, 3, 3]); // bias slightly toward 3
-  const chosenNames = pickManyUnique(factionNames, factionCount);
-
-  return {
-    openingFrame: pick([
-      "A low fog coils between narrow streets as evening bells fade.",
-      "Rain-dark stone reflects lanternlight in uneasy patterns.",
-      "Voices echo where they shouldn’t, carrying fragments of argument.",
-      "The city hums, unaware of the pressure building beneath it.",
-    ]),
-    locationTraits: [pick(["crowded", "echoing", "claustrophobic", "uneasily quiet"]), pick(["ancient stone", "rotting wood", "slick cobblestone"])],
-    latentFactions: chosenNames.map((name) => ({
-      name,
-      desire: pick(desires),
-      pressure: pick(pressures),
-    })),
-    environmentalOddities: [
-      pick(["Lantern flames gutter without wind", "Stone walls seem to absorb sound", "Whispers surface near old drains", "Footsteps echo twice"]),
-    ],
-    dormantHooks: [pick(["A name scratched into stone repeats across districts", "A missing city clerk last seen near the underways", "A sealed door recently disturbed"])],
-  };
-}
-
-// ------------------------------------------------------------
-// Table narration renderer (NON-CANONICAL)
-// ------------------------------------------------------------
-
-function renderInitialTableNarration(t: InitialTable): string {
-  const [traitA, traitB] = t.locationTraits;
-  const oddity = t.environmentalOddities[0] ?? "Something feels off";
-  const hook = t.dormantHooks[0] ?? "A sign repeats";
-  const factions = t.latentFactions;
-
-  const lines: string[] = [];
-  lines.push(t.openingFrame);
-  lines.push(`The place feels ${traitA}, and the air carries the stink of ${traitB}.`);
-
-  if (/footsteps echo twice/i.test(oddity)) {
-    lines.push("Every step answers itself — once, then again — like the street remembers you a beat too late.");
-  } else if (/lantern/i.test(oddity.toLowerCase())) {
-    lines.push("Lanternlight can’t decide what it wants to be — steady one second, starving the next.");
-  } else if (/absorb sound/i.test(oddity.toLowerCase())) {
-    lines.push("Sound doesn’t travel right. Words die early, like the walls are swallowing them.");
-  } else if (/whispers/i.test(oddity.toLowerCase())) {
-    lines.push("You keep catching whispers at the edge of hearing — not loud enough to understand, not quiet enough to ignore.");
-  } else {
-    lines.push(`${oddity}.`);
-  }
-
-  if (factions.length > 0) {
-    lines.push("There are pressures under the surface:");
-    factions.forEach((f) => lines.push(`• ${f.name} want to ${f.desire} — but ${f.pressure}.`));
-  }
-
-  lines.push(`${hook}.`);
-  lines.push("That repetition feels deliberate. And it feels recent.");
-
-  return lines.join("\n\n");
-}
-
-// ------------------------------------------------------------
-// Difficulty inference (language-only)
-// ------------------------------------------------------------
-
-function inferOptionKind(description: string): OptionKind {
-  const text = description.toLowerCase();
-
-  if (text.includes("attack") || text.includes("fight") || text.includes("oppose") || text.includes("contest")) return "contested";
-  if (text.includes("climb") || text.includes("cross") || text.includes("navigate") || text.includes("environment")) return "environmental";
-  if (text.includes("steal") || text.includes("sneak") || text.includes("risk")) return "risky";
-
-  return "safe";
-}
-
-// ------------------------------------------------------------
-// Turn + role helpers (combat-aware)
-// ------------------------------------------------------------
-
-function isEnemyActorId(actorId: string) {
-  return actorId.startsWith("enemy_") || actorId.startsWith("enemy_group_");
-}
-
-function describeActorForUI(actorId: string, derivedCombat: any | null) {
-  if (!derivedCombat) return { label: "Player 1", kind: "player" as const };
-
-  const spec = derivedCombat.participants?.find((p: any) => p.id === actorId) ?? null;
-  if (spec) {
-    return {
-      label: formatCombatantLabel(spec),
-      kind: spec.kind === "enemy_group" ? ("enemy" as const) : ("player" as const),
-    };
-  }
-
-  // fallback
-  return {
-    label: actorId,
-    kind: isEnemyActorId(actorId) ? ("enemy" as const) : ("player" as const),
-  };
-}
+type ExplorationDraft = {
+  enableMove: boolean;
+  direction: Direction | "none";
+  enableReveal: boolean;
+  revealRadius: 0 | 1 | 2;
+  enableMark: boolean;
+  markKind: MapMarkKind;
+  markNote: string;
+};
 
 // ------------------------------------------------------------
 
 export default function DemoPage() {
   const role: "arbiter" = "arbiter";
 
-  const [state, setState] = useState<SessionState>(createSession("demo-session", "demo"));
+  const [state, setState] = useState<SessionState>(
+    createSession("demo-session", "demo")
+  );
+
   const [dmMode, setDmMode] = useState<DMMode>("solace-neutral");
 
-  // Map size (matches your ExplorationMapPanel MVP assumptions)
+  // Map size (MVP grid)
   const MAP_W = 13;
   const MAP_H = 9;
 
@@ -423,119 +476,91 @@ export default function DemoPage() {
   // Editable narration buffer (DM-controlled)
   const [tableDraftText, setTableDraftText] = useState("");
 
-  // Intent + resolution flow
+  // Action parsing + options
   const [playerInput, setPlayerInput] = useState("");
   const [parsed, setParsed] = useState<any>(null);
   const [options, setOptions] = useState<Option[] | null>(null);
   const [selectedOption, setSelectedOption] = useState<Option | null>(null);
 
   // ----------------------------------------------------------
-  // Canon append helper (used by broken-out panels)
+  // Combat state (derived)
   // ----------------------------------------------------------
 
-  function appendCanon(type: string, payload: any) {
-    setState((prev) =>
-      recordEvent(prev, {
-        id: crypto.randomUUID(),
-        timestamp: Date.now(),
-        actor: "arbiter",
-        type,
-        payload,
-      })
-    );
-  }
-
-  // ----------------------------------------------------------
-  // Combat derived state (for turn-aware input labeling)
-  // ----------------------------------------------------------
-
-  const latestCombatId = useMemo(() => findLatestCombatId(state.events as any) ?? null, [state.events]);
+  const latestCombatId = useMemo(() => {
+    return findLatestCombatId(state.events as any) ?? null;
+  }, [state.events]);
 
   const derivedCombat = useMemo(() => {
     if (!latestCombatId) return null;
-    try {
-      return deriveCombatState(latestCombatId, state.events as any);
-    } catch {
-      return null;
-    }
+    return deriveCombatState(latestCombatId, state.events as any);
   }, [latestCombatId, state.events]);
 
-  const activeActorId = useMemo(() => {
-    if (derivedCombat?.activeCombatantId) return String(derivedCombat.activeCombatantId);
-    return "player_1";
+  const combatActive = !!derivedCombat;
+
+  const activeCombatantSpec = useMemo(() => {
+    if (!derivedCombat?.activeCombatantId) return null;
+    return (
+      derivedCombat.participants.find((p) => p.id === derivedCombat.activeCombatantId) ??
+      null
+    );
   }, [derivedCombat]);
 
-  const activeActorUI = useMemo(() => {
-    return describeActorForUI(activeActorId, derivedCombat);
-  }, [activeActorId, derivedCombat]);
+  const isEnemyTurn = activeCombatantSpec?.kind === "enemy_group";
 
   // ----------------------------------------------------------
-  // Exploration draft (auto-prepared AFTER intent -> option selection)
+  // Exploration draft (auto-prepared AFTER intent + option)
   // ----------------------------------------------------------
 
-  const currentPos = useMemo(() => deriveCurrentPosition(state.events as any[], MAP_W, MAP_H), [state.events]);
+  const currentPos = useMemo(
+    () => deriveCurrentPosition(state.events as any[], MAP_W, MAP_H),
+    [state.events]
+  );
 
   const [explorationDraft, setExplorationDraft] = useState<ExplorationDraft>({
     enableMove: false,
-    moveMode: "direction",
-    direction: "north",
-    to: null,
-
+    direction: "none",
     enableReveal: true,
     revealRadius: 1,
-
     enableMark: false,
     markKind: "door",
     markNote: "",
   });
 
-  // Auto-draft exploration once an option is selected (we now have intent + a concrete proposed resolution)
+  const suggestedTo = useMemo(() => {
+    if (!explorationDraft.enableMove) return null;
+    if (explorationDraft.direction === "none") return null;
+    const to = stepFrom(currentPos, explorationDraft.direction);
+    return withinBounds(to, MAP_W, MAP_H) ? to : null;
+  }, [explorationDraft.enableMove, explorationDraft.direction, currentPos]);
+
+  // When an option is selected (i.e., we are about to resolve), auto-draft exploration.
   useEffect(() => {
     if (!selectedOption) return;
 
     const intentText = `${playerInput}\n${selectedOption.description}`.trim();
-    const inferred = inferDirection(intentText);
 
-    const dir: Direction = inferred ?? "north";
-    const step = stepFrom(currentPos, dir);
-    const canMove = withinBounds(step, MAP_W, MAP_H);
-
+    const dir = inferDirection(intentText);
     const door = textSuggestsDoor(intentText);
     const locked = textSuggestsLocked(intentText);
 
     setExplorationDraft((prev) => ({
       ...prev,
-      enableMove: canMove,
-      moveMode: "direction",
-      direction: dir,
-      to: canMove ? step : null,
 
+      // move draft: only if a direction is inferred; DM can override dropdown
+      enableMove: !!dir,
+      direction: dir ?? "none",
+
+      // reveal is cheap + feels good; keep on by default
       enableReveal: true,
       revealRadius: 1,
 
+      // mark suggestion: only if door mentioned; DM can override
       enableMark: door,
       markKind: "door",
       markNote: door ? (locked ? "locked" : prev.markNote || "") : prev.markNote,
     }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedOption?.id]);
-
-  // Keep draft.to synced if user is in direction mode and changes direction
-  useEffect(() => {
-    if (!selectedOption) return;
-    if (!explorationDraft.enableMove) return;
-    if (explorationDraft.moveMode !== "direction") return;
-
-    const nextTo = stepFrom(currentPos, explorationDraft.direction);
-    const canMove = withinBounds(nextTo, MAP_W, MAP_H);
-
-    setExplorationDraft((p) => ({
-      ...p,
-      to: canMove ? nextTo : null,
-      enableMove: canMove,
-    }));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [explorationDraft.direction, explorationDraft.moveMode, currentPos.x, currentPos.y, selectedOption?.id]);
 
   // ----------------------------------------------------------
   // Generate table ONCE per session
@@ -553,24 +578,29 @@ export default function DemoPage() {
 
   useEffect(() => {
     if (!initialTable) return;
-    if (tableDraftText.trim() === "") setTableDraftText(renderedTableNarration);
+    if (tableDraftText.trim() === "") {
+      setTableDraftText(renderedTableNarration);
+    }
   }, [initialTable, renderedTableNarration, tableDraftText]);
 
-  // If user switches modes:
-  // - Solace: gate applies
-  // - Human: DO NOT auto-accept
+  // Mode switching: Solace requires accept gate again
   useEffect(() => {
     if (dmMode === "solace-neutral") setTableAccepted(false);
   }, [dmMode]);
 
   // ----------------------------------------------------------
-  // Player/Arbiter submits action (turn-aware)
+  // Player submits action (intent)
   // ----------------------------------------------------------
 
-  function handleActionSubmit() {
-    if (!playerInput.trim()) return;
+  const canPlayerSubmitIntent =
+    // in combat: only allow player to submit intent on player turns (or any turn in Human DM mode)
+    (!combatActive || !isEnemyTurn) || dmMode === "human";
 
-    const parsedAction = parseAction(activeActorId, playerInput);
+  function handlePlayerAction() {
+    if (!playerInput.trim()) return;
+    if (!canPlayerSubmitIntent) return;
+
+    const parsedAction = parseAction("player_1", playerInput);
     const optionSet = generateOptions(parsedAction);
 
     setParsed(parsedAction);
@@ -578,7 +608,7 @@ export default function DemoPage() {
     setSelectedOption(null);
   }
 
-  // Solace silently selects option when facilitating (neutral mode)
+  // Solace selects an option in neutral facilitator mode
   useEffect(() => {
     if (dmMode !== "solace-neutral") return;
     if (!options || options.length === 0) return;
@@ -586,8 +616,82 @@ export default function DemoPage() {
   }, [dmMode, options]);
 
   // ----------------------------------------------------------
-  // Record canon atomically (OUTCOME + exploration bundle)
+  // Record canon (OUTCOME + optional exploration bundle)
   // ----------------------------------------------------------
+
+  function commitExplorationBundle(nextState: SessionState) {
+    const d = explorationDraft;
+    let next = nextState;
+
+    const here = deriveCurrentPosition(next.events as any[], MAP_W, MAP_H);
+
+    const to =
+      d.enableMove && d.direction !== "none"
+        ? stepFrom(here, d.direction)
+        : null;
+
+    const canMove = to ? withinBounds(to, MAP_W, MAP_H) : false;
+
+    // Movement is the resolution of intent → only commit if enabled + valid
+    if (d.enableMove && canMove && to) {
+      next = recordEvent(next, {
+        id: crypto.randomUUID(),
+        timestamp: Date.now(),
+        actor: "arbiter",
+        type: "PLAYER_MOVED",
+        payload: { from: here, to } as any,
+      });
+
+      if (d.enableReveal && d.revealRadius > 0) {
+        next = recordEvent(next, {
+          id: crypto.randomUUID(),
+          timestamp: Date.now(),
+          actor: "arbiter",
+          type: "MAP_REVEALED",
+          payload: { tiles: revealRadius(to, d.revealRadius, MAP_W, MAP_H) } as any,
+        });
+      }
+
+      // Mark at the destination (e.g., “you arrive at a locked door”)
+      if (d.enableMark) {
+        const note = d.markNote.trim() ? d.markNote.trim() : null;
+        next = recordEvent(next, {
+          id: crypto.randomUUID(),
+          timestamp: Date.now(),
+          actor: "arbiter",
+          type: "MAP_MARKED",
+          payload: { at: to, kind: d.markKind, note } as any,
+        });
+      }
+
+      return next;
+    }
+
+    // No move: allow reveal/mark at current tile ONLY if explicitly enabled.
+    // (Supports “I inspect / listen / search” without moving.)
+    if (d.enableReveal && d.revealRadius > 0) {
+      next = recordEvent(next, {
+        id: crypto.randomUUID(),
+        timestamp: Date.now(),
+        actor: "arbiter",
+        type: "MAP_REVEALED",
+        payload: { tiles: revealRadius(here, d.revealRadius, MAP_W, MAP_H) } as any,
+      });
+    }
+
+    if (d.enableMark) {
+      const note = d.markNote.trim() ? d.markNote.trim() : null;
+      next = recordEvent(next, {
+        id: crypto.randomUUID(),
+        timestamp: Date.now(),
+        actor: "arbiter",
+        type: "MAP_MARKED",
+        payload: { at: here, kind: d.markKind, note } as any,
+      });
+    }
+
+    return next;
+  }
 
   function handleRecord(payload: {
     description: string;
@@ -599,13 +703,9 @@ export default function DemoPage() {
     };
     audit: string[];
   }) {
-    const d = explorationDraft;
-
     setState((prev) => {
-      let next = prev;
-
-      // 1) OUTCOME is canon
-      next = recordEvent(next, {
+      // OUTCOME is canon first…
+      let next = recordEvent(prev, {
         id: crypto.randomUUID(),
         timestamp: Date.now(),
         actor: "arbiter",
@@ -613,57 +713,8 @@ export default function DemoPage() {
         payload,
       });
 
-      // 2) Exploration bundle (append-only; arbiter-only)
-      //    Movement is a consequence of intent resolution, not a pre-move UI action.
-      const here = deriveCurrentPosition(next.events as any[], MAP_W, MAP_H);
-
-      // Determine destination
-      let destination: XY | null = null;
-
-      if (d.enableMove) {
-        if (d.moveMode === "direction") {
-          const to = stepFrom(here, d.direction);
-          destination = withinBounds(to, MAP_W, MAP_H) ? to : null;
-        } else {
-          if (d.to && withinBounds(d.to, MAP_W, MAP_H)) destination = { x: d.to.x, y: d.to.y };
-        }
-      }
-
-      // PLAYER_MOVED (only if we have a valid destination)
-      if (destination) {
-        next = recordEvent(next, {
-          id: crypto.randomUUID(),
-          timestamp: Date.now(),
-          actor: "arbiter",
-          type: "PLAYER_MOVED",
-          payload: { from: here, to: destination } as any,
-        });
-      }
-
-      // MAP_REVEALED (reveal around destination if moved, else reveal around here)
-      if (d.enableReveal && d.revealRadius > 0) {
-        const center = destination ?? here;
-        next = recordEvent(next, {
-          id: crypto.randomUUID(),
-          timestamp: Date.now(),
-          actor: "arbiter",
-          type: "MAP_REVEALED",
-          payload: { tiles: revealRadius(center, d.revealRadius, MAP_W, MAP_H) } as any,
-        });
-      }
-
-      // MAP_MARKED (mark at destination if moved, else current tile)
-      if (d.enableMark) {
-        const at = destination ?? here;
-        const note = d.markNote.trim() ? d.markNote.trim() : null;
-        next = recordEvent(next, {
-          id: crypto.randomUUID(),
-          timestamp: Date.now(),
-          actor: "arbiter",
-          type: "MAP_MARKED",
-          payload: { at, kind: d.markKind, note } as any,
-        });
-      }
+      // …then exploration bundle (append-only, still arbiter-gated)
+      next = commitExplorationBundle(next);
 
       return next;
     });
@@ -676,6 +727,222 @@ export default function DemoPage() {
   function shareCanon() {
     navigator.clipboard.writeText(exportCanon(state.events));
     alert("Canon copied to clipboard.");
+  }
+
+  // ----------------------------------------------------------
+  // Combat setup inputs (locked once combat starts)
+  // ----------------------------------------------------------
+
+  const [playerCount, setPlayerCount] = useState(4);
+
+  // Player names indexed 0..5 (render only first N)
+  const [playerNames, setPlayerNames] = useState<string[]>(["", "", "", "", "", ""]);
+
+  // Enemy groups as chips
+  const [enemyGroups, setEnemyGroups] = useState<string[]>(["Skirmishers", "Archers"]);
+  const [enemyGroupSelect, setEnemyGroupSelect] = useState<string>("Skirmishers");
+
+  // Init mods
+  const [initModPlayers, setInitModPlayers] = useState(1);
+  const [initModEnemies, setInitModEnemies] = useState(1);
+
+  const PLAYER_COUNTS = [1, 2, 3, 4, 5, 6] as const;
+  const INIT_MODS = [-2, -1, 0, 1, 2, 3, 4, 5, 6, 7, 8] as const;
+
+  const ENEMY_GROUP_LIBRARY = useMemo(
+    () => [
+      "Skirmishers",
+      "Archers",
+      "Brutes",
+      "Shields",
+      "Stalkers",
+      "Casters",
+      "Drones",
+      "Sentries",
+      "Wraiths",
+      "Grid Knights",
+      "Firewall Wardens",
+      "Neon Hounds",
+    ],
+    []
+  );
+
+  // Ensure playerNames always has length 6
+  useEffect(() => {
+    setPlayerNames((prev) => {
+      if (prev.length === 6) return prev;
+      const next = [...prev];
+      while (next.length < 6) next.push("");
+      return next.slice(0, 6);
+    });
+  }, []);
+
+  function getEffectivePlayerName(i1Based: number) {
+    const idx = i1Based - 1;
+    const raw = playerNames[idx] ?? "";
+    const name = normalizeName(raw);
+    return name.length > 0 ? name : `Player ${i1Based}`;
+  }
+
+  function startCombatDeterministic() {
+    if (combatActive) return;
+
+    const pc = clampInt(playerCount, 1, 6);
+
+    const groups = enemyGroups
+      .map((g) => normalizeName(g))
+      .filter(Boolean)
+      .slice(0, 6);
+
+    const combatId = crypto.randomUUID();
+    const seed = crypto.randomUUID(); // deterministic within-combat once committed
+
+    const participants: CombatantSpec[] = [];
+
+    for (let i = 1; i <= pc; i++) {
+      participants.push({
+        id: `player_${i}`,
+        name: getEffectivePlayerName(i),
+        kind: "player",
+        initiativeMod: Math.trunc(initModPlayers || 0),
+      });
+    }
+
+    groups.forEach((name, idx) => {
+      const id = `enemy_group_${idx + 1}`;
+      participants.push({
+        id,
+        name,
+        kind: "enemy_group",
+        initiativeMod: Math.trunc(initModEnemies || 0),
+      });
+    });
+
+    const started: CombatStartedPayload = {
+      combatId,
+      seed,
+      participants,
+    };
+
+    const initRolls = generateDeterministicInitiativeRolls(started);
+
+    setState((prev) => {
+      let next = prev;
+
+      next = recordEvent(next, {
+        id: crypto.randomUUID(),
+        timestamp: Date.now(),
+        actor: "arbiter",
+        type: "COMBAT_STARTED",
+        payload: started as any,
+      });
+
+      for (const r of initRolls) {
+        next = recordEvent(next, {
+          id: crypto.randomUUID(),
+          timestamp: Date.now(),
+          actor: "arbiter",
+          type: "INITIATIVE_ROLLED",
+          payload: r as any,
+        });
+      }
+
+      // Initialize pointer at round 1, index 0
+      next = recordEvent(next, {
+        id: crypto.randomUUID(),
+        timestamp: Date.now(),
+        actor: "arbiter",
+        type: "TURN_ADVANCED",
+        payload: {
+          combatId,
+          round: 1,
+          index: 0,
+        } as any,
+      });
+
+      return next;
+    });
+  }
+
+  function advanceTurn() {
+    if (!derivedCombat) return;
+    const payload = nextTurnPointer(derivedCombat);
+
+    setState((prev) =>
+      recordEvent(prev, {
+        id: crypto.randomUUID(),
+        timestamp: Date.now(),
+        actor: "arbiter",
+        type: "TURN_ADVANCED",
+        payload: payload as any,
+      })
+    );
+  }
+
+  function endCombat() {
+    if (!derivedCombat) return;
+
+    setState((prev) =>
+      recordEvent(prev, {
+        id: crypto.randomUUID(),
+        timestamp: Date.now(),
+        actor: "arbiter",
+        type: "COMBAT_ENDED",
+        payload: { combatId: derivedCombat.combatId } as any,
+      })
+    );
+  }
+
+  // Enemy group builder actions
+  function addEnemyGroup(name: string) {
+    if (combatActive) return;
+
+    const v = normalizeName(name);
+    if (!v) return;
+
+    setEnemyGroups((prev) => {
+      if (prev.map((x) => x.toLowerCase()).includes(v.toLowerCase())) return prev;
+      if (prev.length >= 6) return prev;
+      return [...prev, v];
+    });
+  }
+
+  function removeEnemyGroup(name: string) {
+    if (combatActive) return;
+    setEnemyGroups((prev) => prev.filter((g) => g !== name));
+  }
+
+  function clearEnemyGroups() {
+    if (combatActive) return;
+    setEnemyGroups([]);
+  }
+
+  function randomizePlayerNames() {
+    if (combatActive) return;
+
+    const pc = clampInt(playerCount, 1, 6);
+    setPlayerNames((prev) => {
+      const next = [...prev];
+      const used = new Set<string>(
+        next.map((x) => normalizeName(x).toLowerCase()).filter(Boolean)
+      );
+
+      for (let i = 0; i < pc; i++) {
+        const current = normalizeName(next[i] ?? "");
+        if (current) continue;
+
+        let tries = 0;
+        let name = randomName();
+        while (used.has(name.toLowerCase()) && tries < 12) {
+          name = randomName();
+          tries++;
+        }
+        used.add(name.toLowerCase());
+        next[i] = name;
+      }
+
+      return next.slice(0, 6);
+    });
   }
 
   const isHumanDM = dmMode === "human";
@@ -696,14 +963,23 @@ export default function DemoPage() {
         ]}
       />
 
+      {/* FACILITATION MODE */}
       <CardSection title="Facilitation Mode">
         <label>
-          <input type="radio" checked={dmMode === "human"} onChange={() => setDmMode("human")} />{" "}
+          <input
+            type="radio"
+            checked={dmMode === "human"}
+            onChange={() => setDmMode("human")}
+          />{" "}
           Human DM (options visible + editable setup)
         </label>
         <br />
         <label>
-          <input type="radio" checked={dmMode === "solace-neutral"} onChange={() => setDmMode("solace-neutral")} />{" "}
+          <input
+            type="radio"
+            checked={dmMode === "solace-neutral"}
+            onChange={() => setDmMode("solace-neutral")}
+          />{" "}
           Solace (Neutral Facilitator)
         </label>
       </CardSection>
@@ -754,7 +1030,7 @@ export default function DemoPage() {
         </CardSection>
       )}
 
-      {/* HUMAN DM: editable table */}
+      {/* HUMAN DM: editable table (AUTO-GENERATED) */}
       {dmMode === "human" && initialTable && !tableAccepted && (
         <CardSection title="Solace Setup Helper (Optional)">
           <p className="muted" style={{ marginTop: 0 }}>
@@ -806,53 +1082,282 @@ export default function DemoPage() {
             events={state.events}
           />
 
-          {/* Map is canon-only view */}
+          {/* Exploration Map (canon view; no pre-intent controls) */}
           <ExplorationMapPanel events={state.events} mapW={MAP_W} mapH={MAP_H} />
 
-          {/* Combat (broken out, locked by canon) */}
-          <CombatSetupPanel events={state.events as any[]} onAppendCanon={appendCanon} />
+          {/* COMBAT */}
+          <CardSection title="Combat (Deterministic, Grouped Enemies)">
+            <p className="muted" style={{ marginTop: 0 }}>
+              Players roll individually. Enemy groups roll once per group. Turn order is derived from events.
+            </p>
 
-          {/* Turn-aware action banner */}
-          <CardSection title="Current Turn">
-            {derivedCombat ? (
-              <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
-                <div>
-                  <div className="muted">Active combatant</div>
-                  <div style={{ marginTop: 4 }}>
-                    <strong>{activeActorUI.label}</strong>{" "}
-                    <span className="muted">({activeActorUI.kind === "enemy" ? "enemy (arbiter-authored)" : "player"})</span>
-                  </div>
+            {combatActive && (
+              <div className="muted" style={{ marginTop: 8 }}>
+                🔒 Combat is active. Setup is locked to preserve replay integrity.
+              </div>
+            )}
+
+            {/* Setup */}
+            <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "flex-end" }}>
+              <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                Players (1–6):
+                <select
+                  value={playerCount}
+                  onChange={(e) => setPlayerCount(clampInt(Number(e.target.value), 1, 6))}
+                  style={{ minWidth: 140 }}
+                  disabled={combatActive}
+                >
+                  {PLAYER_COUNTS.map((n) => (
+                    <option key={n} value={n}>
+                      {n}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                Player init mod:
+                <select
+                  value={initModPlayers}
+                  onChange={(e) => setInitModPlayers(Math.trunc(Number(e.target.value)))}
+                  style={{ minWidth: 140 }}
+                  disabled={combatActive}
+                >
+                  {INIT_MODS.map((n) => (
+                    <option key={n} value={n}>
+                      {n >= 0 ? `+${n}` : `${n}`}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                Enemy group init mod:
+                <select
+                  value={initModEnemies}
+                  onChange={(e) => setInitModEnemies(Math.trunc(Number(e.target.value)))}
+                  style={{ minWidth: 170 }}
+                  disabled={combatActive}
+                >
+                  {INIT_MODS.map((n) => (
+                    <option key={n} value={n}>
+                      {n >= 0 ? `+${n}` : `${n}`}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <div style={{ flex: "1 1 320px", display: "flex", flexDirection: "column", gap: 6 }}>
+                <span className="muted">Enemy groups</span>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                  <select
+                    value={enemyGroupSelect}
+                    onChange={(e) => setEnemyGroupSelect(e.target.value)}
+                    style={{ minWidth: 220 }}
+                    disabled={combatActive}
+                  >
+                    {ENEMY_GROUP_LIBRARY.map((g) => (
+                      <option key={g} value={g}>
+                        {g}
+                      </option>
+                    ))}
+                  </select>
+                  <button onClick={() => addEnemyGroup(enemyGroupSelect)} disabled={combatActive}>
+                    Add
+                  </button>
+                  <button onClick={clearEnemyGroups} disabled={combatActive || enemyGroups.length === 0}>
+                    Clear
+                  </button>
+                  <span className="muted" style={{ fontSize: 12 }}>
+                    (max 6)
+                  </span>
                 </div>
-                <div className="muted" style={{ alignSelf: "flex-end" }}>
-                  Round {derivedCombat.round}
+
+                {enemyGroups.length > 0 ? (
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8 }}>
+                    {enemyGroups.map((g) => (
+                      <span
+                        key={g}
+                        style={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: 8,
+                          padding: "6px 10px",
+                          borderRadius: 999,
+                          border: "1px solid rgba(255,255,255,0.12)",
+                          background: "rgba(255,255,255,0.05)",
+                        }}
+                      >
+                        <span>{g}</span>
+                        <button
+                          onClick={() => removeEnemyGroup(g)}
+                          aria-label={`Remove ${g}`}
+                          disabled={combatActive}
+                          style={{
+                            padding: "0 8px",
+                            borderRadius: 999,
+                            border: "1px solid rgba(255,255,255,0.12)",
+                          }}
+                        >
+                          ×
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="muted" style={{ marginTop: 8 }}>
+                    No enemy groups yet. Add one.
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Player Names */}
+            <div style={{ marginTop: 14 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
+                <strong>Players</strong>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  <button onClick={randomizePlayerNames} disabled={combatActive}>
+                    🎲 Random names
+                  </button>
                 </div>
               </div>
-            ) : (
-              <p className="muted" style={{ marginTop: 0 }}>
-                No combat active. Default actor is Player 1.
+
+              <div
+                style={{
+                  marginTop: 10,
+                  display: "grid",
+                  gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+                  gap: 10,
+                }}
+              >
+                {Array.from({ length: clampInt(playerCount, 1, 6) }, (_, idx) => {
+                  const i1 = idx + 1;
+                  const value = playerNames[idx] ?? "";
+                  return (
+                    <label key={i1} style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                      <span className="muted">Player {i1} name (optional)</span>
+                      <input
+                        value={value}
+                        disabled={combatActive}
+                        onChange={(e) => {
+                          const v = e.target.value;
+                          setPlayerNames((prev) => {
+                            const next = [...prev];
+                            next[idx] = v;
+                            return next.slice(0, 6);
+                          });
+                        }}
+                        placeholder={`Player ${i1}`}
+                      />
+                    </label>
+                  );
+                })}
+              </div>
+
+              <p className="muted" style={{ marginTop: 10, marginBottom: 0 }}>
+                Blank names will display as “Player 1…N”. Names are used for initiative labels and canon readability.
               </p>
+            </div>
+
+            {/* Controls */}
+            <div style={{ marginTop: 14, display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <button onClick={startCombatDeterministic} disabled={combatActive}>
+                Start Combat (Seeded)
+              </button>
+              <button onClick={advanceTurn} disabled={!derivedCombat}>
+                Advance Turn
+              </button>
+              <button onClick={endCombat} disabled={!derivedCombat}>
+                End Combat
+              </button>
+            </div>
+
+            {derivedCombat && (
+              <div style={{ marginTop: 12 }}>
+                <div className="muted">
+                  Combat: <strong>{derivedCombat.combatId}</strong> · Round{" "}
+                  <strong>{derivedCombat.round}</strong>
+                  {activeCombatantSpec && (
+                    <>
+                      {" "}
+                      · Active: <strong>{formatCombatantLabel(activeCombatantSpec)}</strong>
+                    </>
+                  )}
+                </div>
+
+                <div style={{ marginTop: 10, display: "grid", gridTemplateColumns: "1fr", gap: 6 }}>
+                  {derivedCombat.order.map((id, idx) => {
+                    const spec = derivedCombat.participants.find((p) => p.id === id) ?? null;
+                    const roll = derivedCombat.initiative.find((r) => r.combatantId === id) ?? null;
+                    const active = derivedCombat.activeCombatantId === id;
+
+                    return (
+                      <div
+                        key={id}
+                        style={{
+                          padding: "10px 12px",
+                          borderRadius: 8,
+                          border: active
+                            ? "1px solid rgba(138,180,255,0.55)"
+                            : "1px solid rgba(255,255,255,0.10)",
+                          background: active ? "rgba(138,180,255,0.10)" : "rgba(255,255,255,0.04)",
+                          display: "flex",
+                          justifyContent: "space-between",
+                          alignItems: "center",
+                          gap: 10,
+                        }}
+                      >
+                        <div>
+                          <strong>
+                            {idx + 1}. {spec ? formatCombatantLabel(spec) : id}
+                          </strong>
+                          {active && <span className="muted">{"  "}← active</span>}
+                        </div>
+                        <div className="muted">
+                          {roll ? `Init ${roll.total} (d20 ${roll.natural} + ${roll.modifier})` : "Init —"}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
             )}
           </CardSection>
 
-          <CardSection title={activeActorUI.kind === "enemy" ? "Arbiter Action (Enemy Turn)" : "Player Action"}>
+          {/* Player Action */}
+          <CardSection
+            title={
+              combatActive && activeCombatantSpec
+                ? `Intent (Active: ${formatCombatantLabel(activeCombatantSpec)})`
+                : "Player Action"
+            }
+          >
+            {combatActive && isEnemyTurn && dmMode !== "human" && (
+              <p className="muted" style={{ marginTop: 0 }}>
+                Enemy turn. In Solace-neutral, the player cannot declare enemy intent.
+                Switch to Human DM to enter enemy intent, then commit with the Arbiter.
+              </p>
+            )}
+
             <textarea
               value={playerInput}
               onChange={(e) => setPlayerInput(e.target.value)}
-              placeholder={
-                activeActorUI.kind === "enemy"
-                  ? `As Arbiter, describe what ${activeActorUI.label} does…`
-                  : "Describe what your character does…"
-              }
+              placeholder="Describe what your character does…"
+              disabled={!canPlayerSubmitIntent}
               style={{
                 width: "100%",
                 minHeight: "120px",
                 resize: "vertical",
                 boxSizing: "border-box",
                 lineHeight: 1.5,
+                opacity: !canPlayerSubmitIntent ? 0.6 : 1,
               }}
             />
             <div style={{ marginTop: 8 }}>
-              <button onClick={handleActionSubmit}>Submit Action</button>
+              <button onClick={handlePlayerAction} disabled={!canPlayerSubmitIntent}>
+                Submit Action
+              </button>
             </div>
           </CardSection>
 
@@ -878,22 +1383,26 @@ export default function DemoPage() {
           {selectedOption && (
             <CardSection title="Proposed Exploration Canon (Draft)">
               <p className="muted" style={{ marginTop: 0 }}>
-                These are auto-suggested based on intent + selected option. They are NOT canon until you record the outcome.
+                Auto-suggested from intent text. Not canon until you record the outcome.
               </p>
 
               <div className="muted" style={{ marginBottom: 10 }}>
-                Current canon position:{" "}
-                <strong>
-                  ({currentPos.x},{currentPos.y})
-                </strong>
+                Current canon position: <strong>({currentPos.x},{currentPos.y})</strong>
               </div>
 
               <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 10 }}>
+                {/* MOVE */}
                 <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
                   <input
                     type="checkbox"
                     checked={explorationDraft.enableMove}
-                    onChange={(e) => setExplorationDraft((p) => ({ ...p, enableMove: e.target.checked }))}
+                    onChange={(e) =>
+                      setExplorationDraft((p) => ({
+                        ...p,
+                        enableMove: e.target.checked,
+                        direction: e.target.checked ? p.direction : "none",
+                      }))
+                    }
                   />
                   Commit movement (PLAYER_MOVED)
                 </label>
@@ -901,95 +1410,36 @@ export default function DemoPage() {
                 {explorationDraft.enableMove && (
                   <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "flex-end" }}>
                     <label style={{ display: "flex", flexDirection: "column", gap: 6, minWidth: 220 }}>
-                      Move mode:
+                      Direction (recommended):
                       <select
-                        value={explorationDraft.moveMode}
+                        value={explorationDraft.direction}
                         onChange={(e) =>
                           setExplorationDraft((p) => ({
                             ...p,
-                            moveMode: e.target.value as MoveMode,
-                            // if switching to direction, immediately re-derive
-                            to:
-                              e.target.value === "direction"
-                                ? withinBounds(stepFrom(currentPos, p.direction), MAP_W, MAP_H)
-                                  ? stepFrom(currentPos, p.direction)
-                                  : null
-                                : p.to,
+                            direction: e.target.value as any,
                           }))
                         }
                       >
-                        <option value="direction">Direction (recommended)</option>
-                        <option value="custom">Custom coordinate</option>
+                        <option value="none">None</option>
+                        <option value="north">North (↑)</option>
+                        <option value="east">East (→)</option>
+                        <option value="south">South (↓)</option>
+                        <option value="west">West (←)</option>
                       </select>
                     </label>
 
-                    {explorationDraft.moveMode === "direction" ? (
-                      <label style={{ display: "flex", flexDirection: "column", gap: 6, minWidth: 220 }}>
-                        Direction:
-                        <select
-                          value={explorationDraft.direction}
-                          onChange={(e) => setExplorationDraft((p) => ({ ...p, direction: e.target.value as Direction }))}
-                        >
-                          <option value="north">North (↑)</option>
-                          <option value="east">East (→)</option>
-                          <option value="south">South (↓)</option>
-                          <option value="west">West (←)</option>
-                        </select>
-                      </label>
-                    ) : (
-                      <>
-                        <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                          To X:
-                          <input
-                            value={explorationDraft.to?.x ?? ""}
-                            onChange={(e) => {
-                              const x = Number(e.target.value);
-                              setExplorationDraft((p) => ({
-                                ...p,
-                                to: {
-                                  x: Number.isFinite(x) ? Math.trunc(x) : currentPos.x,
-                                  y: p.to?.y ?? currentPos.y,
-                                },
-                              }));
-                            }}
-                            style={{ width: 120 }}
-                          />
-                        </label>
-                        <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                          To Y:
-                          <input
-                            value={explorationDraft.to?.y ?? ""}
-                            onChange={(e) => {
-                              const y = Number(e.target.value);
-                              setExplorationDraft((p) => ({
-                                ...p,
-                                to: {
-                                  x: p.to?.x ?? currentPos.x,
-                                  y: Number.isFinite(y) ? Math.trunc(y) : currentPos.y,
-                                },
-                              }));
-                            }}
-                            style={{ width: 120 }}
-                          />
-                        </label>
-                      </>
-                    )}
-
-                    <span className="muted">
-                      (Bounds: 0..{MAP_W - 1} / 0..{MAP_H - 1})
-                    </span>
-
-                    <span className="muted" style={{ marginLeft: "auto" }}>
+                    <div className="muted" style={{ paddingBottom: 4 }}>
+                      Bounds: <strong>0..{MAP_W - 1}</strong> / <strong>0..{MAP_H - 1}</strong>
+                      {" · "}
                       Suggested destination:{" "}
                       <strong>
-                        {explorationDraft.enableMove && explorationDraft.to
-                          ? `(${explorationDraft.to.x},${explorationDraft.to.y})`
-                          : "(none)"}
+                        {suggestedTo ? `(${suggestedTo.x},${suggestedTo.y})` : "(out of bounds / none)"}
                       </strong>
-                    </span>
+                    </div>
                   </div>
                 )}
 
+                {/* REVEAL */}
                 <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
                   <input
                     type="checkbox"
@@ -1000,12 +1450,15 @@ export default function DemoPage() {
                 </label>
 
                 {explorationDraft.enableReveal && (
-                  <label style={{ display: "flex", flexDirection: "column", gap: 6, maxWidth: 240 }}>
+                  <label style={{ display: "flex", flexDirection: "column", gap: 6, maxWidth: 220 }}>
                     Reveal radius:
                     <select
                       value={explorationDraft.revealRadius}
                       onChange={(e) =>
-                        setExplorationDraft((p) => ({ ...p, revealRadius: Number(e.target.value) as any }))
+                        setExplorationDraft((p) => ({
+                          ...p,
+                          revealRadius: Number(e.target.value) as any,
+                        }))
                       }
                     >
                       <option value={0}>0 (none)</option>
@@ -1015,6 +1468,7 @@ export default function DemoPage() {
                   </label>
                 )}
 
+                {/* MARK */}
                 <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
                   <input
                     type="checkbox"
@@ -1030,7 +1484,12 @@ export default function DemoPage() {
                       Kind:
                       <select
                         value={explorationDraft.markKind}
-                        onChange={(e) => setExplorationDraft((p) => ({ ...p, markKind: e.target.value as MapMarkKind }))}
+                        onChange={(e) =>
+                          setExplorationDraft((p) => ({
+                            ...p,
+                            markKind: e.target.value as MapMarkKind,
+                          }))
+                        }
                       >
                         <option value="door">door 🚪</option>
                         <option value="stairs">stairs ⬇️</option>
@@ -1040,7 +1499,7 @@ export default function DemoPage() {
                       </select>
                     </label>
 
-                    <label style={{ display: "flex", flexDirection: "column", gap: 6, flex: "1 1 240px" }}>
+                    <label style={{ display: "flex", flexDirection: "column", gap: 6, flex: "1 1 220px" }}>
                       Note (optional):
                       <input
                         value={explorationDraft.markNote}
@@ -1050,7 +1509,7 @@ export default function DemoPage() {
                     </label>
 
                     <span className="muted">
-                      (Mark applies to destination if moved; otherwise current tile.)
+                      Mark applies to destination if moving; otherwise current tile.
                     </span>
                   </div>
                 )}
@@ -1070,7 +1529,11 @@ export default function DemoPage() {
           )}
 
           <NextActionHint state={state} />
+
+          {/* Canon non-OUTCOME events (movement/map/combat) */}
           <CanonEventsPanel events={state.events as any[]} />
+
+          {/* OUTCOME narration ledger */}
           <WorldLedgerPanelLegacy events={state.events} />
         </>
       )}
