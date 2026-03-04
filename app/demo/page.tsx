@@ -653,27 +653,33 @@ export default function DemoPage() {
     return next;
   }
 
-  function handleRecord(payload: {
-    description: string;
-    dice: { mode: DiceMode; roll: number; dc: number; source: RollSource };
-    audit: string[];
-  }) {
-    setState((prev) => {
-      let next = recordEvent(prev, {
-        id: crypto.randomUUID(),
-        timestamp: Date.now(),
-        actor: "arbiter",
-        type: "OUTCOME",
-        payload,
-      });
-
-      next = commitExplorationBundle(next);
-      return next;
+function handleRecord(payload: {
+  description: string;
+  dice: { mode: DiceMode; roll: number; dc: number; source: RollSource };
+  audit: string[];
+}) {
+  setState((prev) => {
+    let next = recordEvent(prev, {
+      id: crypto.randomUUID(),
+      timestamp: Date.now(),
+      actor: "arbiter",
+      type: "OUTCOME",
+      payload,
     });
 
-    setActiveSection("canon");
-    queueMicrotask(() => scrollToSection("canon"));
-  }
+    next = commitExplorationBundle(next);
+    return next;
+  });
+
+  // Reset draft pipeline + return to next intent
+  setPlayerInput("");
+  setParsed(null);
+  setOptions(null);
+  setSelectedOption(null);
+
+  setActiveSection("action");
+  queueMicrotask(() => scrollToSection("action"));
+}
 
   // Enemy outcomes should NOT auto-commit exploration movement/reveal/marks.
   function handleRecordOutcomeOnly(payload: {
