@@ -22,15 +22,14 @@
 // - WorldLedgerPanelLegacy shows OUTCOME narration
 // - CanonEventsPanel shows all OTHER canon events (movement/map/combat)
 //
-// IMPORTANT (THIS FIX):
-// - Remove the inline CanonEventsPanel implementation from this page.
-// - Use the shared component at "@/components/CanonEventsPanel" to prevent drift
-//   and eliminate one common source of duplicate renderings.
-//
 // ------------------------------------------------------------
 
 import { useEffect, useMemo, useState } from "react";
-import { createSession, recordEvent, SessionState } from "@/lib/session/SessionState";
+import {
+  createSession,
+  recordEvent,
+  SessionState,
+} from "@/lib/session/SessionState";
 
 import { parseAction } from "@/lib/parser/ActionParser";
 import { generateOptions, Option } from "@/lib/options/OptionGenerator";
@@ -40,14 +39,14 @@ import ResolutionDraftAdvisoryPanel from "@/components/resolution/ResolutionDraf
 import NextActionHint from "@/components/NextActionHint";
 import WorldLedgerPanelLegacy from "@/components/world/WorldLedgerPanel.legacy";
 import DungeonPressurePanel from "@/components/world/DungeonPressurePanel";
-import ExplorationMapPanel, { MapMarkKind } from "@/components/world/ExplorationMapPanel";
+import ExplorationMapPanel, {
+  MapMarkKind,
+} from "@/components/world/ExplorationMapPanel";
 
 import StewardedShell from "@/components/layout/StewardedShell";
 import ModeHeader from "@/components/layout/ModeHeader";
 import CardSection from "@/components/layout/CardSection";
 import Disclaimer from "@/components/layout/Disclaimer";
-
-import CanonEventsPanel from "@/components/CanonEventsPanel";
 
 import {
   CombatStartedPayload,
@@ -86,6 +85,107 @@ type RollSource = "manual" | "solace";
 type XY = { x: number; y: number };
 
 type Direction = "north" | "south" | "east" | "west";
+
+// ------------------------------------------------------------
+// CanonEventsPanel (non-OUTCOME canon ledger)
+// ------------------------------------------------------------
+
+type CanonPanelProps = {
+  events: readonly any[];
+};
+
+function fmtXY(xy: any) {
+  if (!xy || typeof xy.x !== "number" || typeof xy.y !== "number") return "(?,?)";
+  return `(${xy.x},${xy.y})`;
+}
+
+function renderCanonEventLine(e: any) {
+  const p: any = e?.payload;
+
+  switch (e?.type) {
+    case "PLAYER_MOVED": {
+      const from = fmtXY(p?.from);
+      const to = fmtXY(p?.to);
+      return `🧭 Move ${from} → ${to}`;
+    }
+    case "MAP_REVEALED": {
+      const tiles = Array.isArray(p?.tiles) ? p.tiles : [];
+      const n = tiles.length;
+      return `🗺️ Reveal ${n} tile${n === 1 ? "" : "s"}`;
+    }
+    case "MAP_MARKED": {
+      const at = fmtXY(p?.at);
+      const kind = typeof p?.kind === "string" ? p.kind : "mark";
+      const note =
+        typeof p?.note === "string" && p.note.trim() ? ` — ${p.note.trim()}` : "";
+      return `📍 Mark ${kind} at ${at}${note}`;
+    }
+    case "COMBAT_STARTED": {
+      const combatId = p?.combatId ? String(p.combatId) : "(unknown)";
+      const participants = Array.isArray(p?.participants) ? p.participants.length : 0;
+      return `⚔️ Combat started (${combatId}) — ${participants} participants`;
+    }
+    case "COMBAT_ENDED": {
+      const combatId = p?.combatId ? String(p.combatId) : "(combat)";
+      return `🏁 Combat ended (${combatId})`;
+    }
+    case "INITIATIVE_ROLLED": {
+      const who = p?.combatantId ? String(p.combatantId) : "(combatant)";
+      const total = typeof p?.total === "number" ? p.total : "?";
+      const natural = typeof p?.natural === "number" ? p.natural : "?";
+      const mod = typeof p?.modifier === "number" ? p.modifier : "?";
+      return `🎲 Initiative ${who}: ${total} (d20 ${natural} + ${mod})`;
+    }
+    case "TURN_ADVANCED": {
+      const combatId = p?.combatId ? String(p.combatId) : "(combat)";
+      const round = typeof p?.round === "number" ? p.round : "?";
+      const index = typeof p?.index === "number" ? p.index : "?";
+      return `⏭️ Turn advanced — ${combatId} (round ${round}, index ${index})`;
+    }
+    default: {
+      const safe = (() => {
+        try {
+          return JSON.stringify(p ?? {}, null, 0);
+        } catch {
+          return "{}";
+        }
+      })();
+      return `• ${String(e?.type ?? "UNKNOWN")}${safe !== "{}" ? ` — ${safe}` : ""}`;
+    }
+  }
+}
+
+function CanonEventsPanel({ events }: CanonPanelProps) {
+  const canon = (events ?? []).filter((e: any) => e?.type !== "OUTCOME");
+
+  return (
+    <CardSection title="Canon Events">
+      {canon.length === 0 ? (
+        <p className="muted">No canon events yet.</p>
+      ) : (
+        <ul>
+          {canon.map((e: any) => (
+            <li key={e.id} style={{ marginBottom: 10 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
+                <div>
+                  <strong>{renderCanonEventLine(e)}</strong>
+                  <div className="muted" style={{ marginTop: 4 }}>
+                    actor: {e.actor} · type: {e.type}
+                  </div>
+                </div>
+                <div className="muted" style={{ whiteSpace: "nowrap" }}>
+                  {typeof e.timestamp === "number"
+                    ? new Date(e.timestamp).toLocaleTimeString()
+                    : ""}
+                </div>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+    </CardSection>
+  );
+}
 
 // ------------------------------------------------------------
 // Random helpers
@@ -517,7 +617,8 @@ export default function DemoPage() {
 
     const here = deriveCurrentPosition(next.events as any[], MAP_W, MAP_H);
 
-    const to = d.enableMove && d.direction !== "none" ? stepFrom(here, d.direction) : null;
+    const to =
+      d.enableMove && d.direction !== "none" ? stepFrom(here, d.direction) : null;
 
     const canMove = to ? withinBounds(to, MAP_W, MAP_H) : false;
 
@@ -1056,14 +1157,7 @@ export default function DemoPage() {
                 </div>
               </div>
 
-              <div
-                style={{
-                  marginTop: 10,
-                  display: "grid",
-                  gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-                  gap: 10,
-                }}
-              >
+              <div style={{ marginTop: 10, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 10 }}>
                 {Array.from({ length: clampInt(playerCount, 1, 6) }, (_, idx) => {
                   const i1 = idx + 1;
                   const value = playerNames[idx] ?? "";
@@ -1143,9 +1237,7 @@ export default function DemoPage() {
                           </strong>
                           {active && <span className="muted">{"  "}← active</span>}
                         </div>
-                        <div className="muted">
-                          {roll ? `Init ${roll.total} (d20 ${roll.natural} + ${roll.modifier})` : "Init —"}
-                        </div>
+                        <div className="muted">{roll ? `Init ${roll.total} (d20 ${roll.natural} + ${roll.modifier})` : "Init —"}</div>
                       </div>
                     );
                   })}
@@ -1157,8 +1249,8 @@ export default function DemoPage() {
           <CardSection title="Player Action">
             {combatActive && isEnemyTurn && dmMode !== "human" && (
               <p className="muted" style={{ marginTop: 0 }}>
-                Enemy turn. In Solace-neutral, the player cannot declare enemy intent. Switch to Human DM to enter enemy
-                intent.
+                Enemy turn. In Solace-neutral, the player cannot declare enemy intent.
+                Switch to Human DM to enter enemy intent.
               </p>
             )}
 
@@ -1167,13 +1259,7 @@ export default function DemoPage() {
               onChange={(e) => setPlayerInput(e.target.value)}
               placeholder="Describe what your character does…"
               disabled={!canPlayerSubmitIntent}
-              style={{
-                width: "100%",
-                minHeight: "120px",
-                resize: "vertical",
-                boxSizing: "border-box",
-                lineHeight: 1.5,
-              }}
+              style={{ width: "100%", minHeight: "120px", resize: "vertical", boxSizing: "border-box", lineHeight: 1.5 }}
             />
             <div style={{ marginTop: 8 }}>
               <button onClick={handlePlayerAction} disabled={!canPlayerSubmitIntent}>
@@ -1207,10 +1293,7 @@ export default function DemoPage() {
               </p>
 
               <div className="muted" style={{ marginBottom: 10 }}>
-                Current canon position:{" "}
-                <strong>
-                  ({currentPos.x},{currentPos.y})
-                </strong>
+                Current canon position: <strong>({currentPos.x},{currentPos.y})</strong>
               </div>
 
               <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 10 }}>
@@ -1266,9 +1349,7 @@ export default function DemoPage() {
                     Reveal radius:
                     <select
                       value={explorationDraft.revealRadius}
-                      onChange={(e) =>
-                        setExplorationDraft((p) => ({ ...p, revealRadius: Number(e.target.value) as any }))
-                      }
+                      onChange={(e) => setExplorationDraft((p) => ({ ...p, revealRadius: Number(e.target.value) as any }))}
                     >
                       <option value={0}>0 (none)</option>
                       <option value={1}>1 (tight)</option>
@@ -1292,9 +1373,7 @@ export default function DemoPage() {
                       Kind:
                       <select
                         value={explorationDraft.markKind}
-                        onChange={(e) =>
-                          setExplorationDraft((p) => ({ ...p, markKind: e.target.value as MapMarkKind }))
-                        }
+                        onChange={(e) => setExplorationDraft((p) => ({ ...p, markKind: e.target.value as MapMarkKind }))}
                       >
                         <option value="door">door 🚪</option>
                         <option value="stairs">stairs ⬇️</option>
@@ -1333,7 +1412,7 @@ export default function DemoPage() {
 
           <NextActionHint state={state} />
 
-          {/* Canon events (non-OUTCOME). This page now renders ONLY the shared component. */}
+          {/* IMPORTANT: Render CanonEventsPanel ONCE (no duplicates). */}
           <CanonEventsPanel events={state.events as any[]} />
 
           <WorldLedgerPanelLegacy events={state.events} />
