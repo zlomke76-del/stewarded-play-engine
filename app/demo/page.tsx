@@ -1,3 +1,4 @@
+// app/demo/page.tsx
 "use client";
 
 // ------------------------------------------------------------
@@ -23,14 +24,18 @@
 // - CanonEventsPanel shows all OTHER canon events (movement/map/combat)
 //
 // UI (this version)
-// - Adds a “hero” and chapter navigation so the page feels alive
+// - Adds a “hero” + dungeon image and chapter navigation so the page feels alive
 // - Breaks the long demo into anchored sections (no new files)
 // - Keeps event-sourced invariants intact
 //
 // ------------------------------------------------------------
 
 import { useEffect, useMemo, useState } from "react";
-import { createSession, recordEvent, SessionState } from "@/lib/session/SessionState";
+import {
+  createSession,
+  recordEvent,
+  SessionState,
+} from "@/lib/session/SessionState";
 
 import { parseAction } from "@/lib/parser/ActionParser";
 import { generateOptions, Option } from "@/lib/options/OptionGenerator";
@@ -41,7 +46,9 @@ import ResolutionDraftAdvisoryPanel from "@/components/resolution/ResolutionDraf
 import NextActionHint from "@/components/NextActionHint";
 import WorldLedgerPanelLegacy from "@/components/world/WorldLedgerPanel.legacy";
 import DungeonPressurePanel from "@/components/world/DungeonPressurePanel";
-import ExplorationMapPanel, { MapMarkKind } from "@/components/world/ExplorationMapPanel";
+import ExplorationMapPanel, {
+  MapMarkKind,
+} from "@/components/world/ExplorationMapPanel";
 
 import StewardedShell from "@/components/layout/StewardedShell";
 import ModeHeader from "@/components/layout/ModeHeader";
@@ -214,14 +221,22 @@ function generateInitialTable(): InitialTable {
       "Voices echo where they shouldn’t, carrying fragments of argument.",
       "The city hums, unaware of the pressure building beneath it.",
     ]),
-    locationTraits: [pick(["crowded", "echoing", "claustrophobic", "uneasily quiet"]), pick(["ancient stone", "rotting wood", "slick cobblestone"])],
+    locationTraits: [
+      pick(["crowded", "echoing", "claustrophobic", "uneasily quiet"]),
+      pick(["ancient stone", "rotting wood", "slick cobblestone"]),
+    ],
     latentFactions: chosenNames.map((name) => ({
       name,
       desire: pick(desires),
       pressure: pick(pressures),
     })),
     environmentalOddities: [
-      pick(["Lantern flames gutter without wind", "Stone walls seem to absorb sound", "Whispers surface near old drains", "Footsteps echo twice"]),
+      pick([
+        "Lantern flames gutter without wind",
+        "Stone walls seem to absorb sound",
+        "Whispers surface near old drains",
+        "Footsteps echo twice",
+      ]),
     ],
     dormantHooks: [
       pick([
@@ -241,23 +256,35 @@ function renderInitialTableNarration(t: InitialTable): string {
 
   const lines: string[] = [];
   lines.push(t.openingFrame);
-  lines.push(`The place feels ${traitA}, and the air carries the stink of ${traitB}.`);
+  lines.push(
+    `The place feels ${traitA}, and the air carries the stink of ${traitB}.`
+  );
 
   if (/footsteps echo twice/i.test(oddity)) {
-    lines.push("Every step answers itself — once, then again — like the street remembers you a beat too late.");
+    lines.push(
+      "Every step answers itself — once, then again — like the street remembers you a beat too late."
+    );
   } else if (/lantern/i.test(oddity.toLowerCase())) {
-    lines.push("Lanternlight can’t decide what it wants to be — steady one second, starving the next.");
+    lines.push(
+      "Lanternlight can’t decide what it wants to be — steady one second, starving the next."
+    );
   } else if (/absorb sound/i.test(oddity.toLowerCase())) {
-    lines.push("Sound doesn’t travel right. Words die early, like the walls are swallowing them.");
+    lines.push(
+      "Sound doesn’t travel right. Words die early, like the walls are swallowing them."
+    );
   } else if (/whispers/i.test(oddity.toLowerCase())) {
-    lines.push("You keep catching whispers at the edge of hearing — not loud enough to understand, not quiet enough to ignore.");
+    lines.push(
+      "You keep catching whispers at the edge of hearing — not loud enough to understand, not quiet enough to ignore."
+    );
   } else {
     lines.push(`${oddity}.`);
   }
 
   if (factions.length > 0) {
     lines.push("There are pressures under the surface:");
-    factions.forEach((f) => lines.push(`• ${f.name} want to ${f.desire} — but ${f.pressure}.`));
+    factions.forEach((f) =>
+      lines.push(`• ${f.name} want to ${f.desire} — but ${f.pressure}.`)
+    );
   }
 
   lines.push(`${hook}.`);
@@ -268,9 +295,22 @@ function renderInitialTableNarration(t: InitialTable): string {
 
 function inferOptionKind(description: string): OptionKind {
   const text = description.toLowerCase();
-  if (text.includes("attack") || text.includes("fight") || text.includes("oppose") || text.includes("contest")) return "contested";
-  if (text.includes("climb") || text.includes("cross") || text.includes("navigate") || text.includes("environment")) return "environmental";
-  if (text.includes("steal") || text.includes("sneak") || text.includes("risk")) return "risky";
+  if (
+    text.includes("attack") ||
+    text.includes("fight") ||
+    text.includes("oppose") ||
+    text.includes("contest")
+  )
+    return "contested";
+  if (
+    text.includes("climb") ||
+    text.includes("cross") ||
+    text.includes("navigate") ||
+    text.includes("environment")
+  )
+    return "environmental";
+  if (text.includes("steal") || text.includes("sneak") || text.includes("risk"))
+    return "risky";
   return "safe";
 }
 
@@ -287,7 +327,12 @@ function deriveCurrentPosition(events: readonly any[], w: number, h: number): XY
   for (const e of events) {
     if (e?.type === "PLAYER_MOVED") {
       const to = e?.payload?.to;
-      if (to && typeof to.x === "number" && typeof to.y === "number" && withinBounds(to, w, h)) {
+      if (
+        to &&
+        typeof to.x === "number" &&
+        typeof to.y === "number" &&
+        withinBounds(to, w, h)
+      ) {
         pos = { x: to.x, y: to.y };
       }
     }
@@ -351,7 +396,11 @@ function isCombatEndedForId(combatId: string, events: readonly any[]) {
       seenStart = true;
       continue;
     }
-    if (seenStart && e?.type === "COMBAT_ENDED" && e?.payload?.combatId === combatId) {
+    if (
+      seenStart &&
+      e?.type === "COMBAT_ENDED" &&
+      e?.payload?.combatId === combatId
+    ) {
       return true;
     }
   }
@@ -401,7 +450,9 @@ function sectionLabel(section: DemoSectionId) {
 export default function DemoPage() {
   const role: "arbiter" = "arbiter";
 
-  const [state, setState] = useState<SessionState>(createSession("demo-session", "demo"));
+  const [state, setState] = useState<SessionState>(
+    createSession("demo-session", "demo")
+  );
   const [dmMode, setDmMode] = useState<DMMode>("solace-neutral");
 
   const MAP_W = 13;
@@ -425,7 +476,10 @@ export default function DemoPage() {
   // Combat state (derived + ended-aware)
   // ----------------------------------------------------------
 
-  const latestCombatId = useMemo(() => findLatestCombatId(state.events as any) ?? null, [state.events]);
+  const latestCombatId = useMemo(
+    () => findLatestCombatId(state.events as any) ?? null,
+    [state.events]
+  );
 
   const derivedCombat = useMemo(() => {
     if (!latestCombatId) return null;
@@ -441,7 +495,11 @@ export default function DemoPage() {
 
   const activeCombatantSpec = useMemo(() => {
     if (!derivedCombat?.activeCombatantId) return null;
-    return derivedCombat.participants.find((p) => p.id === derivedCombat.activeCombatantId) ?? null;
+    return (
+      derivedCombat.participants.find(
+        (p) => p.id === derivedCombat.activeCombatantId
+      ) ?? null
+    );
   }, [derivedCombat]);
 
   const isEnemyTurn = combatActive && activeCombatantSpec?.kind === "enemy_group";
@@ -450,7 +508,10 @@ export default function DemoPage() {
   // Exploration draft (auto-prepared AFTER intent + option)
   // ----------------------------------------------------------
 
-  const currentPos = useMemo(() => deriveCurrentPosition(state.events as any[], MAP_W, MAP_H), [state.events]);
+  const currentPos = useMemo(
+    () => deriveCurrentPosition(state.events as any[], MAP_W, MAP_H),
+    [state.events]
+  );
 
   const [explorationDraft, setExplorationDraft] = useState<ExplorationDraft>({
     enableMove: false,
@@ -517,7 +578,8 @@ export default function DemoPage() {
   // Player submits action (intent)
   // ----------------------------------------------------------
 
-  const canPlayerSubmitIntent = (!combatActive || !isEnemyTurn) || dmMode === "human";
+  const canPlayerSubmitIntent =
+    (!combatActive || !isEnemyTurn) || dmMode === "human";
 
   function handlePlayerAction() {
     if (!playerInput.trim()) return;
@@ -555,7 +617,8 @@ export default function DemoPage() {
 
     const here = deriveCurrentPosition(next.events as any[], MAP_W, MAP_H);
 
-    const to = d.enableMove && d.direction !== "none" ? stepFrom(here, d.direction) : null;
+    const to =
+      d.enableMove && d.direction !== "none" ? stepFrom(here, d.direction) : null;
 
     const canMove = to ? withinBounds(to, MAP_W, MAP_H) : false;
 
@@ -649,10 +712,21 @@ export default function DemoPage() {
   // ----------------------------------------------------------
 
   const [playerCount, setPlayerCount] = useState(4);
-  const [playerNames, setPlayerNames] = useState<string[]>(["", "", "", "", "", ""]);
+  const [playerNames, setPlayerNames] = useState<string[]>([
+    "",
+    "",
+    "",
+    "",
+    "",
+    "",
+  ]);
 
-  const [enemyGroups, setEnemyGroups] = useState<string[]>(["Skirmishers", "Archers"]);
-  const [enemyGroupSelect, setEnemyGroupSelect] = useState<string>("Skirmishers");
+  const [enemyGroups, setEnemyGroups] = useState<string[]>([
+    "Skirmishers",
+    "Archers",
+  ]);
+  const [enemyGroupSelect, setEnemyGroupSelect] =
+    useState<string>("Skirmishers");
 
   const [initModPlayers, setInitModPlayers] = useState(1);
   const [initModEnemies, setInitModEnemies] = useState(1);
@@ -822,7 +896,9 @@ export default function DemoPage() {
     const pc = clampInt(playerCount, 1, 6);
     setPlayerNames((prev) => {
       const next = [...prev];
-      const used = new Set<string>(next.map((x) => normalizeName(x).toLowerCase()).filter(Boolean));
+      const used = new Set<string>(
+        next.map((x) => normalizeName(x).toLowerCase()).filter(Boolean)
+      );
 
       for (let i = 0; i < pc; i++) {
         const current = normalizeName(next[i] ?? "");
@@ -844,8 +920,14 @@ export default function DemoPage() {
 
   const isHumanDM = dmMode === "human";
 
-  const outcomesCount = useMemo(() => state.events.filter((e: any) => e?.type === "OUTCOME").length, [state.events]);
-  const canonCount = useMemo(() => state.events.filter((e: any) => e?.type && e?.type !== "OUTCOME").length, [state.events]);
+  const outcomesCount = useMemo(
+    () => state.events.filter((e: any) => e?.type === "OUTCOME").length,
+    [state.events]
+  );
+  const canonCount = useMemo(
+    () => state.events.filter((e: any) => e?.type && e?.type !== "OUTCOME").length,
+    [state.events]
+  );
 
   const chapterButtons: { id: DemoSectionId; hint: string }[] = useMemo(
     () => [
@@ -873,12 +955,15 @@ export default function DemoPage() {
         onShare={shareCanon}
         roles={[
           { label: "Player", description: "Declares intent" },
-          { label: "Solace", description: "Prepares the resolution and narrates outcome" },
+          {
+            label: "Solace",
+            description: "Prepares the resolution and narrates outcome",
+          },
           { label: "Arbiter", description: "Commits canon" },
         ]}
       />
 
-      {/* HERO + CHAPTER NAV (visual only) */}
+      {/* HERO + DUNGEON IMAGE + CHAPTER NAV (visual only) */}
       <div
         style={{
           borderRadius: 12,
@@ -889,20 +974,50 @@ export default function DemoPage() {
           marginBottom: 14,
         }}
       >
-        <div style={{ display: "flex", justifyContent: "space-between", gap: 14, alignItems: "flex-start", flexWrap: "wrap" }}>
-          <div style={{ minWidth: 260, flex: "1 1 520px" }}>
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "minmax(260px, 1.1fr) minmax(260px, 0.9fr)",
+            gap: 14,
+            alignItems: "stretch",
+          }}
+        >
+          {/* LEFT: pitch + controls */}
+          <div style={{ minWidth: 0 }}>
             <div style={{ fontSize: 12, letterSpacing: 0.6, opacity: 0.85 }}>
               EVENT-SOURCED PLAY · FAIL-CLOSED CANON
             </div>
-            <div style={{ marginTop: 6, fontSize: 22, fontWeight: 800, lineHeight: 1.15 }}>
+            <div
+              style={{
+                marginTop: 6,
+                fontSize: 22,
+                fontWeight: 800,
+                lineHeight: 1.15,
+              }}
+            >
               A governed tabletop loop: intent → resolution → canon.
             </div>
-            <div className="muted" style={{ marginTop: 10, maxWidth: 760, lineHeight: 1.55 }}>
-              This page is a working demo. It’s long by nature — so it’s now organized into “chapters.”
+            <div
+              className="muted"
+              style={{
+                marginTop: 10,
+                maxWidth: 760,
+                lineHeight: 1.55,
+              }}
+            >
+              This page is a working demo. It’s long by nature — so it’s organized into “chapters.”
               Nothing here rewrites the world: the UI only renders what the event log contains.
             </div>
 
-            <div style={{ marginTop: 12, display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+            <div
+              style={{
+                marginTop: 12,
+                display: "flex",
+                gap: 10,
+                flexWrap: "wrap",
+                alignItems: "center",
+              }}
+            >
               <button
                 onClick={() => {
                   setActiveSection("mode");
@@ -911,58 +1026,151 @@ export default function DemoPage() {
               >
                 Start here
               </button>
+
               <button
                 onClick={() => {
                   setActiveSection("action");
                   scrollToSection("action");
                 }}
               >
-                Jump to action
+                Play me
               </button>
+
               <div className="muted" style={{ fontSize: 12 }}>
-                outcomes: <strong>{outcomesCount}</strong> · canon events: <strong>{canonCount}</strong>
+                outcomes: <strong>{outcomesCount}</strong> · canon events:{" "}
+                <strong>{canonCount}</strong>
               </div>
+            </div>
+
+            <div className="muted" style={{ fontSize: 12, marginTop: 10 }}>
+              Pro-tip: click “Play me”, submit an action, then roll/record to commit canon.
             </div>
           </div>
 
-          <div style={{ flex: "0 1 360px", minWidth: 280 }}>
-            <div className="muted" style={{ fontSize: 12, marginBottom: 8 }}>
-              Chapters
-            </div>
-
+          {/* RIGHT: image + chapter grid */}
+          <div style={{ minWidth: 0, display: "grid", gap: 10 }}>
+            {/* Image */}
             <div
               style={{
-                display: "grid",
-                gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
-                gap: 8,
+                borderRadius: 12,
+                overflow: "hidden",
+                border: "1px solid rgba(255,255,255,0.10)",
+                background: "rgba(0,0,0,0.22)",
+                position: "relative",
+                minHeight: 190,
               }}
             >
-              {chapterButtons.map((b) => {
-                const active = activeSection === b.id;
-                return (
-                  <button
-                    key={b.id}
-                    onClick={() => {
-                      setActiveSection(b.id);
-                      scrollToSection(b.id);
-                    }}
-                    style={{
-                      padding: "10px 10px",
-                      borderRadius: 10,
-                      border: active ? "1px solid rgba(138,180,255,0.55)" : "1px solid rgba(255,255,255,0.10)",
-                      background: active ? "rgba(138,180,255,0.10)" : "rgba(255,255,255,0.04)",
-                      textAlign: "left",
-                    }}
-                    aria-label={`Go to ${sectionLabel(b.id)}`}
-                    title={b.hint}
-                  >
-                    <div style={{ fontWeight: 800, fontSize: 12 }}>{sectionLabel(b.id)}</div>
-                    <div className="muted" style={{ fontSize: 11, marginTop: 4, lineHeight: 1.2 }}>
-                      {b.hint}
-                    </div>
-                  </button>
-                );
-              })}
+              <div
+                style={{
+                  position: "absolute",
+                  inset: 0,
+                  backgroundImage: "url('/Hero_dungeon.png')",
+                  backgroundSize: "cover",
+                  backgroundPosition: "center",
+                  filter: "contrast(1.05) saturate(1.05)",
+                  transform: "scale(1.02)",
+                }}
+              />
+              <div
+                style={{
+                  position: "absolute",
+                  inset: 0,
+                  background:
+                    "linear-gradient(90deg, rgba(0,0,0,0.70), rgba(0,0,0,0.30) 55%, rgba(0,0,0,0.65))",
+                }}
+              />
+              <div
+                style={{
+                  position: "absolute",
+                  inset: 0,
+                  display: "flex",
+                  alignItems: "flex-end",
+                  justifyContent: "space-between",
+                  padding: 12,
+                  gap: 10,
+                }}
+              >
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontWeight: 800, fontSize: 14 }}>
+                    Enter the dungeon
+                  </div>
+                  <div className="muted" style={{ fontSize: 12, marginTop: 2 }}>
+                    You declare intent. The world remembers only what canon records.
+                  </div>
+                </div>
+
+                <button
+                  onClick={() => {
+                    setActiveSection("action");
+                    scrollToSection("action");
+                  }}
+                  style={{
+                    padding: "10px 12px",
+                    borderRadius: 10,
+                    border: "1px solid rgba(255,255,255,0.14)",
+                    background: "rgba(255,255,255,0.06)",
+                    whiteSpace: "nowrap",
+                  }}
+                  title="Jump to Player Action"
+                >
+                  ▶ Play
+                </button>
+              </div>
+            </div>
+
+            {/* Chapters */}
+            <div>
+              <div className="muted" style={{ fontSize: 12, marginBottom: 8 }}>
+                Chapters
+              </div>
+
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+                  gap: 8,
+                }}
+              >
+                {chapterButtons.map((b) => {
+                  const active = activeSection === b.id;
+                  return (
+                    <button
+                      key={b.id}
+                      onClick={() => {
+                        setActiveSection(b.id);
+                        scrollToSection(b.id);
+                      }}
+                      style={{
+                        padding: "10px 10px",
+                        borderRadius: 10,
+                        border: active
+                          ? "1px solid rgba(138,180,255,0.55)"
+                          : "1px solid rgba(255,255,255,0.10)",
+                        background: active
+                          ? "rgba(138,180,255,0.10)"
+                          : "rgba(255,255,255,0.04)",
+                        textAlign: "left",
+                      }}
+                      aria-label={`Go to ${sectionLabel(b.id)}`}
+                      title={b.hint}
+                    >
+                      <div style={{ fontWeight: 800, fontSize: 12 }}>
+                        {sectionLabel(b.id)}
+                      </div>
+                      <div
+                        className="muted"
+                        style={{
+                          fontSize: 11,
+                          marginTop: 4,
+                          lineHeight: 1.2,
+                        }}
+                      >
+                        {b.hint}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
             </div>
           </div>
         </div>
@@ -1023,7 +1231,9 @@ export default function DemoPage() {
               <summary className="muted">Show underlying table signals</summary>
               <div style={{ marginTop: 10 }}>
                 <p>{initialTable.openingFrame}</p>
-                <p className="muted">Traits: {initialTable.locationTraits.join(", ")}</p>
+                <p className="muted">
+                  Traits: {initialTable.locationTraits.join(", ")}
+                </p>
                 <ul>
                   {initialTable.latentFactions.map((f, i) => (
                     <li key={i}>
@@ -1031,8 +1241,12 @@ export default function DemoPage() {
                     </li>
                   ))}
                 </ul>
-                <p className="muted">Oddity: {initialTable.environmentalOddities.join(", ")}</p>
-                <p className="muted">Hook: {initialTable.dormantHooks.join(", ")}</p>
+                <p className="muted">
+                  Oddity: {initialTable.environmentalOddities.join(", ")}
+                </p>
+                <p className="muted">
+                  Hook: {initialTable.dormantHooks.join(", ")}
+                </p>
               </div>
             </details>
 
@@ -1067,7 +1281,9 @@ export default function DemoPage() {
               <summary className="muted">Show underlying table signals</summary>
               <div style={{ marginTop: 10 }}>
                 <p>{initialTable.openingFrame}</p>
-                <p className="muted">Traits: {initialTable.locationTraits.join(", ")}</p>
+                <p className="muted">
+                  Traits: {initialTable.locationTraits.join(", ")}
+                </p>
                 <ul>
                   {initialTable.latentFactions.map((f, i) => (
                     <li key={i}>
@@ -1075,8 +1291,12 @@ export default function DemoPage() {
                     </li>
                   ))}
                 </ul>
-                <p className="muted">Oddity: {initialTable.environmentalOddities.join(", ")}</p>
-                <p className="muted">Hook: {initialTable.dormantHooks.join(", ")}</p>
+                <p className="muted">
+                  Oddity: {initialTable.environmentalOddities.join(", ")}
+                </p>
+                <p className="muted">
+                  Hook: {initialTable.dormantHooks.join(", ")}
+                </p>
               </div>
             </details>
 
@@ -1101,12 +1321,19 @@ export default function DemoPage() {
         <>
           {/* PRESSURE */}
           <div id={anchorId("pressure")} style={{ scrollMarginTop: 90 }}>
-            <DungeonPressurePanel turn={outcomesCount} events={state.events} />
+            <DungeonPressurePanel
+              turn={outcomesCount}
+              events={state.events}
+            />
           </div>
 
           {/* MAP */}
           <div id={anchorId("map")} style={{ scrollMarginTop: 90 }}>
-            <ExplorationMapPanel events={state.events} mapW={MAP_W} mapH={MAP_H} />
+            <ExplorationMapPanel
+              events={state.events}
+              mapW={MAP_W}
+              mapH={MAP_H}
+            />
           </div>
 
           {/* COMBAT */}
@@ -1128,12 +1355,21 @@ export default function DemoPage() {
                 </div>
               )}
 
-              <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "flex-end" }}>
+              <div
+                style={{
+                  display: "flex",
+                  gap: 12,
+                  flexWrap: "wrap",
+                  alignItems: "flex-end",
+                }}
+              >
                 <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                   Players (1–6):
                   <select
                     value={playerCount}
-                    onChange={(e) => setPlayerCount(clampInt(Number(e.target.value), 1, 6))}
+                    onChange={(e) =>
+                      setPlayerCount(clampInt(Number(e.target.value), 1, 6))
+                    }
                     style={{ minWidth: 140 }}
                     disabled={combatActive}
                   >
@@ -1149,7 +1385,9 @@ export default function DemoPage() {
                   Player init mod:
                   <select
                     value={initModPlayers}
-                    onChange={(e) => setInitModPlayers(Math.trunc(Number(e.target.value)))}
+                    onChange={(e) =>
+                      setInitModPlayers(Math.trunc(Number(e.target.value)))
+                    }
                     style={{ minWidth: 140 }}
                     disabled={combatActive}
                   >
@@ -1165,7 +1403,9 @@ export default function DemoPage() {
                   Enemy group init mod:
                   <select
                     value={initModEnemies}
-                    onChange={(e) => setInitModEnemies(Math.trunc(Number(e.target.value)))}
+                    onChange={(e) =>
+                      setInitModEnemies(Math.trunc(Number(e.target.value)))
+                    }
                     style={{ minWidth: 170 }}
                     disabled={combatActive}
                   >
@@ -1177,9 +1417,23 @@ export default function DemoPage() {
                   </select>
                 </label>
 
-                <div style={{ flex: "1 1 320px", display: "flex", flexDirection: "column", gap: 6 }}>
+                <div
+                  style={{
+                    flex: "1 1 320px",
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: 6,
+                  }}
+                >
                   <span className="muted">Enemy groups</span>
-                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                  <div
+                    style={{
+                      display: "flex",
+                      gap: 8,
+                      flexWrap: "wrap",
+                      alignItems: "center",
+                    }}
+                  >
                     <select
                       value={enemyGroupSelect}
                       onChange={(e) => setEnemyGroupSelect(e.target.value)}
@@ -1192,10 +1446,16 @@ export default function DemoPage() {
                         </option>
                       ))}
                     </select>
-                    <button onClick={() => addEnemyGroup(enemyGroupSelect)} disabled={combatActive}>
+                    <button
+                      onClick={() => addEnemyGroup(enemyGroupSelect)}
+                      disabled={combatActive}
+                    >
                       Add
                     </button>
-                    <button onClick={clearEnemyGroups} disabled={combatActive || enemyGroups.length === 0}>
+                    <button
+                      onClick={clearEnemyGroups}
+                      disabled={combatActive || enemyGroups.length === 0}
+                    >
                       Clear
                     </button>
                     <span className="muted" style={{ fontSize: 12 }}>
@@ -1204,7 +1464,14 @@ export default function DemoPage() {
                   </div>
 
                   {enemyGroups.length > 0 ? (
-                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8 }}>
+                    <div
+                      style={{
+                        display: "flex",
+                        gap: 8,
+                        flexWrap: "wrap",
+                        marginTop: 8,
+                      }}
+                    >
                       {enemyGroups.map((g) => (
                         <span
                           key={g}
@@ -1223,7 +1490,11 @@ export default function DemoPage() {
                             onClick={() => removeEnemyGroup(g)}
                             aria-label={`Remove ${g}`}
                             disabled={combatActive}
-                            style={{ padding: "0 8px", borderRadius: 999, border: "1px solid rgba(255,255,255,0.12)" }}
+                            style={{
+                              padding: "0 8px",
+                              borderRadius: 999,
+                              border: "1px solid rgba(255,255,255,0.12)",
+                            }}
                           >
                             ×
                           </button>
@@ -1239,10 +1510,20 @@ export default function DemoPage() {
               </div>
 
               <div style={{ marginTop: 14 }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    gap: 10,
+                  }}
+                >
                   <strong>Players</strong>
                   <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                    <button onClick={randomizePlayerNames} disabled={combatActive}>
+                    <button
+                      onClick={randomizePlayerNames}
+                      disabled={combatActive}
+                    >
                       🎲 Random names
                     </button>
                   </div>
@@ -1252,36 +1533,50 @@ export default function DemoPage() {
                   style={{
                     marginTop: 10,
                     display: "grid",
-                    gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+                    gridTemplateColumns:
+                      "repeat(auto-fit, minmax(220px, 1fr))",
                     gap: 10,
                   }}
                 >
-                  {Array.from({ length: clampInt(playerCount, 1, 6) }, (_, idx) => {
-                    const i1 = idx + 1;
-                    const value = playerNames[idx] ?? "";
-                    return (
-                      <label key={i1} style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                        <span className="muted">Player {i1} name (optional)</span>
-                        <input
-                          value={value}
-                          disabled={combatActive}
-                          onChange={(e) => {
-                            const v = e.target.value;
-                            setPlayerNames((prev) => {
-                              const next = [...prev];
-                              next[idx] = v;
-                              return next.slice(0, 6);
-                            });
+                  {Array.from(
+                    { length: clampInt(playerCount, 1, 6) },
+                    (_, idx) => {
+                      const i1 = idx + 1;
+                      const value = playerNames[idx] ?? "";
+                      return (
+                        <label
+                          key={i1}
+                          style={{
+                            display: "flex",
+                            flexDirection: "column",
+                            gap: 6,
                           }}
-                          placeholder={`Player ${i1}`}
-                        />
-                      </label>
-                    );
-                  })}
+                        >
+                          <span className="muted">
+                            Player {i1} name (optional)
+                          </span>
+                          <input
+                            value={value}
+                            disabled={combatActive}
+                            onChange={(e) => {
+                              const v = e.target.value;
+                              setPlayerNames((prev) => {
+                                const next = [...prev];
+                                next[idx] = v;
+                                return next.slice(0, 6);
+                              });
+                            }}
+                            placeholder={`Player ${i1}`}
+                          />
+                        </label>
+                      );
+                    }
+                  )}
                 </div>
 
                 <p className="muted" style={{ marginTop: 10, marginBottom: 0 }}>
-                  Blank names will display as “Player 1…N”. Names are used for initiative labels and canon readability.
+                  Blank names will display as “Player 1…N”. Names are used for
+                  initiative labels and canon readability.
                 </p>
               </div>
 
@@ -1300,19 +1595,31 @@ export default function DemoPage() {
               {derivedCombat && (
                 <div style={{ marginTop: 12 }}>
                   <div className="muted">
-                    Combat: <strong>{derivedCombat.combatId}</strong> · Round <strong>{derivedCombat.round}</strong>
+                    Combat: <strong>{derivedCombat.combatId}</strong> · Round{" "}
+                    <strong>{derivedCombat.round}</strong>
                     {activeCombatantSpec && (
                       <>
                         {" "}
-                        · Active: <strong>{formatCombatantLabel(activeCombatantSpec)}</strong>
+                        · Active:{" "}
+                        <strong>{formatCombatantLabel(activeCombatantSpec)}</strong>
                       </>
                     )}
                   </div>
 
-                  <div style={{ marginTop: 10, display: "grid", gridTemplateColumns: "1fr", gap: 6 }}>
+                  <div
+                    style={{
+                      marginTop: 10,
+                      display: "grid",
+                      gridTemplateColumns: "1fr",
+                      gap: 6,
+                    }}
+                  >
                     {derivedCombat.order.map((id, idx) => {
-                      const spec = derivedCombat.participants.find((p) => p.id === id) ?? null;
-                      const roll = derivedCombat.initiative.find((r) => r.combatantId === id) ?? null;
+                      const spec =
+                        derivedCombat.participants.find((p) => p.id === id) ?? null;
+                      const roll =
+                        derivedCombat.initiative.find((r) => r.combatantId === id) ??
+                        null;
                       const active = derivedCombat.activeCombatantId === id;
 
                       return (
@@ -1321,8 +1628,12 @@ export default function DemoPage() {
                           style={{
                             padding: "10px 12px",
                             borderRadius: 8,
-                            border: active ? "1px solid rgba(138,180,255,0.55)" : "1px solid rgba(255,255,255,0.10)",
-                            background: active ? "rgba(138,180,255,0.10)" : "rgba(255,255,255,0.04)",
+                            border: active
+                              ? "1px solid rgba(138,180,255,0.55)"
+                              : "1px solid rgba(255,255,255,0.10)",
+                            background: active
+                              ? "rgba(138,180,255,0.10)"
+                              : "rgba(255,255,255,0.04)",
                             display: "flex",
                             justifyContent: "space-between",
                             alignItems: "center",
@@ -1336,7 +1647,9 @@ export default function DemoPage() {
                             {active && <span className="muted">{"  "}← active</span>}
                           </div>
                           <div className="muted">
-                            {roll ? `Init ${roll.total} (d20 ${roll.natural} + ${roll.modifier})` : "Init —"}
+                            {roll
+                              ? `Init ${roll.total} (d20 ${roll.natural} + ${roll.modifier})`
+                              : "Init —"}
                           </div>
                         </div>
                       );
@@ -1352,7 +1665,8 @@ export default function DemoPage() {
             <CardSection title="Player Action">
               {combatActive && isEnemyTurn && dmMode !== "human" && (
                 <p className="muted" style={{ marginTop: 0 }}>
-                  Enemy turn. In Solace-neutral, the player cannot declare enemy intent. Switch to Human DM to enter enemy intent.
+                  Enemy turn. In Solace-neutral, the player cannot declare enemy
+                  intent. Switch to Human DM to enter enemy intent.
                 </p>
               )}
 
@@ -1369,7 +1683,15 @@ export default function DemoPage() {
                   lineHeight: 1.5,
                 }}
               />
-              <div style={{ marginTop: 8, display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+              <div
+                style={{
+                  marginTop: 8,
+                  display: "flex",
+                  gap: 10,
+                  flexWrap: "wrap",
+                  alignItems: "center",
+                }}
+              >
                 <button onClick={handlePlayerAction} disabled={!canPlayerSubmitIntent}>
                   Submit Action
                 </button>
@@ -1417,7 +1739,10 @@ export default function DemoPage() {
                 </p>
 
                 <div className="muted" style={{ marginBottom: 10 }}>
-                  Current canon position: <strong>({currentPos.x},{currentPos.y})</strong>
+                  Current canon position:{" "}
+                  <strong>
+                    ({currentPos.x},{currentPos.y})
+                  </strong>
                 </div>
 
                 <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 10 }}>
@@ -1437,12 +1762,31 @@ export default function DemoPage() {
                   </label>
 
                   {explorationDraft.enableMove && (
-                    <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "flex-end" }}>
-                      <label style={{ display: "flex", flexDirection: "column", gap: 6, minWidth: 220 }}>
+                    <div
+                      style={{
+                        display: "flex",
+                        gap: 12,
+                        flexWrap: "wrap",
+                        alignItems: "flex-end",
+                      }}
+                    >
+                      <label
+                        style={{
+                          display: "flex",
+                          flexDirection: "column",
+                          gap: 6,
+                          minWidth: 220,
+                        }}
+                      >
                         Direction (recommended):
                         <select
                           value={explorationDraft.direction}
-                          onChange={(e) => setExplorationDraft((p) => ({ ...p, direction: e.target.value as any }))}
+                          onChange={(e) =>
+                            setExplorationDraft((p) => ({
+                              ...p,
+                              direction: e.target.value as any,
+                            }))
+                          }
                         >
                           <option value="none">None</option>
                           <option value="north">North (↑)</option>
@@ -1453,8 +1797,13 @@ export default function DemoPage() {
                       </label>
 
                       <div className="muted" style={{ paddingBottom: 4 }}>
-                        Bounds: <strong>0..{MAP_W - 1}</strong> / <strong>0..{MAP_H - 1}</strong> · Suggested destination:{" "}
-                        <strong>{suggestedTo ? `(${suggestedTo.x},${suggestedTo.y})` : "(out of bounds / none)"}</strong>
+                        Bounds: <strong>0..{MAP_W - 1}</strong> /{" "}
+                        <strong>0..{MAP_H - 1}</strong> · Suggested destination:{" "}
+                        <strong>
+                          {suggestedTo
+                            ? `(${suggestedTo.x},${suggestedTo.y})`
+                            : "(out of bounds / none)"}
+                        </strong>
                       </div>
                     </div>
                   )}
@@ -1463,7 +1812,12 @@ export default function DemoPage() {
                     <input
                       type="checkbox"
                       checked={explorationDraft.enableReveal}
-                      onChange={(e) => setExplorationDraft((p) => ({ ...p, enableReveal: e.target.checked }))}
+                      onChange={(e) =>
+                        setExplorationDraft((p) => ({
+                          ...p,
+                          enableReveal: e.target.checked,
+                        }))
+                      }
                     />
                     Reveal tiles (MAP_REVEALED)
                   </label>
@@ -1473,7 +1827,12 @@ export default function DemoPage() {
                       Reveal radius:
                       <select
                         value={explorationDraft.revealRadius}
-                        onChange={(e) => setExplorationDraft((p) => ({ ...p, revealRadius: Number(e.target.value) as any }))}
+                        onChange={(e) =>
+                          setExplorationDraft((p) => ({
+                            ...p,
+                            revealRadius: Number(e.target.value) as any,
+                          }))
+                        }
                       >
                         <option value={0}>0 (none)</option>
                         <option value={1}>1 (tight)</option>
@@ -1486,18 +1845,35 @@ export default function DemoPage() {
                     <input
                       type="checkbox"
                       checked={explorationDraft.enableMark}
-                      onChange={(e) => setExplorationDraft((p) => ({ ...p, enableMark: e.target.checked }))}
+                      onChange={(e) =>
+                        setExplorationDraft((p) => ({
+                          ...p,
+                          enableMark: e.target.checked,
+                        }))
+                      }
                     />
                     Mark tile (MAP_MARKED)
                   </label>
 
                   {explorationDraft.enableMark && (
-                    <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "flex-end" }}>
+                    <div
+                      style={{
+                        display: "flex",
+                        gap: 12,
+                        flexWrap: "wrap",
+                        alignItems: "flex-end",
+                      }}
+                    >
                       <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                         Kind:
                         <select
                           value={explorationDraft.markKind}
-                          onChange={(e) => setExplorationDraft((p) => ({ ...p, markKind: e.target.value as MapMarkKind }))}
+                          onChange={(e) =>
+                            setExplorationDraft((p) => ({
+                              ...p,
+                              markKind: e.target.value as MapMarkKind,
+                            }))
+                          }
                         >
                           <option value="door">door 🚪</option>
                           <option value="stairs">stairs ⬇️</option>
@@ -1511,12 +1887,19 @@ export default function DemoPage() {
                         Note (optional):
                         <input
                           value={explorationDraft.markNote}
-                          onChange={(e) => setExplorationDraft((p) => ({ ...p, markNote: e.target.value }))}
+                          onChange={(e) =>
+                            setExplorationDraft((p) => ({
+                              ...p,
+                              markNote: e.target.value,
+                            }))
+                          }
                           placeholder="e.g., locked / sealed / humming / glyph"
                         />
                       </label>
 
-                      <span className="muted">(Mark applies to destination if moving; otherwise current tile.)</span>
+                      <span className="muted">
+                        (Mark applies to destination if moving; otherwise current tile.)
+                      </span>
                     </div>
                   )}
                 </div>
