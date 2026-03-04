@@ -121,11 +121,8 @@ export default function CombatRendererPanel({
     [events, mapW, mapH]
   );
 
-  // Not strictly required for V1 rendering yet, but kept for V2 branching.
-  const archetype = useMemo(
-    () => guessEnemyArchetype(activeEnemyGroupName),
-    [activeEnemyGroupName]
-  );
+  // Not required for V1 branching yet; kept for V2.
+  useMemo(() => guessEnemyArchetype(activeEnemyGroupName), [activeEnemyGroupName]);
 
   // Preload images when enemy changes
   useEffect(() => {
@@ -201,9 +198,6 @@ export default function CombatRendererPanel({
     if (busy) return;
 
     setBusy(true);
-
-    // V1: all archetypes share telegraph → release → flight → impact pacing.
-    // (We branch by archetype in V2 for different projectile/effects.)
     startPhase("telegraph");
   }
 
@@ -224,15 +218,12 @@ export default function CombatRendererPanel({
     const now = performance.now();
     const elapsed = now - phaseStartedAt;
 
-    // Telegraph time
     if (phase === "telegraph" && elapsed > 650) {
       startPhase("release");
       return;
     }
 
-    // Release “beat”
     if (phase === "release" && elapsed > 250) {
-      // Build volley particles aimed at player
       const target = tileCenterPx(playerPos);
       const origins = enemyVolleyOrigins().map(tileCenterPx);
 
@@ -242,7 +233,7 @@ export default function CombatRendererPanel({
         y0: o.y,
         x1: target.x,
         y1: target.y,
-        t0: t0 + idx * 60, // slight stagger
+        t0: t0 + idx * 60,
         dur: 520,
       }));
 
@@ -250,7 +241,6 @@ export default function CombatRendererPanel({
       return;
     }
 
-    // Flight ends when last projectile would land
     if (phase === "flight") {
       const parts = volley.current;
       const last = parts[parts.length - 1];
@@ -265,29 +255,29 @@ export default function CombatRendererPanel({
       }
     }
 
-    // Impact “flash”
     if (phase === "impact" && elapsed > 380) {
       startPhase("cooldown");
       return;
     }
 
-    // Cooldown ends
     if (phase === "cooldown" && elapsed > 450) {
       reset();
       return;
     }
-  }, [busy, phase, phaseStartedAt, playerPos, archetype]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [busy, phase, phaseStartedAt, playerPos]);
 
-  // Main render loop
+  // Main render loop (strict TS: ctx never nullable inside helpers)
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
-    const g = canvas.getContext("2d");
-    if (!g) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
 
-    // Clean, portable rounded-rect path: uses roundRect if available, else draws fallback.
+    type Ctx = CanvasRenderingContext2D;
+
     function roundRectPath(
+      g: Ctx,
       x: number,
       y: number,
       w: number,
@@ -295,8 +285,8 @@ export default function CombatRendererPanel({
       r: number
     ) {
       const rr = Math.max(0, Math.min(r, Math.min(w, h) / 2));
-
       const anyG = g as any;
+
       if (typeof anyG.roundRect === "function") {
         anyG.roundRect(x, y, w, h, rr);
         return;
@@ -314,11 +304,11 @@ export default function CombatRendererPanel({
       g.quadraticCurveTo(x, y, x + rr, y);
     }
 
-    function clear() {
+    function clear(g: Ctx) {
       g.clearRect(0, 0, g.canvas.width, g.canvas.height);
     }
 
-    function drawTelegraph() {
+    function drawTelegraph(g: Ctx) {
       const center = tileCenterPx(playerPos);
       const pulse = Math.min(1, (performance.now() - phaseStartedAt) / 650);
       const r = 10 + pulse * 14;
@@ -337,25 +327,23 @@ export default function CombatRendererPanel({
       }
     }
 
-    function drawEnemyBadges() {
+    function drawEnemyBadges(g: Ctx) {
       if (!activeEnemyGroupName) return;
 
       const origins = enemyVolleyOrigins().map(tileCenterPx);
       const size = 42;
 
       for (const o of origins) {
-        // subtle background plate
         g.globalAlpha = 0.9;
         g.fillStyle = "rgba(0,0,0,0.35)";
         g.beginPath();
-        roundRectPath(o.x - size / 2, o.y - size / 2, size, size, 10);
+        roundRectPath(g, o.x - size / 2, o.y - size / 2, size, size, 10);
         g.fill();
         g.globalAlpha = 1;
 
         if (enemyImg) {
           g.drawImage(enemyImg, o.x - size / 2, o.y - size / 2, size, size);
         } else {
-          // fallback glyph
           g.fillStyle = "rgba(255,255,255,0.85)";
           g.font = "16px system-ui";
           g.textAlign = "center";
@@ -365,7 +353,7 @@ export default function CombatRendererPanel({
       }
     }
 
-    function drawArrows() {
+    function drawArrows(g: Ctx) {
       const now = performance.now();
       const parts = volley.current;
 
@@ -376,7 +364,6 @@ export default function CombatRendererPanel({
         const x = p.x0 + (p.x1 - p.x0) * t;
         const y = p.y0 + (p.y1 - p.y0) * t;
 
-        // Trail
         g.globalAlpha = 0.55;
         g.strokeStyle = "rgba(200,220,255,0.55)";
         g.lineWidth = 2;
@@ -386,7 +373,6 @@ export default function CombatRendererPanel({
         g.stroke();
         g.globalAlpha = 1;
 
-        // Arrow sprite or fallback
         if (arrowImg) {
           const s = 22;
           const ang = Math.atan2(p.y1 - p.y0, p.x1 - p.x0);
@@ -404,15 +390,15 @@ export default function CombatRendererPanel({
       }
     }
 
-    function drawImpact() {
+    function drawImpact(g: Ctx) {
       const center = tileCenterPx(playerPos);
       const t = Math.min(1, (performance.now() - phaseStartedAt) / 380);
 
-      // tile flash
       g.globalAlpha = 0.25 + 0.25 * (1 - t);
       g.fillStyle = "rgba(255,200,120,0.7)";
       g.beginPath();
       roundRectPath(
+        g,
         center.x - tileSize / 2,
         center.y - tileSize / 2,
         tileSize,
@@ -422,7 +408,6 @@ export default function CombatRendererPanel({
       g.fill();
       g.globalAlpha = 1;
 
-      // impact sprite
       if (impactImg) {
         const s = 64;
         g.globalAlpha = 0.9 * (1 - t * 0.35);
@@ -438,21 +423,20 @@ export default function CombatRendererPanel({
     }
 
     function frame() {
-      clear();
+      clear(ctx);
 
-      // Always show enemy badges during non-idle enemy phase
       if (activeEnemyGroupName && (busy || phase !== "idle")) {
-        drawEnemyBadges();
+        drawEnemyBadges(ctx);
       }
 
-      if (phase === "telegraph" || phase === "release") drawTelegraph();
+      if (phase === "telegraph" || phase === "release") drawTelegraph(ctx);
 
       if (phase === "flight") {
-        drawTelegraph();
-        drawArrows();
+        drawTelegraph(ctx);
+        drawArrows(ctx);
       }
 
-      if (phase === "impact") drawImpact();
+      if (phase === "impact") drawImpact(ctx);
 
       rafRef.current = requestAnimationFrame(frame);
     }
@@ -481,13 +465,7 @@ export default function CombatRendererPanel({
   const canPlay = !!activeEnemyGroupName && !busy;
 
   return (
-    <div
-      style={{
-        position: "absolute",
-        inset: 0,
-        pointerEvents: "none", // renderer is visual-only by default
-      }}
-    >
+    <div style={{ position: "absolute", inset: 0, pointerEvents: "none" }}>
       <canvas
         ref={canvasRef}
         width={canvasW}
@@ -505,7 +483,7 @@ export default function CombatRendererPanel({
             position: "absolute",
             top: 10,
             right: 10,
-            pointerEvents: "auto", // allow clicking UI
+            pointerEvents: "auto",
             display: "flex",
             flexDirection: "column",
             gap: 8,
