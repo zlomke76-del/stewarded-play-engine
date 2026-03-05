@@ -20,6 +20,8 @@ export function sectionLabel(section: DemoSectionId) {
   switch (section) {
     case "mode":
       return "Mode";
+    case "party":
+      return "Party";
     case "table":
       return "Table";
     case "pressure":
@@ -36,6 +38,8 @@ export function sectionLabel(section: DemoSectionId) {
       return "Canon";
     case "ledger":
       return "Ledger";
+    default:
+      return "Section";
   }
 }
 
@@ -228,8 +232,6 @@ export function inferOptionKind(description: string): OptionKind {
 
   // ------------------------------------------------------------
   // 1) CONTESTED (DC 14)
-  // - Direct adversary / opposition / confrontation / attack framing
-  // - Social contests (influence checks) also treated as contested in this demo
   // ------------------------------------------------------------
   if (
     has(
@@ -250,9 +252,7 @@ export function inferOptionKind(description: string): OptionKind {
       "threat",
       "duel"
     ) ||
-    // OptionGenerator exact phrases we want to strongly classify:
     has("resolve as an attack", "hostile action", "interrupt or escalate the confrontation") ||
-    // Social check is usually opposed by an NPC's will/insight in many tables -> contested tier for demo punch
     has("social or influence check", "influence check")
   ) {
     return "contested";
@@ -260,7 +260,6 @@ export function inferOptionKind(description: string): OptionKind {
 
   // ------------------------------------------------------------
   // 2) ENVIRONMENTAL (DC 8)
-  // - Terrain, obstacles, tool use, movement costs, environment consequences
   // ------------------------------------------------------------
   if (
     has(
@@ -289,7 +288,6 @@ export function inferOptionKind(description: string): OptionKind {
       "gate",
       "hatch"
     ) ||
-    // OptionGenerator exact phrases
     has(
       "account for terrain or surroundings",
       "resolve movement with obstacles or costs",
@@ -304,7 +302,6 @@ export function inferOptionKind(description: string): OptionKind {
 
   // ------------------------------------------------------------
   // 3) RISKY (DC 10)
-  // - Stealth, theft, escalation, ritualized magic, partial/ambiguous info, high-variance moves
   // ------------------------------------------------------------
   if (
     has(
@@ -327,7 +324,6 @@ export function inferOptionKind(description: string): OptionKind {
       "consequence",
       "consequences"
     ) ||
-    // OptionGenerator exact phrases
     has(
       "treat as a spell or magical effect",
       "interpret as a ritual or symbolic act",
@@ -339,7 +335,6 @@ export function inferOptionKind(description: string): OptionKind {
 
   // ------------------------------------------------------------
   // 4) SAFE (DC 6)
-  // - Clarification, roleplay resolution, simple interactions, “defer”, “without a roll”
   // ------------------------------------------------------------
   return "safe";
 }
