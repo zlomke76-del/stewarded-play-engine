@@ -598,51 +598,6 @@ export default function CombatSetupPanel({
           </div>
         </div>
 
-        {/* Players (read-only; session truth) */}
-        <div style={{ marginTop: 16 }}>
-          <strong>Players (session truth)</strong>
-
-          {partySize === 0 ? (
-            <div className="muted" style={{ marginTop: 10 }}>
-              No party declared yet.
-            </div>
-          ) : (
-            <div
-              style={{
-                marginTop: 10,
-                display: "grid",
-                gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-                gap: 10,
-              }}
-            >
-              {partyMembers.slice(0, 6).map((m, idx) => {
-                const i1 = idx + 1;
-                const name = normalizeName(m.name || "") || `Player ${i1}`;
-                const mod = Math.trunc(Number(m.initiativeMod ?? 0));
-                return (
-                  <div
-                    key={String(m.id ?? `player_${i1}`)}
-                    style={{
-                      padding: "10px 12px",
-                      borderRadius: 12,
-                      border: "1px solid rgba(255,255,255,0.10)",
-                      background: "rgba(255,255,255,0.04)",
-                    }}
-                  >
-                    <div>
-                      <strong>{name}</strong>
-                    </div>
-                    <div className="muted" style={{ marginTop: 6, fontSize: 12 }}>
-                      id: {String(m.id)} · init mod: {mod >= 0 ? `+${mod}` : `${mod}`}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
-      </div>
-
       {/* Actions */}
       <div style={{ marginTop: 14, display: "flex", gap: 8, flexWrap: "wrap" }}>
         <button
