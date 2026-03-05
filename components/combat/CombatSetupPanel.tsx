@@ -116,10 +116,7 @@ function selectStyle(disabled?: boolean): React.CSSProperties {
   };
 }
 
-function buttonStyle(
-  tone: "primary" | "ghost" | "danger",
-  disabled?: boolean
-): React.CSSProperties {
+function buttonStyle(tone: "primary" | "ghost" | "danger", disabled?: boolean): React.CSSProperties {
   const base: React.CSSProperties = {
     padding: "10px 12px",
     borderRadius: 10,
@@ -137,10 +134,8 @@ function buttonStyle(
     return {
       ...base,
       border: "1px solid rgba(138,180,255,0.28)",
-      background:
-        "linear-gradient(180deg, rgba(138,180,255,0.14), rgba(138,180,255,0.06))",
-      boxShadow:
-        "inset 0 1px 0 rgba(255,255,255,0.06), 0 10px 22px rgba(0,0,0,0.22)",
+      background: "linear-gradient(180deg, rgba(138,180,255,0.14), rgba(138,180,255,0.06))",
+      boxShadow: "inset 0 1px 0 rgba(255,255,255,0.06), 0 10px 22px rgba(0,0,0,0.22)",
     };
   }
 
@@ -148,8 +143,7 @@ function buttonStyle(
     return {
       ...base,
       border: "1px solid rgba(255,120,120,0.24)",
-      background:
-        "linear-gradient(180deg, rgba(255,120,120,0.14), rgba(255,120,120,0.06))",
+      background: "linear-gradient(180deg, rgba(255,120,120,0.14), rgba(255,120,120,0.06))",
     };
   }
 
@@ -166,76 +160,102 @@ function hash32(s: string): number {
   return h >>> 0;
 }
 
-function uniqCaseInsensitive(items: string[]) {
-  const seen = new Set<string>();
-  const out: string[] = [];
-  for (const raw of items) {
-    const v = normalizeName(raw);
-    if (!v) continue;
-    const k = v.toLowerCase();
-    if (seen.has(k)) continue;
-    seen.add(k);
-    out.push(v);
-  }
-  return out;
+type PressureBand = "low" | "medium" | "high" | "extreme";
+
+function pressureBandFromTier(pressureTier: any): PressureBand {
+  const t = String(pressureTier ?? "").toLowerCase();
+  if (t.includes("extreme") || t.includes("tier_4") || t === "4") return "extreme";
+  if (t.includes("high") || t.includes("tier_3") || t === "3") return "high";
+  if (t.includes("med") || t.includes("tier_2") || t === "2") return "medium";
+  return "low";
 }
 
 // Pressure -> mild init mod heuristic (kept intentionally simple)
 function inferEnemyInitModFromPressure(pressureTier: any): number {
-  const t = String(pressureTier ?? "").toLowerCase();
-
-  if (t.includes("low") || t.includes("calm") || t.includes("tier_1") || t === "1") return 0;
-  if (t.includes("med") || t.includes("tier_2") || t === "2") return 1;
-  if (t.includes("high") || t.includes("tier_3") || t === "3") return 2;
-  if (t.includes("extreme") || t.includes("tier_4") || t === "4") return 3;
-
-  return 1;
+  const band = pressureBandFromTier(pressureTier);
+  if (band === "low") return 0;
+  if (band === "medium") return 1;
+  if (band === "high") return 2;
+  return 3;
 }
 
-// Pressure -> enemy theme pool (implicit difficulty flavor)
-function enemyPoolForPressure(pressureTier: any) {
-  const t = String(pressureTier ?? "").toLowerCase();
-
-  const low = ["Skirmishers", "Archers", "Shields", "Stalkers", "Sentries", "Neon Hounds"];
-  const med = ["Brutes", "Skirmishers", "Archers", "Casters", "Drones", "Grid Knights"];
-  const high = ["Wraiths", "Firewall Wardens", "Casters", "Drones", "Grid Knights", "Brutes"];
-
-  if (t.includes("low") || t.includes("calm") || t.includes("tier_1") || t === "1") return low;
-  if (t.includes("med") || t.includes("tier_2") || t === "2") return med;
-  if (t.includes("high") || t.includes("tier_3") || t === "3") return high;
-  if (t.includes("extreme") || t.includes("tier_4") || t === "4")
-    return [...high, "Wraiths", "Firewall Wardens"];
-
-  return med;
+// Pressure -> per-enemy HP (avoid squared scaling; count already matches party size)
+function inferEnemyHpPerEnemyFromPressure(pressureTier: any): number {
+  const band = pressureBandFromTier(pressureTier);
+  if (band === "low") return 12;
+  if (band === "medium") return 14;
+  if (band === "high") return 16;
+  return 18;
 }
 
-function pickDeterministicUnique(pool: string[], count: number, seed: string): string[] {
-  const p = uniqCaseInsensitive(pool);
-  const n = clampInt(count, 0, 6);
-  if (n === 0) return [];
+// Pressure -> 50/50 enemy archetypes (difficulty via “quality”, not quantity)
+function enemyTypesForPressure(pressureTier: any): [string, string] {
+  const band = pressureBandFromTier(pressureTier);
 
-  const keyed = p.map((name, idx) => {
-    const h = hash32(`${seed}::${idx}::${name.toLowerCase()}`);
-    return { name, h };
-  });
+  if (band === "low") return ["Archers", "Shields"];
+  if (band === "medium") return ["Skirmishers", "Shields"];
+  if (band === "high") return ["Casters", "Brutes"];
+  return ["Wraiths", "Firewall Wardens"];
+}
 
-  keyed.sort((a, b) => a.h - b.h);
+function makeInstanceLabel(base: string, idx1: number) {
+  // Keep it readable + stable, and still match asset resolver (includes("archer"), etc.)
+  return `${base} #${idx1}`;
+}
 
-  const out: string[] = [];
-  let pass = 0;
-  while (out.length < n && pass < 3) {
-    for (const k of keyed) {
-      if (out.length >= n) break;
-      if (!out.some((x) => x.toLowerCase() === k.name.toLowerCase())) out.push(k.name);
-    }
-    pass++;
-    if (out.length < n) {
-      keyed.forEach((k) => (k.h = hash32(`${seed}::pass${pass}::${k.name.toLowerCase()}`)));
-      keyed.sort((a, b) => a.h - b.h);
+function shouldFirstTypeGetExtra(seed: string): boolean {
+  // deterministic: 0/1 based on hash
+  return (hash32(seed) & 1) === 1;
+}
+
+function buildBalancedRoster(
+  pressureTier: any,
+  partySize: number,
+  seed: string
+): { labels: string[]; counts: { a: number; b: number }; types: [string, string] } {
+  const n = clampInt(partySize, 0, 6);
+  const types = enemyTypesForPressure(pressureTier);
+  const [A, B] = types;
+
+  if (n === 0) return { labels: [], counts: { a: 0, b: 0 }, types };
+
+  // Base 50/50 split.
+  let a = Math.floor(n / 2);
+  let b = n - a;
+
+  // If odd, deterministically choose which side gets the extra (variety without RNG).
+  if (n % 2 === 1) {
+    const aGetsExtra = shouldFirstTypeGetExtra(`${seed}::odd_split::${String(pressureTier ?? "")}`);
+    if (aGetsExtra) {
+      a = Math.ceil(n / 2);
+      b = n - a;
+    } else {
+      a = Math.floor(n / 2);
+      b = n - a;
     }
   }
 
-  return out.slice(0, n);
+  const labels: string[] = [];
+  for (let i = 1; i <= a; i++) labels.push(makeInstanceLabel(A, i));
+  for (let i = 1; i <= b; i++) labels.push(makeInstanceLabel(B, i));
+
+  // Deterministic order shuffle-lite: keep it stable, but avoid “all archers then all shields” sometimes.
+  // We interleave based on a deterministic bit.
+  const interleave = shouldFirstTypeGetExtra(`${seed}::interleave::${A}::${B}`);
+  if (interleave && labels.length > 1) {
+    const aLabels = labels.filter((x) => x.toLowerCase().includes(A.toLowerCase().split(" ")[0]));
+    const bLabels = labels.filter((x) => x.toLowerCase().includes(B.toLowerCase().split(" ")[0]));
+    const out: string[] = [];
+    let ia = 0,
+      ib = 0;
+    while (out.length < labels.length) {
+      if (ia < aLabels.length) out.push(aLabels[ia++]);
+      if (ib < bLabels.length) out.push(bLabels[ib++]);
+    }
+    return { labels: out.slice(0, n), counts: { a, b }, types };
+  }
+
+  return { labels: labels.slice(0, n), counts: { a, b }, types };
 }
 
 function enemyAssetForGroupName(name: string): string {
@@ -314,7 +334,7 @@ function EnemyCard({
         </div>
 
         <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>
-          enemy group · init mod {initMod >= 0 ? `+${initMod}` : `${initMod}`}
+          enemy · init mod {initMod >= 0 ? `+${initMod}` : `${initMod}`}
         </div>
 
         <div className="muted" style={{ fontSize: 12, marginTop: 2 }}>
@@ -345,12 +365,12 @@ export default function CombatSetupPanel({
 
   const ENEMY_GROUP_LIBRARY = useMemo(
     () => [
-      "Skirmishers",
       "Archers",
-      "Brutes",
       "Shields",
-      "Stalkers",
+      "Skirmishers",
+      "Brutes",
       "Casters",
+      "Stalkers",
       "Drones",
       "Sentries",
       "Wraiths",
@@ -369,54 +389,71 @@ export default function CombatSetupPanel({
   }, [events, partySize, pressureTier]);
 
   // -----------------------------
-  // Enemy groups (Solace-owned unless Human/Dev)
+  // Enemy list (instances) + knobs
   // -----------------------------
 
-  const [enemyGroups, setEnemyGroups] = useState<string[]>(["Skirmishers", "Archers"]);
-  const [enemyGroupSelect, setEnemyGroupSelect] = useState<string>("Skirmishers");
+  const [enemyGroups, setEnemyGroups] = useState<string[]>([
+    makeInstanceLabel("Archers", 1),
+    makeInstanceLabel("Shields", 1),
+  ]);
+
+  const [enemyGroupSelect, setEnemyGroupSelect] = useState<string>("Archers");
   const [initModEnemies, setInitModEnemies] = useState<number>(1);
 
-  // Solace: implicit difficulty → init mod + 1:1 groups to party size.
+  // Solace-owned: pressure -> init mod (quality)
   useEffect(() => {
     if (isHuman && !allowDevControls) return;
 
     const inferred = inferEnemyInitModFromPressure(pressureTier);
     setInitModEnemies((prev) => {
-      if (isHuman && allowDevControls) return prev;
+      if (isHuman && allowDevControls) return prev; // don’t stomp dev edits
       return inferred;
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pressureTier, isHuman, allowDevControls]);
 
+  // Solace-owned: 1:1 enemies to party size, 50/50 composition, pressure drives *type*
   useEffect(() => {
     if (isHuman && !allowDevControls) return;
 
     const desired = clampInt(partySize, 0, 6);
-    const pool = enemyPoolForPressure(pressureTier);
-    const picked = pickDeterministicUnique(pool.length ? pool : ENEMY_GROUP_LIBRARY, desired, pressureSeed);
+    const roster = buildBalancedRoster(pressureTier, desired, pressureSeed);
 
     setEnemyGroups((prev) => {
-      if (isHuman && allowDevControls) return prev; // don’t stomp dev edits
-      return picked;
+      if (isHuman && allowDevControls) return prev; // dev can override
+      return roster.labels;
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [partySize, pressureTier, pressureSeed, isHuman, allowDevControls, ENEMY_GROUP_LIBRARY.join("|")]);
+  }, [partySize, pressureTier, pressureSeed, isHuman, allowDevControls]);
 
-  function addEnemyGroup(name: string) {
+  function nextInstanceIndexForBase(base: string, existing: string[]) {
+    const b = String(base ?? "").toLowerCase().trim();
+    let max = 0;
+    for (const label of existing) {
+      const s = String(label ?? "").toLowerCase();
+      if (!s.includes(b)) continue;
+      const m = /#\s*(\d+)\s*$/.exec(label);
+      if (m?.[1]) max = Math.max(max, Number(m[1]));
+    }
+    return max + 1;
+  }
+
+  function addEnemyGroup(baseName: string) {
     if (!canEdit) return;
-    const v = normalizeName(name);
-    if (!v) return;
+    const base = normalizeName(baseName);
+    if (!base) return;
 
     setEnemyGroups((prev) => {
-      const next = uniqCaseInsensitive([...prev, v]);
-      return next.slice(0, 6);
+      if (prev.length >= 6) return prev;
+      const idx = nextInstanceIndexForBase(base, prev);
+      return [...prev, makeInstanceLabel(base, idx)].slice(0, 6);
     });
   }
 
-  function removeEnemyGroup(name: string) {
+  function removeEnemyGroup(label: string) {
     if (!canEdit) return;
-    const v = normalizeName(name);
-    setEnemyGroups((prev) => prev.filter((g) => g.toLowerCase() !== v.toLowerCase()));
+    const v = normalizeName(label);
+    setEnemyGroups((prev) => prev.filter((g) => g !== v));
   }
 
   function clearEnemyGroups() {
@@ -452,12 +489,12 @@ export default function CombatSetupPanel({
     if (members.length === 0) return;
 
     const desiredGroups = clampInt(members.length, 1, 6);
-    const groups = uniqCaseInsensitive(enemyGroups).slice(0, desiredGroups);
 
-    const ensuredGroups =
-      groups.length > 0
-        ? groups
-        : pickDeterministicUnique(enemyPoolForPressure(pressureTier), desiredGroups, pressureSeed);
+    // Use exactly N enemies (1:1 with party size). If empty, rebuild from Solace roster.
+    const ensuredLabels =
+      enemyGroups.length > 0
+        ? enemyGroups.slice(0, desiredGroups)
+        : buildBalancedRoster(pressureTier, desiredGroups, pressureSeed).labels;
 
     const combatId = crypto.randomUUID();
     const seed = crypto.randomUUID();
@@ -474,7 +511,7 @@ export default function CombatSetupPanel({
       });
     });
 
-    ensuredGroups.forEach((name, idx) => {
+    ensuredLabels.forEach((name, idx) => {
       participants.push({
         id: `enemy_group_${idx + 1}`,
         name,
@@ -508,26 +545,33 @@ export default function CombatSetupPanel({
   }
 
   // -----------------------------
-  // Enemy cards (replace visual noise area)
+  // Enemy cards (no squared math)
   // -----------------------------
 
   const enemyCards = useMemo(() => {
-    const groups = uniqCaseInsensitive(enemyGroups).slice(0, clampInt(partySize, 0, 6));
+    const n = clampInt(partySize, 0, 6);
+    const labels = enemyGroups.slice(0, n);
 
-    // Lightweight “state/HP” presentation:
-    // - Until we add canonical damage events, treat enemies as full HP.
-    // - Still shows something concrete and consistent.
-    const hpMax = Math.max(1, partySize) * 12; // simple scaling; purely UI until canonical damage exists
-    const hpLabel = `HP ${hpMax}/${hpMax}`;
+    // Key fix: HP is PER ENEMY, not multiplied by party size.
+    const hpPerEnemy = inferEnemyHpPerEnemyFromPressure(pressureTier);
+    const hpLabel = `HP ${hpPerEnemy}/${hpPerEnemy}`;
     const stateLabel = locked ? "In combat" : "Deployed (Solace-owned)";
 
-    return groups.map((g) => ({
-      name: g,
+    return labels.map((name) => ({
+      name,
       initMod: Math.trunc(Number(initModEnemies ?? 0)),
       hpLabel,
       stateLabel,
     }));
-  }, [enemyGroups, initModEnemies, locked, partySize]);
+  }, [enemyGroups, initModEnemies, locked, partySize, pressureTier]);
+
+  const rosterInfo = useMemo(() => {
+    const roster = buildBalancedRoster(pressureTier, clampInt(partySize, 0, 6), pressureSeed);
+    const [A, B] = roster.types;
+    const hp = inferEnemyHpPerEnemyFromPressure(pressureTier);
+    const band = pressureBandFromTier(pressureTier);
+    return { A, B, a: roster.counts.a, b: roster.counts.b, hp, band };
+  }, [partySize, pressureTier, pressureSeed]);
 
   return (
     <CardSection title="Combat (Deterministic, Grouped Enemies)">
@@ -538,13 +582,13 @@ export default function CombatSetupPanel({
       </div>
 
       <p className="muted" style={{ marginTop: 10 }}>
-        Players roll individually. Enemy groups roll once per group. Turn order is derived from events.
+        Players roll individually. Enemies roll once per enemy. Turn order is derived from events.
       </p>
 
       {!isHuman && !allowDevControls && (
         <div className="muted" style={{ marginTop: 10 }}>
           Combat materialization is derived from <strong>pressure + hostile intent</strong>. This panel shows the{" "}
-          <strong>implicit</strong> setup Solace would use (1:1 enemy groups to party size).
+          <strong>implicit</strong> setup Solace would use (1:1 enemies to party size, 50/50 mix).
         </div>
       )}
 
@@ -590,12 +634,17 @@ export default function CombatSetupPanel({
           <div style={{ flex: "1 1 420px", display: "flex", flexDirection: "column", gap: 8, minWidth: 320 }}>
             <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 10 }}>
               <span className="muted" style={{ fontSize: 12 }}>
-                Enemy groups <span className="muted">(1:1 with party size)</span>
+                Enemies <span className="muted">(1:1 with party size · 50/50 mix)</span>
               </span>
 
               <span className="muted" style={{ fontSize: 12 }}>
-                Pressure tier: <strong>{String(pressureTier ?? "unknown")}</strong>
+                Pressure tier: <strong>{String(pressureTier ?? "unknown")}</strong> · Band{" "}
+                <strong>{rosterInfo.band}</strong> · HP <strong>{rosterInfo.hp}</strong>
               </span>
+            </div>
+
+            <div className="muted" style={{ fontSize: 12 }}>
+              Roster: <strong>{rosterInfo.a}</strong>× {rosterInfo.A} · <strong>{rosterInfo.b}</strong>× {rosterInfo.B}
             </div>
 
             {showBuilderControls && (
@@ -615,9 +664,9 @@ export default function CombatSetupPanel({
 
                 <button
                   onClick={() => addEnemyGroup(enemyGroupSelect)}
-                  disabled={!canEdit}
-                  style={buttonStyle("primary", !canEdit)}
-                  title={!canEdit ? "Solace-owned (or combat locked)" : "Add enemy group"}
+                  disabled={!canEdit || enemyGroups.length >= 6}
+                  style={buttonStyle("primary", !canEdit || enemyGroups.length >= 6)}
+                  title={!canEdit ? "Solace-owned (or combat locked)" : "Add enemy"}
                 >
                   Add
                 </button>
@@ -647,22 +696,16 @@ export default function CombatSetupPanel({
                 }}
               >
                 {enemyCards.map((c) => (
-                  <EnemyCard
-                    key={c.name}
-                    name={c.name}
-                    initMod={c.initMod}
-                    hpLabel={c.hpLabel}
-                    stateLabel={c.stateLabel}
-                  />
+                  <EnemyCard key={c.name} name={c.name} initMod={c.initMod} hpLabel={c.hpLabel} stateLabel={c.stateLabel} />
                 ))}
               </div>
             ) : (
               <div className="muted" style={{ marginTop: 6 }}>
-                No enemy groups.
+                No enemies.
               </div>
             )}
 
-            {/* If we’re showing builder controls (human/dev), keep the removable chips too. */}
+            {/* If we’re showing builder controls (human/dev), keep removable chips too. */}
             {showBuilderControls && enemyGroups.length > 0 && (
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8 }}>
                 {enemyGroups.slice(0, 6).map((g) => (
@@ -753,9 +796,7 @@ export default function CombatSetupPanel({
                   style={{
                     padding: "12px 12px",
                     borderRadius: 12,
-                    border: active
-                      ? "1px solid rgba(138,180,255,0.35)"
-                      : "1px solid rgba(255,255,255,0.10)",
+                    border: active ? "1px solid rgba(138,180,255,0.35)" : "1px solid rgba(255,255,255,0.10)",
                     background: active
                       ? "linear-gradient(180deg, rgba(138,180,255,0.10), rgba(0,0,0,0.10))"
                       : "rgba(255,255,255,0.04)",
@@ -773,9 +814,7 @@ export default function CombatSetupPanel({
                         width: 10,
                         height: 10,
                         borderRadius: 999,
-                        border: active
-                          ? "1px solid rgba(138,180,255,0.60)"
-                          : "1px solid rgba(255,255,255,0.16)",
+                        border: active ? "1px solid rgba(138,180,255,0.60)" : "1px solid rgba(255,255,255,0.16)",
                         background: active ? "rgba(138,180,255,0.18)" : "rgba(255,255,255,0.05)",
                         boxShadow: active ? "0 0 14px rgba(138,180,255,0.25)" : "none",
                       }}
