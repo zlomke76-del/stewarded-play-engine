@@ -233,6 +233,7 @@ export default function EnemyTurnResolverPanel({
   const [reveal, setReveal] = useState<string>("");
 
   const timers = useRef<number[]>([]);
+  const rollRef = useRef<number | null>(null);
 
   const enemyName = activeEnemyGroupName ?? null;
 
@@ -246,6 +247,7 @@ export default function EnemyTurnResolverPanel({
     setStep("idle");
     setDeclared("");
     setRoll(null);
+    rollRef.current = null;
     setReveal("");
     if (enemyName) setDC(defaultDC(enemyName));
 
@@ -283,12 +285,13 @@ export default function EnemyTurnResolverPanel({
 
     queue(1250, () => {
       const r = randInt(1, 20);
+      rollRef.current = r;
       setRoll(r);
       setStep("rolled");
     });
 
     queue(1750, () => {
-      const r = roll ?? randInt(1, 20); // safety; usually roll already set
+      const r = rollRef.current ?? randInt(1, 20); // safety; usually roll already set
       const text = outcomeText(enemyName, targetName, r, nextDC);
       setReveal(text);
       setStep("revealed");
@@ -297,7 +300,7 @@ export default function EnemyTurnResolverPanel({
 
   function commit() {
     if (!enabled || !enemyName) return;
-    const r = roll ?? 0;
+    const r = rollRef.current ?? roll ?? 0;
 
     const dmg = damageProfileFor(enemyName);
 
