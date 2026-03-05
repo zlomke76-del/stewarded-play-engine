@@ -10,6 +10,11 @@
 // - Human DM mode: Arbiter may EDIT narration
 // - Solace (Neutral Facilitator) DM mode: narration is NOT editable (read-only)
 // - Arbiter commits canon (Record Outcome)
+//
+// Upgrade (2026-03):
+// - Optional rollModifier applied to the rolled value for DC comparisons.
+//   This supports deterministic penalties like "Injury: -2 per stack"
+//   without changing existing callers.
 // ------------------------------------------------------------
 
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -62,11 +67,22 @@ type Props = {
     attackStyleHint?: "volley" | "beam" | "charge" | "unknown";
   } | null;
 
+  /**
+   * Optional mechanical modifier applied to the rolled value.
+   * Use negative values for penalties (e.g., injury stacks: -2, -4, ...).
+   *
+   * Important:
+   * - The panel records the *effective* roll (raw + modifier) in dice.roll,
+   *   and logs the raw roll + modifier in audit for transparency.
+   */
+  rollModifier?: number;
+  rollModifierLabel?: string | null;
+
   onRecord: (payload: {
     description: string;
     dice: {
       mode: DiceMode;
-      roll: number;
+      roll: number; // effective (raw + modifier)
       dc: number;
       source: RollSource;
     };
@@ -97,6 +113,11 @@ function clampInt(n: number, lo: number, hi: number) {
   return Math.max(lo, Math.min(hi, n));
 }
 
+function safeInt(n: unknown, fallback: number) {
+  const x = Number(n);
+  return Number.isFinite(x) ? Math.trunc(x) : fallback;
+}
+
 /* ------------------------------------------------------------ */
 
 export default function ResolutionDraftAdvisoryPanel({
@@ -106,13 +127,15 @@ export default function ResolutionDraftAdvisoryPanel({
   setupText = null,
   movement = null,
   combat = null,
+  rollModifier = 0,
+  rollModifierLabel = null,
   onRecord,
 }: Props) {
   const dc = difficultyFor(context.optionKind);
   const isSolaceNeutral = dmMode === "solace_neutral";
 
   const [diceMode, setDiceMode] = useState<DiceMode>("d20");
-  const [roll, setRoll] = useState<number | null>(null);
+  const [rawRoll, setRawRoll] = useState<number | null>(null);
   const [manualRoll, setManualRoll] = useState("");
 
   const committedRef = useRef(false);
@@ -122,7 +145,7 @@ export default function ResolutionDraftAdvisoryPanel({
 
   // Reset on new intent
   useEffect(() => {
-    setRoll(null);
+    setRawRoll(null);
     setManualRoll("");
     setDraftText("");
     committedRef.current = false;
@@ -134,14 +157,24 @@ export default function ResolutionDraftAdvisoryPanel({
 
   function rollDice() {
     const max = clampInt(Number(diceMode.slice(1)), 2, 100);
-    setRoll(Math.ceil(Math.random() * max));
+    setRawRoll(Math.ceil(Math.random() * max));
   }
 
   function acceptManualRoll() {
     const r = Number(manualRoll);
     if (!Number.isInteger(r) || r <= 0) return;
-    setRoll(r);
+    setRawRoll(r);
   }
+
+  const effectiveRoll = useMemo(() => {
+    if (rawRoll === null) return null;
+
+    // Apply modifier only when it matters most (d20 checks),
+    // but keep it generic for future flexibility.
+    // If you want it d20-only, replace with:
+    // return diceMode === "d20" ? rawRoll + rollModifier : rawRoll;
+    return rawRoll + safeInt(rollModifier, 0);
+  }, [rawRoll, rollModifier]);
 
   /* ----------------------------------------------------------
      Creative narration (NON-AUTHORITATIVE flavor)
@@ -150,9 +183,9 @@ export default function ResolutionDraftAdvisoryPanel({
   ---------------------------------------------------------- */
 
   const generatedNarration = useMemo(() => {
-    if (roll === null) return "";
+    if (rawRoll === null || effectiveRoll === null) return "";
 
-    const margin = roll - dc;
+    const margin = effectiveRoll - dc;
 
     // Build truth anchors only when Solace Neutral is active
     const truth = isSolaceNeutral
@@ -174,7 +207,9 @@ export default function ResolutionDraftAdvisoryPanel({
             : undefined,
           mechanics: {
             dc,
-            roll,
+            roll: effectiveRoll,
+            rawRoll,
+            rollModifier: safeInt(rollModifier, 0),
             margin,
             success: margin >= 0,
             optionKind: context.optionKind,
@@ -190,7 +225,8 @@ export default function ResolutionDraftAdvisoryPanel({
       truth,
     });
   }, [
-    roll,
+    rawRoll,
+    effectiveRoll,
     dc,
     context.optionDescription,
     context.optionKind,
@@ -198,13 +234,14 @@ export default function ResolutionDraftAdvisoryPanel({
     setupText,
     movement,
     combat,
+    rollModifier,
   ]);
 
   // Seed draft text:
   // - Human DM mode: seed once, then allow edits
   // - Solace Neutral mode: always keep aligned to generated narration (read-only)
   useEffect(() => {
-    if (roll === null) return;
+    if (rawRoll === null) return;
 
     if (isSolaceNeutral) {
       setDraftText(generatedNarration);
@@ -214,31 +251,43 @@ export default function ResolutionDraftAdvisoryPanel({
     if (draftText === "") {
       setDraftText(generatedNarration);
     }
-  }, [roll, generatedNarration, draftText, isSolaceNeutral]);
+  }, [rawRoll, generatedNarration, draftText, isSolaceNeutral]);
 
   /* ----------------------------------------------------------
      Commit (arbiter authority)
   ---------------------------------------------------------- */
 
   function handleRecord() {
-    if (roll === null || committedRef.current) return;
+    if (rawRoll === null || effectiveRoll === null || committedRef.current) return;
     committedRef.current = true;
 
     const source: RollSource = manualRoll ? "manual" : "solace";
 
     const audit: string[] = [];
+    audit.push("Drafted by CreativeNarrator");
+
+    // Always capture mechanical transparency (raw vs effective)
+    const mod = safeInt(rollModifier, 0);
+    if (mod !== 0) {
+      const modLabel = (rollModifierLabel ?? "").trim();
+      const labelPart = modLabel ? ` (${modLabel})` : "";
+      audit.push(
+        `Roll modifier applied${labelPart}: ${mod >= 0 ? `+${mod}` : `${mod}`} (raw ${rawRoll} → effective ${effectiveRoll})`
+      );
+    } else {
+      audit.push(`Roll: raw ${rawRoll} (no modifier)`);
+    }
+
     if (isSolaceNeutral) {
-      audit.push("Drafted by CreativeNarrator");
       audit.push("Presented as Solace (Neutral Facilitator) Arbiter narration (read-only)");
       audit.push("Recorded by Arbiter");
     } else {
-      audit.push("Drafted by CreativeNarrator");
       audit.push("Edited by Arbiter");
     }
 
     onRecord({
       description: draftText.trim(),
-      dice: { mode: diceMode, roll, dc, source },
+      dice: { mode: diceMode, roll: effectiveRoll, dc, source },
       audit,
     });
   }
@@ -247,11 +296,8 @@ export default function ResolutionDraftAdvisoryPanel({
 
   const showAnchors =
     isSolaceNeutral &&
-    roll !== null &&
-    (!!setupText ||
-      !!movement?.from ||
-      !!movement?.to ||
-      !!combat?.activeEnemyGroupName);
+    rawRoll !== null &&
+    (!!setupText || !!movement?.from || !!movement?.to || !!combat?.activeEnemyGroupName);
 
   return (
     <section
@@ -289,13 +335,24 @@ export default function ResolutionDraftAdvisoryPanel({
         <button onClick={acceptManualRoll}>Accept Roll</button>
       </div>
 
-      {roll !== null && (
+      {rawRoll !== null && (
         <p>
-          🎲 {diceMode} rolled <strong>{roll}</strong> vs DC <strong>{dc}</strong>
+          🎲 {diceMode} rolled <strong>{rawRoll}</strong>
+          {safeInt(rollModifier, 0) !== 0 && effectiveRoll !== null && (
+            <>
+              {" "}
+              <span className="muted">
+                (modifier {safeInt(rollModifier, 0) >= 0 ? `+${safeInt(rollModifier, 0)}` : `${safeInt(rollModifier, 0)}`}
+                {rollModifierLabel ? ` · ${rollModifierLabel}` : ""})
+              </span>{" "}
+              → effective <strong>{effectiveRoll}</strong>
+            </>
+          )}{" "}
+          vs DC <strong>{dc}</strong>
         </p>
       )}
 
-      {roll !== null && (
+      {rawRoll !== null && (
         <>
           {isSolaceNeutral ? (
             <>
@@ -352,8 +409,16 @@ export default function ResolutionDraftAdvisoryPanel({
                     )}
 
                     <div>
-                      <strong>Mechanics:</strong> margin {roll - dc >= 0 ? "+" : ""}
-                      {roll - dc} (roll {roll} vs DC {dc})
+                      <strong>Mechanics:</strong>{" "}
+                      {effectiveRoll !== null ? (
+                        <>
+                          margin {effectiveRoll - dc >= 0 ? "+" : ""}
+                          {effectiveRoll - dc} (effective {effectiveRoll} vs DC {dc}
+                          {safeInt(rollModifier, 0) !== 0 ? `; raw ${rawRoll}` : ""})
+                        </>
+                      ) : (
+                        <>—</>
+                      )}
                     </div>
                   </div>
                 </details>
@@ -374,7 +439,7 @@ export default function ResolutionDraftAdvisoryPanel({
       )}
 
       {role === "arbiter" && (
-        <button onClick={handleRecord} disabled={roll === null}>
+        <button onClick={handleRecord} disabled={rawRoll === null}>
           Record Outcome
         </button>
       )}
