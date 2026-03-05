@@ -1,7 +1,8 @@
 // components/combat/CombatSetupPanel.tsx
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React from "react";
+import { useEffect, useMemo, useState } from "react";
 import CardSection from "@/components/layout/CardSection";
 
 import {
@@ -186,6 +187,7 @@ function inferEnemyInitModFromPressure(pressureTier: any): number {
   if (t.includes("high") || t.includes("tier_3") || t === "3") return 2;
   if (t.includes("extreme") || t.includes("tier_4") || t === "4") return 3;
 
+  // default
   return 1;
 }
 
@@ -210,6 +212,7 @@ function pickDeterministicUnique(pool: string[], count: number, seed: string): s
   const n = clampInt(count, 0, 6);
   if (n === 0) return [];
 
+  // Deterministic “shuffle” by sorting with seeded hash
   const keyed = p.map((name, idx) => {
     const h = hash32(`${seed}::${idx}::${name.toLowerCase()}`);
     return { name, h };
@@ -217,6 +220,7 @@ function pickDeterministicUnique(pool: string[], count: number, seed: string): s
 
   keyed.sort((a, b) => a.h - b.h);
 
+  // If pool is smaller than requested, wrap with a second pass using a different key
   const out: string[] = [];
   let pass = 0;
   while (out.length < n && pass < 3) {
@@ -232,30 +236,6 @@ function pickDeterministicUnique(pool: string[], count: number, seed: string): s
   }
 
   return out.slice(0, n);
-}
-
-// -----------------------------
-// Enemy visuals (public/assets/v1/*)
-// -----------------------------
-function enemyAssetKey(groupName: string) {
-  const n = normalizeName(groupName).toLowerCase();
-
-  if (n.includes("archer")) return "enemy_archers";
-  if (n.includes("shield")) return "enemy_shields";
-  if (n.includes("skirmish")) return "enemy_skirmishers";
-  if (n.includes("brute")) return "enemy_brutes";
-  if (n.includes("drone")) return "enemy_drones";
-  if (n.includes("stalker")) return "enemy_stalkers";
-  if (n.includes("sentr")) return "enemy_sentries";
-  if (n.includes("wraith")) return "enemy_wraith";
-  if (n.includes("firewall")) return "enemy_firewall_warden";
-  if (n.includes("grid")) return "enemy_grid_knights";
-
-  return "enemy_unknown";
-}
-
-function enemyPortraitSrc(groupName: string) {
-  return `/assets/v1/${enemyAssetKey(groupName)}.png`;
 }
 
 export default function CombatSetupPanel({
@@ -297,12 +277,17 @@ export default function CombatSetupPanel({
     return `pressure=${String(pressureTier ?? "unknown")}::outcomes=${outcomes}::party=${partySize}`;
   }, [events, partySize, pressureTier]);
 
+  // -----------------------------
+  // Enemy groups (Solace-owned unless Human/Dev)
+  // -----------------------------
+
   const [enemyGroups, setEnemyGroups] = useState<string[]>(["Skirmishers", "Archers"]);
   const [enemyGroupSelect, setEnemyGroupSelect] = useState<string>("Skirmishers");
   const [initModEnemies, setInitModEnemies] = useState<number>(1);
 
   useEffect(() => {
     if (isHuman && !allowDevControls) return;
+
     const inferred = inferEnemyInitModFromPressure(pressureTier);
     setInitModEnemies((prev) => {
       if (isHuman && allowDevControls) return prev;
@@ -347,6 +332,10 @@ export default function CombatSetupPanel({
     setEnemyGroups([]);
   }
 
+  // -----------------------------
+  // Derived combat display
+  // -----------------------------
+
   const latestCombatId = useMemo(() => {
     return findLatestCombatId(events as any) ?? null;
   }, [events]);
@@ -359,6 +348,10 @@ export default function CombatSetupPanel({
       return null;
     }
   }, [latestCombatId, events]);
+
+  // -----------------------------
+  // Canon actions
+  // -----------------------------
 
   const canStartCombat = !locked && (isHuman || allowDevControls);
 
@@ -422,10 +415,9 @@ export default function CombatSetupPanel({
     onAppendCanon("COMBAT_ENDED", { combatId });
   }
 
-  const deployedEnemyGroups = useMemo(() => {
-    const desired = clampInt(partySize, 0, 6);
-    return uniqCaseInsensitive(enemyGroups).slice(0, desired);
-  }, [enemyGroups, partySize]);
+  // -----------------------------
+  // UI
+  // -----------------------------
 
   return (
     <CardSection title="Combat (Deterministic, Grouped Enemies)">
@@ -447,6 +439,7 @@ export default function CombatSetupPanel({
         </div>
       )}
 
+      {/* Setup console */}
       <div
         style={{
           marginTop: 12,
@@ -469,7 +462,7 @@ export default function CombatSetupPanel({
             </div>
           </ControlLabel>
 
-          <ControlLabel label="Enemy init mod (pressure-derived)">
+          <ControlLabel label="Enemy group init mod (pressure-derived)">
             <select
               value={initModEnemies}
               disabled={!canEdit}
@@ -486,165 +479,88 @@ export default function CombatSetupPanel({
 
           <div style={{ flex: "1 1 360px", display: "flex", flexDirection: "column", gap: 6 }}>
             <span className="muted" style={{ fontSize: 12 }}>
-              Enemy groups <span className="muted">(1:1 with party size)</span>
+              Enemy groups{" "}
+              <span className="muted" style={{ fontSize: 12 }}>
+                (1:1 with party size)
+              </span>
             </span>
 
-            {canEdit ? (
-              <>
-                <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-                  <select
-                    value={enemyGroupSelect}
-                    disabled={!canEdit}
-                    onChange={(e) => setEnemyGroupSelect(e.target.value)}
-                    style={{ ...selectStyle(!canEdit), minWidth: 240 }}
-                  >
-                    {ENEMY_GROUP_LIBRARY.map((g) => (
-                      <option key={g} value={g}>
-                        {g}
-                      </option>
-                    ))}
-                  </select>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+              <select
+                value={enemyGroupSelect}
+                disabled={!canEdit}
+                onChange={(e) => setEnemyGroupSelect(e.target.value)}
+                style={{ ...selectStyle(!canEdit), minWidth: 240 }}
+              >
+                {ENEMY_GROUP_LIBRARY.map((g) => (
+                  <option key={g} value={g}>
+                    {g}
+                  </option>
+                ))}
+              </select>
 
-                  <button
-                    onClick={() => addEnemyGroup(enemyGroupSelect)}
-                    disabled={!canEdit}
-                    style={buttonStyle("primary", !canEdit)}
-                    title={!canEdit ? "Solace-owned (or combat locked)" : "Add enemy group"}
-                  >
-                    Add
-                  </button>
+              <button
+                onClick={() => addEnemyGroup(enemyGroupSelect)}
+                disabled={!canEdit}
+                style={buttonStyle("primary", !canEdit)}
+                title={!canEdit ? "Solace-owned (or combat locked)" : "Add enemy group"}
+              >
+                Add
+              </button>
 
-                  <button
-                    onClick={clearEnemyGroups}
-                    disabled={!canEdit || enemyGroups.length === 0}
-                    style={buttonStyle("ghost", !canEdit || enemyGroups.length === 0)}
-                  >
-                    Clear
-                  </button>
+              <button
+                onClick={clearEnemyGroups}
+                disabled={!canEdit || enemyGroups.length === 0}
+                style={buttonStyle("ghost", !canEdit || enemyGroups.length === 0)}
+              >
+                Clear
+              </button>
 
-                  <span className="muted" style={{ fontSize: 12 }}>
-                    (max 6)
-                  </span>
-                </div>
+              <span className="muted" style={{ fontSize: 12 }}>
+                (max 6)
+              </span>
+            </div>
 
-                {enemyGroups.length > 0 ? (
-                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 10 }}>
-                    {enemyGroups.slice(0, 6).map((g) => (
-                      <span
-                        key={g}
-                        style={{
-                          display: "inline-flex",
-                          alignItems: "center",
-                          gap: 8,
-                          padding: "7px 10px",
-                          borderRadius: 999,
-                          border: "1px solid rgba(255,255,255,0.12)",
-                          background: "rgba(255,255,255,0.05)",
-                        }}
-                      >
-                        <span>{g}</span>
-                        <button
-                          onClick={() => removeEnemyGroup(g)}
-                          disabled={!canEdit}
-                          aria-label={`Remove ${g}`}
-                          style={{
-                            padding: "0 10px",
-                            height: 24,
-                            borderRadius: 999,
-                            border: "1px solid rgba(255,255,255,0.12)",
-                            background: "rgba(0,0,0,0.22)",
-                            color: "inherit",
-                            opacity: !canEdit ? 0.55 : 1,
-                            cursor: !canEdit ? "not-allowed" : "pointer",
-                          }}
-                        >
-                          ×
-                        </button>
-                      </span>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="muted" style={{ marginTop: 10 }}>
-                    No enemy groups. (Solace will normally pick these automatically.)
-                  </div>
-                )}
-              </>
-            ) : (
-              <>
-                {deployedEnemyGroups.length > 0 ? (
-                  <div
+            {enemyGroups.length > 0 ? (
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 10 }}>
+                {enemyGroups.slice(0, 6).map((g) => (
+                  <span
+                    key={g}
                     style={{
-                      marginTop: 6,
-                      display: "grid",
-                      gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-                      gap: 10,
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: 8,
+                      padding: "7px 10px",
+                      borderRadius: 999,
+                      border: "1px solid rgba(255,255,255,0.12)",
+                      background: "rgba(255,255,255,0.05)",
                     }}
                   >
-                    {deployedEnemyGroups.map((g, idx) => {
-                      const src = enemyPortraitSrc(g);
-                      const mod = Math.trunc(Number(initModEnemies ?? 0));
-
-                      return (
-                        <div
-                          key={`${g}_${idx}`}
-                          style={{
-                            display: "flex",
-                            alignItems: "center",
-                            gap: 12,
-                            padding: "10px 12px",
-                            borderRadius: 12,
-                            border: "1px solid rgba(255,255,255,0.10)",
-                            background: "rgba(255,255,255,0.04)",
-                          }}
-                        >
-                          <div
-                            style={{
-                              width: 44,
-                              height: 44,
-                              borderRadius: 10,
-                              overflow: "hidden",
-                              border: "1px solid rgba(255,255,255,0.14)",
-                              background: "rgba(0,0,0,0.25)",
-                              display: "flex",
-                              alignItems: "center",
-                              justifyContent: "center",
-                              flexShrink: 0,
-                            }}
-                            title={src}
-                          >
-                            <img
-                              src={src}
-                              alt={g}
-                              width={44}
-                              height={44}
-                              style={{ width: 44, height: 44, objectFit: "cover", display: "block" }}
-                              onError={(e) => {
-                                e.currentTarget.style.display = "none";
-                              }}
-                            />
-                          </div>
-
-                          <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={{ display: "flex", alignItems: "baseline", gap: 10, flexWrap: "wrap" }}>
-                              <strong style={{ fontSize: 14 }}>{g}</strong>
-                              <span className="muted" style={{ fontSize: 12 }}>
-                                enemy group · init mod {mod >= 0 ? `+${mod}` : `${mod}`}
-                              </span>
-                            </div>
-                            <div className="muted" style={{ fontSize: 12, marginTop: 2 }}>
-                              Deployed (Solace-owned)
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                ) : (
-                  <div className="muted" style={{ marginTop: 10 }}>
-                    No enemy groups deployed.
-                  </div>
-                )}
-              </>
+                    <span>{g}</span>
+                    <button
+                      onClick={() => removeEnemyGroup(g)}
+                      disabled={!canEdit}
+                      aria-label={`Remove ${g}`}
+                      style={{
+                        padding: "0 10px",
+                        height: 24,
+                        borderRadius: 999,
+                        border: "1px solid rgba(255,255,255,0.12)",
+                        background: "rgba(0,0,0,0.22)",
+                        color: "inherit",
+                        opacity: !canEdit ? 0.55 : 1,
+                        cursor: !canEdit ? "not-allowed" : "pointer",
+                      }}
+                    >
+                      ×
+                    </button>
+                  </span>
+                ))}
+              </div>
+            ) : (
+              <div className="muted" style={{ marginTop: 10 }}>
+                No enemy groups. (Solace will normally pick these automatically.)
+              </div>
             )}
 
             <div className="muted" style={{ marginTop: 10, fontSize: 12 }}>
@@ -654,6 +570,7 @@ export default function CombatSetupPanel({
         </div>
       </div>
 
+      {/* Actions */}
       <div style={{ marginTop: 14, display: "flex", gap: 8, flexWrap: "wrap" }}>
         <button
           onClick={startCombatDeterministic}
@@ -683,6 +600,7 @@ export default function CombatSetupPanel({
         )}
       </div>
 
+      {/* Derived order */}
       {derivedCombat && (
         <div style={{ marginTop: 14 }}>
           <div className="muted">
