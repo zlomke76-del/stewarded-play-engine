@@ -5,9 +5,7 @@
 // ------------------------------------------------------------
 // Visual-only header for mode identity and role framing.
 // No logic, no state.
-// Now supports optional hiding of title/roles/share for pages that
-// already provide their own hero.
-//
+// Now supports optional hiding of title/roles/share.
 // ------------------------------------------------------------
 
 import React from "react";
@@ -22,12 +20,12 @@ type Props = {
   roles?: Role[];
   onShare?: () => void;
 
-  // Visibility controls (defaults preserve current behavior)
+  // Visibility controls
   showTitle?: boolean; // default true
-  showRoles?: boolean; // default true (only applies if roles exist)
-  showShare?: boolean; // default true (only applies if onShare exists)
+  showRoles?: boolean; // default true
+  showShare?: boolean; // default true
 
-  // Optional content slot (right side), if you ever want a custom action row later
+  // Optional slot for right-side actions (future-proof)
   rightSlot?: React.ReactNode;
 };
 
@@ -43,11 +41,8 @@ export default function ModeHeader({
   const shouldShowRoles = showRoles && roles.length > 0;
   const shouldShowShare = showShare && !!onShare;
 
-  // If everything is hidden AND no rightSlot, render nothing.
-  // (prevents empty space when a page wants a full-bleed hero)
-  if (!showTitle && !shouldShowRoles && !shouldShowShare && !rightSlot) {
-    return null;
-  }
+  // If everything is hidden and no right slot, render nothing.
+  if (!showTitle && !shouldShowRoles && !shouldShowShare && !rightSlot) return null;
 
   return (
     <header className="demo-header">
