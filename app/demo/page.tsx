@@ -764,7 +764,7 @@ export default function DemoPage() {
   function jumpTo(key: any) {
     if (key === "party") key = "mode"; // party lives on the hero
     setActiveSection(key as DemoSectionId);
-    scrollToSection(String(key));
+    scrollToSection(key as DemoSectionId);
   }
 
   // Enemy overlay only when:
