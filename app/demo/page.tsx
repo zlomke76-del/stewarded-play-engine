@@ -143,6 +143,70 @@ function inferPressureTier(outcomesCount: number): PressureTier {
 }
 
 // ------------------------------------------------------------
+// Injury / Downed (event-derived, safe default)
+// ------------------------------------------------------------
+//
+// We’re going with a simple D&D-feel mechanic:
+// - Each "injury stack" applies -2 to d20 checks (Resolution).
+// - A "Downed" state can be represented as injury stacks >= 1 (or separate events).
+//
+// This function is deliberately tolerant: if the injury events don’t exist yet,
+// stacks will stay at 0 until you add damage canon emission.
+// ------------------------------------------------------------
+
+function deriveInjuryStacksForPlayer(events: readonly any[], playerId: string): number {
+  const pid = String(playerId ?? "").trim();
+  if (!pid) return 0;
+
+  let stacks = 0;
+
+  for (let i = 0; i < events.length; i++) {
+    const e = events[i];
+    const t = e?.type;
+
+    // Supported (future / optional) shapes:
+    // - INJURY_APPLIED { playerId, stacks?: number, delta?: number }
+    // - INJURY_STACK_CHANGED { playerId, delta }
+    // - PLAYER_DOWNED { playerId }  => treat as +1 stack
+    // - DAMAGE_APPLIED { targetId, ... , downed?: boolean } => treat downed as +1
+    const p = e?.payload ?? {};
+
+    if (t === "INJURY_APPLIED") {
+      const ppid = String(p?.playerId ?? "");
+      if (ppid === pid) {
+        if (Number.isFinite(Number(p?.stacks))) stacks = Math.max(0, Math.trunc(Number(p.stacks)));
+        else if (Number.isFinite(Number(p?.delta))) stacks = Math.max(0, stacks + Math.trunc(Number(p.delta)));
+        else stacks = Math.max(0, stacks + 1);
+      }
+      continue;
+    }
+
+    if (t === "INJURY_STACK_CHANGED") {
+      const ppid = String(p?.playerId ?? "");
+      if (ppid === pid) {
+        const d = Number.isFinite(Number(p?.delta)) ? Math.trunc(Number(p.delta)) : 0;
+        stacks = Math.max(0, stacks + d);
+      }
+      continue;
+    }
+
+    if (t === "PLAYER_DOWNED") {
+      const ppid = String(p?.playerId ?? "");
+      if (ppid === pid) stacks = Math.max(0, stacks + 1);
+      continue;
+    }
+
+    if (t === "DAMAGE_APPLIED") {
+      const targetId = String(p?.targetId ?? "");
+      if (targetId === pid && p?.downed === true) stacks = Math.max(0, stacks + 1);
+      continue;
+    }
+  }
+
+  return stacks;
+}
+
+// ------------------------------------------------------------
 // Zone derivation helpers (must match DungeonPressurePanel semantics)
 // ------------------------------------------------------------
 
@@ -292,6 +356,23 @@ export default function DemoPage() {
 
   const isEnemyTurn = combatActive && activeCombatantSpec?.kind === "enemy_group";
   const isPlayerTurn = combatActive && activeCombatantSpec?.kind === "player";
+
+  // ----------------------------------------------------------
+  // Injury modifier (applies to Resolution checks)
+  // ----------------------------------------------------------
+
+  const actingPlayerInjuryStacks = useMemo(() => {
+    // Only meaningful when the active combatant is a player (or when not in combat).
+    // If you want it strictly tied to "active combatant", switch pid to activeCombatantSpec?.id.
+    const pid = String(actingPlayerId ?? "").trim();
+    return deriveInjuryStacksForPlayer(state.events as any[], pid);
+  }, [state.events, actingPlayerId]);
+
+  const actingRollModifier = useMemo(() => {
+    // -2 per stack. Clamp defensively.
+    const s = Math.max(0, Math.min(20, Math.trunc(Number(actingPlayerInjuryStacks ?? 0))));
+    return -2 * s;
+  }, [actingPlayerInjuryStacks]);
 
   // ----------------------------------------------------------
   // Party operations
@@ -999,6 +1080,11 @@ export default function DemoPage() {
                       optionDescription: selectedOption.description,
                       optionKind: inferOptionKind(`${playerInput}\n${selectedOption.description}`.trim()),
                     }}
+                    // Apply injury penalty (-2 per stack) to d20 checks
+                    rollModifier={actingRollModifier}
+                    rollModifierLabel={
+                      actingPlayerInjuryStacks > 0 ? `Injury stacks: ${actingPlayerInjuryStacks}` : "Injury"
+                    }
                     onRecord={handleRecord}
                   />
                 )}
