@@ -1199,97 +1199,133 @@ export default function DemoPage() {
                   </div>
                 </div>
 
-                {/* RIGHT: cinematic tile */}
-                <div
-                  style={{
-                    borderRadius: 16,
-                    overflow: "hidden",
-                    border: "1px solid rgba(255,255,255,0.10)",
-                    background: "rgba(255,255,255,0.03)",
-                    position: "relative",
-                    minHeight: 320,
-                  }}
-                >
-                  {heroImageOk ? (
-                    <img
-                      src={HERO_IMAGE_SRC}
-                      alt="Enter the dungeon"
-                      onError={() => setHeroImageOk(false)}
-                      style={{
-                        width: "100%",
-                        height: "100%",
-                        objectFit: "cover",
-                        display: "block",
-                        filter: "contrast(1.05) saturate(1.05)",
-                      }}
-                    />
-                  ) : (
-                    <div
-                      style={{
-                        width: "100%",
-                        height: "100%",
-                        background:
-                          "radial-gradient(1200px 600px at 70% 40%, rgba(255,190,120,0.10), rgba(0,0,0,0) 60%), radial-gradient(900px 500px at 40% 65%, rgba(140,170,255,0.08), rgba(0,0,0,0) 55%), linear-gradient(180deg, rgba(255,255,255,0.06), rgba(0,0,0,0.06))",
-                      }}
-                    />
-                  )}
+{/* RIGHT: cinematic tile */}
+<div
+  style={{
+    borderRadius: 16,
+    overflow: "hidden",
+    border: "1px solid rgba(255,255,255,0.10)",
+    background: "rgba(0,0,0,0.40)",
+    position: "relative",
+    minHeight: 320,
+  }}
+>
+  {/* hero image */}
+  {heroImageOk ? (
+    <img
+      src={HERO_IMAGE_SRC}
+      alt="Enter the dungeon"
+      onError={() => setHeroImageOk(false)}
+      style={{
+        position: "absolute",
+        inset: 0,
+        width: "100%",
+        height: "100%",
+        objectFit: "cover",
+        display: "block",
+        opacity: 0.88,
+        filter: "brightness(0.90) contrast(1.08) saturate(1.08)",
+        transform: "scale(1.02)",
+      }}
+    />
+  ) : (
+    <div
+      style={{
+        position: "absolute",
+        inset: 0,
+        background:
+          "radial-gradient(1200px 600px at 70% 40%, rgba(255,190,120,0.12), rgba(0,0,0,0) 60%), radial-gradient(900px 500px at 40% 65%, rgba(140,170,255,0.10), rgba(0,0,0,0) 55%), linear-gradient(180deg, rgba(255,255,255,0.06), rgba(0,0,0,0.10))",
+      }}
+    />
+  )}
 
-                  {/* vignette + glass overlay */}
-                  <div
-                    style={{
-                      position: "absolute",
-                      inset: 0,
-                      background:
-                        "linear-gradient(90deg, rgba(0,0,0,0.55) 0%, rgba(0,0,0,0.35) 35%, rgba(0,0,0,0.35) 65%, rgba(0,0,0,0.55) 100%), radial-gradient(120% 90% at 50% 55%, rgba(0,0,0,0.08), rgba(0,0,0,0.70))",
-                      pointerEvents: "none",
-                    }}
-                  />
+  {/* vignette + glass overlay */}
+  <div
+    style={{
+      position: "absolute",
+      inset: 0,
+      background:
+        "linear-gradient(90deg, rgba(0,0,0,0.68) 0%, rgba(0,0,0,0.35) 32%, rgba(0,0,0,0.35) 68%, rgba(0,0,0,0.68) 100%), radial-gradient(120% 95% at 50% 55%, rgba(0,0,0,0.05), rgba(0,0,0,0.78))",
+      pointerEvents: "none",
+    }}
+  />
 
-                  {/* copy + CTA */}
-                  <div
-                    style={{
-                      position: "absolute",
-                      left: 14,
-                      right: 14,
-                      bottom: 14,
-                      padding: 12,
-                      borderRadius: 14,
-                      border: "1px solid rgba(255,255,255,0.12)",
-                      background: "rgba(10,10,10,0.55)",
-                      backdropFilter: "blur(10px)",
-                    }}
-                  >
-                    <div style={{ fontWeight: 950, fontSize: 16, letterSpacing: 0.2 }}>Enter the Dungeon</div>
-                    <div style={{ marginTop: 4, fontSize: 12, opacity: 0.78 }}>
-                      You declare intent. The world remembers what you do.
-                    </div>
+  {/* subtle torch/ember bloom */}
+  <div
+    style={{
+      position: "absolute",
+      inset: 0,
+      background:
+        "radial-gradient(700px 360px at 65% 35%, rgba(255,170,90,0.10), rgba(0,0,0,0) 62%), radial-gradient(520px 280px at 35% 70%, rgba(120,150,255,0.08), rgba(0,0,0,0) 60%)",
+      mixBlendMode: "screen",
+      pointerEvents: "none",
+      opacity: 0.9,
+    }}
+  />
 
-                    <div style={{ marginTop: 10, display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-                      <button
-                        type="button"
-                        onClick={enterDungeon}
-                        disabled={!canEnterDungeon}
-                        style={{
-                          padding: "10px 14px",
-                          borderRadius: 12,
-                          fontWeight: 950,
-                          letterSpacing: 0.2,
-                          border: "1px solid rgba(255,255,255,0.18)",
-                          background: canEnterDungeon ? "rgba(255,255,255,0.10)" : "rgba(255,255,255,0.04)",
-                          cursor: canEnterDungeon ? "pointer" : "not-allowed",
-                          opacity: canEnterDungeon ? 1 : 0.6,
-                        }}
-                      >
-                        Enter
-                      </button>
+  {/* copy + CTA */}
+  <div
+    style={{
+      position: "absolute",
+      left: 14,
+      right: 14,
+      bottom: 14,
+      padding: 12,
+      borderRadius: 14,
+      border: "1px solid rgba(255,255,255,0.12)",
+      background:
+        "linear-gradient(180deg, rgba(10,10,10,0.35), rgba(10,10,10,0.62))",
+      backdropFilter: "blur(10px)",
+      boxShadow: "0 12px 40px rgba(0,0,0,0.45)",
+    }}
+  >
+    <div style={{ fontWeight: 950, fontSize: 16, letterSpacing: 0.2 }}>
+      Enter the Dungeon
+    </div>
 
-                      <div style={{ fontSize: 12, opacity: 0.72 }}>
-                        {dmMode === null ? "Choose a play style first." : "Next: accept the scene and start acting."}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
+    <div style={{ marginTop: 4, fontSize: 12, opacity: 0.80 }}>
+      You declare intent. The world remembers what you do.
+    </div>
+
+    <div
+      style={{
+        marginTop: 10,
+        display: "flex",
+        gap: 10,
+        alignItems: "center",
+        flexWrap: "wrap",
+      }}
+    >
+      <button
+        type="button"
+        onClick={enterDungeon}
+        disabled={!canEnterDungeon}
+        style={{
+          padding: "10px 14px",
+          borderRadius: 12,
+          fontWeight: 950,
+          letterSpacing: 0.2,
+          border: canEnterDungeon
+            ? "1px solid rgba(255,255,255,0.24)"
+            : "1px solid rgba(255,255,255,0.18)",
+          background: canEnterDungeon
+            ? "rgba(255,255,255,0.12)"
+            : "rgba(255,255,255,0.04)",
+          cursor: canEnterDungeon ? "pointer" : "not-allowed",
+          opacity: canEnterDungeon ? 1 : 0.6,
+        }}
+      >
+        Enter
+      </button>
+
+      <div style={{ fontSize: 12, opacity: 0.74 }}>
+        {dmMode === null
+          ? "Choose a play style first."
+          : "Next: accept the scene and start acting."}
+      </div>
+    </div>
+  </div>
+</div>
             </section>
 
             <div style={{ marginTop: 10, display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 10 }}>
