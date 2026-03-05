@@ -21,7 +21,6 @@
 //
 // Notes:
 // - Party editing UI is intentionally deferred (we'll fill in details later).
-// - Dragons-eye / flair: intentionally postponed (per request).
 // ------------------------------------------------------------
 
 import { useEffect, useMemo, useState } from "react";
@@ -30,16 +29,10 @@ import { createSession, recordEvent, SessionState } from "@/lib/session/SessionS
 import { parseAction } from "@/lib/parser/ActionParser";
 import { generateOptions, Option } from "@/lib/options/OptionGenerator";
 import { exportCanon } from "@/lib/export/exportCanon";
-import CanonEventsPanel from "@/components/world/CanonEventsPanel";
 
 import ResolutionDraftAdvisoryPanel from "@/components/resolution/ResolutionDraftAdvisoryPanel";
 import NextActionHint from "@/components/NextActionHint";
-import WorldLedgerPanelLegacy from "@/components/world/WorldLedgerPanel.legacy";
 import DungeonPressurePanel from "@/components/world/DungeonPressurePanel";
-import ExplorationMapPanel from "@/components/world/ExplorationMapPanel";
-import CombatRendererPanel from "@/components/world/CombatRendererPanel";
-import EnemyTurnResolverPanel from "@/components/combat/EnemyTurnResolverPanel";
-import CombatSetupPanel from "@/components/combat/CombatSetupPanel";
 
 import StewardedShell from "@/components/layout/StewardedShell";
 import ModeHeader from "@/components/layout/ModeHeader";
@@ -54,6 +47,12 @@ import {
 
 import AmbientBackground from "./components/AmbientBackground";
 import InitialTableSection from "./components/InitialTableSection";
+
+import HeroOnboarding from "./components/HeroOnboarding";
+import MapSection from "./components/MapSection";
+import ActionSection from "./components/ActionSection";
+import CombatSection from "./components/CombatSection";
+import CanonChronicleSection from "./components/CanonChronicleSection";
 
 import { DMMode, DemoSectionId, DiceMode, RollSource, InitialTable, ExplorationDraft } from "./demoTypes";
 
@@ -174,171 +173,18 @@ function awarenessDeltaFor(kind: ReturnType<typeof inferOptionKind>, success: bo
   return base + byKind + byResult;
 }
 
-// ------------------------------------------------------------
-// Onboarding UI helpers
-// ------------------------------------------------------------
-
-type ChapterKey =
-  | "mode"
-  | "party"
-  | "table"
-  | "pressure"
-  | "map"
-  | "combat"
-  | "action"
-  | "resolution"
-  | "canon"
-  | "ledger";
-
-function Chip({
-  label,
-  state,
-  onClick,
-}: {
-  label: string;
-  state: "done" | "next" | "locked" | "open";
-  onClick?: () => void;
-}) {
-  const clickable = !!onClick && state !== "locked";
-  const bg =
-    state === "done"
-      ? "rgba(138,180,255,0.12)"
-      : state === "next"
-      ? "rgba(255,255,255,0.08)"
-      : state === "open"
-      ? "rgba(255,255,255,0.06)"
-      : "rgba(255,255,255,0.03)";
-
-  const border =
-    state === "done"
-      ? "1px solid rgba(138,180,255,0.35)"
-      : state === "next"
-      ? "1px solid rgba(255,255,255,0.18)"
-      : state === "open"
-      ? "1px solid rgba(255,255,255,0.12)"
-      : "1px solid rgba(255,255,255,0.08)";
-
-  const opacity = state === "locked" ? 0.55 : 1;
-
-  return (
-    <button
-      type="button"
-      onClick={clickable ? onClick : undefined}
-      disabled={!clickable}
-      style={{
-        cursor: clickable ? "pointer" : "default",
-        padding: "8px 10px",
-        borderRadius: 999,
-        background: bg,
-        border,
-        color: "rgba(255,255,255,0.92)",
-        opacity,
-        fontSize: 12,
-        letterSpacing: 0.2,
-        display: "inline-flex",
-        alignItems: "center",
-        gap: 8,
-      }}
-      title={state === "locked" ? "Locked until you progress" : undefined}
-    >
-      <span style={{ fontWeight: 800 }}>{label}</span>
-      {state === "done" ? <span style={{ opacity: 0.85 }}>✓</span> : null}
-      {state === "next" ? <span style={{ opacity: 0.8 }}>→</span> : null}
-    </button>
-  );
-}
-
-function Toggle({
-  value,
-  onChange,
-  leftLabel,
-  rightLabel,
-  disabled,
-}: {
-  value: boolean;
-  onChange: (next: boolean) => void;
-  leftLabel: string;
-  rightLabel: string;
-  disabled?: boolean;
-}) {
-  return (
-    <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
-      <div style={{ fontSize: 12, opacity: disabled ? 0.6 : 0.85 }}>{leftLabel}</div>
-
-      <button
-        type="button"
-        onClick={() => !disabled && onChange(!value)}
-        disabled={!!disabled}
-        aria-label="toggle"
-        style={{
-          width: 54,
-          height: 28,
-          borderRadius: 999,
-          border: "1px solid rgba(255,255,255,0.18)",
-          background: disabled ? "rgba(255,255,255,0.03)" : "rgba(255,255,255,0.06)",
-          position: "relative",
-          cursor: disabled ? "not-allowed" : "pointer",
-          padding: 0,
-        }}
-      >
-        <span
-          style={{
-            position: "absolute",
-            top: 3,
-            left: value ? 28 : 3,
-            width: 22,
-            height: 22,
-            borderRadius: 999,
-            background: "rgba(220,220,255,0.85)",
-            boxShadow: "0 0 0 1px rgba(0,0,0,0.2)",
-            transition: "left 160ms ease",
-          }}
-        />
-      </button>
-
-      <div style={{ fontSize: 12, opacity: disabled ? 0.6 : 0.85 }}>{rightLabel}</div>
-    </div>
-  );
-}
-
-function PartyPips({ count }: { count: number }) {
-  const n = clampInt(count, 1, 6);
-  return (
-    <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
-      {Array.from({ length: n }, (_, i) => (
-        <span
-          key={i}
-          style={{
-            width: 34,
-            height: 34,
-            borderRadius: 999,
-            display: "grid",
-            placeItems: "center",
-            border: "1px solid rgba(255,255,255,0.14)",
-            background: "rgba(255,255,255,0.04)",
-            fontSize: 16,
-          }}
-          title={`Adventurer ${i + 1}`}
-        >
-          ⚔
-        </span>
-      ))}
-    </div>
-  );
-}
-
 export default function DemoPage() {
   const role: "arbiter" = "arbiter";
 
   const [state, setState] = useState<SessionState>(createSession("demo-session", "demo"));
 
-  // IMPORTANT UX CHANGE: mode must be explicitly selected
+  // mode must be explicitly selected
   const [dmMode, setDmMode] = useState<DMMode | null>(null);
 
   const MAP_W = 13;
   const MAP_H = 9;
 
-  // Hero image (cinematic tile)
+  // Hero image
   const HERO_IMAGE_SRC = "/Hero_dungeon.png";
   const [heroImageOk, setHeroImageOk] = useState(true);
 
@@ -356,13 +202,13 @@ export default function DemoPage() {
   const [options, setOptions] = useState<Option[] | null>(null);
   const [selectedOption, setSelectedOption] = useState<Option | null>(null);
 
-  // Which party member is acting (player must choose / default)
+  // Which party member is acting
   const [actingPlayerId, setActingPlayerId] = useState<string>("player_1");
 
-  // Combat renderer trigger (parent-driven)
+  // Combat renderer trigger
   const [enemyPlayNonce, setEnemyPlayNonce] = useState(0);
 
-  // Enemy telegraph metadata (Solace-neutral only; visual only + narration anchor)
+  // Enemy telegraph metadata
   const [enemyTelegraphHint, setEnemyTelegraphHint] = useState<{
     enemyName: string;
     targetName: string;
@@ -385,11 +231,8 @@ export default function DemoPage() {
   // ----------------------------------------------------------
 
   const partyCanonical = useMemo(() => deriveLatestParty(state.events as any[]) ?? null, [state.events]);
-
-  // Draft editor lives in session UI; only becomes canon when Arbiter commits (PARTY_DECLARED).
   const [partyDraft, setPartyDraft] = useState<PartyDeclaredPayload | null>(null);
 
-  // Ensure a draft exists once mode is selected (so party sizing is available immediately)
   useEffect(() => {
     if (dmMode === null) return;
 
@@ -402,14 +245,12 @@ export default function DemoPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dmMode, partyCanonical?.partyId]);
 
-  // Effective party is canonical if present, otherwise draft.
   const partyEffective: PartyDeclaredPayload | null = partyCanonical ?? partyDraft;
   const partyMembers = partyEffective?.members ?? [];
   const partySize = clampInt(partyMembers.length || 4, 1, 6);
 
   const effectivePlayerNames = useMemo(() => partyMembers.map((m, idx) => displayName(m, idx + 1)), [partyMembers]);
 
-  // Keep actingPlayerId valid as party changes
   useEffect(() => {
     if (!partyMembers.length) {
       setActingPlayerId("player_1");
@@ -443,6 +284,18 @@ export default function DemoPage() {
   const partyLockedByCanon = !!partyCanonical;
   const partyLockedByCombat = combatActive;
   const partyLocked = partyLockedByCanon || partyLockedByCombat;
+
+  const activeCombatantSpec = useMemo(() => {
+    if (!derivedCombat?.activeCombatantId) return null;
+    return derivedCombat.participants.find((p: any) => p.id === derivedCombat.activeCombatantId) ?? null;
+  }, [derivedCombat]);
+
+  const isEnemyTurn = combatActive && activeCombatantSpec?.kind === "enemy_group";
+  const isPlayerTurn = combatActive && activeCombatantSpec?.kind === "player";
+
+  // ----------------------------------------------------------
+  // Party operations
+  // ----------------------------------------------------------
 
   function setPartySize(nextCount: number) {
     const n = clampInt(nextCount, 1, 6);
@@ -487,7 +340,6 @@ export default function DemoPage() {
       if (!prev) return prev;
 
       const used = new Set<string>(prev.members.map((m) => normalizeName(m.name || "").toLowerCase()).filter(Boolean));
-
       const next: PartyDeclaredPayload = { ...prev, members: prev.members.map((m) => ({ ...m })) };
 
       for (let i = 0; i < next.members.length; i++) {
@@ -544,14 +396,6 @@ export default function DemoPage() {
       })
     );
   }
-
-  const activeCombatantSpec = useMemo(() => {
-    if (!derivedCombat?.activeCombatantId) return null;
-    return derivedCombat.participants.find((p: any) => p.id === derivedCombat.activeCombatantId) ?? null;
-  }, [derivedCombat]);
-
-  const isEnemyTurn = combatActive && activeCombatantSpec?.kind === "enemy_group";
-  const isPlayerTurn = combatActive && activeCombatantSpec?.kind === "player";
 
   // ----------------------------------------------------------
   // Exploration draft (auto-prepared AFTER intent + option)
@@ -654,7 +498,6 @@ export default function DemoPage() {
     if (!canPlayerSubmitIntent) return;
 
     const actorId = normalizeName(actingPlayerId || "player_1") || "player_1";
-
     const parsedAction = parseAction(actorId, playerInput);
     const optionSet = generateOptions(parsedAction);
 
@@ -666,12 +509,11 @@ export default function DemoPage() {
     queueMicrotask(() => scrollToSection("resolution"));
   }
 
-  // Solace-neutral auto-select first option
   useEffect(() => {
     if (dmMode !== "solace-neutral") return;
     if (!options || options.length === 0) return;
-    setSelectedOption(options[0]);
 
+    setSelectedOption(options[0]);
     setActiveSection("resolution");
     queueMicrotask(() => scrollToSection("resolution"));
   }, [dmMode, options]);
@@ -888,28 +730,28 @@ export default function DemoPage() {
   }
 
   // ----------------------------------------------------------
-  // Onboarding state + Chapters (simplified early)
+  // Onboarding / Chapters
   // ----------------------------------------------------------
 
   const canEnterDungeon = dmMode !== null;
 
-  const chapterState: Record<ChapterKey, "done" | "next" | "locked" | "open"> = useMemo(() => {
+  const chapterState = useMemo(() => {
     const doneMode = dmMode !== null;
     const doneParty = doneMode && partySize >= 1;
     const doneTable = tableAccepted;
 
     return {
-      mode: doneMode ? "done" : "next",
-      party: doneParty ? "done" : doneMode ? "next" : "locked",
-      table: doneTable ? "done" : doneParty ? "next" : "locked",
+      mode: doneMode ? ("done" as const) : ("next" as const),
+      party: doneParty ? ("done" as const) : doneMode ? ("next" as const) : ("locked" as const),
+      table: doneTable ? ("done" as const) : doneParty ? ("next" as const) : ("locked" as const),
 
-      pressure: doneTable ? "open" : "locked",
-      map: doneTable ? "open" : "locked",
-      combat: doneTable ? "open" : "locked",
-      action: doneTable ? "open" : "locked",
-      resolution: doneTable ? "open" : "locked",
-      canon: doneTable ? "open" : "locked",
-      ledger: doneTable ? "open" : "locked",
+      pressure: doneTable ? ("open" as const) : ("locked" as const),
+      map: doneTable ? ("open" as const) : ("locked" as const),
+      combat: doneTable ? ("open" as const) : ("locked" as const),
+      action: doneTable ? ("open" as const) : ("locked" as const),
+      resolution: doneTable ? ("open" as const) : ("locked" as const),
+      canon: doneTable ? ("open" as const) : ("locked" as const),
+      ledger: doneTable ? ("open" as const) : ("locked" as const),
     };
   }, [dmMode, partySize, tableAccepted]);
 
@@ -917,6 +759,12 @@ export default function DemoPage() {
     if (!canEnterDungeon) return;
     setActiveSection("table");
     queueMicrotask(() => scrollToSection("table"));
+  }
+
+  function jumpTo(key: any) {
+    if (key === "party") key = "mode"; // party lives on the hero
+    setActiveSection(key as DemoSectionId);
+    scrollToSection(String(key));
   }
 
   // Enemy overlay only when:
@@ -938,367 +786,47 @@ export default function DemoPage() {
 
   const resolutionDmMode = useMemo(() => (dmMode === "solace-neutral" ? "solace_neutral" : "human"), [dmMode]);
 
+  // ----------------------------------------------------------
+  // Render
+  // ----------------------------------------------------------
+
   return (
     <AmbientBackground>
       <div style={{ position: "relative", zIndex: 1 }}>
         <StewardedShell>
-          {/* We intentionally hide the top header on /demo to avoid duplicate title,
-              immersion-breaking directions, and redundant Share. */}
-          <ModeHeader title="Echoes of Fate" showTitle={false} showRoles={false} showShare={false} />
+          {/* Hide the top header on /demo to avoid duplicate title + directions + redundant Share */}
+          <ModeHeader title="Echoes of Fate" onShare={shareCanon} showTitle={false} showRoles={false} showShare={false} />
 
-          {/* -------------------------------------------------- */}
-          {/* ONBOARDING HERO */}
-          {/* -------------------------------------------------- */}
+          {/* HERO / ONBOARDING */}
           <div id={anchorId("mode")} style={{ scrollMarginTop: 90 }}>
-            <section
-              className="card"
-              style={{
-                background: "rgba(17,17,17,0.82)",
-                border: "1px solid rgba(255,255,255,0.10)",
-                borderRadius: 16,
-                padding: 16,
+            <HeroOnboarding
+              heroTitle="Echoes of Fate"
+              heroSubtitle="Every action leaves an echo."
+              dmMode={dmMode}
+              onSetDmMode={(nextMode) => {
+                setDmMode(nextMode);
+                setActiveSection("mode");
+                setPartyDraft((prev) => prev ?? defaultParty(partySize));
               }}
-            >
-              <div style={{ display: "grid", gap: 14 }}>
-                {/* Single title lives here (no duplicates above). */}
-                <div>
-                  <div style={{ fontSize: 26, fontWeight: 950, letterSpacing: 0.2 }}>Echoes of Fate</div>
-                  <div style={{ marginTop: 6, fontSize: 14, opacity: 0.86 }}>Every action leaves an echo.</div>
-                </div>
-
-                {/* Two-column hero: onboarding + cinematic tile */}
-                <div
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: "1.1fr 0.9fr",
-                    gap: 12,
-                    alignItems: "stretch",
-                  }}
-                >
-                  {/* LEFT */}
-                  <div style={{ display: "grid", gap: 12 }}>
-                    <div
-                      style={{
-                        display: "grid",
-                        gridTemplateColumns: "1fr",
-                        gap: 10,
-                        padding: 12,
-                        borderRadius: 14,
-                        background: "rgba(255,255,255,0.04)",
-                        border: "1px solid rgba(255,255,255,0.10)",
-                      }}
-                    >
-                      <div style={{ fontWeight: 900, letterSpacing: 0.2 }}>Choose Your Play Style</div>
-
-                      <Toggle
-                        value={dmMode === "solace-neutral"}
-                        onChange={(next) => {
-                          const nextMode: DMMode = next ? "solace-neutral" : "human";
-                          setDmMode(nextMode);
-                          setActiveSection("mode");
-                          setPartyDraft((prev) => prev ?? defaultParty(partySize));
-                        }}
-                        leftLabel="Human"
-                        rightLabel="Solace"
-                      />
-
-                      <div style={{ fontSize: 12, opacity: 0.78 }}>
-                        {dmMode === "solace-neutral"
-                          ? "Solace keeps the adventure moving."
-                          : dmMode === "human"
-                          ? "You choose how each action resolves."
-                          : "Pick a style to begin."}
-                      </div>
-                    </div>
-
-                    <div
-                      style={{
-                        display: "grid",
-                        gridTemplateColumns: "1fr",
-                        gap: 10,
-                        padding: 12,
-                        borderRadius: 14,
-                        background: "rgba(255,255,255,0.04)",
-                        border: "1px solid rgba(255,255,255,0.10)",
-                        opacity: dmMode === null ? 0.75 : 1,
-                      }}
-                    >
-                      <div style={{ fontWeight: 900, letterSpacing: 0.2 }}>Party Size</div>
-
-                      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                        {([1, 2, 3, 4, 5, 6] as const).map((n) => {
-                          const active = partySize === n;
-                          return (
-                            <button
-                              key={n}
-                              type="button"
-                              onClick={() => {
-                                if (dmMode === null) return;
-                                setPartySize(n);
-                              }}
-                              disabled={dmMode === null || partyLocked}
-                              style={{
-                                padding: "8px 10px",
-                                borderRadius: 10,
-                                border: active
-                                  ? "1px solid rgba(138,180,255,0.55)"
-                                  : "1px solid rgba(255,255,255,0.12)",
-                                background: active ? "rgba(138,180,255,0.10)" : "rgba(255,255,255,0.04)",
-                                cursor: dmMode === null || partyLocked ? "not-allowed" : "pointer",
-                                opacity: dmMode === null || partyLocked ? 0.6 : 1,
-                                minWidth: 36,
-                                textAlign: "center",
-                                fontWeight: 850,
-                              }}
-                              title={partyLocked ? "Party locked by canon/combat" : undefined}
-                            >
-                              {n}
-                            </button>
-                          );
-                        })}
-                      </div>
-
-                      <div style={{ display: "grid", gap: 8 }}>
-                        <div style={{ fontSize: 12, opacity: 0.78 }}>
-                          {partyLocked ? "Party locked for this session." : "Quick start — details come next."}
-                        </div>
-
-                        <div>
-                          <div style={{ fontWeight: 900, letterSpacing: 0.2, marginBottom: 6 }}>Assemble Your Party</div>
-                          <div style={{ fontSize: 12, opacity: 0.78, marginBottom: 10 }}>
-                            These are the adventurers entering the dungeon.
-                          </div>
-                          <PartyPips count={partySize} />
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Simplified Chapters */}
-                    <div
-                      style={{
-                        marginTop: 2,
-                        paddingTop: 10,
-                        borderTop: "1px solid rgba(255,255,255,0.10)",
-                        display: "grid",
-                        gap: 10,
-                      }}
-                    >
-                      <div style={{ fontWeight: 900, letterSpacing: 0.2 }}>Chapters</div>
-
-                      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                        <Chip
-                          label="Mode"
-                          state={chapterState.mode}
-                          onClick={() => {
-                            setActiveSection("mode");
-                            scrollToSection("mode");
-                          }}
-                        />
-                        <Chip
-                          label="Party"
-                          state={chapterState.party}
-                          onClick={() => {
-                            setActiveSection("mode");
-                            scrollToSection("mode");
-                          }}
-                        />
-                        <Chip
-                          label="Table"
-                          state={chapterState.table}
-                          onClick={() => {
-                            setActiveSection("table");
-                            scrollToSection("table");
-                          }}
-                        />
-                        <Chip
-                          label="Pressure"
-                          state={chapterState.pressure}
-                          onClick={() => {
-                            setActiveSection("pressure");
-                            scrollToSection("pressure");
-                          }}
-                        />
-                        <Chip
-                          label="Map"
-                          state={chapterState.map}
-                          onClick={() => {
-                            setActiveSection("map");
-                            scrollToSection("map");
-                          }}
-                        />
-                        <Chip
-                          label="Combat"
-                          state={chapterState.combat}
-                          onClick={() => {
-                            setActiveSection("combat");
-                            scrollToSection("combat");
-                          }}
-                        />
-                        <Chip
-                          label="Action"
-                          state={chapterState.action}
-                          onClick={() => {
-                            setActiveSection("action");
-                            scrollToSection("action");
-                          }}
-                        />
-                        <Chip
-                          label="Resolution"
-                          state={chapterState.resolution}
-                          onClick={() => {
-                            setActiveSection("resolution");
-                            scrollToSection("resolution");
-                          }}
-                        />
-                        <Chip
-                          label="Canon"
-                          state={chapterState.canon}
-                          onClick={() => {
-                            setActiveSection("canon");
-                            scrollToSection("canon");
-                          }}
-                        />
-                        <Chip
-                          label="Chronicle"
-                          state={chapterState.ledger}
-                          onClick={() => {
-                            setActiveSection("ledger");
-                            scrollToSection("ledger");
-                          }}
-                        />
-                      </div>
-
-                      <div style={{ fontSize: 12, opacity: 0.70 }}>Progress unlocks the deeper chapters.</div>
-                    </div>
-                  </div>
-
-                  {/* RIGHT: cinematic tile */}
-                  <div
-                    style={{
-                      borderRadius: 16,
-                      overflow: "hidden",
-                      border: "1px solid rgba(255,255,255,0.10)",
-                      background: "rgba(0,0,0,0.40)",
-                      position: "relative",
-                      minHeight: 320,
-                    }}
-                  >
-                    {/* hero image */}
-                    {heroImageOk ? (
-                      <img
-                        src={HERO_IMAGE_SRC}
-                        alt="Enter the dungeon"
-                        onError={() => setHeroImageOk(false)}
-                        style={{
-                          position: "absolute",
-                          inset: 0,
-                          width: "100%",
-                          height: "100%",
-                          objectFit: "cover",
-                          display: "block",
-                          opacity: 0.88,
-                          filter: "brightness(0.90) contrast(1.08) saturate(1.08)",
-                          transform: "scale(1.02)",
-                        }}
-                      />
-                    ) : (
-                      <div
-                        style={{
-                          position: "absolute",
-                          inset: 0,
-                          background:
-                            "radial-gradient(1200px 600px at 70% 40%, rgba(255,190,120,0.12), rgba(0,0,0,0) 60%), radial-gradient(900px 500px at 40% 65%, rgba(140,170,255,0.10), rgba(0,0,0,0) 55%), linear-gradient(180deg, rgba(255,255,255,0.06), rgba(0,0,0,0.10))",
-                        }}
-                      />
-                    )}
-
-                    {/* vignette + glass overlay */}
-                    <div
-                      style={{
-                        position: "absolute",
-                        inset: 0,
-                        background:
-                          "linear-gradient(90deg, rgba(0,0,0,0.68) 0%, rgba(0,0,0,0.35) 32%, rgba(0,0,0,0.35) 68%, rgba(0,0,0,0.68) 100%), radial-gradient(120% 95% at 50% 55%, rgba(0,0,0,0.05), rgba(0,0,0,0.78))",
-                        pointerEvents: "none",
-                      }}
-                    />
-
-                    {/* subtle torch/ember bloom */}
-                    <div
-                      style={{
-                        position: "absolute",
-                        inset: 0,
-                        background:
-                          "radial-gradient(700px 360px at 65% 35%, rgba(255,170,90,0.10), rgba(0,0,0,0) 62%), radial-gradient(520px 280px at 35% 70%, rgba(120,150,255,0.08), rgba(0,0,0,0) 60%)",
-                        mixBlendMode: "screen",
-                        pointerEvents: "none",
-                        opacity: 0.9,
-                      }}
-                    />
-
-                    {/* copy + CTA */}
-                    <div
-                      style={{
-                        position: "absolute",
-                        left: 14,
-                        right: 14,
-                        bottom: 14,
-                        padding: 12,
-                        borderRadius: 14,
-                        border: "1px solid rgba(255,255,255,0.12)",
-                        background: "linear-gradient(180deg, rgba(10,10,10,0.35), rgba(10,10,10,0.62))",
-                        backdropFilter: "blur(10px)",
-                        boxShadow: "0 12px 40px rgba(0,0,0,0.45)",
-                      }}
-                    >
-                      <div style={{ fontWeight: 950, fontSize: 16, letterSpacing: 0.2 }}>Enter the Dungeon</div>
-                      <div style={{ marginTop: 4, fontSize: 12, opacity: 0.80 }}>
-                        You declare intent. The world remembers what you do.
-                      </div>
-
-                      <div style={{ marginTop: 10, display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-                        <button
-                          type="button"
-                          onClick={enterDungeon}
-                          disabled={!canEnterDungeon}
-                          style={{
-                            padding: "10px 14px",
-                            borderRadius: 12,
-                            fontWeight: 950,
-                            letterSpacing: 0.2,
-                            border: canEnterDungeon
-                              ? "1px solid rgba(255,255,255,0.24)"
-                              : "1px solid rgba(255,255,255,0.18)",
-                            background: canEnterDungeon ? "rgba(255,255,255,0.12)" : "rgba(255,255,255,0.04)",
-                            cursor: canEnterDungeon ? "pointer" : "not-allowed",
-                            opacity: canEnterDungeon ? 1 : 0.6,
-                          }}
-                        >
-                          Enter
-                        </button>
-
-                        <div style={{ fontSize: 12, opacity: 0.74 }}>
-                          {dmMode === null ? "Choose a play style first." : "Next: accept the scene and start acting."}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Keep the stats, remove the Share (immersion + redundancy). */}
-                <div style={{ marginTop: 10, display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 10 }}>
-                  <div className="muted" style={{ fontSize: 12 }}>
-                    outcomes: <strong>{outcomesCount}</strong> · canon events: <strong>{canonCount}</strong>
-                  </div>
-
-                  {/* Share removed from onboarding surface on purpose.
-                      Reintroduce later in Canon/Chronicle when desired. */}
-                </div>
-              </div>
-            </section>
+              partySize={partySize}
+              partyLocked={partyLocked}
+              onSetPartySize={(n) => {
+                if (dmMode === null) return;
+                setPartySize(n);
+              }}
+              onEnter={enterDungeon}
+              canEnter={canEnterDungeon}
+              heroImageSrc={HERO_IMAGE_SRC}
+              heroImageOk={heroImageOk}
+              onHeroImageError={() => setHeroImageOk(false)}
+              chapterState={chapterState as any}
+              onJump={(k) => jumpTo(k)}
+              outcomesCount={outcomesCount}
+              canonCount={canonCount}
+            />
           </div>
 
-          {/* TABLE (hidden until mode selected) */}
+          {/* TABLE */}
           <div id={anchorId("table")} style={{ scrollMarginTop: 90, marginTop: 16 }}>
             <InitialTableSection
               dmMode={dmMode}
@@ -1323,27 +851,21 @@ export default function DemoPage() {
 
               {/* MAP */}
               <div id={anchorId("map")} style={{ scrollMarginTop: 90 }}>
-                <div style={{ position: "relative" }}>
-                  <ExplorationMapPanel events={state.events} mapW={MAP_W} mapH={MAP_H} />
-
-                  {/* Visual-only combat theater overlay */}
-                  <CombatRendererPanel
-                    events={state.events}
-                    mapW={MAP_W}
-                    mapH={MAP_H}
-                    activeEnemyGroupName={activeEnemyOverlayName}
-                    hideControls={true}
-                    playSignal={enemyPlayNonce}
-                  />
-                </div>
+                <MapSection
+                  events={state.events as any[]}
+                  mapW={MAP_W}
+                  mapH={MAP_H}
+                  activeEnemyGroupName={activeEnemyOverlayName}
+                  playSignal={enemyPlayNonce}
+                />
               </div>
 
               {/* COMBAT */}
               <div id={anchorId("combat")} style={{ scrollMarginTop: 90 }}>
-                <CombatSetupPanel
+                <CombatSection
                   events={state.events as any[]}
-                  onAppendCanon={appendCanon}
                   dmMode={dmMode}
+                  onAppendCanon={appendCanon}
                   partyMembers={partyMembers.map((m, idx) => ({
                     id: String(m.id),
                     name: displayName(m, idx + 1),
@@ -1351,35 +873,29 @@ export default function DemoPage() {
                   }))}
                   pressureTier={pressureTier}
                   allowDevControls={false}
+                  showEnemyResolver={solaceNeutralEnemyTurnEnabled}
+                  activeEnemyGroupName={activeEnemyOverlayName}
+                  activeEnemyGroupId={activeEnemyOverlayId}
+                  playerNames={effectivePlayerNames}
+                  onTelegraph={(info) => {
+                    setEnemyTelegraphHint(info);
+                    setEnemyPlayNonce((n) => n + 1);
+                  }}
+                  onCommitOutcomeOnly={(payload) => handleRecordOutcomeOnly(payload)}
+                  onAdvanceTurn={() => advanceTurn()}
+                  enemyTelegraphHint={enemyTelegraphHint}
+                  derivedCombat={derivedCombat as any}
+                  activeCombatantSpec={activeCombatantSpec}
+                  combatEnded={combatEnded}
+                  isEnemyTurn={isEnemyTurn}
+                  isWrongPlayerForTurn={isWrongPlayerForTurn}
+                  onAdvanceTurnBtn={() => advanceTurn()}
+                  onPassTurnBtn={() => passTurn()}
+                  onEndCombatBtn={() => endCombat()}
                 />
 
-                {/* Enemy turn resolver (Solace-neutral) */}
-                {solaceNeutralEnemyTurnEnabled && (
-                  <CardSection title="Enemy Turn Resolution (Solace-neutral)">
-                    <EnemyTurnResolverPanel
-                      enabled={true}
-                      activeEnemyGroupName={activeEnemyOverlayName}
-                      activeEnemyGroupId={activeEnemyOverlayId}
-                      playerNames={effectivePlayerNames}
-                      onTelegraph={(info) => {
-                        setEnemyTelegraphHint(info);
-                        setEnemyPlayNonce((n) => n + 1);
-                      }}
-                      onCommitOutcome={(payload) => handleRecordOutcomeOnly(payload)}
-                      onAdvanceTurn={advanceTurn}
-                    />
-
-                    {enemyTelegraphHint && (
-                      <div className="muted" style={{ marginTop: 8, fontSize: 12 }}>
-                        Telegraph hint: <strong>{enemyTelegraphHint.attackStyleHint}</strong> · Target{" "}
-                        <strong>{enemyTelegraphHint.targetName}</strong>
-                      </div>
-                    )}
-                  </CardSection>
-                )}
-
                 {derivedCombat && (
-                  <CardSection title="Derived Turn Order">
+                  <CardSection title="Derived Turn Order (Quick Read)">
                     <div className="muted">
                       Combat: <strong>{derivedCombat.combatId}</strong> · Round <strong>{derivedCombat.round}</strong>
                       {activeCombatantSpec && (
@@ -1389,121 +905,35 @@ export default function DemoPage() {
                         </>
                       )}
                     </div>
-
-                    <div style={{ marginTop: 10, display: "grid", gridTemplateColumns: "1fr", gap: 6 }}>
-                      {derivedCombat.order.map((id: string, idx: number) => {
-                        const spec = derivedCombat.participants.find((p: any) => p.id === id) ?? null;
-                        const roll = derivedCombat.initiative.find((r: any) => r.combatantId === id) ?? null;
-                        const active = derivedCombat.activeCombatantId === id;
-
-                        return (
-                          <div
-                            key={id}
-                            style={{
-                              padding: "10px 12px",
-                              borderRadius: 8,
-                              border: active ? "1px solid rgba(138,180,255,0.55)" : "1px solid rgba(255,255,255,0.10)",
-                              background: active ? "rgba(138,180,255,0.10)" : "rgba(255,255,255,0.04)",
-                              display: "flex",
-                              justifyContent: "space-between",
-                              alignItems: "center",
-                              gap: 10,
-                            }}
-                          >
-                            <div>
-                              <strong>
-                                {idx + 1}. {spec ? formatCombatantLabel(spec) : id}
-                              </strong>
-                              {active && <span className="muted">{"  "}← active</span>}
-                            </div>
-                            <div className="muted">{roll ? `Init ${roll.total} (d20 ${roll.natural} + ${roll.modifier})` : "Init —"}</div>
-                          </div>
-                        );
-                      })}
-                    </div>
-
-                    <div style={{ marginTop: 12, display: "flex", gap: 8, flexWrap: "wrap" }}>
-                      <button onClick={advanceTurn} disabled={!derivedCombat || combatEnded || (dmMode === "solace-neutral" && isEnemyTurn)}>
-                        Advance Turn
-                      </button>
-
-                      <button onClick={passTurn} disabled={!combatActive || (dmMode === "solace-neutral" && isEnemyTurn) || isWrongPlayerForTurn}>
-                        Pass / End Turn
-                      </button>
-
-                      <button onClick={endCombat} disabled={!derivedCombat || combatEnded}>
-                        End Combat
-                      </button>
-                    </div>
                   </CardSection>
                 )}
               </div>
 
               {/* ACTION */}
               <div id={anchorId("action")} style={{ scrollMarginTop: 90 }}>
-                <CardSection title="Player Action">
-                  <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-end", marginBottom: 10 }}>
-                    <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                      Acting player:
-                      <select
-                        value={actingPlayerId}
-                        onChange={(e) => setActingPlayerId(e.target.value)}
-                        disabled={!partyMembers.length}
-                        style={{ minWidth: 240 }}
-                      >
-                        {partyMembers.length ? (
-                          partyMembers.map((m, idx) => (
-                            <option key={m.id} value={m.id}>
-                              {displayName(m, idx + 1)} ({m.id})
-                            </option>
-                          ))
-                        ) : (
-                          <option value="player_1">Player 1 (player_1)</option>
-                        )}
-                      </select>
-                    </label>
-
-                    <button onClick={passTurn} disabled={!combatActive || (dmMode === "solace-neutral" && isEnemyTurn) || isWrongPlayerForTurn}>
-                      Pass / End Turn
-                    </button>
-
-                    {dmMode === "human" && !partyLocked && partyDraft && (
-                      <button type="button" onClick={() => commitParty()} title="Commit PARTY_DECLARED (canon)" style={{ opacity: 0.75 }}>
-                        Commit Party (Canon)
-                      </button>
-                    )}
-
-                    {/* dev-only (kept available, not emphasized) */}
-                    {dmMode === "human" && !partyLocked && partyDraft && (
-                      <button type="button" onClick={() => randomizePartyNames()} title="Fill missing party names" style={{ opacity: 0.55 }}>
-                        Random Names
-                      </button>
-                    )}
-                  </div>
-
-                  <textarea
-                    value={playerInput}
-                    onChange={(e) => setPlayerInput(e.target.value)}
-                    placeholder="Describe what your character does…"
-                    disabled={!canPlayerSubmitIntent}
-                    style={{
-                      width: "100%",
-                      minHeight: "120px",
-                      resize: "vertical",
-                      boxSizing: "border-box",
-                      lineHeight: 1.5,
-                    }}
-                  />
-
-                  <div style={{ marginTop: 8, display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
-                    <button onClick={handlePlayerAction} disabled={!canPlayerSubmitIntent}>
-                      Submit Action
-                    </button>
-                    <span className="muted" style={{ fontSize: 12 }}>
-                      Tip: After you submit, the page jumps to Resolution automatically.
-                    </span>
-                  </div>
-                </CardSection>
+                <ActionSection
+                  partyMembers={
+                    partyMembers.length
+                      ? partyMembers.map((m, idx) => ({
+                          id: String(m.id),
+                          label: `${displayName(m, idx + 1)} (${m.id})`,
+                        }))
+                      : []
+                  }
+                  actingPlayerId={actingPlayerId}
+                  onSetActingPlayerId={(id) => setActingPlayerId(id)}
+                  playerInput={playerInput}
+                  onSetPlayerInput={(v) => setPlayerInput(v)}
+                  canSubmit={canPlayerSubmitIntent}
+                  onSubmit={handlePlayerAction}
+                  combatActive={combatActive}
+                  passDisabled={(dmMode === "solace-neutral" && isEnemyTurn) || isWrongPlayerForTurn}
+                  onPassTurn={passTurn}
+                  showPartyButtons={dmMode === "human" && !partyLocked && !!partyDraft}
+                  onCommitParty={commitParty}
+                  onRandomNames={randomizePartyNames}
+                  commitDisabled={partyLocked}
+                />
               </div>
 
               {/* PARSED */}
@@ -1551,15 +981,13 @@ export default function DemoPage() {
 
               <NextActionHint state={state} />
 
-              {/* CANON */}
+              {/* CANON + CHRONICLE */}
               <div id={anchorId("canon")} style={{ scrollMarginTop: 90 }}>
-                <CanonEventsPanel events={state.events as any[]} />
+                <CanonChronicleSection events={state.events as any[]} />
               </div>
 
-              {/* LEDGER */}
-              <div id={anchorId("ledger")} style={{ scrollMarginTop: 90 }}>
-                <WorldLedgerPanelLegacy events={state.events} />
-              </div>
+              {/* separate anchor for chapter jump */}
+              <div id={anchorId("ledger")} style={{ height: 1, scrollMarginTop: 90 }} />
             </>
           )}
         </StewardedShell>
