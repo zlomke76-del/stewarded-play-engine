@@ -1,3 +1,4 @@
+// app/demo/components/CombatSection.tsx
 "use client";
 
 // ------------------------------------------------------------
@@ -18,6 +19,9 @@ type PartyMemberLite = {
   name: string;
   className: string;
   portrait: "Male" | "Female";
+  ac: number;
+  hpMax: number;
+  hpCurrent: number;
   initiativeMod: number;
 };
 
@@ -78,6 +82,40 @@ function portraitSrcFor(member: PartyMemberLite) {
   return `/assets/V2/${cls}_${gender}.png`;
 }
 
+function normalizeClassKey(v: string) {
+  return (v || "").trim().toLowerCase();
+}
+
+function isHealerCapable(className: string) {
+  const k = normalizeClassKey(className);
+  // Keep this intentionally conservative & “RPG obvious”.
+  // (No new schema needed; derived from className.)
+  return (
+    k === "cleric" ||
+    k === "paladin" ||
+    k === "druid" ||
+    k === "bard" ||
+    k === "artificer"
+  );
+}
+
+function clamp01(n: number) {
+  if (!Number.isFinite(n)) return 0;
+  return Math.max(0, Math.min(1, n));
+}
+
+function hpPercent(hpCurrent: number, hpMax: number) {
+  const max = Math.max(1, Number(hpMax) || 1);
+  const cur = Math.max(0, Number(hpCurrent) || 0);
+  return clamp01(cur / max);
+}
+
+function fmtHp(hpCurrent: number, hpMax: number) {
+  const max = Math.max(1, Number(hpMax) || 1);
+  const cur = Math.max(0, Number(hpCurrent) || 0);
+  return `${cur} / ${max}`;
+}
+
 export default function CombatSection({
   events,
   dmMode,
@@ -104,7 +142,7 @@ export default function CombatSection({
 }: Props) {
   return (
     <>
-      {/* Players (session truth) — portraits (if className exists) */}
+      {/* Players (session truth) — portraits + vitals */}
       {partyMembers.length > 0 && (
         <CardSection title="Players (session truth)">
           <div
@@ -116,21 +154,73 @@ export default function CombatSection({
           >
             {partyMembers.map((m) => {
               const src = portraitSrcFor(m);
+              const healer = isHealerCapable(m.className);
+              const downed = (Number(m.hpCurrent) || 0) <= 0;
+              const pct = hpPercent(m.hpCurrent, m.hpMax);
 
               return (
                 <div
                   key={m.id}
                   style={{
+                    position: "relative",
                     display: "flex",
                     alignItems: "center",
                     gap: 12,
                     padding: "12px 12px",
                     borderRadius: 12,
-                    border: "1px solid rgba(255,255,255,0.12)",
-                    background: "rgba(255,255,255,0.04)",
+                    border: downed ? "1px solid rgba(255,120,120,0.28)" : "1px solid rgba(255,255,255,0.12)",
+                    background: downed ? "rgba(255,120,120,0.06)" : "rgba(255,255,255,0.04)",
                     boxShadow: "0 10px 26px rgba(0,0,0,0.22)",
+                    opacity: downed ? 0.72 : 1,
                   }}
                 >
+                  {/* role glyph */}
+                  {healer && (
+                    <div
+                      title="Healer-capable"
+                      style={{
+                        position: "absolute",
+                        top: 10,
+                        right: 10,
+                        width: 24,
+                        height: 24,
+                        borderRadius: 999,
+                        border: "1px solid rgba(255,255,255,0.18)",
+                        background: "rgba(255,255,255,0.06)",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        fontSize: 14,
+                        lineHeight: 1,
+                        opacity: 0.95,
+                        userSelect: "none",
+                      }}
+                    >
+                      ✚
+                    </div>
+                  )}
+
+                  {/* downed badge */}
+                  {downed && (
+                    <div
+                      style={{
+                        position: "absolute",
+                        bottom: 10,
+                        right: 10,
+                        padding: "4px 8px",
+                        borderRadius: 999,
+                        border: "1px solid rgba(255,120,120,0.35)",
+                        background: "rgba(255,120,120,0.10)",
+                        fontSize: 11,
+                        letterSpacing: 0.5,
+                        textTransform: "uppercase",
+                        opacity: 0.95,
+                      }}
+                    >
+                      Downed
+                    </div>
+                  )}
+
                   <div
                     style={{
                       width: 64,
@@ -170,15 +260,60 @@ export default function CombatSection({
                     <div style={{ display: "flex", alignItems: "baseline", gap: 10, flexWrap: "wrap" }}>
                       <strong style={{ fontSize: 15, lineHeight: 1.2 }}>{m.name || "Unnamed"}</strong>
                       <span className="muted" style={{ fontSize: 12 }}>
-                        id: {m.id} · init{" "}
+                        id: {m.id} · AC {Number(m.ac) || 0} · init{" "}
                         {m.initiativeMod >= 0 ? `+${m.initiativeMod}` : m.initiativeMod}
                       </span>
                     </div>
 
-                    <div className="muted" style={{ fontSize: 12, marginTop: 3 }}>
+                    {/* HP bar */}
+                    <div style={{ marginTop: 8 }}>
+                      <div
+                        style={{
+                          height: 7,
+                          borderRadius: 999,
+                          background: "rgba(0,0,0,0.36)",
+                          border: "1px solid rgba(255,255,255,0.10)",
+                          overflow: "hidden",
+                        }}
+                        aria-label={`HP ${fmtHp(m.hpCurrent, m.hpMax)}`}
+                      >
+                        <div
+                          style={{
+                            height: "100%",
+                            width: `${Math.round(pct * 100)}%`,
+                            background: downed ? "rgba(255,120,120,0.65)" : "rgba(160,220,255,0.55)",
+                            boxShadow: downed ? "none" : "0 0 12px rgba(160,220,255,0.22)",
+                          }}
+                        />
+                      </div>
+
+                      <div
+                        className="muted"
+                        style={{
+                          marginTop: 6,
+                          fontSize: 12,
+                          display: "flex",
+                          justifyContent: "space-between",
+                          gap: 10,
+                        }}
+                      >
+                        <span>
+                          HP <strong>{fmtHp(m.hpCurrent, m.hpMax)}</strong>
+                        </span>
+                        <span>{m.className ? <strong>{m.className}</strong> : "—"}</span>
+                      </div>
+                    </div>
+
+                    <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>
                       {m.className ? (
                         <>
-                          Class: <strong>{m.className}</strong> · Portrait: <strong>{m.portrait}</strong>
+                          Portrait: <strong>{m.portrait}</strong>
+                          {healer ? (
+                            <>
+                              {" "}
+                              · Role: <strong>Healer</strong>
+                            </>
+                          ) : null}
                         </>
                       ) : (
                         <>Set a class name to load portrait</>
