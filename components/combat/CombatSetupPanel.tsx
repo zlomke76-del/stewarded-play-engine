@@ -583,13 +583,6 @@ export default function CombatSetupPanel({
         Players roll individually. Enemies roll once per enemy. Turn order is derived from events.
       </p>
 
-      {!isHuman && !allowDevControls && (
-        <div className="muted" style={{ marginTop: 10 }}>
-          Combat materialization is derived from <strong>pressure + hostile intent</strong>. This panel shows the{" "}
-          <strong>implicit</strong> setup Solace would use (1:1 enemies to party size, 50/50 mix).
-        </div>
-      )}
-
       {/* Setup console */}
       <div
         style={{
