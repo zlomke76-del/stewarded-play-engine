@@ -1,6 +1,7 @@
+// components/combat/CombatSetupPanel.tsx
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import CardSection from "@/components/layout/CardSection";
 
 import {
@@ -91,13 +92,7 @@ function Pill({
   );
 }
 
-function ControlLabel({
-  label,
-  children,
-}: {
-  label: string;
-  children: React.ReactNode;
-}) {
+function ControlLabel({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
       <span className="muted" style={{ fontSize: 12 }}>
@@ -121,10 +116,7 @@ function selectStyle(disabled?: boolean): React.CSSProperties {
   };
 }
 
-function buttonStyle(
-  tone: "primary" | "ghost" | "danger",
-  disabled?: boolean
-): React.CSSProperties {
+function buttonStyle(tone: "primary" | "ghost" | "danger", disabled?: boolean): React.CSSProperties {
   const base: React.CSSProperties = {
     padding: "10px 12px",
     borderRadius: 10,
@@ -142,10 +134,8 @@ function buttonStyle(
     return {
       ...base,
       border: "1px solid rgba(138,180,255,0.28)",
-      background:
-        "linear-gradient(180deg, rgba(138,180,255,0.14), rgba(138,180,255,0.06))",
-      boxShadow:
-        "inset 0 1px 0 rgba(255,255,255,0.06), 0 10px 22px rgba(0,0,0,0.22)",
+      background: "linear-gradient(180deg, rgba(138,180,255,0.14), rgba(138,180,255,0.06))",
+      boxShadow: "inset 0 1px 0 rgba(255,255,255,0.06), 0 10px 22px rgba(0,0,0,0.22)",
     };
   }
 
@@ -153,8 +143,7 @@ function buttonStyle(
     return {
       ...base,
       border: "1px solid rgba(255,120,120,0.24)",
-      background:
-        "linear-gradient(180deg, rgba(255,120,120,0.14), rgba(255,120,120,0.06))",
+      background: "linear-gradient(180deg, rgba(255,120,120,0.14), rgba(255,120,120,0.06))",
     };
   }
 
@@ -249,6 +238,31 @@ function pickDeterministicUnique(pool: string[], count: number, seed: string): s
   return out.slice(0, n);
 }
 
+// -----------------------------
+// Enemy visuals (public/assets/v1/*)
+// -----------------------------
+function enemyAssetKey(groupName: string) {
+  const n = normalizeName(groupName).toLowerCase();
+
+  // explicit mappings for known library names
+  if (n.includes("archer")) return "enemy_archers";
+  if (n.includes("shield")) return "enemy_shields";
+  if (n.includes("skirmish")) return "enemy_skirmishers";
+  if (n.includes("brute")) return "enemy_brutes";
+  if (n.includes("drone")) return "enemy_drones";
+  if (n.includes("stalker")) return "enemy_stalkers";
+  if (n.includes("sentr")) return "enemy_sentries";
+  if (n.includes("wraith")) return "enemy_wraith";
+  if (n.includes("firewall")) return "enemy_firewall_warden";
+  if (n.includes("grid")) return "enemy_grid_knights";
+
+  return "enemy_unknown";
+}
+
+function enemyPortraitSrc(groupName: string) {
+  return `/assets/v1/${enemyAssetKey(groupName)}.png`;
+}
+
 export default function CombatSetupPanel({
   events,
   onAppendCanon,
@@ -320,11 +334,7 @@ export default function CombatSetupPanel({
     const desired = clampInt(partySize, 0, 6);
 
     const pool = enemyPoolForPressure(pressureTier);
-    const picked = pickDeterministicUnique(
-      pool.length ? pool : ENEMY_GROUP_LIBRARY,
-      desired,
-      pressureSeed
-    );
+    const picked = pickDeterministicUnique(pool.length ? pool : ENEMY_GROUP_LIBRARY, desired, pressureSeed);
 
     setEnemyGroups((prev) => {
       // If human dev controls are allowed, don’t stomp their choices.
@@ -394,9 +404,7 @@ export default function CombatSetupPanel({
 
     // If somehow empty, fall back to deterministic pick
     const ensuredGroups =
-      groups.length > 0
-        ? groups
-        : pickDeterministicUnique(enemyPoolForPressure(pressureTier), desiredGroups, pressureSeed);
+      groups.length > 0 ? groups : pickDeterministicUnique(enemyPoolForPressure(pressureTier), desiredGroups, pressureSeed);
 
     const combatId = crypto.randomUUID();
     const seed = crypto.randomUUID();
@@ -448,6 +456,12 @@ export default function CombatSetupPanel({
     onAppendCanon("COMBAT_ENDED", { combatId });
   }
 
+  const deployedEnemyGroups = useMemo(() => {
+    // Keep these deterministic + capped for UI
+    const desired = clampInt(partySize, 0, 6);
+    return uniqCaseInsensitive(enemyGroups).slice(0, desired);
+  }, [enemyGroups, partySize]);
+
   // -----------------------------
   // UI
   // -----------------------------
@@ -485,14 +499,7 @@ export default function CombatSetupPanel({
       >
         <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "flex-end" }}>
           <ControlLabel label="Party size (session truth)">
-            <div
-              style={{
-                ...selectStyle(true),
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-              }}
-            >
+            <div style={{ ...selectStyle(true), display: "flex", alignItems: "center", justifyContent: "space-between" }}>
               <span>
                 <strong>{partySize}</strong> {partySize === 1 ? "member" : "members"}
               </span>
@@ -502,7 +509,8 @@ export default function CombatSetupPanel({
             </div>
           </ControlLabel>
 
-          <ControlLabel label="Enemy group init mod (pressure-derived)">
+          {/* Keep the init-mod control, but eliminate noise: in Solace-owned mode it’s disabled and reads as derived */}
+          <ControlLabel label="Enemy init mod (pressure-derived)">
             <select
               value={initModEnemies}
               disabled={!canEdit}
@@ -519,94 +527,218 @@ export default function CombatSetupPanel({
 
           <div style={{ flex: "1 1 360px", display: "flex", flexDirection: "column", gap: 6 }}>
             <span className="muted" style={{ fontSize: 12 }}>
-              Enemy groups{" "}
-              <span className="muted" style={{ fontSize: 12 }}>
-                (1:1 with party size)
-              </span>
+              Enemy groups <span className="muted">(1:1 with party size)</span>
             </span>
 
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-              <select
-                value={enemyGroupSelect}
-                disabled={!canEdit}
-                onChange={(e) => setEnemyGroupSelect(e.target.value)}
-                style={{ ...selectStyle(!canEdit), minWidth: 240 }}
-              >
-                {ENEMY_GROUP_LIBRARY.map((g) => (
-                  <option key={g} value={g}>
-                    {g}
-                  </option>
-                ))}
-              </select>
+            {/* EDIT MODE: keep your existing controls */}
+            {canEdit ? (
+              <>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                  <select
+                    value={enemyGroupSelect}
+                    disabled={!canEdit}
+                    onChange={(e) => setEnemyGroupSelect(e.target.value)}
+                    style={{ ...selectStyle(!canEdit), minWidth: 240 }}
+                  >
+                    {ENEMY_GROUP_LIBRARY.map((g) => (
+                      <option key={g} value={g}>
+                        {g}
+                      </option>
+                    ))}
+                  </select>
 
-              <button
-                onClick={() => addEnemyGroup(enemyGroupSelect)}
-                disabled={!canEdit}
-                style={buttonStyle("primary", !canEdit)}
-                title={!canEdit ? "Solace-owned (or combat locked)" : "Add enemy group"}
-              >
-                Add
-              </button>
+                  <button
+                    onClick={() => addEnemyGroup(enemyGroupSelect)}
+                    disabled={!canEdit}
+                    style={buttonStyle("primary", !canEdit)}
+                    title={!canEdit ? "Solace-owned (or combat locked)" : "Add enemy group"}
+                  >
+                    Add
+                  </button>
 
-              <button
-                onClick={clearEnemyGroups}
-                disabled={!canEdit || enemyGroups.length === 0}
-                style={buttonStyle("ghost", !canEdit || enemyGroups.length === 0)}
-              >
-                Clear
-              </button>
+                  <button
+                    onClick={clearEnemyGroups}
+                    disabled={!canEdit || enemyGroups.length === 0}
+                    style={buttonStyle("ghost", !canEdit || enemyGroups.length === 0)}
+                  >
+                    Clear
+                  </button>
 
-              <span className="muted" style={{ fontSize: 12 }}>
-                (max 6)
-              </span>
-            </div>
+                  <span className="muted" style={{ fontSize: 12 }}>
+                    (max 6)
+                  </span>
+                </div>
 
-            {enemyGroups.length > 0 ? (
-              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 10 }}>
-                {enemyGroups.slice(0, 6).map((g) => (
-                  <span
-                    key={g}
+                {enemyGroups.length > 0 ? (
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 10 }}>
+                    {enemyGroups.slice(0, 6).map((g) => (
+                      <span
+                        key={g}
+                        style={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: 8,
+                          padding: "7px 10px",
+                          borderRadius: 999,
+                          border: "1px solid rgba(255,255,255,0.12)",
+                          background: "rgba(255,255,255,0.05)",
+                        }}
+                      >
+                        <span>{g}</span>
+                        <button
+                          onClick={() => removeEnemyGroup(g)}
+                          disabled={!canEdit}
+                          aria-label={`Remove ${g}`}
+                          style={{
+                            padding: "0 10px",
+                            height: 24,
+                            borderRadius: 999,
+                            border: "1px solid rgba(255,255,255,0.12)",
+                            background: "rgba(0,0,0,0.22)",
+                            color: "inherit",
+                            opacity: !canEdit ? 0.55 : 1,
+                            cursor: !canEdit ? "not-allowed" : "pointer",
+                          }}
+                        >
+                          ×
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="muted" style={{ marginTop: 10 }}>
+                    No enemy groups. (Solace will normally pick these automatically.)
+                  </div>
+                )}
+              </>
+            ) : (
+              // SOLACE-OWNED MODE: remove visual noise; show deployed enemy group "cards" in that space
+              <>
+                {deployedEnemyGroups.length > 0 ? (
+                  <div
                     style={{
-                      display: "inline-flex",
-                      alignItems: "center",
-                      gap: 8,
-                      padding: "7px 10px",
-                      borderRadius: 999,
-                      border: "1px solid rgba(255,255,255,0.12)",
-                      background: "rgba(255,255,255,0.05)",
+                      marginTop: 6,
+                      display: "grid",
+                      gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+                      gap: 10,
                     }}
                   >
-                    <span>{g}</span>
-                    <button
-                      onClick={() => removeEnemyGroup(g)}
-                      disabled={!canEdit}
-                      aria-label={`Remove ${g}`}
-                      style={{
-                        padding: "0 10px",
-                        height: 24,
-                        borderRadius: 999,
-                        border: "1px solid rgba(255,255,255,0.12)",
-                        background: "rgba(0,0,0,0.22)",
-                        color: "inherit",
-                        opacity: !canEdit ? 0.55 : 1,
-                        cursor: !canEdit ? "not-allowed" : "pointer",
-                      }}
-                    >
-                      ×
-                    </button>
-                  </span>
-                ))}
-              </div>
-            ) : (
-              <div className="muted" style={{ marginTop: 10 }}>
-                No enemy groups. (Solace will normally pick these automatically.)
-              </div>
+                    {deployedEnemyGroups.map((g, idx) => {
+                      const src = enemyPortraitSrc(g);
+                      const mod = Math.trunc(Number(initModEnemies ?? 0));
+
+                      return (
+                        <div
+                          key={`${g}_${idx}`}
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: 12,
+                            padding: "10px 12px",
+                            borderRadius: 12,
+                            border: "1px solid rgba(255,255,255,0.10)",
+                            background: "rgba(255,255,255,0.04)",
+                          }}
+                        >
+                          <div
+                            style={{
+                              width: 44,
+                              height: 44,
+                              borderRadius: 10,
+                              overflow: "hidden",
+                              border: "1px solid rgba(255,255,255,0.14)",
+                              background: "rgba(0,0,0,0.25)",
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              flexShrink: 0,
+                            }}
+                            title={src}
+                          >
+                            <img
+                              src={src}
+                              alt={g}
+                              width={44}
+                              height={44}
+                              style={{ width: 44, height: 44, objectFit: "cover", display: "block" }}
+                              onError={(e) => {
+                                // hide broken images without cascading error loops
+                                e.currentTarget.style.display = "none";
+                              }}
+                            />
+                          </div>
+
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ display: "flex", alignItems: "baseline", gap: 10, flexWrap: "wrap" }}>
+                              <strong style={{ fontSize: 14 }}>{g}</strong>
+                              <span className="muted" style={{ fontSize: 12 }}>
+                                enemy group · init mod {mod >= 0 ? `+${mod}` : `${mod}`}
+                              </span>
+                            </div>
+                            <div className="muted" style={{ fontSize: 12, marginTop: 2 }}>
+                              Deployed (Solace-owned)
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="muted" style={{ marginTop: 10 }}>
+                    No enemy groups deployed.
+                  </div>
+                )}
+              </>
             )}
 
             <div className="muted" style={{ marginTop: 10, fontSize: 12 }}>
               Pressure tier signal: <strong>{String(pressureTier ?? "unknown")}</strong>
             </div>
           </div>
+        </div>
+
+        {/* Players (read-only; session truth) */}
+        <div style={{ marginTop: 16 }}>
+          <strong>Players (session truth)</strong>
+
+          {partySize === 0 ? (
+            <div className="muted" style={{ marginTop: 10 }}>
+              No party declared yet.
+            </div>
+          ) : (
+            <div
+              style={{
+                marginTop: 10,
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+                gap: 10,
+              }}
+            >
+              {partyMembers.slice(0, 6).map((m, idx) => {
+                const i1 = idx + 1;
+                const name = normalizeName(m.name || "") || `Player ${i1}`;
+                const mod = Math.trunc(Number(m.initiativeMod ?? 0));
+                return (
+                  <div
+                    key={String(m.id ?? `player_${i1}`)}
+                    style={{
+                      padding: "10px 12px",
+                      borderRadius: 12,
+                      border: "1px solid rgba(255,255,255,0.10)",
+                      background: "rgba(255,255,255,0.04)",
+                    }}
+                  >
+                    <div>
+                      <strong>{name}</strong>
+                    </div>
+                    <div className="muted" style={{ marginTop: 6, fontSize: 12 }}>
+                      id: {String(m.id)} · init mod: {mod >= 0 ? `+${mod}` : `${mod}`}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       </div>
 
@@ -659,9 +791,7 @@ export default function CombatSetupPanel({
                   style={{
                     padding: "12px 12px",
                     borderRadius: 12,
-                    border: active
-                      ? "1px solid rgba(138,180,255,0.35)"
-                      : "1px solid rgba(255,255,255,0.10)",
+                    border: active ? "1px solid rgba(138,180,255,0.35)" : "1px solid rgba(255,255,255,0.10)",
                     background: active
                       ? "linear-gradient(180deg, rgba(138,180,255,0.10), rgba(0,0,0,0.10))"
                       : "rgba(255,255,255,0.04)",
@@ -679,9 +809,7 @@ export default function CombatSetupPanel({
                         width: 10,
                         height: 10,
                         borderRadius: 999,
-                        border: active
-                          ? "1px solid rgba(138,180,255,0.60)"
-                          : "1px solid rgba(255,255,255,0.16)",
+                        border: active ? "1px solid rgba(138,180,255,0.60)" : "1px solid rgba(255,255,255,0.16)",
                         background: active ? "rgba(138,180,255,0.18)" : "rgba(255,255,255,0.05)",
                         boxShadow: active ? "0 0 14px rgba(138,180,255,0.25)" : "none",
                       }}
@@ -698,9 +826,7 @@ export default function CombatSetupPanel({
                     </div>
                   </div>
 
-                  <div className="muted">
-                    {roll ? `Init ${roll.total} (d20 ${roll.natural} + ${roll.modifier})` : "Init —"}
-                  </div>
+                  <div className="muted">{roll ? `Init ${roll.total} (d20 ${roll.natural} + ${roll.modifier})` : "Init —"}</div>
                 </div>
               );
             })}
