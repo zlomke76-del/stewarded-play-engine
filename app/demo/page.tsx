@@ -40,12 +40,7 @@ import StewardedShell from "@/components/layout/StewardedShell";
 import ModeHeader from "@/components/layout/ModeHeader";
 import CardSection from "@/components/layout/CardSection";
 
-import {
-  deriveCombatState,
-  findLatestCombatId,
-  formatCombatantLabel,
-  nextTurnPointer,
-} from "@/lib/combat/CombatState";
+import { deriveCombatState, findLatestCombatId, nextTurnPointer } from "@/lib/combat/CombatState";
 
 import AmbientBackground from "./components/AmbientBackground";
 import InitialTableSection from "./components/InitialTableSection";
@@ -57,14 +52,7 @@ import ActionSection from "./components/ActionSection";
 import CombatSection from "./components/CombatSection";
 import CanonChronicleSection from "./components/CanonChronicleSection";
 
-import {
-  DMMode,
-  DemoSectionId,
-  DiceMode,
-  RollSource,
-  InitialTable,
-  ExplorationDraft,
-} from "./demoTypes";
+import { DMMode, DemoSectionId, DiceMode, RollSource, InitialTable, ExplorationDraft } from "./demoTypes";
 
 import {
   anchorId,
@@ -231,10 +219,7 @@ export default function DemoPage() {
   // Counts
   // ----------------------------------------------------------
 
-  const outcomesCount = useMemo(
-    () => state.events.filter((e: any) => e?.type === "OUTCOME").length,
-    [state.events]
-  );
+  const outcomesCount = useMemo(() => state.events.filter((e: any) => e?.type === "OUTCOME").length, [state.events]);
 
   const canonCount = useMemo(
     () => state.events.filter((e: any) => e?.type && e?.type !== "OUTCOME").length,
@@ -264,10 +249,7 @@ export default function DemoPage() {
   const partyMembers = partyEffective?.members ?? [];
   const partySize = clampInt(partyMembers.length || 4, 1, 6);
 
-  const effectivePlayerNames = useMemo(
-    () => partyMembers.map((m, idx) => displayName(m, idx + 1)),
-    [partyMembers]
-  );
+  const effectivePlayerNames = useMemo(() => partyMembers.map((m, idx) => displayName(m, idx + 1)), [partyMembers]);
 
   useEffect(() => {
     if (!partyMembers.length) {
@@ -358,9 +340,7 @@ export default function DemoPage() {
     setPartyDraft((prev) => {
       if (!prev) return prev;
 
-      const used = new Set<string>(
-        prev.members.map((m) => normalizeName(m.name || "").toLowerCase()).filter(Boolean)
-      );
+      const used = new Set<string>(prev.members.map((m) => normalizeName(m.name || "").toLowerCase()).filter(Boolean));
       const next: PartyDeclaredPayload = { ...prev, members: prev.members.map((m) => ({ ...m })) };
 
       for (let i = 0; i < next.members.length; i++) {
@@ -831,13 +811,7 @@ export default function DemoPage() {
       <div style={{ position: "relative", zIndex: 1 }}>
         <StewardedShell>
           {/* Hide the top header on /demo to avoid duplicate title + directions + redundant Share */}
-          <ModeHeader
-            title="Echoes of Fate"
-            onShare={shareCanon}
-            showTitle={false}
-            showRoles={false}
-            showShare={false}
-          />
+          <ModeHeader title="Echoes of Fate" onShare={shareCanon} showTitle={false} showRoles={false} showShare={false} />
 
           {/* HERO / ONBOARDING */}
           <div id={anchorId("mode")} style={{ scrollMarginTop: 90 }}>
@@ -955,21 +929,6 @@ export default function DemoPage() {
                   onPassTurnBtn={() => passTurn()}
                   onEndCombatBtn={() => endCombat()}
                 />
-
-                {derivedCombat && (
-                  <CardSection title="Derived Turn Order (Quick Read)">
-                    <div className="muted">
-                      Combat: <strong>{derivedCombat.combatId}</strong> · Round{" "}
-                      <strong>{derivedCombat.round}</strong>
-                      {activeCombatantSpec && (
-                        <>
-                          {" "}
-                          · Active: <strong>{formatCombatantLabel(activeCombatantSpec)}</strong>
-                        </>
-                      )}
-                    </div>
-                  </CardSection>
-                )}
               </div>
 
               {/* ACTION */}
