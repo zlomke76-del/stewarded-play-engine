@@ -19,8 +19,10 @@
 //   (DungeonPressurePanel now updates deterministically)
 // - OptionKind inference uses combined intent + option text (fixes "everything safe")
 //
-// Notes:
-// - Party editing UI is intentionally deferred (we'll fill in details later).
+// Updated flow requirement (this change):
+// - After Accept Table, user must DECLARE PLAYERS (PartySetupSection)
+// - Pressure/Map/Combat/Action stay locked until PARTY_DECLARED exists
+// - Chapters "Party" represents PARTY_DECLARED (not just party size)
 // ------------------------------------------------------------
 
 import { useEffect, useMemo, useState } from "react";
@@ -49,12 +51,20 @@ import AmbientBackground from "./components/AmbientBackground";
 import InitialTableSection from "./components/InitialTableSection";
 
 import HeroOnboarding from "./components/HeroOnboarding";
+import PartySetupSection from "./components/PartySetupSection";
 import MapSection from "./components/MapSection";
 import ActionSection from "./components/ActionSection";
 import CombatSection from "./components/CombatSection";
 import CanonChronicleSection from "./components/CanonChronicleSection";
 
-import { DMMode, DemoSectionId, DiceMode, RollSource, InitialTable, ExplorationDraft } from "./demoTypes";
+import {
+  DMMode,
+  DemoSectionId,
+  DiceMode,
+  RollSource,
+  InitialTable,
+  ExplorationDraft,
+} from "./demoTypes";
 
 import {
   anchorId,
@@ -219,7 +229,10 @@ export default function DemoPage() {
   // Counts
   // ----------------------------------------------------------
 
-  const outcomesCount = useMemo(() => state.events.filter((e: any) => e?.type === "OUTCOME").length, [state.events]);
+  const outcomesCount = useMemo(
+    () => state.events.filter((e: any) => e?.type === "OUTCOME").length,
+    [state.events]
+  );
 
   const canonCount = useMemo(
     () => state.events.filter((e: any) => e?.type && e?.type !== "OUTCOME").length,
@@ -249,7 +262,10 @@ export default function DemoPage() {
   const partyMembers = partyEffective?.members ?? [];
   const partySize = clampInt(partyMembers.length || 4, 1, 6);
 
-  const effectivePlayerNames = useMemo(() => partyMembers.map((m, idx) => displayName(m, idx + 1)), [partyMembers]);
+  const effectivePlayerNames = useMemo(
+    () => partyMembers.map((m, idx) => displayName(m, idx + 1)),
+    [partyMembers]
+  );
 
   useEffect(() => {
     if (!partyMembers.length) {
@@ -339,7 +355,9 @@ export default function DemoPage() {
     setPartyDraft((prev) => {
       if (!prev) return prev;
 
-      const used = new Set<string>(prev.members.map((m) => normalizeName(m.name || "").toLowerCase()).filter(Boolean));
+      const used = new Set<string>(
+        prev.members.map((m) => normalizeName(m.name || "").toLowerCase()).filter(Boolean)
+      );
       const next: PartyDeclaredPayload = { ...prev, members: prev.members.map((m) => ({ ...m })) };
 
       for (let i = 0; i < next.members.length; i++) {
@@ -395,6 +413,12 @@ export default function DemoPage() {
         payload: cleaned as any,
       })
     );
+
+    // After accepting table, Party is the required next step before gameplay.
+    if (tableAccepted) {
+      setActiveSection("pressure");
+      queueMicrotask(() => scrollToSection("pressure"));
+    }
   }
 
   // ----------------------------------------------------------
@@ -735,25 +759,32 @@ export default function DemoPage() {
 
   const canEnterDungeon = dmMode !== null;
 
+  const partyCanonicalExists = !!partyCanonical;
+
   const chapterState = useMemo(() => {
     const doneMode = dmMode !== null;
-    const doneParty = doneMode && partySize >= 1;
     const doneTable = tableAccepted;
+    const doneParty = partyCanonicalExists;
 
     return {
       mode: doneMode ? ("done" as const) : ("next" as const),
-      party: doneParty ? ("done" as const) : doneMode ? ("next" as const) : ("locked" as const),
-      table: doneTable ? ("done" as const) : doneParty ? ("next" as const) : ("locked" as const),
 
-      pressure: doneTable ? ("open" as const) : ("locked" as const),
-      map: doneTable ? ("open" as const) : ("locked" as const),
-      combat: doneTable ? ("open" as const) : ("locked" as const),
-      action: doneTable ? ("open" as const) : ("locked" as const),
-      resolution: doneTable ? ("open" as const) : ("locked" as const),
-      canon: doneTable ? ("open" as const) : ("locked" as const),
-      ledger: doneTable ? ("open" as const) : ("locked" as const),
+      // Party = PARTY_DECLARED (required after table acceptance)
+      party: doneParty ? ("done" as const) : doneTable ? ("next" as const) : ("locked" as const),
+
+      // Table comes directly after Mode (party size selection happens inside hero)
+      table: doneTable ? ("done" as const) : doneMode ? ("next" as const) : ("locked" as const),
+
+      // Gameplay chapters require BOTH table accepted + party declared
+      pressure: doneTable && doneParty ? ("open" as const) : ("locked" as const),
+      map: doneTable && doneParty ? ("open" as const) : ("locked" as const),
+      combat: doneTable && doneParty ? ("open" as const) : ("locked" as const),
+      action: doneTable && doneParty ? ("open" as const) : ("locked" as const),
+      resolution: doneTable && doneParty ? ("open" as const) : ("locked" as const),
+      canon: doneTable && doneParty ? ("open" as const) : ("locked" as const),
+      ledger: doneTable && doneParty ? ("open" as const) : ("locked" as const),
     };
-  }, [dmMode, partySize, tableAccepted]);
+  }, [dmMode, tableAccepted, partyCanonicalExists]);
 
   function enterDungeon() {
     if (!canEnterDungeon) return;
@@ -762,7 +793,6 @@ export default function DemoPage() {
   }
 
   function jumpTo(key: any) {
-    if (key === "party") key = "mode"; // party lives on the hero
     setActiveSection(key as DemoSectionId);
     scrollToSection(key as DemoSectionId);
   }
@@ -790,12 +820,20 @@ export default function DemoPage() {
   // Render
   // ----------------------------------------------------------
 
+  const allowGameplay = dmMode !== null && tableAccepted && partyCanonicalExists;
+
   return (
     <AmbientBackground>
       <div style={{ position: "relative", zIndex: 1 }}>
         <StewardedShell>
           {/* Hide the top header on /demo to avoid duplicate title + directions + redundant Share */}
-          <ModeHeader title="Echoes of Fate" onShare={shareCanon} showTitle={false} showRoles={false} showShare={false} />
+          <ModeHeader
+            title="Echoes of Fate"
+            onShare={shareCanon}
+            showTitle={false}
+            showRoles={false}
+            showShare={false}
+          />
 
           {/* HERO / ONBOARDING */}
           <div id={anchorId("mode")} style={{ scrollMarginTop: 90 }}>
@@ -836,13 +874,31 @@ export default function DemoPage() {
               setTableDraftText={setTableDraftText}
               onAccept={() => {
                 setTableAccepted(true);
-                setActiveSection("pressure");
-                queueMicrotask(() => scrollToSection("pressure"));
+                setActiveSection("party");
+                queueMicrotask(() => scrollToSection("party"));
               }}
             />
           </div>
 
-          {(dmMode !== null && (dmMode === "human" || tableAccepted)) && (
+          {/* PARTY DECLARATION (required after Accept Table) */}
+          <div id={anchorId("party")} style={{ scrollMarginTop: 90, marginTop: 16 }}>
+            <PartySetupSection
+              enabled={dmMode !== null && tableAccepted}
+              partyDraft={partyDraft}
+              partyMembersFallback={partyMembers}
+              partyCanonicalExists={partyCanonicalExists}
+              partyLocked={partyLocked}
+              partyLockedByCombat={partyLockedByCombat}
+              setPartySize={(n) => setPartySize(n)}
+              randomizePartyNames={randomizePartyNames}
+              commitParty={commitParty}
+              safeInt={safeInt}
+              setPartyDraft={setPartyDraft}
+            />
+          </div>
+
+          {/* Gameplay chapters gated until table accepted + party declared */}
+          {allowGameplay && (
             <>
               {/* PRESSURE */}
               <div id={anchorId("pressure")} style={{ scrollMarginTop: 90 }}>
@@ -897,7 +953,8 @@ export default function DemoPage() {
                 {derivedCombat && (
                   <CardSection title="Derived Turn Order (Quick Read)">
                     <div className="muted">
-                      Combat: <strong>{derivedCombat.combatId}</strong> · Round <strong>{derivedCombat.round}</strong>
+                      Combat: <strong>{derivedCombat.combatId}</strong> · Round{" "}
+                      <strong>{derivedCombat.round}</strong>
                       {activeCombatantSpec && (
                         <>
                           {" "}
