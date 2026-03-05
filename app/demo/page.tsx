@@ -93,6 +93,7 @@ type PartyMember = {
   id: string; // stable per session (ex: "player_1")
   name: string;
   className: string;
+  portrait: "Male" | "Female";
   ac: number;
   hpMax: number;
   hpCurrent: number;
@@ -124,6 +125,7 @@ function defaultParty(count: number): PartyDeclaredPayload {
         id: `player_${idx}`,
         name: "",
         className: "",
+        portrait: "Male",
         ac: 14,
         hpMax: 12,
         hpCurrent: 12,
@@ -338,6 +340,7 @@ export default function DemoPage() {
           id: `player_${i1}`,
           name: "",
           className: "",
+          portrait: "Male",
           ac: 14,
           hpMax: 12,
           hpCurrent: 12,
@@ -396,6 +399,7 @@ export default function DemoPage() {
             id,
             name: normalizeName(m.name || ""),
             className: normalizeName(m.className || ""),
+            portrait: (m as any).portrait === "Female" ? "Female" : "Male",
             ac: safeInt(m.ac, 14, 1, 40),
             hpMax,
             hpCurrent: Math.min(hpCurrent, hpMax),
@@ -925,6 +929,8 @@ export default function DemoPage() {
                   partyMembers={partyMembers.map((m, idx) => ({
                     id: String(m.id),
                     name: displayName(m, idx + 1),
+                    className: m.className,
+                    portrait: m.portrait ?? "Male",
                     initiativeMod: m.initiativeMod,
                   }))}
                   pressureTier={pressureTier}
