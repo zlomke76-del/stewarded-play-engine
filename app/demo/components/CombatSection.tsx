@@ -107,7 +107,13 @@ export default function CombatSection({
       {/* Players (session truth) — portraits (if className exists) */}
       {partyMembers.length > 0 && (
         <CardSection title="Players (session truth)">
-          <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 8 }}>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
+              gap: 10,
+            }}
+          >
             {partyMembers.map((m) => {
               const src = portraitSrcFor(m);
 
@@ -118,20 +124,21 @@ export default function CombatSection({
                     display: "flex",
                     alignItems: "center",
                     gap: 12,
-                    padding: "10px 12px",
-                    borderRadius: 8,
-                    border: "1px solid rgba(255,255,255,0.10)",
+                    padding: "12px 12px",
+                    borderRadius: 12,
+                    border: "1px solid rgba(255,255,255,0.12)",
                     background: "rgba(255,255,255,0.04)",
+                    boxShadow: "0 10px 26px rgba(0,0,0,0.22)",
                   }}
                 >
                   <div
                     style={{
-                      width: 56,
-                      height: 56,
-                      borderRadius: 10,
+                      width: 64,
+                      height: 64,
+                      borderRadius: 14,
                       overflow: "hidden",
-                      border: "1px solid rgba(255,255,255,0.14)",
-                      background: "rgba(0,0,0,0.25)",
+                      border: "1px solid rgba(255,255,255,0.16)",
+                      background: "rgba(0,0,0,0.28)",
                       display: "flex",
                       alignItems: "center",
                       justifyContent: "center",
@@ -143,9 +150,9 @@ export default function CombatSection({
                       <img
                         src={src}
                         alt={`${m.className} ${m.portrait}`}
-                        width={56}
-                        height={56}
-                        style={{ width: 56, height: 56, objectFit: "cover", display: "block" }}
+                        width={64}
+                        height={64}
+                        style={{ width: 64, height: 64, objectFit: "cover", display: "block" }}
                         onError={(e) => {
                           // Avoid infinite error loops; hide the broken image.
                           const el = e.currentTarget;
@@ -161,13 +168,14 @@ export default function CombatSection({
 
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ display: "flex", alignItems: "baseline", gap: 10, flexWrap: "wrap" }}>
-                      <strong style={{ fontSize: 14 }}>{m.name || "Unnamed"}</strong>
+                      <strong style={{ fontSize: 15, lineHeight: 1.2 }}>{m.name || "Unnamed"}</strong>
                       <span className="muted" style={{ fontSize: 12 }}>
-                        id: {m.id} · init mod: {m.initiativeMod >= 0 ? `+${m.initiativeMod}` : m.initiativeMod}
+                        id: {m.id} · init{" "}
+                        {m.initiativeMod >= 0 ? `+${m.initiativeMod}` : m.initiativeMod}
                       </span>
                     </div>
 
-                    <div className="muted" style={{ fontSize: 12, marginTop: 2 }}>
+                    <div className="muted" style={{ fontSize: 12, marginTop: 3 }}>
                       {m.className ? (
                         <>
                           Class: <strong>{m.className}</strong> · Portrait: <strong>{m.portrait}</strong>
