@@ -156,13 +156,48 @@ function inferPressureTier(outcomesCount: number): PressureTier {
 }
 
 // ------------------------------------------------------------
+// Zone derivation helpers (must match DungeonPressurePanel semantics)
+// ------------------------------------------------------------
+
+const ZONE_SIZE_TILES = 4;
+
+function zoneIdFromTileXY(x: number, y: number) {
+  const zx = Math.floor(x / ZONE_SIZE_TILES);
+  const zy = Math.floor(y / ZONE_SIZE_TILES);
+  return `${zx},${zy}`;
+}
+
+function clamp01to100(n: number) {
+  const x = Math.round(n);
+  return Math.max(0, Math.min(100, x));
+}
+
+function pressureDeltaFor(kind: ReturnType<typeof inferOptionKind>, success: boolean) {
+  // Deterministic, advisory-friendly escalation:
+  // - time always advances a little
+  // - failures spike more than successes
+  // - contested/risky actions are "louder"
+  const base = 1;
+  const byKind =
+    kind === "contested" ? 4 : kind === "risky" ? 3 : kind === "environmental" ? 2 : 1;
+  const byResult = success ? 1 : 6;
+  return base + byKind + byResult;
+}
+
+function awarenessDeltaFor(kind: ReturnType<typeof inferOptionKind>, success: boolean) {
+  // Awareness is a "tripwire" meter: contested + failure draws attention.
+  const base = 0;
+  const byKind = kind === "contested" ? 8 : kind === "risky" ? 5 : kind === "environmental" ? 2 : 1;
+  const byResult = success ? 1 : 10;
+  return base + byKind + byResult;
+}
+
+// ------------------------------------------------------------
 
 export default function DemoPage() {
   const role: "arbiter" = "arbiter";
 
-  const [state, setState] = useState<SessionState>(
-    createSession("demo-session", "demo")
-  );
+  const [state, setState] = useState<SessionState>(createSession("demo-session", "demo"));
 
   // IMPORTANT UX CHANGE: mode must be explicitly selected
   const [dmMode, setDmMode] = useState<DMMode | null>(null);
@@ -215,15 +250,10 @@ export default function DemoPage() {
   // Party sheet (session-level)
   // ----------------------------------------------------------
 
-  const partyCanonical = useMemo(
-    () => deriveLatestParty(state.events as any[]) ?? null,
-    [state.events]
-  );
+  const partyCanonical = useMemo(() => deriveLatestParty(state.events as any[]) ?? null, [state.events]);
 
   // Draft editor lives in session UI; only becomes canon when Arbiter commits (PARTY_DECLARED).
-  const [partyDraft, setPartyDraft] = useState<PartyDeclaredPayload | null>(
-    null
-  );
+  const [partyDraft, setPartyDraft] = useState<PartyDeclaredPayload | null>(null);
 
   // Ensure a draft exists once mode is selected (so Party Setup appears immediately after mode)
   useEffect(() => {
@@ -254,9 +284,7 @@ export default function DemoPage() {
       setActingPlayerId("player_1");
       return;
     }
-    const exists = partyMembers.some(
-      (m) => String(m.id) === String(actingPlayerId)
-    );
+    const exists = partyMembers.some((m) => String(m.id) === String(actingPlayerId));
     if (exists) return;
 
     setActingPlayerId(String(partyMembers[0].id ?? "player_1"));
@@ -267,10 +295,7 @@ export default function DemoPage() {
   // Combat state (derived + ended-aware)
   // ----------------------------------------------------------
 
-  const latestCombatId = useMemo(
-    () => findLatestCombatId(state.events as any) ?? null,
-    [state.events]
-  );
+  const latestCombatId = useMemo(() => findLatestCombatId(state.events as any) ?? null, [state.events]);
 
   const derivedCombat = useMemo(() => {
     if (!latestCombatId) return null;
@@ -286,11 +311,7 @@ export default function DemoPage() {
 
   const activeCombatantSpec = useMemo(() => {
     if (!derivedCombat?.activeCombatantId) return null;
-    return (
-      derivedCombat.participants.find(
-        (p: any) => p.id === derivedCombat.activeCombatantId
-      ) ?? null
-    );
+    return derivedCombat.participants.find((p: any) => p.id === derivedCombat.activeCombatantId) ?? null;
   }, [derivedCombat]);
 
   const isEnemyTurn = combatActive && activeCombatantSpec?.kind === "enemy_group";
@@ -342,9 +363,7 @@ export default function DemoPage() {
       if (!prev) return prev;
 
       const used = new Set<string>(
-        prev.members
-          .map((m) => normalizeName(m.name || "").toLowerCase())
-          .filter(Boolean)
+        prev.members.map((m) => normalizeName(m.name || "").toLowerCase()).filter(Boolean)
       );
 
       const next: PartyDeclaredPayload = {
@@ -411,10 +430,7 @@ export default function DemoPage() {
   // Exploration draft (auto-prepared AFTER intent + option)
   // ----------------------------------------------------------
 
-  const currentPos = useMemo(
-    () => deriveCurrentPosition(state.events as any[], MAP_W, MAP_H),
-    [state.events]
-  );
+  const currentPos = useMemo(() => deriveCurrentPosition(state.events as any[], MAP_W, MAP_H), [state.events]);
 
   const [explorationDraft, setExplorationDraft] = useState<ExplorationDraft>({
     enableMove: false,
@@ -492,10 +508,7 @@ export default function DemoPage() {
   // Player submits action (intent)
   // ----------------------------------------------------------
 
-  const pressureTier = useMemo(
-    () => inferPressureTier(outcomesCount),
-    [outcomesCount]
-  );
+  const pressureTier = useMemo(() => inferPressureTier(outcomesCount), [outcomesCount]);
 
   const isWrongPlayerForTurn =
     combatActive &&
@@ -592,8 +605,7 @@ export default function DemoPage() {
     let next = nextState;
 
     const here = deriveCurrentPosition(next.events as any[], MAP_W, MAP_H);
-    const to =
-      d.enableMove && d.direction !== "none" ? stepFrom(here, d.direction) : null;
+    const to = d.enableMove && d.direction !== "none" ? stepFrom(here, d.direction) : null;
     const canMove = to ? withinBounds(to, MAP_W, MAP_H) : false;
 
     if (d.enableMove && canMove && to) {
@@ -643,7 +655,7 @@ export default function DemoPage() {
       const note = d.markNote.trim() ? d.markNote.trim() : null;
       next = recordEvent(next, {
         id: crypto.randomUUID(),
-        timestamp: Date.now(),
+       timestamp: Date.now(),
         actor: "arbiter",
         type: "MAP_MARKED",
         payload: { at: here, kind: d.markKind, note } as any,
@@ -653,33 +665,88 @@ export default function DemoPage() {
     return next;
   }
 
-function handleRecord(payload: {
-  description: string;
-  dice: { mode: DiceMode; roll: number; dc: number; source: RollSource };
-  audit: string[];
-}) {
-  setState((prev) => {
-    let next = recordEvent(prev, {
-      id: crypto.randomUUID(),
-      timestamp: Date.now(),
-      actor: "arbiter",
-      type: "OUTCOME",
-      payload,
+  function handleRecord(payload: {
+    description: string;
+    dice: { mode: DiceMode; roll: number; dc: number; source: RollSource };
+    audit: string[];
+  }) {
+    // Determine kind using BOTH intent + option text (prevents "everything safe")
+    const selectedText = selectedOption?.description ?? "";
+    const combinedText = `${playerInput}\n${selectedText}`.trim();
+    const kind = inferOptionKind(combinedText.length ? combinedText : selectedText);
+
+    setState((prev) => {
+      // Determine zone at commit time from canon position + intended movement (if any)
+      const here = deriveCurrentPosition(prev.events as any[], MAP_W, MAP_H);
+
+      // If this outcome includes a governed movement (as drafted), apply pressure to the destination zone.
+      const d = explorationDraft;
+      const to =
+        d.enableMove && d.direction !== "none" ? stepFrom(here, d.direction) : null;
+      const canMove = to ? withinBounds(to, MAP_W, MAP_H) : false;
+
+      const posForZone = d.enableMove && canMove && to ? to : here;
+      const zoneId = zoneIdFromTileXY(posForZone.x, posForZone.y);
+
+      const roll = Number(payload?.dice?.roll ?? 0);
+      const dc = Number(payload?.dice?.dc ?? 0);
+      const success = Number.isFinite(roll) && Number.isFinite(dc) ? roll >= dc : false;
+
+      const pressureDelta = pressureDeltaFor(kind, success);
+      const awarenessDelta = awarenessDeltaFor(kind, success);
+
+      // Enrich OUTCOME payload without breaking consumers (extra fields are safe to ignore)
+      const enrichedOutcome = {
+        ...payload,
+        meta: {
+          ...(payload as any)?.meta,
+          optionKind: kind,
+          optionDescription: selectedText,
+          intent: playerInput,
+          zoneId,
+          success,
+        },
+      };
+
+      let next = recordEvent(prev, {
+        id: crypto.randomUUID(),
+        timestamp: Date.now(),
+        actor: "arbiter",
+        type: "OUTCOME",
+        payload: enrichedOutcome as any,
+      });
+
+      // Canonical escalation events (what DungeonPressurePanel actually listens for)
+      next = recordEvent(next, {
+        id: crypto.randomUUID(),
+        timestamp: Date.now(),
+        actor: "arbiter",
+        type: "ZONE_PRESSURE_CHANGED",
+        payload: { zoneId, delta: clamp01to100(pressureDelta) } as any,
+      });
+
+      next = recordEvent(next, {
+        id: crypto.randomUUID(),
+        timestamp: Date.now(),
+        actor: "arbiter",
+        type: "ZONE_AWARENESS_CHANGED",
+        payload: { zoneId, delta: clamp01to100(awarenessDelta) } as any,
+      });
+
+      // Exploration bundle remains governed + append-only
+      next = commitExplorationBundle(next);
+      return next;
     });
 
-    next = commitExplorationBundle(next);
-    return next;
-  });
+    // Reset draft pipeline + return to next intent
+    setPlayerInput("");
+    setParsed(null);
+    setOptions(null);
+    setSelectedOption(null);
 
-  // Reset draft pipeline + return to next intent
-  setPlayerInput("");
-  setParsed(null);
-  setOptions(null);
-  setSelectedOption(null);
-
-  setActiveSection("action");
-  queueMicrotask(() => scrollToSection("action"));
-}
+    setActiveSection("action");
+    queueMicrotask(() => scrollToSection("action"));
+  }
 
   // Enemy outcomes should NOT auto-commit exploration movement/reveal/marks.
   function handleRecordOutcomeOnly(payload: {
@@ -738,14 +805,10 @@ function handleRecord(payload: {
   // - it's an enemy group's turn
   // - and we're not in Human DM (Solace-neutral expects Solace to run enemy action)
   const activeEnemyOverlayName =
-    dmMode !== "human" && combatActive && isEnemyTurn
-      ? String(activeCombatantSpec?.name ?? "")
-      : null;
+    dmMode !== "human" && combatActive && isEnemyTurn ? String(activeCombatantSpec?.name ?? "") : null;
 
   const activeEnemyOverlayId =
-    dmMode !== "human" && combatActive && isEnemyTurn
-      ? String(activeCombatantSpec?.id ?? "")
-      : null;
+    dmMode !== "human" && combatActive && isEnemyTurn ? String(activeCombatantSpec?.id ?? "") : null;
 
   const solaceNeutralEnemyTurnEnabled =
     dmMode === "solace-neutral" &&
@@ -755,10 +818,7 @@ function handleRecord(payload: {
     !!activeEnemyOverlayId;
 
   // Map demo DMMode -> Resolution panel dmMode (scoped fix: only Solace-neutral locks narration)
-  const resolutionDmMode = useMemo(
-    () => (dmMode === "solace-neutral" ? "solace_neutral" : "human"),
-    [dmMode]
-  );
+  const resolutionDmMode = useMemo(() => (dmMode === "solace-neutral" ? "solace_neutral" : "human"), [dmMode]);
 
   return (
     <AmbientBackground>
@@ -912,10 +972,8 @@ function handleRecord(payload: {
 
                     <div style={{ marginTop: 10, display: "grid", gridTemplateColumns: "1fr", gap: 6 }}>
                       {derivedCombat.order.map((id: string, idx: number) => {
-                        const spec =
-                          derivedCombat.participants.find((p: any) => p.id === id) ?? null;
-                        const roll =
-                          derivedCombat.initiative.find((r: any) => r.combatantId === id) ?? null;
+                        const spec = derivedCombat.participants.find((p: any) => p.id === id) ?? null;
+                        const roll = derivedCombat.initiative.find((r: any) => r.combatantId === id) ?? null;
                         const active = derivedCombat.activeCombatantId === id;
 
                         return (
@@ -958,11 +1016,7 @@ function handleRecord(payload: {
 
                       <button
                         onClick={passTurn}
-                        disabled={
-                          !combatActive ||
-                          (dmMode === "solace-neutral" && isEnemyTurn) ||
-                          isWrongPlayerForTurn
-                        }
+                        disabled={!combatActive || (dmMode === "solace-neutral" && isEnemyTurn) || isWrongPlayerForTurn}
                       >
                         Pass / End Turn
                       </button>
@@ -978,7 +1032,15 @@ function handleRecord(payload: {
               {/* ACTION */}
               <div id={anchorId("action")} style={{ scrollMarginTop: 90 }}>
                 <CardSection title="Player Action">
-                  <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-end", marginBottom: 10 }}>
+                  <div
+                    style={{
+                      display: "flex",
+                      gap: 10,
+                      flexWrap: "wrap",
+                      alignItems: "flex-end",
+                      marginBottom: 10,
+                    }}
+                  >
                     <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                       Acting player:
                       <select
@@ -1001,11 +1063,7 @@ function handleRecord(payload: {
 
                     <button
                       onClick={passTurn}
-                      disabled={
-                        !combatActive ||
-                        (dmMode === "solace-neutral" && isEnemyTurn) ||
-                        isWrongPlayerForTurn
-                      }
+                      disabled={!combatActive || (dmMode === "solace-neutral" && isEnemyTurn) || isWrongPlayerForTurn}
                     >
                       Pass / End Turn
                     </button>
@@ -1025,7 +1083,15 @@ function handleRecord(payload: {
                     }}
                   />
 
-                  <div style={{ marginTop: 8, display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+                  <div
+                    style={{
+                      marginTop: 8,
+                      display: "flex",
+                      gap: 10,
+                      flexWrap: "wrap",
+                      alignItems: "center",
+                    }}
+                  >
                     <button onClick={handlePlayerAction} disabled={!canPlayerSubmitIntent}>
                       Submit Action
                     </button>
@@ -1072,7 +1138,8 @@ function handleRecord(payload: {
                     dmMode={resolutionDmMode}
                     context={{
                       optionDescription: selectedOption.description,
-                      optionKind: inferOptionKind(selectedOption.description),
+                      // IMPORTANT: infer from combined intent+option to avoid "everything safe"
+                      optionKind: inferOptionKind(`${playerInput}\n${selectedOption.description}`.trim()),
                     }}
                     onRecord={handleRecord}
                   />
