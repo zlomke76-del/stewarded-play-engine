@@ -104,15 +104,6 @@ export default function CombatSection({
 }: Props) {
   return (
     <>
-      <CombatSetupPanel
-        events={events as any[]}
-        onAppendCanon={onAppendCanon}
-        dmMode={dmMode as any}
-        partyMembers={partyMembers as any}
-        pressureTier={pressureTier as any}
-        allowDevControls={allowDevControls}
-      />
-
       {/* Players (session truth) — portraits (if className exists) */}
       {partyMembers.length > 0 && (
         <CardSection title="Players (session truth)">
@@ -192,6 +183,15 @@ export default function CombatSection({
           </div>
         </CardSection>
       )}
+
+      <CombatSetupPanel
+        events={events as any[]}
+        onAppendCanon={onAppendCanon}
+        dmMode={dmMode as any}
+        partyMembers={partyMembers as any}
+        pressureTier={pressureTier as any}
+        allowDevControls={allowDevControls}
+      />
 
       {showEnemyResolver && (
         <CardSection title="Enemy Turn Resolution (Solace-neutral)">
