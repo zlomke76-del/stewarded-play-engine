@@ -1,7 +1,6 @@
 // components/combat/CombatSetupPanel.tsx
 "use client";
 
-import React from "react";
 import { useEffect, useMemo, useState } from "react";
 import CardSection from "@/components/layout/CardSection";
 
@@ -25,10 +24,10 @@ type Props = {
   events: readonly any[];
   onAppendCanon: (type: string, payload: any) => void;
 
-  // NEW (to match app/demo/page.tsx usage)
+  // to match app/demo/page.tsx usage
   dmMode: "human" | "solace-neutral";
   partyMembers: PartyMemberLite[];
-  pressureTier: any; // kept permissive to avoid type coupling across folders
+  pressureTier: any; // intentionally permissive to avoid type coupling across folders
   allowDevControls: boolean;
 };
 
@@ -117,7 +116,10 @@ function selectStyle(disabled?: boolean): React.CSSProperties {
   };
 }
 
-function buttonStyle(tone: "primary" | "ghost" | "danger", disabled?: boolean): React.CSSProperties {
+function buttonStyle(
+  tone: "primary" | "ghost" | "danger",
+  disabled?: boolean
+): React.CSSProperties {
   const base: React.CSSProperties = {
     padding: "10px 12px",
     borderRadius: 10,
@@ -135,8 +137,10 @@ function buttonStyle(tone: "primary" | "ghost" | "danger", disabled?: boolean): 
     return {
       ...base,
       border: "1px solid rgba(138,180,255,0.28)",
-      background: "linear-gradient(180deg, rgba(138,180,255,0.14), rgba(138,180,255,0.06))",
-      boxShadow: "inset 0 1px 0 rgba(255,255,255,0.06), 0 10px 22px rgba(0,0,0,0.22)",
+      background:
+        "linear-gradient(180deg, rgba(138,180,255,0.14), rgba(138,180,255,0.06))",
+      boxShadow:
+        "inset 0 1px 0 rgba(255,255,255,0.06), 0 10px 22px rgba(0,0,0,0.22)",
     };
   }
 
@@ -144,14 +148,12 @@ function buttonStyle(tone: "primary" | "ghost" | "danger", disabled?: boolean): 
     return {
       ...base,
       border: "1px solid rgba(255,120,120,0.24)",
-      background: "linear-gradient(180deg, rgba(255,120,120,0.14), rgba(255,120,120,0.06))",
+      background:
+        "linear-gradient(180deg, rgba(255,120,120,0.14), rgba(255,120,120,0.06))",
     };
   }
 
-  return {
-    ...base,
-    background: "rgba(255,255,255,0.04)",
-  };
+  return { ...base, background: "rgba(255,255,255,0.04)" };
 }
 
 // Small deterministic hash -> [0, 2^32)
@@ -187,7 +189,6 @@ function inferEnemyInitModFromPressure(pressureTier: any): number {
   if (t.includes("high") || t.includes("tier_3") || t === "3") return 2;
   if (t.includes("extreme") || t.includes("tier_4") || t === "4") return 3;
 
-  // default
   return 1;
 }
 
@@ -202,7 +203,8 @@ function enemyPoolForPressure(pressureTier: any) {
   if (t.includes("low") || t.includes("calm") || t.includes("tier_1") || t === "1") return low;
   if (t.includes("med") || t.includes("tier_2") || t === "2") return med;
   if (t.includes("high") || t.includes("tier_3") || t === "3") return high;
-  if (t.includes("extreme") || t.includes("tier_4") || t === "4") return [...high, "Wraiths", "Firewall Wardens"];
+  if (t.includes("extreme") || t.includes("tier_4") || t === "4")
+    return [...high, "Wraiths", "Firewall Wardens"];
 
   return med;
 }
@@ -212,7 +214,6 @@ function pickDeterministicUnique(pool: string[], count: number, seed: string): s
   const n = clampInt(count, 0, 6);
   if (n === 0) return [];
 
-  // Deterministic “shuffle” by sorting with seeded hash
   const keyed = p.map((name, idx) => {
     const h = hash32(`${seed}::${idx}::${name.toLowerCase()}`);
     return { name, h };
@@ -220,13 +221,12 @@ function pickDeterministicUnique(pool: string[], count: number, seed: string): s
 
   keyed.sort((a, b) => a.h - b.h);
 
-  // If pool is smaller than requested, wrap with a second pass using a different key
   const out: string[] = [];
   let pass = 0;
   while (out.length < n && pass < 3) {
     for (const k of keyed) {
       if (out.length >= n) break;
-      if (!out.map((x) => x.toLowerCase()).includes(k.name.toLowerCase())) out.push(k.name);
+      if (!out.some((x) => x.toLowerCase() === k.name.toLowerCase())) out.push(k.name);
     }
     pass++;
     if (out.length < n) {
@@ -236,6 +236,93 @@ function pickDeterministicUnique(pool: string[], count: number, seed: string): s
   }
 
   return out.slice(0, n);
+}
+
+function enemyAssetForGroupName(name: string): string {
+  const n = String(name ?? "").toLowerCase().trim();
+
+  // Prefer explicit group art when you have it; fall back to base.
+  if (n.includes("archer")) return "/assets/v1/enemy_archers.png";
+  if (n.includes("brute")) return "/assets/v1/enemy_brutes.png";
+  if (n.includes("shield")) return "/assets/v1/enemy_shields.png";
+  if (n.includes("skirmish")) return "/assets/v1/enemy_skirmishers.png";
+  if (n.includes("stalker")) return "/assets/v1/enemy_stalkers.png";
+  if (n.includes("drone")) return "/assets/v1/enemy_drones.png";
+  if (n.includes("sentr")) return "/assets/v1/enemy_sentries.png";
+  if (n.includes("wraith")) return "/assets/v1/enemy_wraiths.png";
+  if (n.includes("grid")) return "/assets/v1/enemy_grid_knights.png";
+  if (n.includes("firewall")) return "/assets/v1/enemy_firewall_warden.png";
+  if (n.includes("hound")) return "/assets/v1/enemy_unknown.png";
+  if (n.includes("caster")) return "/assets/v1/enemy_unknown.png";
+
+  return "/assets/v1/enemy_unknown.png";
+}
+
+function EnemyCard({
+  name,
+  initMod,
+  hpLabel,
+  stateLabel,
+}: {
+  name: string;
+  initMod: number;
+  hpLabel: string;
+  stateLabel: string;
+}) {
+  const src = enemyAssetForGroupName(name);
+
+  return (
+    <div
+      style={{
+        display: "flex",
+        gap: 10,
+        alignItems: "center",
+        padding: "10px 12px",
+        borderRadius: 14,
+        border: "1px solid rgba(255,255,255,0.10)",
+        background: "rgba(0,0,0,0.22)",
+        boxShadow: "inset 0 1px 0 rgba(255,255,255,0.05)",
+        minWidth: 220,
+      }}
+    >
+      <div
+        style={{
+          width: 44,
+          height: 44,
+          borderRadius: 12,
+          overflow: "hidden",
+          border: "1px solid rgba(255,255,255,0.12)",
+          background: "rgba(255,255,255,0.03)",
+          flex: "0 0 auto",
+        }}
+      >
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={src}
+          alt=""
+          width={44}
+          height={44}
+          style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+        />
+      </div>
+
+      <div style={{ minWidth: 0 }}>
+        <div style={{ display: "flex", alignItems: "baseline", gap: 10 }}>
+          <strong style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+            {name}
+          </strong>
+        </div>
+
+        <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>
+          enemy group · init mod {initMod >= 0 ? `+${initMod}` : `${initMod}`}
+        </div>
+
+        <div className="muted" style={{ fontSize: 12, marginTop: 2 }}>
+          {hpLabel} · {stateLabel}
+        </div>
+      </div>
+    </div>
+  );
 }
 
 export default function CombatSetupPanel({
@@ -250,6 +337,9 @@ export default function CombatSetupPanel({
 
   const isHuman = dmMode === "human";
   const canEdit = !locked && (isHuman || allowDevControls);
+
+  // In Solace-neutral (no dev), hide the visual-noise “builder” controls.
+  const showBuilderControls = isHuman || allowDevControls;
 
   const INIT_MODS = [-2, -1, 0, 1, 2, 3, 4, 5, 6, 7, 8] as const;
 
@@ -272,8 +362,9 @@ export default function CombatSetupPanel({
   );
 
   const partySize = useMemo(() => clampInt(partyMembers?.length ?? 0, 0, 6), [partyMembers]);
+
   const pressureSeed = useMemo(() => {
-    const outcomes = events.filter((e: any) => e?.type === "OUTCOME").length;
+    const outcomes = (events as any[]).filter((e) => e?.type === "OUTCOME").length;
     return `pressure=${String(pressureTier ?? "unknown")}::outcomes=${outcomes}::party=${partySize}`;
   }, [events, partySize, pressureTier]);
 
@@ -285,6 +376,7 @@ export default function CombatSetupPanel({
   const [enemyGroupSelect, setEnemyGroupSelect] = useState<string>("Skirmishers");
   const [initModEnemies, setInitModEnemies] = useState<number>(1);
 
+  // Solace: implicit difficulty → init mod + 1:1 groups to party size.
   useEffect(() => {
     if (isHuman && !allowDevControls) return;
 
@@ -304,7 +396,7 @@ export default function CombatSetupPanel({
     const picked = pickDeterministicUnique(pool.length ? pool : ENEMY_GROUP_LIBRARY, desired, pressureSeed);
 
     setEnemyGroups((prev) => {
-      if (isHuman && allowDevControls) return prev;
+      if (isHuman && allowDevControls) return prev; // don’t stomp dev edits
       return picked;
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -336,9 +428,7 @@ export default function CombatSetupPanel({
   // Derived combat display
   // -----------------------------
 
-  const latestCombatId = useMemo(() => {
-    return findLatestCombatId(events as any) ?? null;
-  }, [events]);
+  const latestCombatId = useMemo(() => findLatestCombatId(events as any) ?? null, [events]);
 
   const derivedCombat = useMemo(() => {
     if (!latestCombatId) return null;
@@ -365,7 +455,9 @@ export default function CombatSetupPanel({
     const groups = uniqCaseInsensitive(enemyGroups).slice(0, desiredGroups);
 
     const ensuredGroups =
-      groups.length > 0 ? groups : pickDeterministicUnique(enemyPoolForPressure(pressureTier), desiredGroups, pressureSeed);
+      groups.length > 0
+        ? groups
+        : pickDeterministicUnique(enemyPoolForPressure(pressureTier), desiredGroups, pressureSeed);
 
     const combatId = crypto.randomUUID();
     const seed = crypto.randomUUID();
@@ -416,8 +508,26 @@ export default function CombatSetupPanel({
   }
 
   // -----------------------------
-  // UI
+  // Enemy cards (replace visual noise area)
   // -----------------------------
+
+  const enemyCards = useMemo(() => {
+    const groups = uniqCaseInsensitive(enemyGroups).slice(0, clampInt(partySize, 0, 6));
+
+    // Lightweight “state/HP” presentation:
+    // - Until we add canonical damage events, treat enemies as full HP.
+    // - Still shows something concrete and consistent.
+    const hpMax = Math.max(1, partySize) * 12; // simple scaling; purely UI until canonical damage exists
+    const hpLabel = `HP ${hpMax}/${hpMax}`;
+    const stateLabel = locked ? "In combat" : "Deployed (Solace-owned)";
+
+    return groups.map((g) => ({
+      name: g,
+      initMod: Math.trunc(Number(initModEnemies ?? 0)),
+      hpLabel,
+      stateLabel,
+    }));
+  }, [enemyGroups, initModEnemies, locked, partySize]);
 
   return (
     <CardSection title="Combat (Deterministic, Grouped Enemies)">
@@ -434,8 +544,7 @@ export default function CombatSetupPanel({
       {!isHuman && !allowDevControls && (
         <div className="muted" style={{ marginTop: 10 }}>
           Combat materialization is derived from <strong>pressure + hostile intent</strong>. This panel shows the{" "}
-          <strong>implicit</strong> setup Solace would use (1:1 enemy groups to party size), but does not allow manual
-          “Start Combat” unless dev controls are enabled.
+          <strong>implicit</strong> setup Solace would use (1:1 enemy groups to party size).
         </div>
       )}
 
@@ -462,7 +571,7 @@ export default function CombatSetupPanel({
             </div>
           </ControlLabel>
 
-          <ControlLabel label="Enemy group init mod (pressure-derived)">
+          <ControlLabel label="Enemy init mod (pressure-derived)">
             <select
               value={initModEnemies}
               disabled={!canEdit}
@@ -477,52 +586,85 @@ export default function CombatSetupPanel({
             </select>
           </ControlLabel>
 
-          <div style={{ flex: "1 1 360px", display: "flex", flexDirection: "column", gap: 6 }}>
-            <span className="muted" style={{ fontSize: 12 }}>
-              Enemy groups{" "}
+          {/* Enemy area (cards). This replaces the “visual noise” rows in Solace-neutral. */}
+          <div style={{ flex: "1 1 420px", display: "flex", flexDirection: "column", gap: 8, minWidth: 320 }}>
+            <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 10 }}>
               <span className="muted" style={{ fontSize: 12 }}>
-                (1:1 with party size)
+                Enemy groups <span className="muted">(1:1 with party size)</span>
               </span>
-            </span>
-
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-              <select
-                value={enemyGroupSelect}
-                disabled={!canEdit}
-                onChange={(e) => setEnemyGroupSelect(e.target.value)}
-                style={{ ...selectStyle(!canEdit), minWidth: 240 }}
-              >
-                {ENEMY_GROUP_LIBRARY.map((g) => (
-                  <option key={g} value={g}>
-                    {g}
-                  </option>
-                ))}
-              </select>
-
-              <button
-                onClick={() => addEnemyGroup(enemyGroupSelect)}
-                disabled={!canEdit}
-                style={buttonStyle("primary", !canEdit)}
-                title={!canEdit ? "Solace-owned (or combat locked)" : "Add enemy group"}
-              >
-                Add
-              </button>
-
-              <button
-                onClick={clearEnemyGroups}
-                disabled={!canEdit || enemyGroups.length === 0}
-                style={buttonStyle("ghost", !canEdit || enemyGroups.length === 0)}
-              >
-                Clear
-              </button>
 
               <span className="muted" style={{ fontSize: 12 }}>
-                (max 6)
+                Pressure tier: <strong>{String(pressureTier ?? "unknown")}</strong>
               </span>
             </div>
 
-            {enemyGroups.length > 0 ? (
-              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 10 }}>
+            {showBuilderControls && (
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                <select
+                  value={enemyGroupSelect}
+                  disabled={!canEdit}
+                  onChange={(e) => setEnemyGroupSelect(e.target.value)}
+                  style={{ ...selectStyle(!canEdit), minWidth: 240 }}
+                >
+                  {ENEMY_GROUP_LIBRARY.map((g) => (
+                    <option key={g} value={g}>
+                      {g}
+                    </option>
+                  ))}
+                </select>
+
+                <button
+                  onClick={() => addEnemyGroup(enemyGroupSelect)}
+                  disabled={!canEdit}
+                  style={buttonStyle("primary", !canEdit)}
+                  title={!canEdit ? "Solace-owned (or combat locked)" : "Add enemy group"}
+                >
+                  Add
+                </button>
+
+                <button
+                  onClick={clearEnemyGroups}
+                  disabled={!canEdit || enemyGroups.length === 0}
+                  style={buttonStyle("ghost", !canEdit || enemyGroups.length === 0)}
+                >
+                  Clear
+                </button>
+
+                <span className="muted" style={{ fontSize: 12 }}>
+                  (max 6)
+                </span>
+              </div>
+            )}
+
+            {/* Cards */}
+            {enemyCards.length > 0 ? (
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+                  gap: 10,
+                  marginTop: 4,
+                }}
+              >
+                {enemyCards.map((c) => (
+                  <EnemyCard
+                    key={c.name}
+                    name={c.name}
+                    initMod={c.initMod}
+                    hpLabel={c.hpLabel}
+                    stateLabel={c.stateLabel}
+                  />
+                ))}
+              </div>
+            ) : (
+              <div className="muted" style={{ marginTop: 6 }}>
+                No enemy groups.
+              </div>
+            )}
+
+            {/* If we’re showing builder controls (human/dev), keep the removable chips too. */}
+            {showBuilderControls && enemyGroups.length > 0 && (
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8 }}>
                 {enemyGroups.slice(0, 6).map((g) => (
                   <span
                     key={g}
@@ -557,15 +699,7 @@ export default function CombatSetupPanel({
                   </span>
                 ))}
               </div>
-            ) : (
-              <div className="muted" style={{ marginTop: 10 }}>
-                No enemy groups. (Solace will normally pick these automatically.)
-              </div>
             )}
-
-            <div className="muted" style={{ marginTop: 10, fontSize: 12 }}>
-              Pressure tier signal: <strong>{String(pressureTier ?? "unknown")}</strong>
-            </div>
           </div>
         </div>
       </div>
@@ -619,7 +753,9 @@ export default function CombatSetupPanel({
                   style={{
                     padding: "12px 12px",
                     borderRadius: 12,
-                    border: active ? "1px solid rgba(138,180,255,0.35)" : "1px solid rgba(255,255,255,0.10)",
+                    border: active
+                      ? "1px solid rgba(138,180,255,0.35)"
+                      : "1px solid rgba(255,255,255,0.10)",
                     background: active
                       ? "linear-gradient(180deg, rgba(138,180,255,0.10), rgba(0,0,0,0.10))"
                       : "rgba(255,255,255,0.04)",
@@ -637,7 +773,9 @@ export default function CombatSetupPanel({
                         width: 10,
                         height: 10,
                         borderRadius: 999,
-                        border: active ? "1px solid rgba(138,180,255,0.60)" : "1px solid rgba(255,255,255,0.16)",
+                        border: active
+                          ? "1px solid rgba(138,180,255,0.60)"
+                          : "1px solid rgba(255,255,255,0.16)",
                         background: active ? "rgba(138,180,255,0.18)" : "rgba(255,255,255,0.05)",
                         boxShadow: active ? "0 0 14px rgba(138,180,255,0.25)" : "none",
                       }}
@@ -654,7 +792,9 @@ export default function CombatSetupPanel({
                     </div>
                   </div>
 
-                  <div className="muted">{roll ? `Init ${roll.total} (d20 ${roll.natural} + ${roll.modifier})` : "Init —"}</div>
+                  <div className="muted">
+                    {roll ? `Init ${roll.total} (d20 ${roll.natural} + ${roll.modifier})` : "Init —"}
+                  </div>
                 </div>
               );
             })}
