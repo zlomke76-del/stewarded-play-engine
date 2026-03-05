@@ -16,6 +16,10 @@
 // - When EnemyTurnResolver commits an outcome, CombatSection (arbiter-side)
 //   also commits COMBATANT_DAMAGED (+ COMBATANT_DOWNED if HP <= 0),
 //   using a deterministic damage heuristic (D&D-ish, simplified).
+//
+// Update (turn-tied visuals):
+// - Highlight the ACTIVE turn owner (player) using activeCombatantSpec.id
+// - Optionally highlight enemy telegraph target (soft)
 // ------------------------------------------------------------
 
 import React, { useMemo } from "react";
@@ -85,10 +89,7 @@ type Props = {
 function portraitSrcFor(member: PartyMemberLite) {
   const cls = (member.className || "").trim();
   const gender = member.portrait === "Female" ? "Female" : "Male";
-
-  // If class isn't set yet, don't request a broken URL.
   if (!cls) return null;
-
   return `/assets/V2/${cls}_${gender}.png`;
 }
 
@@ -98,8 +99,6 @@ function normalizeClassKey(v: string) {
 
 function isHealerCapable(className: string) {
   const k = normalizeClassKey(className);
-  // Keep this intentionally conservative & “RPG obvious”.
-  // (No new schema needed; derived from className.)
   return k === "cleric" || k === "paladin" || k === "druid" || k === "bard" || k === "artificer";
 }
 
@@ -154,7 +153,7 @@ function derivePlayerHpFromCanon(args: {
 
   if (!combatId) return base;
 
-  // If we have explicit initialized HP events, use them as the baseline (per combat).
+  // baseline overrides (optional)
   for (const e of events) {
     if (e?.type !== "COMBATANT_HP_INITIALIZED") continue;
     const p = e?.payload ?? {};
@@ -169,7 +168,6 @@ function derivePlayerHpFromCanon(args: {
     base[id] = { hpMax, hpCurrent: hpCur, downed: hpCur <= 0 };
   }
 
-  // Apply damage/heal deltas (event-sourced replay)
   for (const e of events) {
     const t = e?.type;
     const p = e?.payload ?? {};
@@ -215,20 +213,15 @@ function inferDamageStyleFromPayload(payload: any): "volley" | "beam" | "charge"
   return "unknown";
 }
 
-// Deterministic “D&D-ish” damage from (roll, dc, style)
-// (no RNG; replayable given OUTCOME dice)
 function computeDeterministicDamage(args: { roll: number; dc: number; style: "volley" | "beam" | "charge" | "unknown" }) {
   const roll = Math.trunc(Number(args.roll) || 0);
   const dc = Math.trunc(Number(args.dc) || 0);
   const margin = roll - dc;
 
-  const base =
-    args.style === "beam" ? 6 : args.style === "charge" ? 5 : args.style === "volley" ? 4 : 4;
-
-  const bonus = Math.max(0, Math.floor(margin / 5)); // +1 per 5 over DC
+  const base = args.style === "beam" ? 6 : args.style === "charge" ? 5 : args.style === "volley" ? 4 : 4;
+  const bonus = Math.max(0, Math.floor(margin / 5));
   const raw = base + bonus;
 
-  // keep it reasonable at low levels
   return clampInt(raw, 1, 12);
 }
 
@@ -271,8 +264,19 @@ export default function CombatSection({
     });
   }, [partyMembers, playerHpById]);
 
+  const activePlayerId = useMemo(() => {
+    if (!activeCombatantSpec) return null;
+    if (String(activeCombatantSpec?.kind ?? "") !== "player") return null;
+    const id = String(activeCombatantSpec?.id ?? "").trim();
+    return id || null;
+  }, [activeCombatantSpec]);
+
+  const telegraphTargetKey = useMemo(() => {
+    const t = enemyTelegraphHint?.targetName ? nameKey(enemyTelegraphHint.targetName) : "";
+    return t || null;
+  }, [enemyTelegraphHint?.targetName]);
+
   function chooseTargetCombatantId(): string | null {
-    // Prefer telegraph target if it matches a living player.
     const hintedName = enemyTelegraphHint?.targetName ? nameKey(enemyTelegraphHint.targetName) : "";
     const living = partyMembersForDisplay.filter((m) => (Number(m.hpCurrent) || 0) > 0);
 
@@ -280,27 +284,24 @@ export default function CombatSection({
       const byName = living.find((m) => nameKey(m.name) === hintedName);
       if (byName) return String(byName.id);
 
-      // Sometimes playerNames may be display-only; fallback to partial match.
-      const byContains = living.find((m) => nameKey(m.name).includes(hintedName) || hintedName.includes(nameKey(m.name)));
+      const byContains = living.find(
+        (m) => nameKey(m.name).includes(hintedName) || hintedName.includes(nameKey(m.name))
+      );
       if (byContains) return String(byContains.id);
     }
 
-    // Otherwise pick first living; if none, pick first party member (still deterministic).
     if (living.length > 0) return String(living[0].id);
     return partyMembersForDisplay.length > 0 ? String(partyMembersForDisplay[0].id) : null;
   }
 
   function handleEnemyCommitOutcomeAndDamage(payload: any) {
-    // Always commit the OUTCOME first (existing pipeline).
     onCommitOutcomeOnly(payload);
 
-    // If we don't have combat context, don't attempt HP mutation.
     if (!combatId) return;
 
     const roll = Math.trunc(Number(payload?.dice?.roll ?? 0));
     const dc = Math.trunc(Number(payload?.dice?.dc ?? 0));
     const hit = Number.isFinite(roll) && Number.isFinite(dc) ? roll >= dc : false;
-
     if (!hit) return;
 
     const styleFromTelegraph =
@@ -321,7 +322,6 @@ export default function CombatSection({
 
     const amount = computeDeterministicDamage({ roll, dc, style });
 
-    // Commit damage canon
     onAppendCanon("COMBATANT_DAMAGED", {
       combatId,
       sourceCombatantId: String(activeEnemyGroupId ?? activeEnemyGroupName ?? "enemy"),
@@ -330,10 +330,15 @@ export default function CombatSection({
       kind: style,
     });
 
-    // If this drops the target to 0, emit DOWNED canon.
     const before = playerHpById[targetCombatantId];
     const beforeCur =
-      before?.hpCurrent ?? clampInt(partyMembersForDisplay.find((m) => String(m.id) === targetCombatantId)?.hpCurrent, 0, 999);
+      before?.hpCurrent ??
+      clampInt(
+        partyMembersForDisplay.find((m) => String(m.id) === targetCombatantId)?.hpCurrent,
+        0,
+        999
+      );
+
     const afterCur = Math.max(0, (Number(beforeCur) || 0) - amount);
 
     if (afterCur <= 0) {
@@ -343,7 +348,7 @@ export default function CombatSection({
 
   return (
     <>
-      {/* Players (session truth) — portraits + vitals (HP derived from canon when available) */}
+      {/* Players (session truth) */}
       {partyMembersForDisplay.length > 0 && (
         <CardSection title="Players (session truth)">
           <div
@@ -362,6 +367,30 @@ export default function CombatSection({
 
               const pct = hpPercent(m.hpCurrent, m.hpMax);
 
+              const isActiveTurnOwner = !!activePlayerId && String(activePlayerId) === String(m.id);
+              const isTelegraphTarget =
+                !!telegraphTargetKey && telegraphTargetKey.length > 0 && nameKey(m.name) === telegraphTargetKey;
+
+              const border = downed
+                ? "1px solid rgba(255,120,120,0.28)"
+                : isActiveTurnOwner
+                  ? "1px solid rgba(138,180,255,0.62)"
+                  : isTelegraphTarget
+                    ? "1px solid rgba(255,255,255,0.18)"
+                    : "1px solid rgba(255,255,255,0.12)";
+
+              const background = downed
+                ? "rgba(255,120,120,0.06)"
+                : isActiveTurnOwner
+                  ? "rgba(138,180,255,0.10)"
+                  : isTelegraphTarget
+                    ? "rgba(255,255,255,0.06)"
+                    : "rgba(255,255,255,0.04)";
+
+              const boxShadow = isActiveTurnOwner
+                ? "0 14px 34px rgba(0,0,0,0.28)"
+                : "0 10px 26px rgba(0,0,0,0.22)";
+
               return (
                 <div
                   key={m.id}
@@ -372,15 +401,35 @@ export default function CombatSection({
                     gap: 12,
                     padding: "12px 12px",
                     borderRadius: 12,
-                    border: downed
-                      ? "1px solid rgba(255,120,120,0.28)"
-                      : "1px solid rgba(255,255,255,0.12)",
-                    background: downed ? "rgba(255,120,120,0.06)" : "rgba(255,255,255,0.04)",
-                    boxShadow: "0 10px 26px rgba(0,0,0,0.22)",
+                    border,
+                    background,
+                    boxShadow,
                     opacity: downed ? 0.72 : 1,
                   }}
                 >
-                  {/* role glyph */}
+                  {/* ACTIVE badge */}
+                  {isActiveTurnOwner && (
+                    <div
+                      style={{
+                        position: "absolute",
+                        top: 10,
+                        left: 10,
+                        padding: "4px 8px",
+                        borderRadius: 999,
+                        border: "1px solid rgba(138,180,255,0.60)",
+                        background: "rgba(138,180,255,0.12)",
+                        fontSize: 11,
+                        letterSpacing: 0.6,
+                        textTransform: "uppercase",
+                        opacity: 0.98,
+                        userSelect: "none",
+                      }}
+                    >
+                      Active Turn
+                    </div>
+                  )}
+
+                  {/* Healer glyph */}
                   {healer && (
                     <div
                       title="Healer-capable"
@@ -406,7 +455,7 @@ export default function CombatSection({
                     </div>
                   )}
 
-                  {/* downed badge */}
+                  {/* Downed badge */}
                   {downed && (
                     <div
                       style={{
@@ -427,13 +476,37 @@ export default function CombatSection({
                     </div>
                   )}
 
+                  {/* Telegraph target badge (enemy turn) */}
+                  {isEnemyTurn && isTelegraphTarget && !downed && (
+                    <div
+                      style={{
+                        position: "absolute",
+                        bottom: 10,
+                        left: 10,
+                        padding: "4px 8px",
+                        borderRadius: 999,
+                        border: "1px solid rgba(255,255,255,0.18)",
+                        background: "rgba(0,0,0,0.26)",
+                        fontSize: 11,
+                        letterSpacing: 0.5,
+                        textTransform: "uppercase",
+                        opacity: 0.95,
+                      }}
+                    >
+                      Targeted
+                    </div>
+                  )}
+
+                  {/* Portrait */}
                   <div
                     style={{
                       width: 64,
                       height: 64,
                       borderRadius: 14,
                       overflow: "hidden",
-                      border: "1px solid rgba(255,255,255,0.16)",
+                      border: isActiveTurnOwner
+                        ? "1px solid rgba(138,180,255,0.45)"
+                        : "1px solid rgba(255,255,255,0.16)",
                       background: "rgba(0,0,0,0.28)",
                       display: "flex",
                       alignItems: "center",
@@ -450,7 +523,6 @@ export default function CombatSection({
                         height={64}
                         style={{ width: 64, height: 64, objectFit: "cover", display: "block" }}
                         onError={(e) => {
-                          // Avoid infinite error loops; hide the broken image.
                           const el = e.currentTarget;
                           el.style.display = "none";
                         }}
@@ -462,12 +534,12 @@ export default function CombatSection({
                     )}
                   </div>
 
+                  {/* Text + vitals */}
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ display: "flex", alignItems: "baseline", gap: 10, flexWrap: "wrap" }}>
                       <strong style={{ fontSize: 15, lineHeight: 1.2 }}>{m.name || "Unnamed"}</strong>
                       <span className="muted" style={{ fontSize: 12 }}>
-                        id: {m.id} · AC {Number(m.ac) || 0} · init{" "}
-                        {m.initiativeMod >= 0 ? `+${m.initiativeMod}` : m.initiativeMod}
+                        id: {m.id} · AC {Number(m.ac) || 0} · init {m.initiativeMod >= 0 ? `+${m.initiativeMod}` : m.initiativeMod}
                       </span>
                     </div>
 
@@ -526,7 +598,6 @@ export default function CombatSection({
                       )}
                     </div>
 
-                    {/* Canon hint */}
                     {combatId && (
                       <div className="muted" style={{ fontSize: 11, marginTop: 6, opacity: 0.85 }}>
                         Combat HP is event-sourced (damage/downed).
@@ -569,8 +640,8 @@ export default function CombatSection({
           )}
 
           <div className="muted" style={{ marginTop: 10, fontSize: 11, opacity: 0.85, lineHeight: 1.5 }}>
-            Damage V1: if roll ≥ DC, we commit <strong>COMBATANT_DAMAGED</strong> (deterministic, style-based).
-            If HP hits 0, we also commit <strong>COMBATANT_DOWNED</strong>.
+            Damage V1: if roll ≥ DC, we commit <strong>COMBATANT_DAMAGED</strong> (deterministic, style-based). If HP hits
+            0, we also commit <strong>COMBATANT_DOWNED</strong>.
           </div>
         </CardSection>
       )}
@@ -613,9 +684,7 @@ export default function CombatSection({
                     </strong>
                     {active && <span className="muted">{"  "}← active</span>}
                   </div>
-                  <div className="muted">
-                    {roll ? `Init ${roll.total} (d20 ${roll.natural} + ${roll.modifier})` : "Init —"}
-                  </div>
+                  <div className="muted">{roll ? `Init ${roll.total} (d20 ${roll.natural} + ${roll.modifier})` : "Init —"}</div>
                 </div>
               );
             })}
@@ -631,7 +700,9 @@ export default function CombatSection({
 
             <button
               onClick={onPassTurnBtn}
-              disabled={!derivedCombat || combatEnded || (dmMode === "solace-neutral" && isEnemyTurn) || isWrongPlayerForTurn}
+              disabled={
+                !derivedCombat || combatEnded || (dmMode === "solace-neutral" && isEnemyTurn) || isWrongPlayerForTurn
+              }
             >
               Pass / End Turn
             </button>
