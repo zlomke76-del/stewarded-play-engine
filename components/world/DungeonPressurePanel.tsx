@@ -11,9 +11,14 @@
 // - Show nearby heat (adjacent zones)
 // - Recommend (never assert) current location/zone
 // - Preserve Arbiter authority
+//
+// Upgrade:
+// - Integrates DungeonEvolution (dragon/apex pacing + dungeon condition) as
+//   a READ-ONLY, deterministic layer derived from canon events.
 // ------------------------------------------------------------
 
 import React, { useMemo } from "react";
+import { deriveDungeonEvolution } from "@/lib/world/DungeonEvolution";
 
 // ------------------------------------------------------------
 // Types
@@ -165,10 +170,7 @@ type ZoneAwarenessState = {
   estimated: boolean; // true if we had to estimate (no canonical awareness events)
 };
 
-function deriveZoneAwareness(
-  events: readonly SessionEvent[],
-  pressure: ZonePressureState
-): ZoneAwarenessState {
+function deriveZoneAwareness(events: readonly SessionEvent[], pressure: ZonePressureState): ZoneAwarenessState {
   const byZone = new Map<ZoneId, number>();
   let sawCanonical = false;
 
@@ -216,12 +218,7 @@ function deriveZoneAwareness(
 function recommendLocation(parsedCommand?: any): { label: string; reason: string } {
   const text = parsedCommand?.rawInput?.toLowerCase?.() ?? "";
 
-  if (
-    text.includes("open door") ||
-    text.includes("enter") ||
-    text.includes("hallway") ||
-    text.includes("passage")
-  ) {
+  if (text.includes("open door") || text.includes("enter") || text.includes("hallway") || text.includes("passage")) {
     return {
       label: "Stone Hallway",
       reason: "Door/entry language implies movement into an interior passage.",
@@ -302,14 +299,7 @@ function RingGauge({
       <div style={{ width: 132, height: 132, position: "relative" }}>
         <svg viewBox="0 0 120 120" width="132" height="132" style={{ display: "block" }}>
           {/* track */}
-          <circle
-            cx="60"
-            cy="60"
-            r={r}
-            fill="none"
-            stroke="rgba(255,255,255,0.10)"
-            strokeWidth="10"
-          />
+          <circle cx="60" cy="60" r={r} fill="none" stroke="rgba(255,255,255,0.10)" strokeWidth="10" />
           {/* glow ring */}
           <circle
             cx="60"
@@ -349,12 +339,8 @@ function RingGauge({
           <div style={{ fontWeight: 900, letterSpacing: 0.6, fontSize: 13, opacity: 0.95 }}>
             {title.toUpperCase()}
           </div>
-          {subtitle ? (
-            <div style={{ marginTop: 4, fontSize: 12, opacity: 0.82 }}>{subtitle}</div>
-          ) : null}
-          {footnote ? (
-            <div style={{ marginTop: 6, fontSize: 11, opacity: 0.65 }}>{footnote}</div>
-          ) : null}
+          {subtitle ? <div style={{ marginTop: 4, fontSize: 12, opacity: 0.82 }}>{subtitle}</div> : null}
+          {footnote ? <div style={{ marginTop: 6, fontSize: 11, opacity: 0.65 }}>{footnote}</div> : null}
         </div>
       </div>
 
@@ -362,7 +348,7 @@ function RingGauge({
         @keyframes rg-breathe {
           0% {
             stroke: rgba(220, 220, 255, 0.72);
-            filter: drop-shadow(0 0 0px rgba(220, 220, 255, 0.0));
+            filter: drop-shadow(0 0 0px rgba(220, 220, 255, 0));
           }
           50% {
             stroke: rgba(240, 240, 255, 0.92);
@@ -370,14 +356,14 @@ function RingGauge({
           }
           100% {
             stroke: rgba(220, 220, 255, 0.72);
-            filter: drop-shadow(0 0 0px rgba(220, 220, 255, 0.0));
+            filter: drop-shadow(0 0 0px rgba(220, 220, 255, 0));
           }
         }
 
         @keyframes rg-heartbeat {
           0% {
             stroke: rgba(220, 220, 255, 0.75);
-            filter: drop-shadow(0 0 0px rgba(240, 240, 255, 0.0));
+            filter: drop-shadow(0 0 0px rgba(240, 240, 255, 0));
           }
           18% {
             stroke: rgba(255, 245, 245, 0.92);
@@ -393,7 +379,7 @@ function RingGauge({
           }
           100% {
             stroke: rgba(220, 220, 255, 0.75);
-            filter: drop-shadow(0 0 0px rgba(240, 240, 255, 0.0));
+            filter: drop-shadow(0 0 0px rgba(240, 240, 255, 0));
           }
         }
       `}</style>
@@ -471,6 +457,8 @@ export default function DungeonPressurePanel({ turn, currentRoomId, events, pars
     return makeZoneId(0, 0);
   }, [playerPos]);
 
+  const adjacent = useMemo(() => adjacentZones(zoneId), [zoneId]);
+
   const zonePressure = useMemo(() => deriveZonePressure(events), [events]);
   const zoneAwareness = useMemo(() => deriveZoneAwareness(events, zonePressure), [events, zonePressure]);
 
@@ -481,11 +469,10 @@ export default function DungeonPressurePanel({ turn, currentRoomId, events, pars
   const awarenessStatus = statusForAwareness(currentAwareness);
 
   const nearbyMaxPressure = useMemo(() => {
-    const adj = adjacentZones(zoneId);
     let m = 0;
-    for (const z of adj) m = Math.max(m, zonePressure.byZone.get(z) ?? 0);
+    for (const z of adjacent) m = Math.max(m, zonePressure.byZone.get(z) ?? 0);
     return m;
-  }, [zoneId, zonePressure]);
+  }, [adjacent, zonePressure]);
 
   const nearbyTier = tierForPressure(nearbyMaxPressure);
 
@@ -521,6 +508,15 @@ export default function DungeonPressurePanel({ turn, currentRoomId, events, pars
   const pressurePulse: "none" | "breathe" | "heartbeat" =
     currentPressure >= 70 ? "heartbeat" : currentPressure >= 25 ? "breathe" : "none";
 
+  // Dungeon Evolution (apex/dragon pacing + condition) — derived, advisory
+  const evolution = useMemo(() => {
+    return deriveDungeonEvolution({
+      events: events as any,
+      zoneId,
+      nearbyZoneIds: adjacent,
+    });
+  }, [events, zoneId, adjacent]);
+
   const advisoryNotes = useMemo(() => {
     const notes: string[] = [];
 
@@ -531,7 +527,6 @@ export default function DungeonPressurePanel({ turn, currentRoomId, events, pars
       notes.push("Awareness is estimated from pressure (no explicit awareness events detected).");
     }
 
-    // Teach the model without being preachy
     notes.push("Advisory only — Arbiter determines all outcomes.");
     return notes;
   }, [zonePressure.estimated, zoneAwareness.estimated]);
@@ -601,6 +596,43 @@ export default function DungeonPressurePanel({ turn, currentRoomId, events, pars
             label={`Nearby Heat — ${nearbyTier.tier}`}
             sublabel={`Max adjacent zone pressure: ${Math.round(nearbyMaxPressure)} (derived)`}
           />
+
+          {/* NEW: Dungeon evolution (dragon/apex pacing) */}
+          <div
+            style={{
+              padding: 12,
+              borderRadius: 12,
+              border: "1px solid rgba(255,255,255,0.10)",
+              background: "rgba(255,255,255,0.04)",
+              display: "grid",
+              gap: 8,
+            }}
+          >
+            <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+              <div style={{ fontWeight: 900 }}>
+                🐉 Apex Presence: <span style={{ opacity: 0.92 }}>{evolution.apex}</span>
+              </div>
+              <div style={{ fontSize: 12, opacity: 0.78 }}>
+                Condition: <strong>{evolution.condition}</strong>
+              </div>
+            </div>
+
+            {evolution.signals.length ? (
+              <ul style={{ margin: 0, paddingLeft: 18 }}>
+                {evolution.signals.slice(0, 4).map((s, i) => (
+                  <li key={i} style={{ fontSize: 12, opacity: 0.86, marginBottom: 4 }}>
+                    {s}
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <div style={{ fontSize: 12, opacity: 0.72 }}>No significant dungeon signals detected yet.</div>
+            )}
+
+            <div style={{ fontSize: 11, opacity: 0.62 }}>
+              Advisory pacing only — this does not spawn enemies or force encounters.
+            </div>
+          </div>
 
           {/* Small status row */}
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap", fontSize: 12, opacity: 0.78 }}>
