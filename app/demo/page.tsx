@@ -178,7 +178,17 @@ function awarenessDeltaFor(kind: ReturnType<typeof inferOptionKind>, success: bo
 // Onboarding UI helpers
 // ------------------------------------------------------------
 
-type ChapterKey = "mode" | "party" | "table" | "pressure" | "map" | "combat" | "action" | "resolution" | "canon" | "ledger";
+type ChapterKey =
+  | "mode"
+  | "party"
+  | "table"
+  | "pressure"
+  | "map"
+  | "combat"
+  | "action"
+  | "resolution"
+  | "canon"
+  | "ledger";
 
 function Chip({
   label,
@@ -635,7 +645,9 @@ export default function DemoPage() {
 
   const canPlayerSubmitIntent =
     dmMode !== null &&
-    ((dmMode === "human" && true) || (!combatActive && !isEnemyTurn) || (combatActive && !isEnemyTurn && !isWrongPlayerForTurn));
+    ((dmMode === "human" && true) ||
+      (!combatActive && !isEnemyTurn) ||
+      (combatActive && !isEnemyTurn && !isWrongPlayerForTurn));
 
   function handlePlayerAction() {
     if (!playerInput.trim()) return;
@@ -930,15 +942,9 @@ export default function DemoPage() {
     <AmbientBackground>
       <div style={{ position: "relative", zIndex: 1 }}>
         <StewardedShell>
-          <ModeHeader
-            title="Echoes of Fate"
-            onShare={shareCanon}
-            roles={[
-              { label: "Player", description: "Declares intent" },
-              { label: "Solace", description: "Prepares the resolution and narrates outcome" },
-              { label: "Arbiter", description: "Commits canon" },
-            ]}
-          />
+          {/* We intentionally hide the top header on /demo to avoid duplicate title,
+              immersion-breaking directions, and redundant Share. */}
+          <ModeHeader title="Echoes of Fate" showTitle={false} showRoles={false} showShare={false} />
 
           {/* -------------------------------------------------- */}
           {/* ONBOARDING HERO */}
@@ -954,6 +960,7 @@ export default function DemoPage() {
               }}
             >
               <div style={{ display: "grid", gap: 14 }}>
+                {/* Single title lives here (no duplicates above). */}
                 <div>
                   <div style={{ fontSize: 26, fontWeight: 950, letterSpacing: 0.2 }}>Echoes of Fate</div>
                   <div style={{ marginTop: 6, fontSize: 14, opacity: 0.86 }}>Every action leaves an echo.</div>
@@ -1033,7 +1040,9 @@ export default function DemoPage() {
                               style={{
                                 padding: "8px 10px",
                                 borderRadius: 10,
-                                border: active ? "1px solid rgba(138,180,255,0.55)" : "1px solid rgba(255,255,255,0.12)",
+                                border: active
+                                  ? "1px solid rgba(138,180,255,0.55)"
+                                  : "1px solid rgba(255,255,255,0.12)",
                                 background: active ? "rgba(138,180,255,0.10)" : "rgba(255,255,255,0.04)",
                                 cursor: dmMode === null || partyLocked ? "not-allowed" : "pointer",
                                 opacity: dmMode === null || partyLocked ? 0.6 : 1,
@@ -1276,13 +1285,14 @@ export default function DemoPage() {
                   </div>
                 </div>
 
+                {/* Keep the stats, remove the Share (immersion + redundancy). */}
                 <div style={{ marginTop: 10, display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 10 }}>
                   <div className="muted" style={{ fontSize: 12 }}>
                     outcomes: <strong>{outcomesCount}</strong> · canon events: <strong>{canonCount}</strong>
                   </div>
-                  <button type="button" onClick={shareCanon} style={{ opacity: 0.85 }}>
-                    Share
-                  </button>
+
+                  {/* Share removed from onboarding surface on purpose.
+                      Reintroduce later in Canon/Chronicle when desired. */}
                 </div>
               </div>
             </section>
@@ -1406,26 +1416,18 @@ export default function DemoPage() {
                               </strong>
                               {active && <span className="muted">{"  "}← active</span>}
                             </div>
-                            <div className="muted">
-                              {roll ? `Init ${roll.total} (d20 ${roll.natural} + ${roll.modifier})` : "Init —"}
-                            </div>
+                            <div className="muted">{roll ? `Init ${roll.total} (d20 ${roll.natural} + ${roll.modifier})` : "Init —"}</div>
                           </div>
                         );
                       })}
                     </div>
 
                     <div style={{ marginTop: 12, display: "flex", gap: 8, flexWrap: "wrap" }}>
-                      <button
-                        onClick={advanceTurn}
-                        disabled={!derivedCombat || combatEnded || (dmMode === "solace-neutral" && isEnemyTurn)}
-                      >
+                      <button onClick={advanceTurn} disabled={!derivedCombat || combatEnded || (dmMode === "solace-neutral" && isEnemyTurn)}>
                         Advance Turn
                       </button>
 
-                      <button
-                        onClick={passTurn}
-                        disabled={!combatActive || (dmMode === "solace-neutral" && isEnemyTurn) || isWrongPlayerForTurn}
-                      >
+                      <button onClick={passTurn} disabled={!combatActive || (dmMode === "solace-neutral" && isEnemyTurn) || isWrongPlayerForTurn}>
                         Pass / End Turn
                       </button>
 
@@ -1461,32 +1463,19 @@ export default function DemoPage() {
                       </select>
                     </label>
 
-                    <button
-                      onClick={passTurn}
-                      disabled={!combatActive || (dmMode === "solace-neutral" && isEnemyTurn) || isWrongPlayerForTurn}
-                    >
+                    <button onClick={passTurn} disabled={!combatActive || (dmMode === "solace-neutral" && isEnemyTurn) || isWrongPlayerForTurn}>
                       Pass / End Turn
                     </button>
 
                     {dmMode === "human" && !partyLocked && partyDraft && (
-                      <button
-                        type="button"
-                        onClick={() => commitParty()}
-                        title="Commit PARTY_DECLARED (canon)"
-                        style={{ opacity: 0.75 }}
-                      >
+                      <button type="button" onClick={() => commitParty()} title="Commit PARTY_DECLARED (canon)" style={{ opacity: 0.75 }}>
                         Commit Party (Canon)
                       </button>
                     )}
 
                     {/* dev-only (kept available, not emphasized) */}
                     {dmMode === "human" && !partyLocked && partyDraft && (
-                      <button
-                        type="button"
-                        onClick={() => randomizePartyNames()}
-                        title="Fill missing party names"
-                        style={{ opacity: 0.55 }}
-                      >
+                      <button type="button" onClick={() => randomizePartyNames()} title="Fill missing party names" style={{ opacity: 0.55 }}>
                         Random Names
                       </button>
                     )}
