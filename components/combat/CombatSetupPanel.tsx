@@ -320,7 +320,11 @@ export default function CombatSetupPanel({
     const desired = clampInt(partySize, 0, 6);
 
     const pool = enemyPoolForPressure(pressureTier);
-    const picked = pickDeterministicUnique(pool.length ? pool : ENEMY_GROUP_LIBRARY, desired, pressureSeed);
+    const picked = pickDeterministicUnique(
+      pool.length ? pool : ENEMY_GROUP_LIBRARY,
+      desired,
+      pressureSeed
+    );
 
     setEnemyGroups((prev) => {
       // If human dev controls are allowed, don’t stomp their choices.
@@ -481,7 +485,14 @@ export default function CombatSetupPanel({
       >
         <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "flex-end" }}>
           <ControlLabel label="Party size (session truth)">
-            <div style={{ ...selectStyle(true), display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+            <div
+              style={{
+                ...selectStyle(true),
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+              }}
+            >
               <span>
                 <strong>{partySize}</strong> {partySize === 1 ? "member" : "members"}
               </span>
@@ -597,6 +608,7 @@ export default function CombatSetupPanel({
             </div>
           </div>
         </div>
+      </div>
 
       {/* Actions */}
       <div style={{ marginTop: 14, display: "flex", gap: 8, flexWrap: "wrap" }}>
@@ -613,11 +625,7 @@ export default function CombatSetupPanel({
           Start Combat (Seeded)
         </button>
 
-        <button
-          onClick={advanceTurn}
-          disabled={!derivedCombat}
-          style={buttonStyle("ghost", !derivedCombat)}
-        >
+        <button onClick={advanceTurn} disabled={!derivedCombat} style={buttonStyle("ghost", !derivedCombat)}>
           Advance Turn
         </button>
 
@@ -636,8 +644,7 @@ export default function CombatSetupPanel({
       {derivedCombat && (
         <div style={{ marginTop: 14 }}>
           <div className="muted">
-            Combat: <strong>{derivedCombat.combatId}</strong> · Round{" "}
-            <strong>{derivedCombat.round}</strong>
+            Combat: <strong>{derivedCombat.combatId}</strong> · Round <strong>{derivedCombat.round}</strong>
           </div>
 
           <div style={{ marginTop: 10, display: "grid", gridTemplateColumns: "1fr", gap: 8 }}>
