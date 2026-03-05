@@ -5,24 +5,23 @@
 // Demo Page — Stewarded Play (Full Governed Flow)
 // ------------------------------------------------------------
 //
-// This file is now the *orchestrator* only.
-// UI is broken into components under app/demo/components.
+// Orchestrator only.
+// UI sections are composed here.
 //
-// (Upgraded toward "real game" direction)
+// Recent focus upgrades implemented in this file:
+// - New top-of-page onboarding: "Echoes of Fate" + consequence hook
+// - Play Style: Human vs Solace as a toggle (no heavy explanation up front)
+// - Party Size selection up-front + simple party visual (⚔ icons)
+// - "Enter the Dungeon" as the singular primary CTA into the next section
+// - Chapters grid simplified early (progressive disclosure)
+// - Canonical escalation events emitted on OUTCOME:
+//     ZONE_PRESSURE_CHANGED + ZONE_AWARENESS_CHANGED
+//   (DungeonPressurePanel now updates deterministically)
+// - OptionKind inference uses combined intent + option text (fixes "everything safe")
 //
-// Session-level truth:
-// - Party roster is declared ONCE per session (append-only event: PARTY_DECLARED)
-// - After PARTY_DECLARED exists, party editing is LOCKED for the session
-// - Combat participants draw from the party roster
-//
-// Combat-level truth:
-// - Turn order is per-combat (derived from COMBAT_STARTED + INITIATIVE_ROLLED + TURN_ADVANCED)
-// - Combat setup is locked while combat is active
-//
-// Governance direction:
-// - In Solace-neutral, the *player* should not author enemy groups or start combat from here.
-//   Combat begins from hostile player action + pressure gating (handled by orchestration rules).
-//
+// Notes:
+// - Party editing UI is intentionally deferred (we'll fill in details later).
+// - Dragons-eye / flair: intentionally postponed (per request).
 // ------------------------------------------------------------
 
 import { useEffect, useMemo, useState } from "react";
@@ -54,9 +53,7 @@ import {
 } from "@/lib/combat/CombatState";
 
 import AmbientBackground from "./components/AmbientBackground";
-import DemoHero from "./components/DemoHero";
 import InitialTableSection from "./components/InitialTableSection";
-import PartySetupSection from "./components/PartySetupSection";
 
 import {
   DMMode,
@@ -173,7 +170,7 @@ function clamp01to100(n: number) {
 }
 
 function pressureDeltaFor(kind: ReturnType<typeof inferOptionKind>, success: boolean) {
-  // Deterministic, advisory-friendly escalation:
+  // Deterministic escalation:
   // - time always advances a little
   // - failures spike more than successes
   // - contested/risky actions are "louder"
@@ -193,6 +190,155 @@ function awarenessDeltaFor(kind: ReturnType<typeof inferOptionKind>, success: bo
 }
 
 // ------------------------------------------------------------
+
+type ChapterKey =
+  | "mode"
+  | "party"
+  | "table"
+  | "pressure"
+  | "map"
+  | "combat"
+  | "action"
+  | "resolution"
+  | "canon"
+  | "ledger";
+
+function Chip({
+  label,
+  state,
+  onClick,
+}: {
+  label: string;
+  state: "done" | "next" | "locked" | "open";
+  onClick?: () => void;
+}) {
+  const clickable = !!onClick && state !== "locked";
+  const bg =
+    state === "done"
+      ? "rgba(138,180,255,0.12)"
+      : state === "next"
+      ? "rgba(255,255,255,0.08)"
+      : state === "open"
+      ? "rgba(255,255,255,0.06)"
+      : "rgba(255,255,255,0.03)";
+
+  const border =
+    state === "done"
+      ? "1px solid rgba(138,180,255,0.35)"
+      : state === "next"
+      ? "1px solid rgba(255,255,255,0.18)"
+      : state === "open"
+      ? "1px solid rgba(255,255,255,0.12)"
+      : "1px solid rgba(255,255,255,0.08)";
+
+  const opacity = state === "locked" ? 0.55 : 1;
+
+  return (
+    <button
+      type="button"
+      onClick={clickable ? onClick : undefined}
+      disabled={!clickable}
+      style={{
+        cursor: clickable ? "pointer" : "default",
+        padding: "8px 10px",
+        borderRadius: 999,
+        background: bg,
+        border,
+        color: "rgba(255,255,255,0.92)",
+        opacity,
+        fontSize: 12,
+        letterSpacing: 0.2,
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 8,
+      }}
+      title={state === "locked" ? "Locked until you progress" : undefined}
+    >
+      <span style={{ fontWeight: 800 }}>{label}</span>
+      {state === "done" ? <span style={{ opacity: 0.85 }}>✓</span> : null}
+      {state === "next" ? <span style={{ opacity: 0.8 }}>→</span> : null}
+    </button>
+  );
+}
+
+function Toggle({
+  value,
+  onChange,
+  leftLabel,
+  rightLabel,
+  disabled,
+}: {
+  value: boolean;
+  onChange: (next: boolean) => void;
+  leftLabel: string;
+  rightLabel: string;
+  disabled?: boolean;
+}) {
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+      <div style={{ fontSize: 12, opacity: disabled ? 0.6 : 0.85 }}>{leftLabel}</div>
+
+      <button
+        type="button"
+        onClick={() => !disabled && onChange(!value)}
+        disabled={!!disabled}
+        aria-label="toggle"
+        style={{
+          width: 54,
+          height: 28,
+          borderRadius: 999,
+          border: "1px solid rgba(255,255,255,0.18)",
+          background: disabled ? "rgba(255,255,255,0.03)" : "rgba(255,255,255,0.06)",
+          position: "relative",
+          cursor: disabled ? "not-allowed" : "pointer",
+          padding: 0,
+        }}
+      >
+        <span
+          style={{
+            position: "absolute",
+            top: 3,
+            left: value ? 28 : 3,
+            width: 22,
+            height: 22,
+            borderRadius: 999,
+            background: "rgba(220,220,255,0.85)",
+            boxShadow: "0 0 0 1px rgba(0,0,0,0.2)",
+            transition: "left 160ms ease",
+          }}
+        />
+      </button>
+
+      <div style={{ fontSize: 12, opacity: disabled ? 0.6 : 0.85 }}>{rightLabel}</div>
+    </div>
+  );
+}
+
+function PartyPips({ count }: { count: number }) {
+  const n = clampInt(count, 1, 6);
+  return (
+    <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+      {Array.from({ length: n }, (_, i) => (
+        <span
+          key={i}
+          style={{
+            width: 34,
+            height: 34,
+            borderRadius: 999,
+            display: "grid",
+            placeItems: "center",
+            border: "1px solid rgba(255,255,255,0.14)",
+            background: "rgba(255,255,255,0.04)",
+            fontSize: 16,
+          }}
+          title={`Adventurer ${i + 1}`}
+        >
+          ⚔
+        </span>
+      ))}
+    </div>
+  );
+}
 
 export default function DemoPage() {
   const role: "arbiter" = "arbiter";
@@ -233,7 +379,7 @@ export default function DemoPage() {
   } | null>(null);
 
   // ----------------------------------------------------------
-  // Counts (must be declared before derived values that depend on them)
+  // Counts
   // ----------------------------------------------------------
 
   const outcomesCount = useMemo(
@@ -255,7 +401,7 @@ export default function DemoPage() {
   // Draft editor lives in session UI; only becomes canon when Arbiter commits (PARTY_DECLARED).
   const [partyDraft, setPartyDraft] = useState<PartyDeclaredPayload | null>(null);
 
-  // Ensure a draft exists once mode is selected (so Party Setup appears immediately after mode)
+  // Ensure a draft exists once mode is selected (so party sizing is available immediately)
   useEffect(() => {
     if (dmMode === null) return;
 
@@ -273,6 +419,7 @@ export default function DemoPage() {
   // Effective party is canonical if present, otherwise draft.
   const partyEffective: PartyDeclaredPayload | null = partyCanonical ?? partyDraft;
   const partyMembers = partyEffective?.members ?? [];
+  const partySize = clampInt(partyMembers.length || 4, 1, 6);
 
   const effectivePlayerNames = useMemo(() => {
     return partyMembers.map((m, idx) => displayName(m, idx + 1));
@@ -291,10 +438,10 @@ export default function DemoPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [partyMembers.map((m) => m.id).join("|")]);
 
-  // ----------------------------------------------------------
-  // Combat state (derived + ended-aware)
-  // ----------------------------------------------------------
-
+  // Party lock rules:
+  // - once PARTY_DECLARED exists => locked for session
+  // - also locked while combat is active (even for draft)
+  // (We still keep commitParty available internally; we just aren't emphasizing details UI right now.)
   const latestCombatId = useMemo(() => findLatestCombatId(state.events as any) ?? null, [state.events]);
 
   const derivedCombat = useMemo(() => {
@@ -309,23 +456,18 @@ export default function DemoPage() {
 
   const combatActive = !!derivedCombat && !combatEnded;
 
-  const activeCombatantSpec = useMemo(() => {
-    if (!derivedCombat?.activeCombatantId) return null;
-    return derivedCombat.participants.find((p: any) => p.id === derivedCombat.activeCombatantId) ?? null;
-  }, [derivedCombat]);
-
-  const isEnemyTurn = combatActive && activeCombatantSpec?.kind === "enemy_group";
-  const isPlayerTurn = combatActive && activeCombatantSpec?.kind === "player";
-
-  // Party lock rules:
-  // - once PARTY_DECLARED exists => locked for session
-  // - also locked while combat is active (even for draft)
   const partyLockedByCanon = !!partyCanonical;
   const partyLockedByCombat = combatActive;
   const partyLocked = partyLockedByCanon || partyLockedByCombat;
 
   function setPartySize(nextCount: number) {
     const n = clampInt(nextCount, 1, 6);
+
+    // If draft hasn't been created yet, create it.
+    if (!partyDraft && !partyCanonical) {
+      setPartyDraft(defaultParty(n));
+      return;
+    }
 
     setPartyDraft((prev) => {
       const base = prev ?? defaultParty(n);
@@ -427,6 +569,18 @@ export default function DemoPage() {
   }
 
   // ----------------------------------------------------------
+  // Combat derived bits
+  // ----------------------------------------------------------
+
+  const activeCombatantSpec = useMemo(() => {
+    if (!derivedCombat?.activeCombatantId) return null;
+    return derivedCombat.participants.find((p: any) => p.id === derivedCombat.activeCombatantId) ?? null;
+  }, [derivedCombat]);
+
+  const isEnemyTurn = combatActive && activeCombatantSpec?.kind === "enemy_group";
+  const isPlayerTurn = combatActive && activeCombatantSpec?.kind === "player";
+
+  // ----------------------------------------------------------
   // Exploration draft (auto-prepared AFTER intent + option)
   // ----------------------------------------------------------
 
@@ -519,7 +673,6 @@ export default function DemoPage() {
 
   const canPlayerSubmitIntent =
     dmMode !== null &&
-    // In Solace-neutral, block intent on enemy turns, and require correct player's turn during player turns.
     ((dmMode === "human" && true) ||
       (!combatActive && !isEnemyTurn) ||
       (combatActive && !isEnemyTurn && !isWrongPlayerForTurn));
@@ -537,7 +690,6 @@ export default function DemoPage() {
     setOptions([...optionSet.options]);
     setSelectedOption(null);
 
-    // Nudge flow forward
     setActiveSection("resolution");
     queueMicrotask(() => scrollToSection("resolution"));
   }
@@ -589,7 +741,6 @@ export default function DemoPage() {
   }
 
   function passTurn() {
-    // Governed: passing is just advancing the turn pointer (no fabricated OUTCOME).
     if (!combatActive) return;
     if (dmMode !== "human" && isEnemyTurn) return;
     if (dmMode !== "human" && isPlayerTurn && isWrongPlayerForTurn) return;
@@ -655,7 +806,7 @@ export default function DemoPage() {
       const note = d.markNote.trim() ? d.markNote.trim() : null;
       next = recordEvent(next, {
         id: crypto.randomUUID(),
-       timestamp: Date.now(),
+        timestamp: Date.now(),
         actor: "arbiter",
         type: "MAP_MARKED",
         payload: { at: here, kind: d.markKind, note } as any,
@@ -681,8 +832,7 @@ export default function DemoPage() {
 
       // If this outcome includes a governed movement (as drafted), apply pressure to the destination zone.
       const d = explorationDraft;
-      const to =
-        d.enableMove && d.direction !== "none" ? stepFrom(here, d.direction) : null;
+      const to = d.enableMove && d.direction !== "none" ? stepFrom(here, d.direction) : null;
       const canMove = to ? withinBounds(to, MAP_W, MAP_H) : false;
 
       const posForZone = d.enableMove && canMove && to ? to : here;
@@ -716,7 +866,7 @@ export default function DemoPage() {
         payload: enrichedOutcome as any,
       });
 
-      // Canonical escalation events (what DungeonPressurePanel actually listens for)
+      // Canonical escalation events (what DungeonPressurePanel listens for)
       next = recordEvent(next, {
         id: crypto.randomUUID(),
         timestamp: Date.now(),
@@ -774,28 +924,45 @@ export default function DemoPage() {
   }
 
   // ----------------------------------------------------------
-  // Navigation
+  // Onboarding state + Chapters (simplified early)
   // ----------------------------------------------------------
 
-  const chapterButtons: { id: DemoSectionId; hint: string }[] = useMemo(
-    () => [
-      { id: "mode", hint: "Choose facilitator mode" },
-      { id: "table", hint: "Start scene + accept table" },
-      { id: "pressure", hint: "Advisory state" },
-      { id: "map", hint: "Canon view of space" },
-      { id: "combat", hint: "Turn order + governance" },
-      { id: "action", hint: "Player intent (+ actor)" },
-      { id: "resolution", hint: "Roll + record OUTCOME" },
-      { id: "canon", hint: "Non-outcome canon log" },
-      { id: "ledger", hint: "Outcome narration only" },
-    ],
-    []
-  );
+  const entered = dmMode !== null; // "entered onboarding mode" (picked a play style)
+  const hasParty = dmMode !== null && partySize >= 1; // always true once draft exists
+  const canEnterDungeon = dmMode !== null;
 
-  function selectMode(nextMode: DMMode) {
-    setDmMode(nextMode);
+  const chapterState = useMemo(() => {
+    const doneMode = dmMode !== null;
+    const doneParty = doneMode && hasParty;
 
-    // After mode: we want party setup immediately available, then table.
+    // Before "Enter the Dungeon", we only surface Mode + Party + Table as meaningful.
+    const doneTable = tableAccepted;
+
+    return {
+      mode: doneMode ? ("done" as const) : ("next" as const),
+      party: doneParty ? ("done" as const) : doneMode ? ("next" as const) : ("locked" as const),
+      table: doneTable
+        ? ("done" as const)
+        : doneParty
+        ? ("next" as const)
+        : ("locked" as const),
+
+      // Everything else stays locked until the table is accepted.
+      pressure: doneTable ? ("open" as const) : ("locked" as const),
+      map: doneTable ? ("open" as const) : ("locked" as const),
+      combat: doneTable ? ("open" as const) : ("locked" as const),
+      action: doneTable ? ("open" as const) : ("locked" as const),
+      resolution: doneTable ? ("open" as const) : ("locked" as const),
+      canon: doneTable ? ("open" as const) : ("locked" as const),
+      ledger: doneTable ? ("open" as const) : ("locked" as const),
+    };
+  }, [dmMode, hasParty, tableAccepted]);
+
+  function enterDungeon() {
+    if (!canEnterDungeon) return;
+
+    // Light flavor: the page should feel like crossing a threshold.
+    // Keep it subtle, no extra modal.
     setActiveSection("table");
     queueMicrotask(() => scrollToSection("table"));
   }
@@ -803,7 +970,7 @@ export default function DemoPage() {
   // Enemy overlay only when:
   // - combat is active
   // - it's an enemy group's turn
-  // - and we're not in Human DM (Solace-neutral expects Solace to run enemy action)
+  // - and we're not in Human DM
   const activeEnemyOverlayName =
     dmMode !== "human" && combatActive && isEnemyTurn ? String(activeCombatantSpec?.name ?? "") : null;
 
@@ -825,7 +992,7 @@ export default function DemoPage() {
       <div style={{ position: "relative", zIndex: 1 }}>
         <StewardedShell>
           <ModeHeader
-            title="Stewarded Play — Full Flow"
+            title="Echoes of Fate"
             onShare={shareCanon}
             roles={[
               { label: "Player", description: "Declares intent" },
@@ -834,49 +1001,267 @@ export default function DemoPage() {
             ]}
           />
 
-          <DemoHero
-            dmMode={dmMode}
-            tableAccepted={tableAccepted}
-            activeSection={activeSection}
-            outcomesCount={outcomesCount}
-            canonCount={canonCount}
-            chapterButtons={chapterButtons}
-            onStartHere={() => {
-              setActiveSection("mode");
-              scrollToSection("mode");
-            }}
-            onPlayJump={() => {
-              setActiveSection("action");
-              scrollToSection("action");
-            }}
-            onSelectMode={selectMode}
-            onNavigate={(id) => {
-              setActiveSection(id);
-              scrollToSection(id);
-            }}
-          />
+          {/* -------------------------------------------------- */}
+          {/* ONBOARDING HERO (simplified, teen-first) */}
+          {/* -------------------------------------------------- */}
 
-          {/* PARTY SETUP (broken out into component; appears immediately after mode) */}
-          {dmMode !== null && (
-            <CardSection title="Party Setup (Session Truth)">
-              <PartySetupSection
-                enabled={true}
-                partyDraft={partyDraft}
-                partyMembersFallback={partyMembers}
-                partyCanonicalExists={!!partyCanonical}
-                partyLocked={partyLocked}
-                partyLockedByCombat={partyLockedByCombat}
-                setPartySize={setPartySize}
-                randomizePartyNames={randomizePartyNames}
-                commitParty={commitParty}
-                safeInt={safeInt}
-                setPartyDraft={setPartyDraft}
-              />
-            </CardSection>
-          )}
+          <div id={anchorId("mode")} style={{ scrollMarginTop: 90 }}>
+            <section
+              className="card"
+              style={{
+                background: "rgba(17,17,17,0.82)",
+                border: "1px solid rgba(255,255,255,0.10)",
+                borderRadius: 16,
+                padding: 16,
+              }}
+            >
+              <div style={{ display: "grid", gap: 14 }}>
+                <div>
+                  <div style={{ fontSize: 26, fontWeight: 950, letterSpacing: 0.2 }}>
+                    Echoes of Fate
+                  </div>
+                  <div style={{ marginTop: 6, fontSize: 14, opacity: 0.86 }}>
+                    Every action leaves an echo.
+                  </div>
+                </div>
+
+                <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 12 }}>
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "1fr",
+                      gap: 10,
+                      padding: 12,
+                      borderRadius: 14,
+                      background: "rgba(255,255,255,0.04)",
+                      border: "1px solid rgba(255,255,255,0.10)",
+                    }}
+                  >
+                    <div style={{ fontWeight: 900, letterSpacing: 0.2 }}>Choose Your Play Style</div>
+
+                    <Toggle
+                      value={dmMode === "solace-neutral"}
+                      onChange={(next) => {
+                        const nextMode: DMMode = next ? "solace-neutral" : "human";
+                        setDmMode(nextMode);
+                        setActiveSection("mode");
+
+                        // Ensure party exists the moment mode is chosen
+                        setPartyDraft((prev) => prev ?? defaultParty(partySize));
+                      }}
+                      leftLabel="Human"
+                      rightLabel="Solace"
+                    />
+
+                    <div style={{ fontSize: 12, opacity: 0.78 }}>
+                      {dmMode === "solace-neutral"
+                        ? "Solace keeps the adventure moving."
+                        : dmMode === "human"
+                        ? "You choose how each action resolves."
+                        : "Pick a style to begin."}
+                    </div>
+                  </div>
+
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "1fr",
+                      gap: 10,
+                      padding: 12,
+                      borderRadius: 14,
+                      background: "rgba(255,255,255,0.04)",
+                      border: "1px solid rgba(255,255,255,0.10)",
+                      opacity: dmMode === null ? 0.75 : 1,
+                    }}
+                  >
+                    <div style={{ fontWeight: 900, letterSpacing: 0.2 }}>Party Size</div>
+
+                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                      {([1, 2, 3, 4, 5, 6] as const).map((n) => {
+                        const active = partySize === n;
+                        return (
+                          <button
+                            key={n}
+                            type="button"
+                            onClick={() => {
+                              if (dmMode === null) return;
+                              setPartySize(n);
+                            }}
+                            disabled={dmMode === null || partyLocked}
+                            style={{
+                              padding: "8px 10px",
+                              borderRadius: 10,
+                              border: active
+                                ? "1px solid rgba(138,180,255,0.55)"
+                                : "1px solid rgba(255,255,255,0.12)",
+                              background: active
+                                ? "rgba(138,180,255,0.10)"
+                                : "rgba(255,255,255,0.04)",
+                              cursor: dmMode === null || partyLocked ? "not-allowed" : "pointer",
+                              opacity: dmMode === null || partyLocked ? 0.6 : 1,
+                              minWidth: 36,
+                              textAlign: "center",
+                              fontWeight: 850,
+                            }}
+                            title={partyLocked ? "Party locked by canon/combat" : undefined}
+                          >
+                            {n}
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    <div style={{ display: "grid", gap: 8 }}>
+                      <div style={{ fontSize: 12, opacity: 0.78 }}>
+                        {partyLocked ? "Party locked for this session." : "Quick start — details come next."}
+                      </div>
+
+                      <div>
+                        <div style={{ fontWeight: 900, letterSpacing: 0.2, marginBottom: 6 }}>
+                          Assemble Your Party
+                        </div>
+                        <div style={{ fontSize: 12, opacity: 0.78, marginBottom: 10 }}>
+                          These are the adventurers entering the dungeon.
+                        </div>
+                        <PartyPips count={partySize} />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+                    <button
+                      type="button"
+                      onClick={enterDungeon}
+                      disabled={!canEnterDungeon}
+                      style={{
+                        padding: "10px 14px",
+                        borderRadius: 12,
+                        fontWeight: 950,
+                        letterSpacing: 0.2,
+                        border: "1px solid rgba(255,255,255,0.18)",
+                        background:
+                          dmMode === null ? "rgba(255,255,255,0.04)" : "rgba(255,255,255,0.08)",
+                        cursor: dmMode === null ? "not-allowed" : "pointer",
+                        opacity: dmMode === null ? 0.6 : 1,
+                      }}
+                    >
+                      Enter the Dungeon
+                    </button>
+
+                    <div style={{ fontSize: 12, opacity: 0.72 }}>
+                      {dmMode === null
+                        ? "Choose a play style first."
+                        : "Next: accept the scene and start acting."}
+                    </div>
+                  </div>
+
+                  {/* Simplified Chapters (progressive disclosure) */}
+                  <div
+                    style={{
+                      marginTop: 2,
+                      paddingTop: 10,
+                      borderTop: "1px solid rgba(255,255,255,0.10)",
+                      display: "grid",
+                      gap: 10,
+                    }}
+                  >
+                    <div style={{ fontWeight: 900, letterSpacing: 0.2 }}>Chapters</div>
+
+                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                      <Chip
+                        label="Mode"
+                        state={chapterState.mode}
+                        onClick={() => {
+                          setActiveSection("mode");
+                          scrollToSection("mode");
+                        }}
+                      />
+                      <Chip
+                        label="Party"
+                        state={chapterState.party}
+                        onClick={() => {
+                          setActiveSection("mode");
+                          scrollToSection("mode");
+                        }}
+                      />
+                      <Chip
+                        label="Table"
+                        state={chapterState.table}
+                        onClick={() => {
+                          setActiveSection("table");
+                          scrollToSection("table");
+                        }}
+                      />
+
+                      <Chip
+                        label="Pressure"
+                        state={chapterState.pressure}
+                        onClick={() => {
+                          setActiveSection("pressure");
+                          scrollToSection("pressure");
+                        }}
+                      />
+                      <Chip
+                        label="Map"
+                        state={chapterState.map}
+                        onClick={() => {
+                          setActiveSection("map");
+                          scrollToSection("map");
+                        }}
+                      />
+                      <Chip
+                        label="Combat"
+                        state={chapterState.combat}
+                        onClick={() => {
+                          setActiveSection("combat");
+                          scrollToSection("combat");
+                        }}
+                      />
+                      <Chip
+                        label="Action"
+                        state={chapterState.action}
+                        onClick={() => {
+                          setActiveSection("action");
+                          scrollToSection("action");
+                        }}
+                      />
+                      <Chip
+                        label="Resolution"
+                        state={chapterState.resolution}
+                        onClick={() => {
+                          setActiveSection("resolution");
+                          scrollToSection("resolution");
+                        }}
+                      />
+                      <Chip
+                        label="Canon"
+                        state={chapterState.canon}
+                        onClick={() => {
+                          setActiveSection("canon");
+                          scrollToSection("canon");
+                        }}
+                      />
+                      <Chip
+                        label="Chronicle"
+                        state={chapterState.ledger}
+                        onClick={() => {
+                          setActiveSection("ledger");
+                          scrollToSection("ledger");
+                        }}
+                      />
+                    </div>
+
+                    <div style={{ fontSize: 12, opacity: 0.70 }}>
+                      Progress unlocks the deeper chapters.
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </section>
+          </div>
 
           {/* TABLE (hidden until mode selected) */}
-          <div id={anchorId("table")} style={{ scrollMarginTop: 90 }}>
+          <div id={anchorId("table")} style={{ scrollMarginTop: 90, marginTop: 16 }}>
             <InitialTableSection
               dmMode={dmMode}
               initialTable={initialTable}
@@ -920,8 +1305,6 @@ export default function DemoPage() {
                 <CombatSetupPanel
                   events={state.events as any[]}
                   onAppendCanon={appendCanon}
-                  // NOTE: If your CombatSetupPanel doesn’t accept these props yet,
-                  // remove them and keep only {events, onAppendCanon}.
                   dmMode={dmMode}
                   partyMembers={partyMembers.map((m, idx) => ({
                     id: String(m.id),
@@ -1032,15 +1415,7 @@ export default function DemoPage() {
               {/* ACTION */}
               <div id={anchorId("action")} style={{ scrollMarginTop: 90 }}>
                 <CardSection title="Player Action">
-                  <div
-                    style={{
-                      display: "flex",
-                      gap: 10,
-                      flexWrap: "wrap",
-                      alignItems: "flex-end",
-                      marginBottom: 10,
-                    }}
-                  >
+                  <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-end", marginBottom: 10 }}>
                     <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                       Acting player:
                       <select
@@ -1067,6 +1442,21 @@ export default function DemoPage() {
                     >
                       Pass / End Turn
                     </button>
+
+                    {/* Small dev affordance: keep hidden intent, but allow party canon commit if you want it later */}
+                    {dmMode === "human" && !partyLocked && partyDraft && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          // Not emphasized in onboarding — but available.
+                          commitParty();
+                        }}
+                        title="Commit PARTY_DECLARED (canon)"
+                        style={{ opacity: 0.75 }}
+                      >
+                        Commit Party (Canon)
+                      </button>
+                    )}
                   </div>
 
                   <textarea
@@ -1083,15 +1473,7 @@ export default function DemoPage() {
                     }}
                   />
 
-                  <div
-                    style={{
-                      marginTop: 8,
-                      display: "flex",
-                      gap: 10,
-                      flexWrap: "wrap",
-                      alignItems: "center",
-                    }}
-                  >
+                  <div style={{ marginTop: 8, display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
                     <button onClick={handlePlayerAction} disabled={!canPlayerSubmitIntent}>
                       Submit Action
                     </button>
