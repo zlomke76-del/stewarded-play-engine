@@ -328,9 +328,7 @@ function EnemyCard({
 
       <div style={{ minWidth: 0 }}>
         <div style={{ display: "flex", alignItems: "baseline", gap: 10 }}>
-          <strong style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-            {name}
-          </strong>
+          <strong style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{name}</strong>
         </div>
 
         <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>
@@ -603,6 +601,7 @@ export default function CombatSetupPanel({
           boxShadow: "inset 0 1px 0 rgba(255,255,255,0.05)",
         }}
       >
+        {/* Row 1: compact controls */}
         <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "flex-end" }}>
           <ControlLabel label="Party size (session truth)">
             <div style={{ ...selectStyle(true), display: "flex", alignItems: "center", justifyContent: "space-between" }}>
@@ -630,25 +629,10 @@ export default function CombatSetupPanel({
             </select>
           </ControlLabel>
 
-          {/* Enemy area (cards). This replaces the “visual noise” rows in Solace-neutral. */}
-          <div style={{ flex: "1 1 420px", display: "flex", flexDirection: "column", gap: 8, minWidth: 320 }}>
-            <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 10 }}>
-              <span className="muted" style={{ fontSize: 12 }}>
-                Enemies <span className="muted">(1:1 with party size · 50/50 mix)</span>
-              </span>
-
-              <span className="muted" style={{ fontSize: 12 }}>
-                Pressure tier: <strong>{String(pressureTier ?? "unknown")}</strong> · Band{" "}
-                <strong>{rosterInfo.band}</strong> · HP <strong>{rosterInfo.hp}</strong>
-              </span>
-            </div>
-
-            <div className="muted" style={{ fontSize: 12 }}>
-              Roster: <strong>{rosterInfo.a}</strong>× {rosterInfo.A} · <strong>{rosterInfo.b}</strong>× {rosterInfo.B}
-            </div>
-
-            {showBuilderControls && (
-              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+          {/* Optional builder controls stay up top in human/dev to avoid pushing the enemy grid right. */}
+          {showBuilderControls && (
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "flex-end" }}>
+              <ControlLabel label="Enemy group (builder)">
                 <select
                   value={enemyGroupSelect}
                   disabled={!canEdit}
@@ -661,89 +645,108 @@ export default function CombatSetupPanel({
                     </option>
                   ))}
                 </select>
+              </ControlLabel>
 
-                <button
-                  onClick={() => addEnemyGroup(enemyGroupSelect)}
-                  disabled={!canEdit || enemyGroups.length >= 6}
-                  style={buttonStyle("primary", !canEdit || enemyGroups.length >= 6)}
-                  title={!canEdit ? "Solace-owned (or combat locked)" : "Add enemy"}
-                >
-                  Add
-                </button>
-
-                <button
-                  onClick={clearEnemyGroups}
-                  disabled={!canEdit || enemyGroups.length === 0}
-                  style={buttonStyle("ghost", !canEdit || enemyGroups.length === 0)}
-                >
-                  Clear
-                </button>
-
-                <span className="muted" style={{ fontSize: 12 }}>
-                  (max 6)
-                </span>
-              </div>
-            )}
-
-            {/* Cards */}
-            {enemyCards.length > 0 ? (
-              <div
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-                  gap: 10,
-                  marginTop: 4,
-                }}
+              <button
+                onClick={() => addEnemyGroup(enemyGroupSelect)}
+                disabled={!canEdit || enemyGroups.length >= 6}
+                style={buttonStyle("primary", !canEdit || enemyGroups.length >= 6)}
+                title={!canEdit ? "Solace-owned (or combat locked)" : "Add enemy"}
               >
-                {enemyCards.map((c) => (
-                  <EnemyCard key={c.name} name={c.name} initMod={c.initMod} hpLabel={c.hpLabel} stateLabel={c.stateLabel} />
-                ))}
-              </div>
-            ) : (
-              <div className="muted" style={{ marginTop: 6 }}>
-                No enemies.
-              </div>
-            )}
+                Add
+              </button>
 
-            {/* If we’re showing builder controls (human/dev), keep removable chips too. */}
-            {showBuilderControls && enemyGroups.length > 0 && (
-              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8 }}>
-                {enemyGroups.slice(0, 6).map((g) => (
-                  <span
-                    key={g}
+              <button
+                onClick={clearEnemyGroups}
+                disabled={!canEdit || enemyGroups.length === 0}
+                style={buttonStyle("ghost", !canEdit || enemyGroups.length === 0)}
+              >
+                Clear
+              </button>
+
+              <span className="muted" style={{ fontSize: 12, alignSelf: "center" }}>
+                (max 6)
+              </span>
+            </div>
+          )}
+        </div>
+
+        {/* Row 2: enemy area FULL WIDTH (fixes the left dead-space in your screenshot) */}
+        <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 8 }}>
+          <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+            <span className="muted" style={{ fontSize: 12 }}>
+              Enemies <span className="muted">(1:1 with party size · 50/50 mix)</span>
+            </span>
+
+            <span className="muted" style={{ fontSize: 12 }}>
+              Pressure tier: <strong>{String(pressureTier ?? "unknown")}</strong> · Band <strong>{rosterInfo.band}</strong> · HP{" "}
+              <strong>{rosterInfo.hp}</strong>
+            </span>
+          </div>
+
+          <div className="muted" style={{ fontSize: 12 }}>
+            Roster: <strong>{rosterInfo.a}</strong>× {rosterInfo.A} · <strong>{rosterInfo.b}</strong>× {rosterInfo.B}
+          </div>
+
+          {/* Cards */}
+          {enemyCards.length > 0 ? (
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+                gap: 10,
+                marginTop: 4,
+                width: "100%",
+              }}
+            >
+              {enemyCards.map((c) => (
+                <EnemyCard key={c.name} name={c.name} initMod={c.initMod} hpLabel={c.hpLabel} stateLabel={c.stateLabel} />
+              ))}
+            </div>
+          ) : (
+            <div className="muted" style={{ marginTop: 6 }}>
+              No enemies.
+            </div>
+          )}
+
+          {/* If we’re showing builder controls (human/dev), keep removable chips too. */}
+          {showBuilderControls && enemyGroups.length > 0 && (
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8 }}>
+              {enemyGroups.slice(0, 6).map((g) => (
+                <span
+                  key={g}
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 8,
+                    padding: "7px 10px",
+                    borderRadius: 999,
+                    border: "1px solid rgba(255,255,255,0.12)",
+                    background: "rgba(255,255,255,0.05)",
+                  }}
+                >
+                  <span>{g}</span>
+                  <button
+                    onClick={() => removeEnemyGroup(g)}
+                    disabled={!canEdit}
+                    aria-label={`Remove ${g}`}
                     style={{
-                      display: "inline-flex",
-                      alignItems: "center",
-                      gap: 8,
-                      padding: "7px 10px",
+                      padding: "0 10px",
+                      height: 24,
                       borderRadius: 999,
                       border: "1px solid rgba(255,255,255,0.12)",
-                      background: "rgba(255,255,255,0.05)",
+                      background: "rgba(0,0,0,0.22)",
+                      color: "inherit",
+                      opacity: !canEdit ? 0.55 : 1,
+                      cursor: !canEdit ? "not-allowed" : "pointer",
                     }}
                   >
-                    <span>{g}</span>
-                    <button
-                      onClick={() => removeEnemyGroup(g)}
-                      disabled={!canEdit}
-                      aria-label={`Remove ${g}`}
-                      style={{
-                        padding: "0 10px",
-                        height: 24,
-                        borderRadius: 999,
-                        border: "1px solid rgba(255,255,255,0.12)",
-                        background: "rgba(0,0,0,0.22)",
-                        color: "inherit",
-                        opacity: !canEdit ? 0.55 : 1,
-                        cursor: !canEdit ? "not-allowed" : "pointer",
-                      }}
-                    >
-                      ×
-                    </button>
-                  </span>
-                ))}
-              </div>
-            )}
-          </div>
+                    ×
+                  </button>
+                </span>
+              ))}
+            </div>
+          )}
         </div>
       </div>
 
