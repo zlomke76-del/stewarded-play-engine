@@ -37,6 +37,7 @@ export type ExplorationDraft = {
 
 export type DemoSectionId =
   | "mode"
+  | "party"
   | "table"
   | "pressure"
   | "map"
