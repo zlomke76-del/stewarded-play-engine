@@ -263,8 +263,8 @@ export default function ActionSection({
               type="button"
               disabled={!canSubmit}
               onClick={() =>
-                onSetPlayerInput((prev) =>
-                  appendIntent(prev, "I move to cover and take a guarded stance, watching for openings.")
+                onSetPlayerInput(
+                  appendIntent(playerInput, "I move to cover and take a guarded stance, watching for openings.")
                 )
               }
               style={{ opacity: canSubmit ? 1 : 0.6 }}
@@ -276,7 +276,7 @@ export default function ActionSection({
             <button
               type="button"
               disabled={!canSubmit}
-              onClick={() => onSetPlayerInput((prev) => appendIntent(prev, "I attack the nearest threat decisively."))}
+              onClick={() => onSetPlayerInput(appendIntent(playerInput, "I attack the nearest threat decisively."))}
               style={{ opacity: canSubmit ? 1 : 0.6 }}
               title="Insert an attack intent"
             >
@@ -287,8 +287,8 @@ export default function ActionSection({
               type="button"
               disabled={!canSubmit}
               onClick={() =>
-                onSetPlayerInput((prev) =>
-                  appendIntent(prev, "I reposition to a better angle and try to draw attention off an ally.")
+                onSetPlayerInput(
+                  appendIntent(playerInput, "I reposition to a better angle and try to draw attention off an ally.")
                 )
               }
               style={{ opacity: canSubmit ? 1 : 0.6 }}
@@ -301,8 +301,8 @@ export default function ActionSection({
               type="button"
               disabled={!canSubmit}
               onClick={() =>
-                onSetPlayerInput((prev) =>
-                  appendIntent(prev, "I assist an ally—calling out timing and creating an opening for them.")
+                onSetPlayerInput(
+                  appendIntent(playerInput, "I assist an ally—calling out timing and creating an opening for them.")
                 )
               }
               style={{ opacity: canSubmit ? 1 : 0.6 }}
