@@ -905,6 +905,9 @@ export default function DemoPage() {
                     name: displayName(m, idx + 1),
                     className: m.className,
                     portrait: m.portrait ?? "Male",
+                    ac: m.ac,
+                    hpMax: m.hpMax,
+                    hpCurrent: m.hpCurrent,
                     initiativeMod: m.initiativeMod,
                   }))}
                   pressureTier={pressureTier}
