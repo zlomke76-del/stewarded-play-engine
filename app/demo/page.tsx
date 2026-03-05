@@ -369,6 +369,20 @@ export default function DemoPage() {
   }, [actingPlayerInjuryStacks]);
 
   // ----------------------------------------------------------
+  // Share canon (fix: define handler used by ModeHeader)
+  // ----------------------------------------------------------
+
+  const shareCanon = () => {
+    // ModeHeader currently has showShare={false}, so this won't fire.
+    // Still: keep it safe and deterministic for when share is enabled.
+    try {
+      exportCanon(state.events as any);
+    } catch {
+      // fail-closed: do nothing
+    }
+  };
+
+  // ----------------------------------------------------------
   // Party operations
   // ----------------------------------------------------------
 
@@ -787,66 +801,66 @@ export default function DemoPage() {
     queueMicrotask(() => scrollToSection("action"));
   }
 
-function handleRecordOutcomeOnly(payload: {
-  description: string;
-  dice: { mode: DiceMode; roll: number; dc: number; source: RollSource };
-  audit: string[];
-}) {
-  setState((prev) => {
-    // Enemy-turn outcomes still happen "in a zone"
-    const here = deriveCurrentPosition(prev.events as any[], MAP_W, MAP_H);
-    const zoneId = zoneIdFromTileXY(here.x, here.y);
+  function handleRecordOutcomeOnly(payload: {
+    description: string;
+    dice: { mode: DiceMode; roll: number; dc: number; source: RollSource };
+    audit: string[];
+  }) {
+    setState((prev) => {
+      // Enemy-turn outcomes still happen "in a zone"
+      const here = deriveCurrentPosition(prev.events as any[], MAP_W, MAP_H);
+      const zoneId = zoneIdFromTileXY(here.x, here.y);
 
-    const roll = Number(payload?.dice?.roll ?? 0);
-    const dc = Number(payload?.dice?.dc ?? 0);
-    const success = Number.isFinite(roll) && Number.isFinite(dc) ? roll >= dc : false;
+      const roll = Number(payload?.dice?.roll ?? 0);
+      const dc = Number(payload?.dice?.dc ?? 0);
+      const success = Number.isFinite(roll) && Number.isFinite(dc) ? roll >= dc : false;
 
-    // Enemy-turn resolutions are effectively contested pressure.
-    const kind = "contested" as ReturnType<typeof inferOptionKind>;
+      // Enemy-turn resolutions are effectively contested pressure.
+      const kind = "contested" as ReturnType<typeof inferOptionKind>;
 
-    const pressureDelta = pressureDeltaFor(kind, success);
-    const awarenessDelta = awarenessDeltaFor(kind, success);
+      const pressureDelta = pressureDeltaFor(kind, success);
+      const awarenessDelta = awarenessDeltaFor(kind, success);
 
-    const enrichedOutcome = {
-      ...payload,
-      meta: {
-        ...(payload as any)?.meta,
-        optionKind: kind,
-        zoneId,
-        success,
-      },
-    };
+      const enrichedOutcome = {
+        ...payload,
+        meta: {
+          ...(payload as any)?.meta,
+          optionKind: kind,
+          zoneId,
+          success,
+        },
+      };
 
-    let next = recordEvent(prev, {
-      id: crypto.randomUUID(),
-      timestamp: Date.now(),
-      actor: "arbiter",
-      type: "OUTCOME",
-      payload: enrichedOutcome as any,
+      let next = recordEvent(prev, {
+        id: crypto.randomUUID(),
+        timestamp: Date.now(),
+        actor: "arbiter",
+        type: "OUTCOME",
+        payload: enrichedOutcome as any,
+      });
+
+      next = recordEvent(next, {
+        id: crypto.randomUUID(),
+        timestamp: Date.now(),
+        actor: "arbiter",
+        type: "ZONE_PRESSURE_CHANGED",
+        payload: { zoneId, delta: clamp01to100(pressureDelta) } as any,
+      });
+
+      next = recordEvent(next, {
+        id: crypto.randomUUID(),
+        timestamp: Date.now(),
+        actor: "arbiter",
+        type: "ZONE_AWARENESS_CHANGED",
+        payload: { zoneId, delta: clamp01to100(awarenessDelta) } as any,
+      });
+
+      return next;
     });
 
-    next = recordEvent(next, {
-      id: crypto.randomUUID(),
-      timestamp: Date.now(),
-      actor: "arbiter",
-      type: "ZONE_PRESSURE_CHANGED",
-      payload: { zoneId, delta: clamp01to100(pressureDelta) } as any,
-    });
-
-    next = recordEvent(next, {
-      id: crypto.randomUUID(),
-      timestamp: Date.now(),
-      actor: "arbiter",
-      type: "ZONE_AWARENESS_CHANGED",
-      payload: { zoneId, delta: clamp01to100(awarenessDelta) } as any,
-    });
-
-    return next;
-  });
-
-  setActiveSection("canon");
-  queueMicrotask(() => scrollToSection("canon"));
-}
+    setActiveSection("canon");
+    queueMicrotask(() => scrollToSection("canon"));
+  }
 
   // ----------------------------------------------------------
   // Onboarding / Chapters
