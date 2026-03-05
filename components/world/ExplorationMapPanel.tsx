@@ -42,20 +42,31 @@ function withinBounds(p: XY, w: number, h: number) {
   return p.x >= 0 && p.y >= 0 && p.x < w && p.y < h;
 }
 
-function glyphForMark(kind: MapMarkKind): string {
+/* ------------------------------------------------------------
+   Asset routing (your uploads live in /public/assets/v1/*)
+------------------------------------------------------------ */
+
+const ASSET_BASE = "/assets/v1";
+
+function assetForPlayer(): { src: string; label: string } {
+  return { src: `${ASSET_BASE}/player_rogue.png`, label: "Player" };
+}
+
+function assetForMark(kind: MapMarkKind): { src: string; label: string } | null {
   switch (kind) {
     case "door":
-      return "🚪";
+      return { src: `${ASSET_BASE}/map_door.png`, label: "Door" };
     case "stairs":
-      return "⬇️";
+      return { src: `${ASSET_BASE}/map_stairs.png`, label: "Stairs" };
     case "altar":
-      return "✶";
+      return { src: `${ASSET_BASE}/map_altar.png`, label: "Altar" };
     case "cache":
-      return "⬚";
+      // Closest match to "cache" in the provided assets list
+      return { src: `${ASSET_BASE}/map_treasure.png`, label: "Cache" };
     case "hazard":
-      return "⚠️";
+      return { src: `${ASSET_BASE}/map_danger.png`, label: "Hazard" };
     default:
-      return "•";
+      return null;
   }
 }
 
@@ -110,13 +121,7 @@ function deriveMapState(events: readonly SessionEvent[], w: number, h: number) {
   return { position, discovered, marksByTile, marks };
 }
 
-function LegendChip({
-  label,
-  swatch,
-}: {
-  label: string;
-  swatch: React.ReactNode;
-}) {
+function LegendChip({ label, swatch }: { label: string; swatch: React.ReactNode }) {
   return (
     <span
       style={{
@@ -139,12 +144,44 @@ function LegendChip({
   );
 }
 
+function IconImg({
+  src,
+  alt,
+  size,
+  style,
+}: {
+  src: string;
+  alt: string;
+  size: number;
+  style?: React.CSSProperties;
+}) {
+  return (
+    <img
+      src={src}
+      alt={alt}
+      width={size}
+      height={size}
+      draggable={false}
+      style={{
+        width: size,
+        height: size,
+        objectFit: "contain",
+        imageRendering: "auto",
+        userSelect: "none",
+        ...style,
+      }}
+    />
+  );
+}
+
 export default function ExplorationMapPanel({ events, mapW = 13, mapH = 9 }: Props) {
   const derived = useMemo(() => deriveMapState(events, mapW, mapH), [events, mapW, mapH]);
 
   // B/C feel: tabletop board + fog-of-war tactical
   const TILE = 26; // physical presence
   const GAP = 5;
+
+  const playerAsset = assetForPlayer();
 
   return (
     <CardSection title="Exploration Map (Canon View)">
@@ -166,18 +203,20 @@ export default function ExplorationMapPanel({ events, mapW = 13, mapH = 9 }: Pro
           label="Player"
           swatch={
             <span
-              aria-hidden
               style={{
-                position: "relative",
-                width: 16,
-                height: 16,
-                borderRadius: 999,
-                border: "1px solid rgba(138,180,255,0.70)",
-                boxShadow: "0 0 0 3px rgba(138,180,255,0.14), 0 0 18px rgba(138,180,255,0.35)",
-                background: "rgba(138,180,255,0.14)",
-                display: "inline-block",
+                width: 18,
+                height: 18,
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+                borderRadius: 8,
+                border: "1px solid rgba(255,255,255,0.12)",
+                background: "rgba(0,0,0,0.20)",
+                boxShadow: "0 6px 18px rgba(0,0,0,0.35)",
               }}
-            />
+            >
+              <IconImg src={playerAsset.src} alt={playerAsset.label} size={14} />
+            </span>
           }
         />
         <LegendChip
@@ -212,7 +251,35 @@ export default function ExplorationMapPanel({ events, mapW = 13, mapH = 9 }: Pro
             />
           }
         />
-        <LegendChip label="Marks" swatch={<span aria-hidden style={{ fontSize: 14 }}>🚪 ⬇️ ✶ ⬚ ⚠️</span>} />
+        <LegendChip
+          label="Marks"
+          swatch={
+            <span style={{ display: "inline-flex", gap: 6, alignItems: "center" }}>
+              {(["door", "stairs", "altar", "cache", "hazard"] as MapMarkKind[]).map((k) => {
+                const a = assetForMark(k);
+                if (!a) return null;
+                return (
+                  <span
+                    key={k}
+                    style={{
+                      width: 18,
+                      height: 18,
+                      display: "inline-flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      borderRadius: 8,
+                      border: "1px solid rgba(255,255,255,0.10)",
+                      background: "rgba(0,0,0,0.20)",
+                    }}
+                    title={a.label}
+                  >
+                    <IconImg src={a.src} alt={a.label} size={14} />
+                  </span>
+                );
+              })}
+            </span>
+          }
+        />
       </div>
 
       <div className="muted" style={{ marginBottom: 12 }}>
@@ -271,7 +338,7 @@ export default function ExplorationMapPanel({ events, mapW = 13, mapH = 9 }: Pro
               const seen = derived.discovered.has(`${x},${y}`);
 
               const mark = derived.marksByTile.get(`${x},${y}`) ?? null;
-              const glyph = mark ? glyphForMark(mark.kind) : "";
+              const markAsset = mark ? assetForMark(mark.kind) : null;
 
               const titleParts: string[] = [];
               titleParts.push(seen ? `(${x},${y})` : "Unknown");
@@ -283,7 +350,7 @@ export default function ExplorationMapPanel({ events, mapW = 13, mapH = 9 }: Pro
               // Visual states
               const fogBg = "rgba(0,0,0,0.64)";
               const knownBg = "rgba(255,255,255,0.07)";
-              const playerBg = "rgba(138,180,255,0.14)";
+              const playerBg = "rgba(138,180,255,0.10)";
 
               const baseBorder = "1px solid rgba(255,255,255,0.10)";
               const knownBorder = "1px solid rgba(255,255,255,0.14)";
@@ -303,7 +370,6 @@ export default function ExplorationMapPanel({ events, mapW = 13, mapH = 9 }: Pro
                     display: "flex",
                     alignItems: "center",
                     justifyContent: "center",
-                    fontSize: 13,
                     lineHeight: 1,
                     userSelect: "none",
                     overflow: "hidden",
@@ -327,33 +393,43 @@ export default function ExplorationMapPanel({ events, mapW = 13, mapH = 9 }: Pro
                     />
                   ) : null}
 
-                  {/* Player marker (ring + glow) */}
+                  {/* Mark icon (under player so player stays readable) */}
+                  {seen && markAsset ? (
+                    <span
+                      style={{
+                        position: "absolute",
+                        inset: 0,
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        pointerEvents: "none",
+                        filter: "drop-shadow(0 2px 6px rgba(0,0,0,0.35))",
+                        opacity: here ? 0.55 : 0.9,
+                      }}
+                    >
+                      <IconImg src={markAsset.src} alt={markAsset.label} size={16} />
+                    </span>
+                  ) : null}
+
+                  {/* Player token (your uploaded asset) */}
                   {here ? (
                     <span
                       aria-hidden
                       style={{
-                        position: "absolute",
-                        width: 16,
-                        height: 16,
-                        borderRadius: 999,
-                        border: "1px solid rgba(138,180,255,0.80)",
-                        boxShadow: "0 0 0 3px rgba(138,180,255,0.14), 0 0 18px rgba(138,180,255,0.38)",
-                        background: "rgba(138,180,255,0.10)",
+                        position: "relative",
+                        width: 18,
+                        height: 18,
+                        borderRadius: 9,
+                        border: "1px solid rgba(138,180,255,0.70)",
+                        background: "rgba(0,0,0,0.22)",
+                        boxShadow: "0 0 0 3px rgba(138,180,255,0.14), 0 0 18px rgba(138,180,255,0.32)",
+                        display: "inline-flex",
+                        alignItems: "center",
+                        justifyContent: "center",
                         pointerEvents: "none",
                       }}
-                    />
-                  ) : null}
-
-                  {/* Mark glyph */}
-                  {seen && glyph ? (
-                    <span
-                      style={{
-                        position: "relative",
-                        transform: "translateY(-0.5px)",
-                        filter: mark ? "drop-shadow(0 2px 6px rgba(0,0,0,0.35))" : "none",
-                      }}
                     >
-                      {glyph}
+                      <IconImg src={playerAsset.src} alt={playerAsset.label} size={14} />
                     </span>
                   ) : null}
                 </div>
@@ -370,12 +446,9 @@ export default function ExplorationMapPanel({ events, mapW = 13, mapH = 9 }: Pro
               borderRadius: 12,
               pointerEvents: "none",
               background: [
-                // warm torchlight pools (subtle)
                 "radial-gradient(220px 220px at 20% 18%, rgba(255,190,120,0.10), rgba(255,190,120,0.00) 62%)",
                 "radial-gradient(260px 260px at 82% 24%, rgba(255,200,140,0.08), rgba(255,200,140,0.00) 65%)",
-                // cool moon/arcane lift near center (ties to player glow without changing logic)
                 "radial-gradient(260px 200px at 52% 58%, rgba(138,180,255,0.06), rgba(138,180,255,0.00) 70%)",
-                // vignette edges
                 "radial-gradient(120% 120% at 50% 45%, rgba(0,0,0,0.00) 52%, rgba(0,0,0,0.22) 78%, rgba(0,0,0,0.36) 100%)",
               ].join(", "),
               mixBlendMode: "screen",
@@ -409,15 +482,20 @@ export default function ExplorationMapPanel({ events, mapW = 13, mapH = 9 }: Pro
             {derived.marks
               .slice()
               .sort((a, b) => a.timestamp - b.timestamp)
-              .map((m) => (
-                <li key={m.eventId}>
-                  <strong>
-                    {m.kind} {glyphForMark(m.kind)}
-                  </strong>{" "}
-                  at ({m.at.x},{m.at.y})
-                  {m.note ? <> — {m.note}</> : null}
-                </li>
-              ))}
+              .map((m) => {
+                const a = assetForMark(m.kind);
+                return (
+                  <li key={m.eventId}>
+                    <strong>{m.kind}</strong> at ({m.at.x},{m.at.y})
+                    {m.note ? <> — {m.note}</> : null}
+                    {a ? (
+                      <span style={{ marginLeft: 10, verticalAlign: "middle" }}>
+                        <IconImg src={a.src} alt={a.label} size={14} style={{ display: "inline-block" }} />
+                      </span>
+                    ) : null}
+                  </li>
+                );
+              })}
           </ul>
         </details>
       )}
