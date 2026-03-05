@@ -2,10 +2,13 @@
 
 import React from "react";
 
+type PortraitType = "Male" | "Female";
+
 type PartyMember = {
   id: string;
   name: string;
   className: string;
+  portrait: PortraitType;
   ac: number;
   hpMax: number;
   hpCurrent: number;
@@ -127,9 +130,9 @@ export default function PartySetupSection(props: {
           <div
             style={{
               display: "grid",
-              gridTemplateColumns: "220px 190px 80px 90px 90px 110px",
+              gridTemplateColumns: "220px 190px 100px 80px 90px 90px 110px",
               gap: 8,
-              minWidth: 820,
+              minWidth: 900,
               alignItems: "center",
             }}
           >
@@ -138,6 +141,9 @@ export default function PartySetupSection(props: {
             </div>
             <div className="muted" style={{ fontSize: 12 }}>
               CLASS
+            </div>
+            <div className="muted" style={{ fontSize: 12 }}>
+              PORTRAIT
             </div>
             <div className="muted" style={{ fontSize: 12 }}>
               AC
@@ -156,13 +162,17 @@ export default function PartySetupSection(props: {
               const i1 = idx + 1;
               const classValue = normalizeClassValue(row?.className ?? "");
 
-              // If class is not in our list and not empty, treat as custom.
               const isCustom =
                 classValue.length > 0 &&
                 !SAFE_CLASS_ARCHETYPES.map((x) => x.toLowerCase()).includes(classValue.toLowerCase());
 
               const selectValue =
-                classValue.length === 0 ? "" : isCustom ? "__custom__" : SAFE_CLASS_ARCHETYPES.find((x) => x.toLowerCase() === classValue.toLowerCase()) ?? "__custom__";
+                classValue.length === 0
+                  ? ""
+                  : isCustom
+                  ? "__custom__"
+                  : SAFE_CLASS_ARCHETYPES.find((x) => x.toLowerCase() === classValue.toLowerCase()) ??
+                    "__custom__";
 
               return (
                 <div key={row.id || `player_${i1}`} style={{ display: "contents" }}>
@@ -184,11 +194,14 @@ export default function PartySetupSection(props: {
                           return;
                         }
                         if (v === "__custom__") {
-                          // Keep existing custom (or empty) and show the input below.
                           if (!isCustom) setMemberField(idx, { className: "" });
                           return;
                         }
-                        setMemberField(idx, { className: v });
+
+                        setMemberField(idx, {
+                          className: v,
+                          portrait: "Male",
+                        });
                       }}
                       style={{ minWidth: 150 }}
                     >
@@ -213,6 +226,17 @@ export default function PartySetupSection(props: {
                     />
                   </div>
 
+                  <select
+                    value={row?.portrait ?? "Male"}
+                    disabled={!editable}
+                    onChange={(e) =>
+                      setMemberField(idx, { portrait: e.target.value as PortraitType })
+                    }
+                  >
+                    <option value="Male">Male</option>
+                    <option value="Female">Female</option>
+                  </select>
+
                   <input
                     value={String(row?.ac ?? 14)}
                     disabled={!editable}
@@ -223,7 +247,9 @@ export default function PartySetupSection(props: {
                   <input
                     value={String(row?.hpCurrent ?? 12)}
                     disabled={!editable}
-                    onChange={(e) => setMemberField(idx, { hpCurrent: safeInt(e.target.value, 12, 0, 999) })}
+                    onChange={(e) =>
+                      setMemberField(idx, { hpCurrent: safeInt(e.target.value, 12, 0, 999) })
+                    }
                     inputMode="numeric"
                   />
 
