@@ -86,28 +86,53 @@ function Chip({
   );
 }
 
-function Toggle({
-  value,
-  onChange,
+function TriToggle({
+  dmMode,
+  onSetDmMode,
   leftLabel,
   rightLabel,
   disabled,
 }: {
-  value: boolean;
-  onChange: (next: boolean) => void;
+  dmMode: DMMode | null;
+  onSetDmMode: (next: DMMode) => void;
   leftLabel: string;
   rightLabel: string;
   disabled?: boolean;
 }) {
+  const isHuman = dmMode === "human";
+  const isSolace = dmMode === "solace-neutral";
+
+  // 3 positions: left (human), center (null), right (solace-neutral)
+  const knobLeft = dmMode === null ? 16 : isSolace ? 32 : 0;
+
+  const labelStyle = (active: boolean) => ({
+    fontSize: 12,
+    opacity: disabled ? 0.6 : active ? 0.92 : 0.78,
+    fontWeight: active ? 900 : 650,
+    cursor: disabled ? "not-allowed" : "pointer",
+    userSelect: "none" as const,
+  });
+
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
-      <div style={{ fontSize: 12, opacity: disabled ? 0.6 : 0.85 }}>{leftLabel}</div>
+      <button
+        type="button"
+        onClick={() => !disabled && onSetDmMode("human")}
+        disabled={!!disabled}
+        style={{
+          all: "unset",
+          ...labelStyle(isHuman),
+        }}
+      >
+        {leftLabel}
+      </button>
 
       <button
         type="button"
-        onClick={() => !disabled && onChange(!value)}
-        disabled={!!disabled}
         aria-label="toggle"
+        disabled={true}
+        // NOTE: disabled on purpose — this enforces "declare style" intentionally via labels,
+        // while still showing neutral-middle state on arrival.
         style={{
           width: 54,
           height: 28,
@@ -115,15 +140,17 @@ function Toggle({
           border: "1px solid rgba(255,255,255,0.18)",
           background: disabled ? "rgba(255,255,255,0.03)" : "rgba(255,255,255,0.06)",
           position: "relative",
-          cursor: disabled ? "not-allowed" : "pointer",
+          cursor: "default",
           padding: 0,
+          opacity: disabled ? 0.65 : 1,
         }}
+        title={dmMode === null ? "Declare a style" : undefined}
       >
         <span
           style={{
             position: "absolute",
             top: 3,
-            left: value ? 28 : 3,
+            left: 3 + knobLeft,
             width: 22,
             height: 22,
             borderRadius: 999,
@@ -134,7 +161,17 @@ function Toggle({
         />
       </button>
 
-      <div style={{ fontSize: 12, opacity: disabled ? 0.6 : 0.85 }}>{rightLabel}</div>
+      <button
+        type="button"
+        onClick={() => !disabled && onSetDmMode("solace-neutral")}
+        disabled={!!disabled}
+        style={{
+          all: "unset",
+          ...labelStyle(isSolace),
+        }}
+      >
+        {rightLabel}
+      </button>
     </div>
   );
 }
@@ -211,8 +248,6 @@ export default function HeroOnboarding({
   outcomesCount,
   canonCount,
 }: Props) {
-  const dmToggleValue = dmMode === "solace-neutral";
-
   const dmHint = useMemo(() => {
     if (dmMode === "solace-neutral") return "Solace keeps the adventure moving.";
     if (dmMode === "human") return "You choose how each action resolves.";
@@ -261,9 +296,9 @@ export default function HeroOnboarding({
             >
               <div style={{ fontWeight: 900, letterSpacing: 0.2 }}>Choose Your Play Style</div>
 
-              <Toggle
-                value={dmToggleValue}
-                onChange={(next) => onSetDmMode(next ? "solace-neutral" : "human")}
+              <TriToggle
+                dmMode={dmMode}
+                onSetDmMode={onSetDmMode}
                 leftLabel="Human"
                 rightLabel="Solace"
               />
@@ -301,7 +336,9 @@ export default function HeroOnboarding({
                       style={{
                         padding: "8px 10px",
                         borderRadius: 10,
-                        border: active ? "1px solid rgba(138,180,255,0.55)" : "1px solid rgba(255,255,255,0.12)",
+                        border: active
+                          ? "1px solid rgba(138,180,255,0.55)"
+                          : "1px solid rgba(255,255,255,0.12)",
                         background: active ? "rgba(138,180,255,0.10)" : "rgba(255,255,255,0.04)",
                         cursor: dmMode === null || partyLocked ? "not-allowed" : "pointer",
                         opacity: dmMode === null || partyLocked ? 0.6 : 1,
