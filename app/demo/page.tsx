@@ -145,14 +145,6 @@ function inferPressureTier(outcomesCount: number): PressureTier {
 // ------------------------------------------------------------
 // Injury / Downed (event-derived, safe default)
 // ------------------------------------------------------------
-//
-// We’re going with a simple D&D-feel mechanic:
-// - Each "injury stack" applies -2 to d20 checks (Resolution).
-// - A "Downed" state can be represented as injury stacks >= 1 (or separate events).
-//
-// This function is deliberately tolerant: if the injury events don’t exist yet,
-// stacks will stay at 0 until you add damage canon emission.
-// ------------------------------------------------------------
 
 function deriveInjuryStacksForPlayer(events: readonly any[], playerId: string): number {
   const pid = String(playerId ?? "").trim();
@@ -164,11 +156,6 @@ function deriveInjuryStacksForPlayer(events: readonly any[], playerId: string): 
     const e = events[i];
     const t = e?.type;
 
-    // Supported (future / optional) shapes:
-    // - INJURY_APPLIED { playerId, stacks?: number, delta?: number }
-    // - INJURY_STACK_CHANGED { playerId, delta }
-    // - PLAYER_DOWNED { playerId }  => treat as +1 stack
-    // - DAMAGE_APPLIED { targetId, ... , downed?: boolean } => treat downed as +1
     const p = e?.payload ?? {};
 
     if (t === "INJURY_APPLIED") {
@@ -357,19 +344,26 @@ export default function DemoPage() {
   const isEnemyTurn = combatActive && activeCombatantSpec?.kind === "enemy_group";
   const isPlayerTurn = combatActive && activeCombatantSpec?.kind === "player";
 
+  // NEW: a clean label for UI turn anchoring
+  const activeTurnLabel = useMemo(() => {
+    if (!combatActive || !activeCombatantSpec) return null;
+    const name = String((activeCombatantSpec as any)?.name ?? "").trim();
+    const id = String((activeCombatantSpec as any)?.id ?? "").trim();
+    if (name) return name;
+    if (id) return id;
+    return null;
+  }, [combatActive, activeCombatantSpec]);
+
   // ----------------------------------------------------------
   // Injury modifier (applies to Resolution checks)
   // ----------------------------------------------------------
 
   const actingPlayerInjuryStacks = useMemo(() => {
-    // Only meaningful when the active combatant is a player (or when not in combat).
-    // If you want it strictly tied to "active combatant", switch pid to activeCombatantSpec?.id.
     const pid = String(actingPlayerId ?? "").trim();
     return deriveInjuryStacksForPlayer(state.events as any[], pid);
   }, [state.events, actingPlayerId]);
 
   const actingRollModifier = useMemo(() => {
-    // -2 per stack. Clamp defensively.
     const s = Math.max(0, Math.min(20, Math.trunc(Number(actingPlayerInjuryStacks ?? 0))));
     return -2 * s;
   }, [actingPlayerInjuryStacks]);
@@ -479,7 +473,6 @@ export default function DemoPage() {
       })
     );
 
-    // After accepting table, Party is the required next step before gameplay.
     if (tableAccepted) {
       setActiveSection("pressure");
       queueMicrotask(() => scrollToSection("pressure"));
@@ -833,14 +826,8 @@ export default function DemoPage() {
 
     return {
       mode: doneMode ? ("done" as const) : ("next" as const),
-
-      // Party = PARTY_DECLARED (required after table acceptance)
       party: doneParty ? ("done" as const) : doneTable ? ("next" as const) : ("locked" as const),
-
-      // Table comes directly after Mode (party size selection happens inside hero)
       table: doneTable ? ("done" as const) : doneMode ? ("next" as const) : ("locked" as const),
-
-      // Gameplay chapters require BOTH table accepted + party declared
       pressure: doneTable && doneParty ? ("open" as const) : ("locked" as const),
       map: doneTable && doneParty ? ("open" as const) : ("locked" as const),
       combat: doneTable && doneParty ? ("open" as const) : ("locked" as const),
@@ -862,10 +849,6 @@ export default function DemoPage() {
     scrollToSection(key as DemoSectionId);
   }
 
-  // Enemy overlay only when:
-  // - combat is active
-  // - it's an enemy group's turn
-  // - and we're not in Human DM
   const activeEnemyOverlayName =
     dmMode !== "human" && combatActive && isEnemyTurn ? String(activeCombatantSpec?.name ?? "") : null;
 
@@ -891,7 +874,6 @@ export default function DemoPage() {
     <AmbientBackground>
       <div style={{ position: "relative", zIndex: 1 }}>
         <StewardedShell>
-          {/* Hide the top header on /demo to avoid duplicate title + directions + redundant Share */}
           <ModeHeader title="Echoes of Fate" onShare={shareCanon} showTitle={false} showRoles={false} showShare={false} />
 
           {/* HERO / ONBOARDING */}
@@ -939,7 +921,7 @@ export default function DemoPage() {
             />
           </div>
 
-          {/* PARTY DECLARATION (required after Accept Table) */}
+          {/* PARTY DECLARATION */}
           <div id={anchorId("party")} style={{ scrollMarginTop: 90, marginTop: 16 }}>
             <PartySetupSection
               enabled={dmMode !== null && tableAccepted}
@@ -956,7 +938,6 @@ export default function DemoPage() {
             />
           </div>
 
-          {/* Gameplay chapters gated until table accepted + party declared */}
           {allowGameplay && (
             <>
               {/* PRESSURE */}
@@ -1035,6 +1016,10 @@ export default function DemoPage() {
                   combatActive={combatActive}
                   passDisabled={(dmMode === "solace-neutral" && isEnemyTurn) || isWrongPlayerForTurn}
                   onPassTurn={passTurn}
+                  dmMode={dmMode}
+                  isEnemyTurn={isEnemyTurn}
+                  isWrongPlayerForTurn={isWrongPlayerForTurn}
+                  activeTurnLabel={activeTurnLabel}
                   showPartyButtons={dmMode === "human" && !partyLocked && !!partyDraft}
                   onCommitParty={commitParty}
                   onRandomNames={randomizePartyNames}
@@ -1080,11 +1065,8 @@ export default function DemoPage() {
                       optionDescription: selectedOption.description,
                       optionKind: inferOptionKind(`${playerInput}\n${selectedOption.description}`.trim()),
                     }}
-                    // Apply injury penalty (-2 per stack) to d20 checks
                     rollModifier={actingRollModifier}
-                    rollModifierLabel={
-                      actingPlayerInjuryStacks > 0 ? `Injury stacks: ${actingPlayerInjuryStacks}` : "Injury"
-                    }
+                    rollModifierLabel={actingPlayerInjuryStacks > 0 ? `Injury stacks: ${actingPlayerInjuryStacks}` : "Injury"}
                     onRecord={handleRecord}
                   />
                 )}
@@ -1097,7 +1079,6 @@ export default function DemoPage() {
                 <CanonChronicleSection events={state.events as any[]} />
               </div>
 
-              {/* separate anchor for chapter jump */}
               <div id={anchorId("ledger")} style={{ height: 1, scrollMarginTop: 90 }} />
             </>
           )}
