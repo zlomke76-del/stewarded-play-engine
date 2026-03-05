@@ -186,7 +186,6 @@ function inferEnemyInitModFromPressure(pressureTier: any): number {
   if (t.includes("high") || t.includes("tier_3") || t === "3") return 2;
   if (t.includes("extreme") || t.includes("tier_4") || t === "4") return 3;
 
-  // default
   return 1;
 }
 
@@ -211,7 +210,6 @@ function pickDeterministicUnique(pool: string[], count: number, seed: string): s
   const n = clampInt(count, 0, 6);
   if (n === 0) return [];
 
-  // Deterministic “shuffle” by sorting with seeded hash
   const keyed = p.map((name, idx) => {
     const h = hash32(`${seed}::${idx}::${name.toLowerCase()}`);
     return { name, h };
@@ -219,7 +217,6 @@ function pickDeterministicUnique(pool: string[], count: number, seed: string): s
 
   keyed.sort((a, b) => a.h - b.h);
 
-  // If pool is smaller than requested, we wrap with a second pass using a different key
   const out: string[] = [];
   let pass = 0;
   while (out.length < n && pass < 3) {
@@ -228,7 +225,6 @@ function pickDeterministicUnique(pool: string[], count: number, seed: string): s
       if (!out.map((x) => x.toLowerCase()).includes(k.name.toLowerCase())) out.push(k.name);
     }
     pass++;
-    // diversify a bit if we had to wrap
     if (out.length < n) {
       keyed.forEach((k) => (k.h = hash32(`${seed}::pass${pass}::${k.name.toLowerCase()}`)));
       keyed.sort((a, b) => a.h - b.h);
@@ -244,7 +240,6 @@ function pickDeterministicUnique(pool: string[], count: number, seed: string): s
 function enemyAssetKey(groupName: string) {
   const n = normalizeName(groupName).toLowerCase();
 
-  // explicit mappings for known library names
   if (n.includes("archer")) return "enemy_archers";
   if (n.includes("shield")) return "enemy_shields";
   if (n.includes("skirmish")) return "enemy_skirmishers";
@@ -298,28 +293,18 @@ export default function CombatSetupPanel({
 
   const partySize = useMemo(() => clampInt(partyMembers?.length ?? 0, 0, 6), [partyMembers]);
   const pressureSeed = useMemo(() => {
-    // keep stable enough for a session: pressureTier + outcomes count + party size
     const outcomes = events.filter((e: any) => e?.type === "OUTCOME").length;
     return `pressure=${String(pressureTier ?? "unknown")}::outcomes=${outcomes}::party=${partySize}`;
   }, [events, partySize, pressureTier]);
 
-  // -----------------------------
-  // Enemy groups (Solace-owned unless Human/Dev)
-  // -----------------------------
-
   const [enemyGroups, setEnemyGroups] = useState<string[]>(["Skirmishers", "Archers"]);
   const [enemyGroupSelect, setEnemyGroupSelect] = useState<string>("Skirmishers");
-
   const [initModEnemies, setInitModEnemies] = useState<number>(1);
 
-  // Solace: implicit difficulty → init mod + 1:1 groups to party size.
   useEffect(() => {
     if (isHuman && !allowDevControls) return;
-
-    // In Solace-neutral (or dev), infer a suggested init mod from pressure.
     const inferred = inferEnemyInitModFromPressure(pressureTier);
     setInitModEnemies((prev) => {
-      // Only auto-set when not actively being edited in human mode.
       if (isHuman && allowDevControls) return prev;
       return inferred;
     });
@@ -329,15 +314,11 @@ export default function CombatSetupPanel({
   useEffect(() => {
     if (isHuman && !allowDevControls) return;
 
-    // Solace-neutral: always keep groups 1:1 with party size (0..6),
-    // picked deterministically from a pressure-themed pool.
     const desired = clampInt(partySize, 0, 6);
-
     const pool = enemyPoolForPressure(pressureTier);
     const picked = pickDeterministicUnique(pool.length ? pool : ENEMY_GROUP_LIBRARY, desired, pressureSeed);
 
     setEnemyGroups((prev) => {
-      // If human dev controls are allowed, don’t stomp their choices.
       if (isHuman && allowDevControls) return prev;
       return picked;
     });
@@ -366,10 +347,6 @@ export default function CombatSetupPanel({
     setEnemyGroups([]);
   }
 
-  // -----------------------------
-  // Derived combat display
-  // -----------------------------
-
   const latestCombatId = useMemo(() => {
     return findLatestCombatId(events as any) ?? null;
   }, [events]);
@@ -383,14 +360,6 @@ export default function CombatSetupPanel({
     }
   }, [latestCombatId, events]);
 
-  // -----------------------------
-  // Canon actions
-  // -----------------------------
-
-  // Governance:
-  // - In Solace-neutral, the PLAYER should not be manually “building combat”.
-  // - Combat should be triggered by pressure + hostile intent elsewhere.
-  // This panel supports dev-mode start, and human DM start.
   const canStartCombat = !locked && (isHuman || allowDevControls);
 
   function startCombatDeterministic() {
@@ -402,7 +371,6 @@ export default function CombatSetupPanel({
     const desiredGroups = clampInt(members.length, 1, 6);
     const groups = uniqCaseInsensitive(enemyGroups).slice(0, desiredGroups);
 
-    // If somehow empty, fall back to deterministic pick
     const ensuredGroups =
       groups.length > 0 ? groups : pickDeterministicUnique(enemyPoolForPressure(pressureTier), desiredGroups, pressureSeed);
 
@@ -411,7 +379,6 @@ export default function CombatSetupPanel({
 
     const participants: CombatantSpec[] = [];
 
-    // Players come from PARTY (session truth)
     members.forEach((m, idx) => {
       const i1 = idx + 1;
       participants.push({
@@ -422,7 +389,6 @@ export default function CombatSetupPanel({
       });
     });
 
-    // Enemy groups (Solace-owned unless human/dev)
     ensuredGroups.forEach((name, idx) => {
       participants.push({
         id: `enemy_group_${idx + 1}`,
@@ -457,14 +423,9 @@ export default function CombatSetupPanel({
   }
 
   const deployedEnemyGroups = useMemo(() => {
-    // Keep these deterministic + capped for UI
     const desired = clampInt(partySize, 0, 6);
     return uniqCaseInsensitive(enemyGroups).slice(0, desired);
   }, [enemyGroups, partySize]);
-
-  // -----------------------------
-  // UI
-  // -----------------------------
 
   return (
     <CardSection title="Combat (Deterministic, Grouped Enemies)">
@@ -486,7 +447,6 @@ export default function CombatSetupPanel({
         </div>
       )}
 
-      {/* Setup console */}
       <div
         style={{
           marginTop: 12,
@@ -509,7 +469,6 @@ export default function CombatSetupPanel({
             </div>
           </ControlLabel>
 
-          {/* Keep the init-mod control, but eliminate noise: in Solace-owned mode it’s disabled and reads as derived */}
           <ControlLabel label="Enemy init mod (pressure-derived)">
             <select
               value={initModEnemies}
@@ -530,7 +489,6 @@ export default function CombatSetupPanel({
               Enemy groups <span className="muted">(1:1 with party size)</span>
             </span>
 
-            {/* EDIT MODE: keep your existing controls */}
             {canEdit ? (
               <>
                 <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
@@ -612,7 +570,6 @@ export default function CombatSetupPanel({
                 )}
               </>
             ) : (
-              // SOLACE-OWNED MODE: remove visual noise; show deployed enemy group "cards" in that space
               <>
                 {deployedEnemyGroups.length > 0 ? (
                   <div
@@ -662,7 +619,6 @@ export default function CombatSetupPanel({
                               height={44}
                               style={{ width: 44, height: 44, objectFit: "cover", display: "block" }}
                               onError={(e) => {
-                                // hide broken images without cascading error loops
                                 e.currentTarget.style.display = "none";
                               }}
                             />
@@ -696,53 +652,8 @@ export default function CombatSetupPanel({
             </div>
           </div>
         </div>
-
-        {/* Players (read-only; session truth) */}
-        <div style={{ marginTop: 16 }}>
-          <strong>Players (session truth)</strong>
-
-          {partySize === 0 ? (
-            <div className="muted" style={{ marginTop: 10 }}>
-              No party declared yet.
-            </div>
-          ) : (
-            <div
-              style={{
-                marginTop: 10,
-                display: "grid",
-                gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-                gap: 10,
-              }}
-            >
-              {partyMembers.slice(0, 6).map((m, idx) => {
-                const i1 = idx + 1;
-                const name = normalizeName(m.name || "") || `Player ${i1}`;
-                const mod = Math.trunc(Number(m.initiativeMod ?? 0));
-                return (
-                  <div
-                    key={String(m.id ?? `player_${i1}`)}
-                    style={{
-                      padding: "10px 12px",
-                      borderRadius: 12,
-                      border: "1px solid rgba(255,255,255,0.10)",
-                      background: "rgba(255,255,255,0.04)",
-                    }}
-                  >
-                    <div>
-                      <strong>{name}</strong>
-                    </div>
-                    <div className="muted" style={{ marginTop: 6, fontSize: 12 }}>
-                      id: {String(m.id)} · init mod: {mod >= 0 ? `+${mod}` : `${mod}`}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
       </div>
 
-      {/* Actions */}
       <div style={{ marginTop: 14, display: "flex", gap: 8, flexWrap: "wrap" }}>
         <button
           onClick={startCombatDeterministic}
@@ -772,7 +683,6 @@ export default function CombatSetupPanel({
         )}
       </div>
 
-      {/* Derived order */}
       {derivedCombat && (
         <div style={{ marginTop: 14 }}>
           <div className="muted">
