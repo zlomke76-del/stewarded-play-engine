@@ -2,27 +2,33 @@
 
 // components/combat/EnemyTurnResolverPanel.tsx
 // ------------------------------------------------------------
-// EnemyTurnResolverPanel (V3)
+// EnemyTurnResolverPanel (V4)
 // ------------------------------------------------------------
 // In Solace Neutral Facilitator mode, enemies are driven by Solace.
 // This panel:
-// - chooses an enemy action using enemy specialty skills when available
+// - resolves the active enemy from EnemyDatabase first
+// - chooses an enemy action using database skillIds when available
+// - falls back to action profile + role/faction when needed
 // - plays suspense steps (declare → telegraph → roll → reveal → commit)
 // - does NOT write canon directly; it calls parent callbacks
 //
 // Upgrade:
-// - integrates enemy skill registry
+// - uses EnemyDatabase as the primary truth source
+// - deterministic portrait loading from portraitKey when present
 // - deterministic skill choice per enemy/target pair
 // - richer attack hint + damage typing
-// - enemy portrait rendering via deterministic asset resolver
-// - still fully backward-compatible with existing combat flow
+// - backward-compatible with existing combat flow
 // ------------------------------------------------------------
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import CardSection from "@/components/layout/CardSection";
-import { getSkillsForEnemyArchetype } from "@/lib/skills/classSkillMap";
 import { getSkillDefinition } from "@/lib/skills/skillDefinitions";
-import { getEnemyPortraitPath } from "@/lib/portraits/getEnemyPortraitPath";
+import {
+  EnemyAction,
+  EnemyDefinition,
+  getEnemyDefinitionByName,
+  getEnemiesForGroupLabel,
+} from "@/lib/game/EnemyDatabase";
 
 type Step = "idle" | "declared" | "telegraph" | "rolled" | "revealed";
 
@@ -70,11 +76,13 @@ type Props = {
 type ResolvedEnemyAction = {
   skillId: string | null;
   skillLabel: string;
-  archetype: string;
+  enemyName: string;
+  archetypeSource: string;
   attackHint: "volley" | "beam" | "charge" | "unknown";
   dc: number;
   damage: { count: number; sides: number; bonus: number; kind: DamageKind };
   declared: string;
+  actionLabel?: string | null;
 };
 
 function randInt(minIncl: number, maxIncl: number) {
@@ -98,105 +106,157 @@ function hash32(s: string): number {
   return h >>> 0;
 }
 
-function archetypeFor(name: string | null) {
-  const s = String(name ?? "").toLowerCase();
-  if (s.includes("archer")) return "archers";
-  if (s.includes("brute")) return "brutes";
-  if (s.includes("shield")) return "shields";
-  if (s.includes("stalker")) return "stalkers";
-  if (s.includes("caster")) return "casters";
-  if (s.includes("drone")) return "drones";
-  if (s.includes("sentr")) return "sentries";
-  if (s.includes("wraith")) return "wraiths";
-  if (s.includes("grid")) return "grid_knights";
-  if (s.includes("firewall")) return "firewall_wardens";
-  if (s.includes("hound")) return "neon_hounds";
-  if (s.includes("skirm")) return "skirmishers";
+function normalizeKey(v: string | null | undefined) {
+  return String(v ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, " ");
+}
+
+function toTitle(v: string) {
+  return String(v ?? "")
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (m) => m.toUpperCase());
+}
+
+function getEnemyPortraitPathFromDefinition(enemy: EnemyDefinition | null, fallbackName: string | null) {
+  if (enemy?.portraitKey) {
+    return `/assets/V2/Enemy/${enemy.portraitKey}.png`;
+  }
+
+  const safeName = String(fallbackName ?? "")
+    .trim()
+    .replace(/\s+/g, "_")
+    .replace(/[^A-Za-z0-9_]/g, "");
+
+  return `/assets/V2/Enemy/Enemy_${safeName}.png`;
+}
+
+function resolveActiveEnemyDefinition(activeEnemyGroupName: string | null): EnemyDefinition | null {
+  const raw = String(activeEnemyGroupName ?? "").trim();
+  if (!raw) return null;
+
+  const byName = getEnemyDefinitionByName(raw);
+  if (byName) return byName;
+
+  const byGroup = getEnemiesForGroupLabel(raw);
+  if (byGroup.length > 0) return byGroup[0] ?? null;
+
+  return null;
+}
+
+function attackHintFromActionKind(kind?: EnemyAction["kind"]): "volley" | "beam" | "charge" | "unknown" {
+  if (kind === "ranged") return "volley";
+  if (kind === "spell") return "beam";
+  if (kind === "melee" || kind === "control") return "charge";
   return "unknown";
 }
 
-function enemyArchetypeKeyForSkills(name: string | null) {
-  const a = archetypeFor(name);
-  switch (a) {
-    case "archers":
-    case "sentries":
-      return "Bandit Archer";
-    case "skirmishers":
-      return "Goblin Skirmisher";
-    case "casters":
-    case "firewall_wardens":
-      return "Dark Cultist";
-    case "wraiths":
-    case "grid_knights":
-      return "Undead Knight";
-    case "stalkers":
-      return "Shadow Assassin";
-    case "brutes":
-    case "shields":
-    case "neon_hounds":
-    case "drones":
-      return "Orc Raider";
+function attackHintFor(
+  enemyName: string,
+  skillId?: string | null,
+  actionKind?: EnemyAction["kind"]
+): "volley" | "beam" | "charge" | "unknown" {
+  const s = String(skillId ?? "").toLowerCase();
+
+  if (s.includes("volley")) return "volley";
+  if (s.includes("blast") || s.includes("hex") || s.includes("drain") || s.includes("lance")) return "beam";
+  if (s.includes("strike") || s.includes("slash") || s.includes("cleave") || s.includes("frenzy")) return "charge";
+
+  const byAction = attackHintFromActionKind(actionKind);
+  if (byAction !== "unknown") return byAction;
+
+  const n = String(enemyName ?? "").toLowerCase();
+  if (n.includes("archer")) return "volley";
+  if (n.includes("acolyte") || n.includes("priest") || n.includes("wraith") || n.includes("sentinel")) return "beam";
+  if (
+    n.includes("warrior") ||
+    n.includes("raider") ||
+    n.includes("knight") ||
+    n.includes("wolf") ||
+    n.includes("spider") ||
+    n.includes("golem")
+  ) {
+    return "charge";
+  }
+
+  return "unknown";
+}
+
+function mapEnemyDamageTypeToPanelKind(type?: string | null): DamageKind {
+  switch (String(type ?? "").toLowerCase()) {
+    case "piercing":
+      return "piercing";
+    case "slashing":
+      return "slashing";
+    case "bludgeoning":
+      return "bludgeoning";
+    case "force":
+      return "force";
+    case "fire":
+      return "fire";
+    case "cold":
+      return "cold";
+    case "lightning":
+      return "lightning";
+    case "necrotic":
+      return "necrotic";
+    case "psychic":
+      return "psychic";
+    case "poison":
+      return "poison";
+    case "radiant":
+      return "radiant";
+    case "shadow":
+      return "shadow";
     default:
-      return "Orc Raider";
+      return "mixed";
   }
 }
 
-function attackHintFor(enemyName: string, skillId?: string | null) {
+function defaultDCFromRole(enemy: EnemyDefinition | null, skillId?: string | null, action?: EnemyAction | null) {
   const s = String(skillId ?? "").toLowerCase();
-  if (s.includes("volley")) return "volley" as const;
-  if (s.includes("blast") || s.includes("hex") || s.includes("drain")) return "beam" as const;
-  if (s.includes("strike") || s.includes("slash") || s.includes("cleave") || s.includes("frenzy")) {
-    return "charge" as const;
-  }
 
-  const a = archetypeFor(enemyName);
-  switch (a) {
-    case "archers":
-    case "sentries":
-      return "volley" as const;
-    case "casters":
-    case "firewall_wardens":
-      return "beam" as const;
-    case "brutes":
-    case "grid_knights":
-    case "neon_hounds":
-    case "skirmishers":
-      return "charge" as const;
-    default:
-      return "unknown" as const;
-  }
-}
-
-function defaultDC(enemyName: string, skillId?: string | null) {
-  const s = String(skillId ?? "").toLowerCase();
   if (s.includes("strike") || s.includes("cleave") || s.includes("slash")) return 12;
   if (s.includes("volley")) return 13;
-  if (s.includes("hex") || s.includes("drain")) return 14;
+  if (s.includes("hex") || s.includes("drain") || s.includes("lance")) return 14;
   if (s.includes("smoke") || s.includes("vanish")) return 12;
   if (s.includes("march") || s.includes("frenzy")) return 11;
 
-  const a = archetypeFor(enemyName);
-  switch (a) {
-    case "archers":
-    case "sentries":
+  if (action?.saveDC && Number(action.saveDC) > 0) {
+    return Math.max(10, Math.trunc(action.saveDC));
+  }
+
+  if (typeof action?.toHitBonus === "number") {
+    return Math.max(10, 8 + Math.trunc(action.toHitBonus));
+  }
+
+  switch (enemy?.role) {
+    case "archer":
       return 13;
-    case "stalkers":
-    case "wraiths":
+    case "caster":
+    case "controller":
+    case "support":
       return 14;
-    case "brutes":
-    case "grid_knights":
-      return 12;
-    case "casters":
-    case "firewall_wardens":
+    case "assassin":
+      return 14;
+    case "boss":
       return 15;
+    case "brute":
+    case "soldier":
+    case "construct":
+    case "undead":
+    case "beast":
+      return 12;
     default:
       return 12;
   }
 }
 
-function damageProfileFor(
-  enemyName: string,
-  skillId?: string | null
+function damageProfileForEnemy(
+  enemy: EnemyDefinition | null,
+  skillId?: string | null,
+  action?: EnemyAction | null
 ): { count: number; sides: number; bonus: number; kind: DamageKind } {
   const s = String(skillId ?? "").toLowerCase();
 
@@ -213,30 +273,46 @@ function damageProfileFor(
   if (s === "shadow_strike") return { count: 1, sides: 8, bonus: 2, kind: "shadow" };
   if (s === "vanish") return { count: 1, sides: 4, bonus: 0, kind: "mixed" };
 
-  const a = archetypeFor(enemyName);
-  switch (a) {
-    case "archers":
-    case "sentries":
+  if (action?.damage) {
+    return {
+      count: Math.max(1, Math.trunc(action.damage.diceCount || 1)),
+      sides: Math.max(4, Math.trunc(action.damage.diceSides || 6)),
+      bonus: Math.trunc(action.damage.bonus || 0),
+      kind: mapEnemyDamageTypeToPanelKind(action.damage.type),
+    };
+  }
+
+  switch (enemy?.role) {
+    case "archer":
       return { count: 1, sides: 6, bonus: 1, kind: "piercing" };
-    case "brutes":
-    case "grid_knights":
-    case "neon_hounds":
+    case "brute":
       return { count: 1, sides: 8, bonus: 2, kind: "bludgeoning" };
-    case "casters":
-      return { count: 1, sides: 10, bonus: 0, kind: "force" };
-    case "firewall_wardens":
-      return { count: 1, sides: 10, bonus: 0, kind: "fire" };
-    case "wraiths":
-      return { count: 1, sides: 8, bonus: 0, kind: "necrotic" };
-    case "stalkers":
-    case "skirmishers":
+    case "caster":
+    case "controller":
+    case "support":
+      return { count: 1, sides: 8, bonus: 0, kind: "force" };
+    case "assassin":
       return { count: 1, sides: 6, bonus: 2, kind: "slashing" };
+    case "construct":
+      return { count: 1, sides: 8, bonus: 2, kind: "force" };
+    case "undead":
+      return { count: 1, sides: 8, bonus: 0, kind: "necrotic" };
+    case "beast":
+      return { count: 1, sides: 6, bonus: 2, kind: "piercing" };
+    case "boss":
+      return { count: 2, sides: 8, bonus: 3, kind: "mixed" };
     default:
       return { count: 1, sides: 6, bonus: 0, kind: "mixed" };
   }
 }
 
-function buildEnemyIntent(enemyName: string, targetName: string, skillId?: string | null, skillLabel?: string) {
+function buildEnemyIntent(
+  enemyName: string,
+  targetName: string,
+  skillId?: string | null,
+  skillLabel?: string,
+  actionLabel?: string | null
+) {
   switch (skillId) {
     case "bandit_volley":
       return `The ${enemyName} unleash ${skillLabel ?? "Bandit Volley"} at ${targetName}, saturating the lane with arrows.`;
@@ -266,35 +342,11 @@ function buildEnemyIntent(enemyName: string, targetName: string, skillId?: strin
       break;
   }
 
-  const a = archetypeFor(enemyName);
-  switch (a) {
-    case "archers":
-      return `The ${enemyName} loose a coordinated volley at ${targetName}.`;
-    case "brutes":
-      return `The ${enemyName} charge and attempt to smash ${targetName} to the ground.`;
-    case "shields":
-      return `The ${enemyName} advance behind cover, trying to pin ${targetName} in place.`;
-    case "stalkers":
-      return `The ${enemyName} vanish into shadow and strike at ${targetName} from an angle.`;
-    case "casters":
-      return `The ${enemyName} weave a spell and hurl force toward ${targetName}.`;
-    case "drones":
-      return `The ${enemyName} align and fire a synchronized burst at ${targetName}.`;
-    case "sentries":
-      return `The ${enemyName} lock on and fire a precision shot at ${targetName}.`;
-    case "wraiths":
-      return `The ${enemyName} phase through the air and lash out at ${targetName}.`;
-    case "grid_knights":
-      return `The ${enemyName} step in formation and execute a disciplined strike on ${targetName}.`;
-    case "firewall_wardens":
-      return `The ${enemyName} project a burning barrier and drive it into ${targetName}.`;
-    case "neon_hounds":
-      return `The ${enemyName} sprint and snap at ${targetName}, testing defenses.`;
-    case "skirmishers":
-      return `The ${enemyName} dart forward and harry ${targetName} with quick attacks.`;
-    default:
-      return `The ${enemyName} press the attack against ${targetName}.`;
+  if (actionLabel) {
+    return `The ${enemyName} use ${actionLabel} against ${targetName}.`;
   }
+
+  return `The ${enemyName} press the attack against ${targetName}.`;
 }
 
 function outcomeText(enemyName: string, targetName: string, roll: number, dc: number, action: ResolvedEnemyAction) {
@@ -325,17 +377,16 @@ function outcomeText(enemyName: string, targetName: string, roll: number, dc: nu
       : `The heavy swing goes wide — ${targetName} holds the line.`;
   }
 
-  const a = archetypeFor(enemyName);
-  if (a === "archers") {
+  if (action.attackHint === "volley") {
     return hit
-      ? `Arrows hiss through the torchlight — one finds ${targetName}.`
-      : `A volley of arrows clatters off stone — ${targetName} ducks behind cover.`;
+      ? `Missiles cut through the air — ${targetName} is hit cleanly.`
+      : `${targetName} slips the incoming line of fire.`;
   }
 
-  if (a === "casters" || a === "firewall_wardens") {
+  if (action.attackHint === "beam") {
     return hit
-      ? `The air snaps with force — ${targetName} is struck mid-step.`
-      : `The spell fractures against the air — it fizzles wide.`;
+      ? `The energy discharge lands hard — ${targetName} staggers under the impact.`
+      : `The effect fractures wide and misses ${targetName}.`;
   }
 
   return hit
@@ -343,32 +394,46 @@ function outcomeText(enemyName: string, targetName: string, roll: number, dc: nu
     : `The attack misses — ${targetName} holds their ground.`;
 }
 
-function resolveEnemyAction(enemyName: string, enemyId: string | null, targetName: string): ResolvedEnemyAction {
-  const archetype = enemyArchetypeKeyForSkills(enemyName);
-  const skillIds = getSkillsForEnemyArchetype(archetype);
+function resolveEnemyAction(
+  enemy: EnemyDefinition | null,
+  enemyName: string,
+  enemyId: string | null,
+  targetName: string
+): ResolvedEnemyAction {
+  const skillIds = Array.isArray(enemy?.skillIds) ? enemy!.skillIds : [];
+  const actions = Array.isArray(enemy?.actions) ? enemy!.actions : [];
 
   let chosenSkillId: string | null = null;
   if (skillIds.length > 0) {
-    const seed = `${enemyId ?? enemyName}::${targetName}::${archetype}`;
+    const seed = `${enemyId ?? enemy?.id ?? enemyName}::${targetName}::skills`;
     const idx = hash32(seed) % skillIds.length;
     chosenSkillId = skillIds[idx] ?? null;
   }
 
+  let chosenAction: EnemyAction | null = null;
+  if (actions.length > 0) {
+    const seed = `${enemyId ?? enemy?.id ?? enemyName}::${targetName}::actions`;
+    const idx = hash32(seed) % actions.length;
+    chosenAction = actions[idx] ?? null;
+  }
+
   const def = chosenSkillId ? getSkillDefinition(chosenSkillId) : null;
-  const skillLabel = def?.label ?? (chosenSkillId ? chosenSkillId : "Attack");
-  const attackHint = attackHintFor(enemyName, chosenSkillId);
-  const dc = defaultDC(enemyName, chosenSkillId);
-  const damage = damageProfileFor(enemyName, chosenSkillId);
-  const declared = buildEnemyIntent(enemyName, targetName, chosenSkillId, skillLabel);
+  const skillLabel = def?.label ?? (chosenSkillId ? toTitle(chosenSkillId) : chosenAction?.label ?? "Attack");
+  const attackHint = attackHintFor(enemyName, chosenSkillId, chosenAction?.kind);
+  const dc = defaultDCFromRole(enemy, chosenSkillId, chosenAction);
+  const damage = damageProfileForEnemy(enemy, chosenSkillId, chosenAction);
+  const declared = buildEnemyIntent(enemyName, targetName, chosenSkillId, skillLabel, chosenAction?.label ?? null);
 
   return {
     skillId: chosenSkillId,
     skillLabel,
-    archetype,
+    enemyName,
+    archetypeSource: enemy?.archetypeSkillSource ?? enemy?.name ?? "Unknown",
     attackHint,
     dc,
     damage,
     declared,
+    actionLabel: chosenAction?.label ?? null,
   };
 }
 
@@ -391,7 +456,12 @@ export default function EnemyTurnResolverPanel({
   const timers = useRef<number[]>([]);
   const rollRef = useRef<number | null>(null);
 
-  const enemyName = activeEnemyGroupName ?? null;
+  const enemyDef = useMemo(() => resolveActiveEnemyDefinition(activeEnemyGroupName), [activeEnemyGroupName]);
+
+  const enemyName = useMemo(() => {
+    if (enemyDef?.name) return enemyDef.name;
+    return activeEnemyGroupName ?? null;
+  }, [enemyDef, activeEnemyGroupName]);
 
   const targetName = useMemo(() => {
     const candidates = playerNames.filter((x) => String(x || "").trim().length > 0);
@@ -399,8 +469,8 @@ export default function EnemyTurnResolverPanel({
   }, [playerNames]);
 
   const portraitSrc = useMemo(() => {
-    return enemyName ? getEnemyPortraitPath(enemyName) : "";
-  }, [enemyName]);
+    return getEnemyPortraitPathFromDefinition(enemyDef, enemyName);
+  }, [enemyDef, enemyName]);
 
   useEffect(() => {
     setStep("idle");
@@ -409,11 +479,11 @@ export default function EnemyTurnResolverPanel({
     rollRef.current = null;
     setReveal("");
     setResolvedAction(null);
-    if (enemyName) setDC(defaultDC(enemyName));
+    setDC(defaultDCFromRole(enemyDef));
 
     timers.current.forEach((t) => window.clearTimeout(t));
     timers.current = [];
-  }, [enabled, activeEnemyGroupId, activeEnemyGroupName, enemyName]);
+  }, [enabled, activeEnemyGroupId, activeEnemyGroupName, enemyDef]);
 
   useEffect(() => {
     return () => {
@@ -430,7 +500,7 @@ export default function EnemyTurnResolverPanel({
   function begin() {
     if (!enabled || !enemyName) return;
 
-    const action = resolveEnemyAction(enemyName, activeEnemyGroupId, targetName);
+    const action = resolveEnemyAction(enemyDef, enemyName, activeEnemyGroupId, targetName);
     setResolvedAction(action);
     setDeclared(action.declared);
     setDC(action.dc);
@@ -462,22 +532,31 @@ export default function EnemyTurnResolverPanel({
 
   function commit() {
     if (!enabled || !enemyName) return;
+
     const r = rollRef.current ?? roll ?? 0;
-    const action = resolvedAction ?? resolveEnemyAction(enemyName, activeEnemyGroupId, targetName);
+    const action = resolvedAction ?? resolveEnemyAction(enemyDef, enemyName, activeEnemyGroupId, targetName);
 
     const payload: OutcomePayload = {
       description: `Enemy turn — ${enemyName}. ${reveal || "Outcome pending."}`,
       dice: { mode: "d20", roll: r, dc, source: "solace" },
       audit: [
-        `enemy_group=${enemyName}`,
+        `enemy_group=${String(activeEnemyGroupName ?? "")}`,
         `enemy_group_id=${String(activeEnemyGroupId ?? "")}`,
-        `enemy_archetype=${action.archetype}`,
+        `enemy_resolved_name=${enemyName}`,
+        `enemy_database_id=${String(enemyDef?.id ?? "")}`,
+        `enemy_slug=${String(enemyDef?.slug ?? "")}`,
+        `enemy_faction=${String(enemyDef?.faction ?? "")}`,
+        `enemy_role=${String(enemyDef?.role ?? "")}`,
+        `enemy_tier=${String(enemyDef?.tier ?? "")}`,
+        `enemy_pressure_band=${String(enemyDef?.pressureBand ?? "")}`,
+        `enemy_archetype_source=${action.archetypeSource}`,
         `enemy_skill_id=${String(action.skillId ?? "none")}`,
         `enemy_skill_label="${action.skillLabel}"`,
+        `enemy_action_label="${String(action.actionLabel ?? "")}"`,
         `intent="${declared}"`,
         `dc=${dc}`,
         `roll=${r}`,
-        `note=V3 skill-aware heuristic resolver with portrait support`,
+        `note=V4 database-aware resolver`,
       ],
       damage: {
         roll: {
@@ -563,9 +642,16 @@ export default function EnemyTurnResolverPanel({
             ) : null}
           </div>
 
+          {enemyDef && (
+            <div className="muted" style={{ fontSize: 12, marginBottom: 6, lineHeight: 1.5 }}>
+              Role: <strong>{enemyDef.role}</strong> · Tier <strong>{enemyDef.tier}</strong> · Pressure{" "}
+              <strong>{enemyDef.pressureBand}</strong> · Faction <strong>{enemyDef.faction}</strong>
+            </div>
+          )}
+
           {resolvedAction && (
             <div className="muted" style={{ fontSize: 12, lineHeight: 1.5 }}>
-              Archetype: <strong>{resolvedAction.archetype}</strong> · Attack hint{" "}
+              Skill source: <strong>{resolvedAction.archetypeSource}</strong> · Attack hint{" "}
               <strong>{resolvedAction.attackHint}</strong> · Damage{" "}
               <strong>
                 {resolvedAction.damage.count}d{resolvedAction.damage.sides}
@@ -620,8 +706,8 @@ export default function EnemyTurnResolverPanel({
           </div>
 
           <div className="muted" style={{ fontSize: 11, opacity: 0.85 }}>
-            V3: enemy behavior now resolves through mapped enemy specialty skills when available, with deterministic
-            portrait loading. Next layer can add cooldowns, target preference, and pressure-conditioned move weighting.
+            V4: enemy behavior now resolves from EnemyDatabase first, then skill mappings and action profiles. This is
+            the right foundation for cooldowns, target weighting, and encounter-specific enemy logic.
           </div>
         </div>
       )}
