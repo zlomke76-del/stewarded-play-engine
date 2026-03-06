@@ -20,6 +20,10 @@
 // - OptionKind inference uses combined intent + option text (fixes "everything safe")
 //
 // Updated flow requirement (this change):
+// - Initial Table stays hidden until:
+//     1) mode selected
+//     2) player count declared
+//     3) Enter pressed
 // - After Accept Table, user must DECLARE PLAYERS (PartySetupSection)
 // - Pressure/Map/Combat/Action stay locked until PARTY_DECLARED exists
 // - Chapters "Party" represents PARTY_DECLARED (not just party size)
@@ -243,6 +247,7 @@ export default function DemoPage() {
   const [initialTable, setInitialTable] = useState<InitialTable | null>(null);
   const [tableAccepted, setTableAccepted] = useState(false);
   const [tableDraftText, setTableDraftText] = useState("");
+  const [enteredDungeon, setEnteredDungeon] = useState(false);
 
   // Chapter UI (visual only)
   const [activeSection, setActiveSection] = useState<DemoSectionId>("mode");
@@ -552,6 +557,7 @@ export default function DemoPage() {
   useEffect(() => {
     if (dmMode === null) return;
     setTableAccepted(false);
+    setEnteredDungeon(false);
   }, [dmMode]);
 
   // ----------------------------------------------------------
@@ -866,9 +872,10 @@ export default function DemoPage() {
   // Onboarding / Chapters
   // ----------------------------------------------------------
 
-  const canEnterDungeon = dmMode !== null;
+  const canEnterDungeon = dmMode !== null && partySize > 0;
 
   const partyCanonicalExists = !!partyCanonical;
+  const showInitialTable = enteredDungeon && dmMode !== null && partySize > 0;
 
   const chapterState = useMemo(() => {
     const doneMode = dmMode !== null;
@@ -878,7 +885,7 @@ export default function DemoPage() {
     return {
       mode: doneMode ? ("done" as const) : ("next" as const),
       party: doneParty ? ("done" as const) : doneTable ? ("next" as const) : ("locked" as const),
-      table: doneTable ? ("done" as const) : doneMode ? ("next" as const) : ("locked" as const),
+      table: doneTable ? ("done" as const) : showInitialTable ? ("next" as const) : doneMode ? ("next" as const) : ("locked" as const),
       pressure: doneTable && doneParty ? ("open" as const) : ("locked" as const),
       map: doneTable && doneParty ? ("open" as const) : ("locked" as const),
       combat: doneTable && doneParty ? ("open" as const) : ("locked" as const),
@@ -887,10 +894,11 @@ export default function DemoPage() {
       canon: doneTable && doneParty ? ("open" as const) : ("locked" as const),
       ledger: doneTable && doneParty ? ("open" as const) : ("locked" as const),
     };
-  }, [dmMode, tableAccepted, partyCanonicalExists]);
+  }, [dmMode, tableAccepted, partyCanonicalExists, showInitialTable]);
 
   function enterDungeon() {
     if (!canEnterDungeon) return;
+    setEnteredDungeon(true);
     setActiveSection("table");
     queueMicrotask(() => scrollToSection("table"));
   }
@@ -935,6 +943,8 @@ export default function DemoPage() {
               dmMode={dmMode}
               onSetDmMode={(nextMode) => {
                 setDmMode(nextMode);
+                setEnteredDungeon(false);
+                setTableAccepted(false);
                 setActiveSection("mode");
                 setPartyDraft((prev) => prev ?? defaultParty(partySize));
               }}
@@ -942,6 +952,8 @@ export default function DemoPage() {
               partyLocked={partyLocked}
               onSetPartySize={(n) => {
                 if (dmMode === null) return;
+                setEnteredDungeon(false);
+                setTableAccepted(false);
                 setPartySize(n);
               }}
               onEnter={enterDungeon}
@@ -957,25 +969,27 @@ export default function DemoPage() {
           </div>
 
           {/* TABLE */}
-          <div id={anchorId("table")} style={{ scrollMarginTop: 90, marginTop: 16 }}>
-            <InitialTableSection
-              dmMode={dmMode}
-              initialTable={initialTable}
-              tableAccepted={tableAccepted}
-              tableDraftText={tableDraftText}
-              setTableDraftText={setTableDraftText}
-              onAccept={() => {
-                setTableAccepted(true);
-                setActiveSection("party");
-                queueMicrotask(() => scrollToSection("party"));
-              }}
-            />
-          </div>
+          {showInitialTable && (
+            <div id={anchorId("table")} style={{ scrollMarginTop: 90, marginTop: 16 }}>
+              <InitialTableSection
+                dmMode={dmMode}
+                initialTable={initialTable}
+                tableAccepted={tableAccepted}
+                tableDraftText={tableDraftText}
+                setTableDraftText={setTableDraftText}
+                onAccept={() => {
+                  setTableAccepted(true);
+                  setActiveSection("party");
+                  queueMicrotask(() => scrollToSection("party"));
+                }}
+              />
+            </div>
+          )}
 
           {/* PARTY DECLARATION */}
           <div id={anchorId("party")} style={{ scrollMarginTop: 90, marginTop: 16 }}>
             <PartySetupSection
-              enabled={dmMode !== null && tableAccepted}
+              enabled={showInitialTable && dmMode !== null && tableAccepted}
               partyDraft={partyDraft}
               partyMembersFallback={partyMembers}
               partyCanonicalExists={partyCanonicalExists}
