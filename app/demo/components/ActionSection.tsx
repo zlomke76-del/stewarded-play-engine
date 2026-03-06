@@ -9,9 +9,10 @@
 // - supports acting-player class skills / species traits
 // - renders loadout chips for the active player
 // - adds specialty quick-action buttons driven by skill labels
+// - adds browser speech-to-text dictation for the action textarea
 // ------------------------------------------------------------
 
-import React, { useEffect, useMemo, useRef } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import CardSection from "@/components/layout/CardSection";
 
 type PartyMemberLite = {
@@ -49,10 +50,40 @@ type Props = {
   commitDisabled?: boolean;
 };
 
+type SpeechRecognitionLike = {
+  continuous: boolean;
+  interimResults: boolean;
+  lang: string;
+  onstart: null | (() => void);
+  onend: null | (() => void);
+  onerror: null | ((event: { error?: string }) => void);
+  onresult: null | ((event: any) => void);
+  start: () => void;
+  stop: () => void;
+};
+
+type SpeechRecognitionCtor = new () => SpeechRecognitionLike;
+
+declare global {
+  interface Window {
+    SpeechRecognition?: SpeechRecognitionCtor;
+    webkitSpeechRecognition?: SpeechRecognitionCtor;
+  }
+}
+
 function appendIntent(prev: string, addition: string) {
   const base = String(prev ?? "");
   if (base.trim().length === 0) return addition;
   return base.endsWith("\n") ? `${base}${addition}` : `${base}\n${addition}`;
+}
+
+function appendDictation(prev: string, addition: string) {
+  const base = String(prev ?? "").trimEnd();
+  const next = String(addition ?? "").trim();
+  if (!next) return String(prev ?? "");
+  if (!base) return next;
+  if (/[.!?]$/.test(base)) return `${base} ${next}`;
+  return `${base} ${next}`;
 }
 
 function titleCaseFromId(value: string) {
@@ -172,6 +203,13 @@ export default function ActionSection({
 }: Props) {
   const hasParty = partyMembers.length > 0;
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
+  const speechBufferRef = useRef<string>("");
+  const shouldResumeListeningRef = useRef(false);
+
+  const [speechSupported, setSpeechSupported] = useState(false);
+  const [isListening, setIsListening] = useState(false);
+  const [speechError, setSpeechError] = useState<string | null>(null);
 
   const actingMember = useMemo(() => {
     return partyMembers.find((m) => m.id === actingPlayerId) ?? null;
@@ -182,11 +220,11 @@ export default function ActionSection({
   }, [actingMember, hasParty]);
 
   const actingSkillIds = useMemo(() => {
-    return Array.isArray(actingMember?.skills) ? actingMember!.skills!.filter(Boolean) : [];
+    return Array.isArray(actingMember?.skills) ? actingMember.skills.filter(Boolean) : [];
   }, [actingMember]);
 
   const actingTraitIds = useMemo(() => {
-    return Array.isArray(actingMember?.traits) ? actingMember!.traits!.filter(Boolean) : [];
+    return Array.isArray(actingMember?.traits) ? actingMember.traits.filter(Boolean) : [];
   }, [actingMember]);
 
   const actingSkillLabels = useMemo(() => {
@@ -217,7 +255,6 @@ export default function ActionSection({
     return partyMembers[nextIndex]?.id ?? null;
   }, [partyMembers, actingPlayerId]);
 
-  // true lock reasons (turn-aware)
   const lockReason = useMemo(() => {
     if (!combatActive) return null;
     if (dmMode === "human") return null;
@@ -237,6 +274,95 @@ export default function ActionSection({
     const id = window.setTimeout(() => textareaRef.current?.focus(), 50);
     return () => window.clearTimeout(id);
   }, [canSubmit, actingPlayerId]);
+
+  useEffect(() => {
+    const RecognitionCtor = window.SpeechRecognition ?? window.webkitSpeechRecognition;
+    setSpeechSupported(!!RecognitionCtor);
+
+    if (!RecognitionCtor) return;
+
+    const recognition = new RecognitionCtor();
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.lang = "en-US";
+
+    recognition.onstart = () => {
+      setIsListening(true);
+      setSpeechError(null);
+    };
+
+    recognition.onend = () => {
+      setIsListening(false);
+      if (shouldResumeListeningRef.current && canSubmit) {
+        try {
+          recognition.start();
+        } catch {
+          // no-op
+        }
+      }
+    };
+
+    recognition.onerror = (event) => {
+      const code = String(event?.error ?? "");
+      if (code === "no-speech") {
+        setSpeechError("No speech detected.");
+      } else if (code === "audio-capture") {
+        setSpeechError("No microphone detected.");
+      } else if (code === "not-allowed") {
+        setSpeechError("Microphone permission was denied.");
+      } else {
+        setSpeechError("Speech recognition error.");
+      }
+    };
+
+    recognition.onresult = (event) => {
+      let finalTranscript = "";
+      let interimTranscript = "";
+
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const transcript = String(event.results[i]?.[0]?.transcript ?? "").trim();
+        if (!transcript) continue;
+
+        if (event.results[i].isFinal) {
+          finalTranscript += `${transcript} `;
+        } else {
+          interimTranscript += `${transcript} `;
+        }
+      }
+
+      speechBufferRef.current = interimTranscript.trim();
+
+      const finalClean = finalTranscript.trim();
+      if (finalClean) {
+        onSetPlayerInput(appendDictation(playerInput, finalClean));
+      }
+    };
+
+    recognitionRef.current = recognition;
+
+    return () => {
+      shouldResumeListeningRef.current = false;
+      try {
+        recognition.stop();
+      } catch {
+        // no-op
+      }
+      recognitionRef.current = null;
+    };
+  }, [canSubmit, onSetPlayerInput, playerInput]);
+
+  useEffect(() => {
+    if (canSubmit) return;
+
+    shouldResumeListeningRef.current = false;
+    if (recognitionRef.current && isListening) {
+      try {
+        recognitionRef.current.stop();
+      } catch {
+        // no-op
+      }
+    }
+  }, [canSubmit, isListening]);
 
   const bannerTone = useMemo(() => {
     if (!combatActive) return "free";
@@ -288,10 +414,47 @@ export default function ActionSection({
   function handleSubmit() {
     if (!canSubmit) return;
 
+    if (isListening) {
+      shouldResumeListeningRef.current = false;
+      try {
+        recognitionRef.current?.stop();
+      } catch {
+        // no-op
+      }
+    }
+
     onSubmit();
 
     if (nextActingPlayerId) {
       onSetActingPlayerId(nextActingPlayerId);
+    }
+  }
+
+  function toggleListening() {
+    if (!speechSupported || !canSubmit) return;
+    const recognition = recognitionRef.current;
+    if (!recognition) return;
+
+    setSpeechError(null);
+
+    if (isListening) {
+      shouldResumeListeningRef.current = false;
+      try {
+        recognition.stop();
+      } catch {
+        // no-op
+      }
+      return;
+    }
+
+    shouldResumeListeningRef.current = true;
+    speechBufferRef.current = "";
+
+    try {
+      recognition.start();
+      textareaRef.current?.focus();
+    } catch {
+      setSpeechError("Unable to start microphone input.");
     }
   }
 
@@ -542,6 +705,22 @@ export default function ActionSection({
               </button>
             ))}
 
+            {speechSupported && (
+              <button
+                type="button"
+                disabled={!canSubmit}
+                onClick={toggleListening}
+                style={{
+                  opacity: canSubmit ? 1 : 0.6,
+                  border: isListening ? "1px solid rgba(255,120,120,0.35)" : undefined,
+                  background: isListening ? "rgba(255,120,120,0.10)" : undefined,
+                }}
+                title={isListening ? "Stop microphone dictation" : "Start microphone dictation"}
+              >
+                {isListening ? "Stop Mic" : "🎤 Dictate"}
+              </button>
+            )}
+
             <button
               type="button"
               disabled={!canSubmit}
@@ -552,6 +731,48 @@ export default function ActionSection({
               Clear
             </button>
           </div>
+
+          {(speechSupported || speechError) && (
+            <div
+              className="muted"
+              style={{
+                marginBottom: 10,
+                fontSize: 12,
+                display: "flex",
+                gap: 10,
+                flexWrap: "wrap",
+                alignItems: "center",
+              }}
+            >
+              {speechSupported ? (
+                <span
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 8,
+                    padding: "4px 8px",
+                    borderRadius: 999,
+                    border: isListening
+                      ? "1px solid rgba(255,120,120,0.32)"
+                      : "1px solid rgba(255,255,255,0.10)",
+                    background: isListening ? "rgba(255,120,120,0.08)" : "rgba(255,255,255,0.04)",
+                  }}
+                >
+                  {isListening ? "Listening..." : "Microphone ready"}
+                </span>
+              ) : null}
+
+              {speechBufferRef.current ? <span>Hearing: “{speechBufferRef.current}”</span> : null}
+
+              {speechError ? <span>{speechError}</span> : null}
+            </div>
+          )}
+
+          {!speechSupported && (
+            <div className="muted" style={{ marginBottom: 10, fontSize: 12 }}>
+              Microphone dictation is not available in this browser.
+            </div>
+          )}
 
           <textarea
             ref={textareaRef}
