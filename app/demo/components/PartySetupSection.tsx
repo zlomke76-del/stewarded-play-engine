@@ -3,6 +3,8 @@
 
 import React from "react";
 import { getPortraitPath } from "@/lib/portraits/getPortraitPath";
+import { getSkillsForClass } from "@/lib/skills/classSkillMap";
+import { getSkillDefinition } from "@/lib/skills/skillDefinitions";
 
 type PortraitType = "Male" | "Female";
 
@@ -14,6 +16,9 @@ type PartyMember = {
   species?: string; // optional for backward-compat with existing party payloads
   className: string;
   portrait: PortraitType;
+
+  // progression / rules
+  skills?: string[];
 
   // stats
   ac: number;
@@ -119,7 +124,7 @@ export default function PartySetupSection(props: {
 
   function getResolvedSpecies(value?: string) {
     const normalized = normalizeSpeciesValue(value ?? "");
-    if (!normalized) return "Elf";
+    if (!normalized) return "Human";
 
     const known =
       SAFE_SPECIES.find((x) => x.toLowerCase() === normalized.toLowerCase()) ?? normalized;
@@ -135,6 +140,17 @@ export default function PartySetupSection(props: {
       SAFE_CLASS_ARCHETYPES.find((x) => x.toLowerCase() === normalized.toLowerCase()) ?? normalized;
 
     return known;
+  }
+
+  function resolveSkillsForClass(className?: string) {
+    const resolvedClass = getResolvedClass(className);
+    return getSkillsForClass(resolvedClass);
+  }
+
+  function getResolvedSkillIds(row: PartyMember) {
+    const fromRow = Array.isArray(row.skills) ? row.skills.filter(Boolean) : [];
+    if (fromRow.length > 0) return fromRow;
+    return resolveSkillsForClass(row.className);
   }
 
   const desktopGridColumns =
@@ -171,6 +187,18 @@ export default function PartySetupSection(props: {
     display: "block",
   };
 
+  const skillChipStyle: React.CSSProperties = {
+    display: "inline-flex",
+    alignItems: "center",
+    borderRadius: 999,
+    padding: "2px 8px",
+    fontSize: 11,
+    lineHeight: 1.3,
+    background: "rgba(255,255,255,0.08)",
+    border: "1px solid rgba(255,255,255,0.10)",
+    whiteSpace: "nowrap",
+  };
+
   return (
     <div style={{ scrollMarginTop: 90 }}>
       <div style={{ padding: "14px 16px" }}>
@@ -182,7 +210,11 @@ export default function PartySetupSection(props: {
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
           <label style={{ display: "flex", flexDirection: "column", gap: 6, minWidth: 190 }}>
             Players (1–6)
-            <select value={currentCount} onChange={(e) => setPartySize(Number(e.target.value))} disabled={partyLocked}>
+            <select
+              value={currentCount}
+              onChange={(e) => setPartySize(Number(e.target.value))}
+              disabled={partyLocked}
+            >
               {[1, 2, 3, 4, 5, 6].map((n) => (
                 <option key={n} value={n}>
                   {n}
@@ -276,9 +308,17 @@ export default function PartySetupSection(props: {
                 row?.portrait ?? "Male"
               );
 
+              const resolvedSkillIds = getResolvedSkillIds(row);
+              const resolvedSkillLabels = resolvedSkillIds.map(
+                (skillId) => getSkillDefinition(skillId)?.label ?? skillId
+              );
+
               return (
                 <React.Fragment key={row.id || `player_${i1}`}>
-                  <div style={portraitFrameStyle} title={`${resolvedSpecies} ${resolvedClass} ${row?.portrait ?? "Male"}`}>
+                  <div
+                    style={portraitFrameStyle}
+                    title={`${resolvedSpecies} ${resolvedClass} ${row?.portrait ?? "Male"}`}
+                  >
                     <img
                       src={portraitPath}
                       alt={`${row?.name || `Player ${i1}`} portrait`}
@@ -291,13 +331,36 @@ export default function PartySetupSection(props: {
                     />
                   </div>
 
-                  <input
-                    value={row?.name ?? ""}
-                    disabled={!editable}
-                    onChange={(e) => setMemberField(idx, { name: e.target.value })}
-                    placeholder={`Player ${i1}`}
-                    style={compactInputStyle}
-                  />
+                  <div style={{ minWidth: 0, display: "flex", flexDirection: "column", gap: 6 }}>
+                    <input
+                      value={row?.name ?? ""}
+                      disabled={!editable}
+                      onChange={(e) => setMemberField(idx, { name: e.target.value })}
+                      placeholder={`Player ${i1}`}
+                      style={compactInputStyle}
+                    />
+
+                    <div
+                      style={{
+                        display: "flex",
+                        flexWrap: "wrap",
+                        gap: 6,
+                        minHeight: 22,
+                      }}
+                    >
+                      {resolvedSkillLabels.length > 0 ? (
+                        resolvedSkillLabels.map((label, skillIdx) => (
+                          <span key={`${row.id || i1}_${label}_${skillIdx}`} style={skillChipStyle}>
+                            {label}
+                          </span>
+                        ))
+                      ) : (
+                        <span className="muted" style={{ fontSize: 11 }}>
+                          No specialty skills assigned
+                        </span>
+                      )}
+                    </div>
+                  </div>
 
                   <div style={{ display: "flex", flexDirection: "column", gap: 6, minWidth: 0 }}>
                     <select
@@ -344,16 +407,25 @@ export default function PartySetupSection(props: {
                       onChange={(e) => {
                         const v = e.target.value;
                         if (v === "") {
-                          setMemberField(idx, { className: "" });
+                          setMemberField(idx, {
+                            className: "",
+                            skills: [],
+                          });
                           return;
                         }
                         if (v === "__custom__") {
-                          if (!classIsCustom) setMemberField(idx, { className: "" });
+                          if (!classIsCustom) {
+                            setMemberField(idx, {
+                              className: "",
+                              skills: [],
+                            });
+                          }
                           return;
                         }
 
                         setMemberField(idx, {
                           className: v,
+                          skills: getSkillsForClass(v),
                         });
                       }}
                       style={compactInputStyle}
@@ -371,7 +443,13 @@ export default function PartySetupSection(props: {
                       <input
                         value={classIsCustom ? classValue : ""}
                         disabled={!editable}
-                        onChange={(e) => setMemberField(idx, { className: e.target.value })}
+                        onChange={(e) => {
+                          const nextClassName = e.target.value;
+                          setMemberField(idx, {
+                            className: nextClassName,
+                            skills: getSkillsForClass(nextClassName),
+                          });
+                        }}
                         placeholder="Custom class"
                         style={compactInputStyle}
                       />
@@ -399,7 +477,9 @@ export default function PartySetupSection(props: {
                   <input
                     value={String(row?.hpCurrent ?? 12)}
                     disabled={!editable}
-                    onChange={(e) => setMemberField(idx, { hpCurrent: safeInt(e.target.value, 12, 0, 999) })}
+                    onChange={(e) =>
+                      setMemberField(idx, { hpCurrent: safeInt(e.target.value, 12, 0, 999) })
+                    }
                     inputMode="numeric"
                     style={compactNumberStyle}
                   />
@@ -438,7 +518,8 @@ export default function PartySetupSection(props: {
 
         <div className="muted" style={{ marginTop: 10, fontSize: 12 }}>
           Recommended: keep this roster stable. Combat turn order is still per combat, but <em>who the
-          players are</em> is session truth.
+          players are</em> is session truth. Specialty skills are auto-assigned from class and become part
+          of the declared roster.
         </div>
       </div>
     </div>
