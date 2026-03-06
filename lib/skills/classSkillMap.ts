@@ -5,6 +5,7 @@ import { normalizeSkillLookupKey } from "./SkillTypes";
 
 export const CLASS_SKILL_MAP: ClassSkillMap = {
   warrior: ["guard_break", "shield_wall", "second_wind"],
+  barbarian: ["rage", "reckless_strike", "intimidating_roar"],
   rogue: ["backstab", "shadowstep", "disarm_trap"],
   mage: ["arc_bolt", "frost_bind", "detect_arcana"],
   cleric: ["heal", "bless", "turn_undead"],
@@ -17,7 +18,6 @@ export const CLASS_SKILL_MAP: ClassSkillMap = {
   sorcerer: ["chaos_bolt", "surge", "quickened_cast"],
   warlock: ["hex", "eldritch_blast", "pact_ward"],
 
-  // optional aliases for future-proofing
   fighter: ["guard_break", "shield_wall", "second_wind"],
   wizard: ["arc_bolt", "frost_bind", "detect_arcana"],
 };
