@@ -1,8 +1,9 @@
 // app/demo/components/DemoHero.tsx
 "use client";
 
+import { useEffect, useRef } from "react";
 import { DMMode, DemoSectionId } from "../demoTypes";
-import { anchorId, scrollToSection, sectionLabel } from "../demoUtils";
+import { anchorId, sectionLabel } from "../demoUtils";
 
 type ChapterButton = { id: DemoSectionId; hint: string };
 
@@ -32,6 +33,89 @@ export default function DemoHero(props: {
   } = props;
 
   const playDisabled = dmMode === null || !tableAccepted;
+
+  const introAudioRef = useRef<HTMLAudioElement | null>(null);
+  const hasPrimedAudioRef = useRef(false);
+  const hasPlayedHeroThemeRef = useRef(false);
+
+  useEffect(() => {
+    const audio = new Audio("/audio/music/chronicles_intro.mp3");
+    audio.preload = "auto";
+    audio.volume = 0.72;
+    introAudioRef.current = audio;
+
+    return () => {
+      try {
+        audio.pause();
+      } catch {
+        // no-op
+      }
+      introAudioRef.current = null;
+      hasPrimedAudioRef.current = false;
+      hasPlayedHeroThemeRef.current = false;
+    };
+  }, []);
+
+  function primeHeroAudio() {
+    const audio = introAudioRef.current;
+    if (!audio || hasPrimedAudioRef.current) return;
+
+    hasPrimedAudioRef.current = true;
+
+    const playPromise = audio.play();
+    if (playPromise && typeof playPromise.then === "function") {
+      playPromise
+        .then(() => {
+          audio.pause();
+          audio.currentTime = 0;
+        })
+        .catch(() => {
+          hasPrimedAudioRef.current = false;
+        });
+    }
+  }
+
+  function playHeroTheme() {
+    const audio = introAudioRef.current;
+    if (!audio) return;
+
+    hasPlayedHeroThemeRef.current = true;
+
+    try {
+      audio.pause();
+      audio.currentTime = 0;
+      const playPromise = audio.play();
+      if (playPromise && typeof playPromise.catch === "function") {
+        playPromise.catch(() => {
+          // autoplay/user-gesture issues should fail silently here
+        });
+      }
+    } catch {
+      // no-op
+    }
+  }
+
+  function handleHeroPlayClick() {
+    if (playDisabled) return;
+    playHeroTheme();
+    onPlayJump();
+  }
+
+  function handleStartHere() {
+    primeHeroAudio();
+    onStartHere();
+  }
+
+  function handleSelectMode(nextMode: DMMode) {
+    primeHeroAudio();
+    onSelectMode(nextMode);
+  }
+
+  function handleNavigate(id: DemoSectionId, disabled: boolean) {
+    if (disabled) return;
+    primeHeroAudio();
+    onNavigate(id);
+  }
 
   return (
     <div
@@ -68,17 +152,17 @@ export default function DemoHero(props: {
           </div>
 
           <div style={{ marginTop: 12, display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
-            <button onClick={onStartHere}>Start here</button>
+            <button onClick={handleStartHere}>Start here</button>
 
             <button
-              onClick={onPlayJump}
+              onClick={handleHeroPlayClick}
               disabled={playDisabled}
               title={
                 dmMode === null
                   ? "Choose a facilitator mode first"
                   : !tableAccepted
-                  ? "Accept the initial table first"
-                  : "Jump to Player Action"
+                    ? "Accept the initial table first"
+                    : "Play intro theme and jump to Player Action"
               }
             >
               Play me
@@ -112,7 +196,7 @@ export default function DemoHero(props: {
 
             <div style={{ marginTop: 10, display: "grid", gap: 8 }}>
               <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                <input type="radio" checked={dmMode === "human"} onChange={() => onSelectMode("human")} />
+                <input type="radio" checked={dmMode === "human"} onChange={() => handleSelectMode("human")} />
                 <span>
                   <strong>Human DM</strong>{" "}
                   <span className="muted">(options visible + editable setup)</span>
@@ -123,7 +207,7 @@ export default function DemoHero(props: {
                 <input
                   type="radio"
                   checked={dmMode === "solace-neutral"}
-                  onChange={() => onSelectMode("solace-neutral")}
+                  onChange={() => handleSelectMode("solace-neutral")}
                 />
                 <span>
                   <strong>Solace</strong> <span className="muted">(Neutral Facilitator)</span>
@@ -196,10 +280,15 @@ export default function DemoHero(props: {
                 <div className="muted" style={{ fontSize: 12, marginTop: 2 }}>
                   You declare intent. The world remembers only what canon records.
                 </div>
+                <div className="muted" style={{ fontSize: 11, marginTop: 6, opacity: 0.9 }}>
+                  {hasPlayedHeroThemeRef.current
+                    ? "Chronicles intro ready."
+                    : "Press play to begin with the intro theme."}
+                </div>
               </div>
 
               <button
-                onClick={onPlayJump}
+                onClick={handleHeroPlayClick}
                 disabled={playDisabled}
                 style={{
                   padding: "10px 12px",
@@ -212,8 +301,8 @@ export default function DemoHero(props: {
                   dmMode === null
                     ? "Choose a facilitator mode first"
                     : !tableAccepted
-                    ? "Accept the initial table first"
-                    : "Jump to Player Action"
+                      ? "Accept the initial table first"
+                      : "Play intro theme and jump to Player Action"
                 }
               >
                 ▶ Play
@@ -251,7 +340,7 @@ export default function DemoHero(props: {
                 return (
                   <button
                     key={b.id}
-                    onClick={() => onNavigate(b.id)}
+                    onClick={() => handleNavigate(b.id, disabled)}
                     disabled={disabled}
                     style={{
                       padding: "10px 10px",
