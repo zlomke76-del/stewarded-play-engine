@@ -286,7 +286,7 @@ export default function PartySetupSection(props: {
                       onError={(e) => {
                         const img = e.currentTarget;
                         img.onerror = null;
-                        img.src = getPortraitPath("Elf", "Warrior", row?.portrait ?? "Male");
+                        img.src = getPortraitPath("Human", "Warrior", row?.portrait ?? "Male");
                       }}
                     />
                   </div>
