@@ -2,6 +2,7 @@
 "use client";
 
 import React from "react";
+import { getPortraitPath } from "@/lib/portraits/getPortraitPath";
 
 type PortraitType = "Male" | "Female";
 
@@ -116,7 +117,29 @@ export default function PartySetupSection(props: {
     return allowed.some((x) => x.toLowerCase() === normalized);
   }
 
-  const desktopGridColumns = "minmax(160px, 1.45fr) minmax(130px, 1fr) minmax(130px, 1fr) 88px 60px 64px 74px 74px";
+  function getResolvedSpecies(value?: string) {
+    const normalized = normalizeSpeciesValue(value ?? "");
+    if (!normalized) return "Elf";
+
+    const known =
+      SAFE_SPECIES.find((x) => x.toLowerCase() === normalized.toLowerCase()) ?? normalized;
+
+    return known;
+  }
+
+  function getResolvedClass(value?: string) {
+    const normalized = normalizeClassValue(value ?? "");
+    if (!normalized) return "Warrior";
+
+    const known =
+      SAFE_CLASS_ARCHETYPES.find((x) => x.toLowerCase() === normalized.toLowerCase()) ?? normalized;
+
+    return known;
+  }
+
+  const desktopGridColumns =
+    "84px minmax(160px, 1.45fr) minmax(130px, 1fr) minmax(130px, 1fr) 88px 60px 64px 74px 74px";
+
   const compactInputStyle: React.CSSProperties = {
     width: "100%",
     minWidth: 0,
@@ -128,12 +151,32 @@ export default function PartySetupSection(props: {
     textAlign: "center",
   };
 
+  const portraitFrameStyle: React.CSSProperties = {
+    width: 72,
+    height: 72,
+    borderRadius: 10,
+    overflow: "hidden",
+    border: "1px solid rgba(255,255,255,0.14)",
+    background: "rgba(255,255,255,0.04)",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    boxSizing: "border-box",
+  };
+
+  const portraitImageStyle: React.CSSProperties = {
+    width: "100%",
+    height: "100%",
+    objectFit: "cover",
+    display: "block",
+  };
+
   return (
     <div style={{ scrollMarginTop: 90 }}>
       <div style={{ padding: "14px 16px" }}>
         <p className="muted" style={{ marginTop: 0 }}>
-          Declare players once at the start. This roster becomes the source for combatants. After you commit, it locks
-          for the session.
+          Declare players once at the start. This roster becomes the source for combatants. After you
+          commit, it locks for the session.
         </p>
 
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
@@ -162,7 +205,7 @@ export default function PartySetupSection(props: {
           </span>
         </div>
 
-        <div style={{ marginTop: 14 }}>
+        <div style={{ marginTop: 14, overflowX: "auto" }}>
           <div
             style={{
               display: "grid",
@@ -170,8 +213,12 @@ export default function PartySetupSection(props: {
               gap: 8,
               alignItems: "center",
               width: "100%",
+              minWidth: 920,
             }}
           >
+            <div className="muted" style={{ fontSize: 12 }}>
+              PORTRAIT
+            </div>
             <div className="muted" style={{ fontSize: 12 }}>
               NAME
             </div>
@@ -221,8 +268,29 @@ export default function PartySetupSection(props: {
                     ? "__custom__"
                     : SAFE_CLASS_ARCHETYPES.find((x) => x.toLowerCase() === classValue.toLowerCase()) ?? "";
 
+              const resolvedSpecies = getResolvedSpecies(row?.species);
+              const resolvedClass = getResolvedClass(row?.className);
+              const portraitPath = getPortraitPath(
+                resolvedSpecies,
+                resolvedClass,
+                row?.portrait ?? "Male"
+              );
+
               return (
                 <React.Fragment key={row.id || `player_${i1}`}>
+                  <div style={portraitFrameStyle} title={`${resolvedSpecies} ${resolvedClass} ${row?.portrait ?? "Male"}`}>
+                    <img
+                      src={portraitPath}
+                      alt={`${row?.name || `Player ${i1}`} portrait`}
+                      style={portraitImageStyle}
+                      onError={(e) => {
+                        const img = e.currentTarget;
+                        img.onerror = null;
+                        img.src = getPortraitPath("Elf", "Warrior", row?.portrait ?? "Male");
+                      }}
+                    />
+                  </div>
+
                   <input
                     value={row?.name ?? ""}
                     disabled={!editable}
@@ -356,7 +424,9 @@ export default function PartySetupSection(props: {
                   <input
                     value={String(row?.initiativeMod ?? 1)}
                     disabled={!editable}
-                    onChange={(e) => setMemberField(idx, { initiativeMod: safeInt(e.target.value, 1, -10, 20) })}
+                    onChange={(e) =>
+                      setMemberField(idx, { initiativeMod: safeInt(e.target.value, 1, -10, 20) })
+                    }
                     inputMode="numeric"
                     style={compactNumberStyle}
                   />
@@ -367,8 +437,8 @@ export default function PartySetupSection(props: {
         </div>
 
         <div className="muted" style={{ marginTop: 10, fontSize: 12 }}>
-          Recommended: keep this roster stable. Combat turn order is still per combat, but *who the players are* is
-          session truth.
+          Recommended: keep this roster stable. Combat turn order is still per combat, but <em>who the
+          players are</em> is session truth.
         </div>
       </div>
     </div>
