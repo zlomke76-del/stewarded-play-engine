@@ -215,6 +215,17 @@ function prettyFaction(v: string) {
   return prettyRole(v);
 }
 
+function buildEnemyRoleFactionLabel(enemy: EnemyDefinition) {
+  const roleLabel = prettyRole(enemy.role);
+  const factionLabel = prettyFaction(enemy.faction);
+
+  if (roleLabel.trim().toLowerCase() === factionLabel.trim().toLowerCase()) {
+    return roleLabel;
+  }
+
+  return `${roleLabel} · ${factionLabel}`;
+}
+
 function classifyPartyRoles(partyMembers: PartyMemberLite[]) {
   let healers = 0;
   let casters = 0;
@@ -354,7 +365,11 @@ function getAdaptiveCandidates(band: PressureBand, partyRoleInfo: PartyRoleInfo)
   const rangedPressure = filterByRole(base, ["archer", "caster", "support", "controller"]);
   const antiBackline = filterByBehavior(
     base,
-    (e) => !!e.behavior.prefersBackline || !!e.behavior.prefersWeakTargets || e.role === "assassin" || e.role === "skirmisher"
+    (e) =>
+      !!e.behavior.prefersBackline ||
+      !!e.behavior.prefersWeakTargets ||
+      e.role === "assassin" ||
+      e.role === "skirmisher"
   );
   const supportPunish = filterByRole(base, ["support", "soldier", "controller", "caster"]);
   const stealthResponse = filterByBehavior(
@@ -396,7 +411,11 @@ function buildRecommendedEnemyRoster(
   const basePool = getBasePoolForPressure(band);
   const adaptivePool = getAdaptiveCandidates(band, partyRoleInfo);
 
-  const pickedAdaptive = pickUniqueDeterministic(adaptivePool, Math.min(n, adaptivePool.length), `${seed}::adaptive`);
+  const pickedAdaptive = pickUniqueDeterministic(
+    adaptivePool,
+    Math.min(n, adaptivePool.length),
+    `${seed}::adaptive`
+  );
   if (pickedAdaptive.length >= n) {
     return pickedAdaptive.slice(0, n);
   }
@@ -404,7 +423,11 @@ function buildRecommendedEnemyRoster(
   const remainingNeeded = n - pickedAdaptive.length;
   const remainingBase = basePool.filter((e) => !pickedAdaptive.some((x) => x.id === e.id));
 
-  const uniqueFill = pickUniqueDeterministic(remainingBase, Math.min(remainingNeeded, remainingBase.length), `${seed}::base_unique`);
+  const uniqueFill = pickUniqueDeterministic(
+    remainingBase,
+    Math.min(remainingNeeded, remainingBase.length),
+    `${seed}::base_unique`
+  );
   if (pickedAdaptive.length + uniqueFill.length >= n) {
     return [...pickedAdaptive, ...uniqueFill].slice(0, n);
   }
@@ -455,6 +478,7 @@ function EnemyCard({
   stateLabel: string;
 }) {
   const src = getEnemyPortraitSrc(enemy);
+  const roleFactionLabel = buildEnemyRoleFactionLabel(enemy);
 
   return (
     <div
@@ -501,7 +525,7 @@ function EnemyCard({
         </div>
 
         <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>
-          {prettyRole(enemy.role)} · {prettyFaction(enemy.faction)} · init mod {initMod >= 0 ? `+${initMod}` : `${initMod}`}
+          {roleFactionLabel} · init mod {initMod >= 0 ? `+${initMod}` : `${initMod}`}
         </div>
 
         <div className="muted" style={{ fontSize: 12, marginTop: 2 }}>
@@ -690,7 +714,12 @@ export default function CombatSetupPanel({
 
   const rosterInfo = useMemo(() => {
     const band = pressureBandFromTier(pressureTier);
-    const recommended = buildRecommendedEnemyRoster(pressureTier, clampInt(partySize, 0, 6), pressureSeed, partyRoleInfo);
+    const recommended = buildRecommendedEnemyRoster(
+      pressureTier,
+      clampInt(partySize, 0, 6),
+      pressureSeed,
+      partyRoleInfo
+    );
 
     const factionCounts = new Map<string, number>();
     for (const e of recommended) {
