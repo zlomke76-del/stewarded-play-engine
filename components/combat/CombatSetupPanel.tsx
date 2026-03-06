@@ -14,6 +14,13 @@ import {
   nextTurnPointer,
 } from "@/lib/combat/CombatState";
 
+import {
+  ENEMY_LIST,
+  EnemyDefinition,
+  EnemyPressureBand,
+  getEnemyDefinitionByName,
+} from "@/lib/game/EnemyDatabase";
+
 type PartyMemberLite = {
   id: string;
   name: string;
@@ -36,6 +43,13 @@ type Props = {
   allowDevControls: boolean;
 };
 
+type PartyRoleInfo = {
+  healers: number;
+  casters: number;
+  frontliners: number;
+  stealthy: number;
+};
+
 function clampInt(n: number, min: number, max: number) {
   const x = Number.isFinite(n) ? Math.trunc(n) : min;
   return Math.max(min, Math.min(max, x));
@@ -47,6 +61,10 @@ function normalizeName(s: string) {
 
 function normalizeClassKey(v: string) {
   return String(v ?? "").trim().toLowerCase();
+}
+
+function shouldFirstTypeGetExtra(seed: string): boolean {
+  return (hash32(seed) & 1) === 1;
 }
 
 function computeCombatLocked(events: readonly any[]) {
@@ -179,7 +197,7 @@ function pressureBandFromTier(pressureTier: any): PressureBand {
   return "low";
 }
 
-// Pressure -> mild init mod heuristic (kept intentionally simple)
+// Pressure -> mild init mod heuristic
 function inferEnemyInitModFromPressure(pressureTier: any): number {
   const band = pressureBandFromTier(pressureTier);
   if (band === "low") return 0;
@@ -188,160 +206,18 @@ function inferEnemyInitModFromPressure(pressureTier: any): number {
   return 3;
 }
 
-// Pressure -> per-enemy HP (avoid squared scaling; count already matches party size)
-function inferEnemyHpPerEnemyFromPressure(pressureTier: any): number {
-  const band = pressureBandFromTier(pressureTier);
-  if (band === "low") return 12;
-  if (band === "medium") return 14;
-  if (band === "high") return 16;
-  return 18;
+function getEnemyPortraitSrc(enemy: EnemyDefinition): string {
+  return `/assets/V2/Enemy/${enemy.portraitKey}.png`;
 }
 
-// Pressure -> 50/50 enemy archetypes (difficulty via “quality”, not quantity)
-function enemyTypesForPressure(pressureTier: any): [string, string] {
-  const band = pressureBandFromTier(pressureTier);
-
-  if (band === "low") return ["Archers", "Shields"];
-  if (band === "medium") return ["Skirmishers", "Shields"];
-  if (band === "high") return ["Casters", "Brutes"];
-  return ["Wraiths", "Firewall Wardens"];
+function prettyRole(v: string) {
+  return String(v ?? "")
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (m) => m.toUpperCase());
 }
 
-function makeInstanceLabel(base: string, idx1: number) {
-  return `${base} #${idx1}`;
-}
-
-function shouldFirstTypeGetExtra(seed: string): boolean {
-  return (hash32(seed) & 1) === 1;
-}
-
-function buildBalancedRoster(
-  pressureTier: any,
-  partySize: number,
-  seed: string
-): { labels: string[]; counts: { a: number; b: number }; types: [string, string] } {
-  const n = clampInt(partySize, 0, 6);
-  const types = enemyTypesForPressure(pressureTier);
-  const [A, B] = types;
-
-  if (n === 0) return { labels: [], counts: { a: 0, b: 0 }, types };
-
-  let a = Math.floor(n / 2);
-  let b = n - a;
-
-  if (n % 2 === 1) {
-    const aGetsExtra = shouldFirstTypeGetExtra(`${seed}::odd_split::${String(pressureTier ?? "")}`);
-    if (aGetsExtra) {
-      a = Math.ceil(n / 2);
-      b = n - a;
-    } else {
-      a = Math.floor(n / 2);
-      b = n - a;
-    }
-  }
-
-  const labels: string[] = [];
-  for (let i = 1; i <= a; i++) labels.push(makeInstanceLabel(A, i));
-  for (let i = 1; i <= b; i++) labels.push(makeInstanceLabel(B, i));
-
-  const interleave = shouldFirstTypeGetExtra(`${seed}::interleave::${A}::${B}`);
-  if (interleave && labels.length > 1) {
-    const aLabels = labels.filter((x) => x.toLowerCase().includes(A.toLowerCase().split(" ")[0]));
-    const bLabels = labels.filter((x) => x.toLowerCase().includes(B.toLowerCase().split(" ")[0]));
-    const out: string[] = [];
-    let ia = 0,
-      ib = 0;
-    while (out.length < labels.length) {
-      if (ia < aLabels.length) out.push(aLabels[ia++]);
-      if (ib < bLabels.length) out.push(bLabels[ib++]);
-    }
-    return { labels: out.slice(0, n), counts: { a, b }, types };
-  }
-
-  return { labels: labels.slice(0, n), counts: { a, b }, types };
-}
-
-function enemyAssetForGroupName(name: string): string {
-  const n = String(name ?? "").toLowerCase().trim();
-
-  if (n.includes("archer")) return "/assets/v1/enemy_archers.png";
-  if (n.includes("brute")) return "/assets/v1/enemy_brutes.png";
-  if (n.includes("shield")) return "/assets/v1/enemy_shields.png";
-  if (n.includes("skirmish")) return "/assets/v1/enemy_skirmishers.png";
-  if (n.includes("stalker")) return "/assets/v1/enemy_stalkers.png";
-  if (n.includes("drone")) return "/assets/v1/enemy_drones.png";
-  if (n.includes("sentr")) return "/assets/v1/enemy_sentries.png";
-  if (n.includes("wraith")) return "/assets/v1/enemy_wraiths.png";
-  if (n.includes("grid")) return "/assets/v1/enemy_grid_knights.png";
-  if (n.includes("firewall")) return "/assets/v1/enemy_firewall_warden.png";
-  if (n.includes("hound")) return "/assets/v1/enemy_unknown.png";
-  if (n.includes("caster")) return "/assets/v1/enemy_unknown.png";
-
-  return "/assets/v1/enemy_unknown.png";
-}
-
-function EnemyCard({
-  name,
-  initMod,
-  hpLabel,
-  stateLabel,
-}: {
-  name: string;
-  initMod: number;
-  hpLabel: string;
-  stateLabel: string;
-}) {
-  const src = enemyAssetForGroupName(name);
-
-  return (
-    <div
-      style={{
-        display: "flex",
-        gap: 10,
-        alignItems: "center",
-        padding: "10px 12px",
-        borderRadius: 14,
-        border: "1px solid rgba(255,255,255,0.10)",
-        background: "rgba(0,0,0,0.22)",
-        boxShadow: "inset 0 1px 0 rgba(255,255,255,0.05)",
-        minWidth: 220,
-      }}
-    >
-      <div
-        style={{
-          width: 44,
-          height: 44,
-          borderRadius: 12,
-          overflow: "hidden",
-          border: "1px solid rgba(255,255,255,0.12)",
-          background: "rgba(255,255,255,0.03)",
-          flex: "0 0 auto",
-        }}
-      >
-        <img
-          src={src}
-          alt=""
-          width={44}
-          height={44}
-          style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
-        />
-      </div>
-
-      <div style={{ minWidth: 0 }}>
-        <div style={{ display: "flex", alignItems: "baseline", gap: 10 }}>
-          <strong style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{name}</strong>
-        </div>
-
-        <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>
-          enemy · init mod {initMod >= 0 ? `+${initMod}` : `${initMod}`}
-        </div>
-
-        <div className="muted" style={{ fontSize: 12, marginTop: 2 }}>
-          {hpLabel} · {stateLabel}
-        </div>
-      </div>
-    </div>
-  );
+function prettyFaction(v: string) {
+  return prettyRole(v);
 }
 
 function classifyPartyRoles(partyMembers: PartyMemberLite[]) {
@@ -373,6 +249,242 @@ function classifyPartyRoles(partyMembers: PartyMemberLite[]) {
   return { healers, casters, frontliners, stealthy };
 }
 
+function sortEnemyLibrary(a: EnemyDefinition, b: EnemyDefinition) {
+  if (a.pressureBand !== b.pressureBand) return a.pressureBand.localeCompare(b.pressureBand);
+  if (a.tier !== b.tier) return a.tier.localeCompare(b.tier);
+  return a.name.localeCompare(b.name);
+}
+
+function pickUniqueDeterministic<T>(items: T[], count: number, seed: string): T[] {
+  const arr = items.slice();
+  const out: T[] = [];
+  let salt = 0;
+
+  while (arr.length > 0 && out.length < count) {
+    const idx = hash32(`${seed}::${salt}`) % arr.length;
+    out.push(arr[idx]);
+    arr.splice(idx, 1);
+    salt += 1;
+  }
+
+  return out;
+}
+
+function repeatDeterministic<T>(items: T[], count: number, seed: string): T[] {
+  if (items.length === 0 || count <= 0) return [];
+  const out: T[] = [];
+  for (let i = 0; i < count; i++) {
+    const idx = hash32(`${seed}::repeat::${i}`) % items.length;
+    out.push(items[idx]);
+  }
+  return out;
+}
+
+function namesToDefs(names: string[]): EnemyDefinition[] {
+  return names
+    .map((name) => getEnemyDefinitionByName(name))
+    .filter((e): e is EnemyDefinition => !!e);
+}
+
+function getBasePoolForPressure(band: PressureBand): EnemyDefinition[] {
+  const namesByBand: Record<PressureBand, string[]> = {
+    low: [
+      "Bandit Archer",
+      "Bandit Warrior",
+      "Goblin Archer",
+      "Goblin Skirmisher",
+      "Zombie",
+      "Wolf",
+    ],
+    medium: [
+      "Bandit Rogue",
+      "Bandit Captain",
+      "Hobgoblin Soldier",
+      "Orc Raider",
+      "Skeleton Warrior",
+      "Skeleton Archer",
+      "Cultist Acolyte",
+      "Giant Spider",
+      "Dire Wolf",
+    ],
+    high: [
+      "Orc Warlord",
+      "Ghoul",
+      "Wraith",
+      "Cult Assassin",
+      "Cult Knight",
+      "Cult Priest",
+      "Arcane Sentinel",
+      "Hellhound",
+      "Stone Golem",
+    ],
+    extreme: [
+      "Ancient Warden",
+      "Void Horror",
+      "Iron Guardian",
+      "Wraith",
+      "Cult Priest",
+      "Arcane Sentinel",
+    ],
+  };
+
+  return namesToDefs(namesByBand[band]);
+}
+
+function getAdaptiveCandidates(band: PressureBand, partyRoleInfo: PartyRoleInfo): EnemyDefinition[] {
+  const base = getBasePoolForPressure(band);
+  const extraNames: string[] = [];
+
+  if (partyRoleInfo.frontliners >= 2) {
+    extraNames.push("Bandit Archer", "Goblin Archer", "Cultist Acolyte", "Arcane Sentinel");
+  }
+
+  if (partyRoleInfo.casters >= 2) {
+    extraNames.push("Goblin Skirmisher", "Bandit Rogue", "Cult Assassin", "Wraith");
+  }
+
+  if (partyRoleInfo.healers >= 1) {
+    extraNames.push("Cult Priest", "Bandit Captain", "Hobgoblin Soldier");
+  }
+
+  if (partyRoleInfo.stealthy >= 2) {
+    extraNames.push("Wolf", "Dire Wolf", "Giant Spider", "Cult Assassin");
+  }
+
+  const extras = namesToDefs(extraNames);
+  const merged = [...base, ...extras];
+
+  const seen = new Set<string>();
+  const unique: EnemyDefinition[] = [];
+  for (const e of merged) {
+    if (!e || seen.has(e.id)) continue;
+    seen.add(e.id);
+    unique.push(e);
+  }
+
+  return unique;
+}
+
+function buildRecommendedEnemyRoster(
+  pressureTier: any,
+  partySize: number,
+  seed: string,
+  partyRoleInfo: PartyRoleInfo
+): EnemyDefinition[] {
+  const n = clampInt(partySize, 0, 6);
+  if (n <= 0) return [];
+
+  const band = pressureBandFromTier(pressureTier);
+  const adaptive = getAdaptiveCandidates(band, partyRoleInfo);
+
+  if (adaptive.length >= n) {
+    return pickUniqueDeterministic(adaptive, n, `${seed}::adaptive`);
+  }
+
+  const fillerPool = getBasePoolForPressure(band);
+  const picked = pickUniqueDeterministic(adaptive, adaptive.length, `${seed}::adaptive`);
+  const needed = n - picked.length;
+  const filler = repeatDeterministic(fillerPool.length > 0 ? fillerPool : adaptive, needed, `${seed}::filler`);
+
+  return [...picked, ...filler].slice(0, n);
+}
+
+function nextEnemyInstanceIndex(enemyName: string, existing: EnemyDefinition[]) {
+  const key = normalizeName(enemyName).toLowerCase();
+  let count = 0;
+  for (const e of existing) {
+    if (normalizeName(e.name).toLowerCase() === key) count += 1;
+  }
+  return count + 1;
+}
+
+function buildEnemyCardLabel(enemy: EnemyDefinition, all: EnemyDefinition[]) {
+  const idx = nextEnemyInstanceIndex(
+    enemy.name,
+    all.filter((e) => e.id === enemy.id || e.name === enemy.name)
+  );
+  const total = all.filter((e) => e.name === enemy.name).length;
+  if (total <= 1) return enemy.name;
+
+  let seen = 0;
+  for (const e of all) {
+    if (e.name !== enemy.name) continue;
+    seen += 1;
+    if (e === enemy) return `${enemy.name} #${seen}`;
+  }
+
+  return `${enemy.name} #${idx}`;
+}
+
+function EnemyCard({
+  enemy,
+  label,
+  initMod,
+  stateLabel,
+}: {
+  enemy: EnemyDefinition;
+  label: string;
+  initMod: number;
+  stateLabel: string;
+}) {
+  const src = getEnemyPortraitSrc(enemy);
+
+  return (
+    <div
+      style={{
+        display: "flex",
+        gap: 10,
+        alignItems: "center",
+        padding: "10px 12px",
+        borderRadius: 14,
+        border: "1px solid rgba(255,255,255,0.10)",
+        background: "rgba(0,0,0,0.22)",
+        boxShadow: "inset 0 1px 0 rgba(255,255,255,0.05)",
+        minWidth: 220,
+      }}
+    >
+      <div
+        style={{
+          width: 52,
+          height: 52,
+          borderRadius: 12,
+          overflow: "hidden",
+          border: "1px solid rgba(255,255,255,0.12)",
+          background: "rgba(255,255,255,0.03)",
+          flex: "0 0 auto",
+        }}
+      >
+        <img
+          src={src}
+          alt={enemy.name}
+          width={52}
+          height={52}
+          style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+          onError={(e) => {
+            const el = e.currentTarget;
+            el.onerror = null;
+            el.src = "/assets/V2/Enemy/Enemy_Bandit_Warrior.png";
+          }}
+        />
+      </div>
+
+      <div style={{ minWidth: 0 }}>
+        <div style={{ display: "flex", alignItems: "baseline", gap: 10 }}>
+          <strong style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{label}</strong>
+        </div>
+
+        <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>
+          {prettyRole(enemy.role)} · {prettyFaction(enemy.faction)} · init mod {initMod >= 0 ? `+${initMod}` : `${initMod}`}
+        </div>
+
+        <div className="muted" style={{ fontSize: 12, marginTop: 2 }}>
+          HP {enemy.defenses.hp}/{enemy.defenses.hp} · AC {enemy.defenses.ac} · {stateLabel}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function CombatSetupPanel({
   events,
   onAppendCanon,
@@ -390,23 +502,7 @@ export default function CombatSetupPanel({
 
   const INIT_MODS = [-2, -1, 0, 1, 2, 3, 4, 5, 6, 7, 8] as const;
 
-  const ENEMY_GROUP_LIBRARY = useMemo(
-    () => [
-      "Archers",
-      "Shields",
-      "Skirmishers",
-      "Brutes",
-      "Casters",
-      "Stalkers",
-      "Drones",
-      "Sentries",
-      "Wraiths",
-      "Grid Knights",
-      "Firewall Wardens",
-      "Neon Hounds",
-    ],
-    []
-  );
+  const ENEMY_LIBRARY = useMemo(() => ENEMY_LIST.slice().sort(sortEnemyLibrary), []);
 
   const partySize = useMemo(() => clampInt(partyMembers?.length ?? 0, 0, 6), [partyMembers]);
 
@@ -417,12 +513,16 @@ export default function CombatSetupPanel({
     return `pressure=${String(pressureTier ?? "unknown")}::outcomes=${outcomes}::party=${partySize}`;
   }, [events, partySize, pressureTier]);
 
-  const [enemyGroups, setEnemyGroups] = useState<string[]>([
-    makeInstanceLabel("Archers", 1),
-    makeInstanceLabel("Shields", 1),
-  ]);
+  const [selectedEnemies, setSelectedEnemies] = useState<EnemyDefinition[]>(() =>
+    buildRecommendedEnemyRoster("low", 2, "initial", {
+      healers: 0,
+      casters: 0,
+      frontliners: 0,
+      stealthy: 0,
+    })
+  );
 
-  const [enemyGroupSelect, setEnemyGroupSelect] = useState<string>("Archers");
+  const [enemySelectName, setEnemySelectName] = useState<string>(() => ENEMY_LIBRARY[0]?.name ?? "Bandit Archer");
   const [initModEnemies, setInitModEnemies] = useState<number>(1);
 
   useEffect(() => {
@@ -439,47 +539,33 @@ export default function CombatSetupPanel({
     if (isHuman && !allowDevControls) return;
 
     const desired = clampInt(partySize, 0, 6);
-    const roster = buildBalancedRoster(pressureTier, desired, pressureSeed);
+    const roster = buildRecommendedEnemyRoster(pressureTier, desired, pressureSeed, partyRoleInfo);
 
-    setEnemyGroups((prev) => {
+    setSelectedEnemies((prev) => {
       if (isHuman && allowDevControls) return prev;
-      return roster.labels;
+      return roster;
     });
-  }, [partySize, pressureTier, pressureSeed, isHuman, allowDevControls]);
+  }, [partySize, pressureTier, pressureSeed, partyRoleInfo, isHuman, allowDevControls]);
 
-  function nextInstanceIndexForBase(base: string, existing: string[]) {
-    const b = String(base ?? "").toLowerCase().trim();
-    let max = 0;
-    for (const label of existing) {
-      const s = String(label ?? "").toLowerCase();
-      if (!s.includes(b)) continue;
-      const m = /#\s*(\d+)\s*$/.exec(label);
-      if (m?.[1]) max = Math.max(max, Number(m[1]));
-    }
-    return max + 1;
-  }
-
-  function addEnemyGroup(baseName: string) {
+  function addEnemyByName(name: string) {
     if (!canEdit) return;
-    const base = normalizeName(baseName);
-    if (!base) return;
+    const enemy = getEnemyDefinitionByName(name);
+    if (!enemy) return;
 
-    setEnemyGroups((prev) => {
+    setSelectedEnemies((prev) => {
       if (prev.length >= 6) return prev;
-      const idx = nextInstanceIndexForBase(base, prev);
-      return [...prev, makeInstanceLabel(base, idx)].slice(0, 6);
+      return [...prev, enemy].slice(0, 6);
     });
   }
 
-  function removeEnemyGroup(label: string) {
+  function removeEnemyAt(index: number) {
     if (!canEdit) return;
-    const v = normalizeName(label);
-    setEnemyGroups((prev) => prev.filter((g) => g !== v));
+    setSelectedEnemies((prev) => prev.filter((_, i) => i !== index));
   }
 
-  function clearEnemyGroups() {
+  function clearEnemies() {
     if (!canEdit) return;
-    setEnemyGroups([]);
+    setSelectedEnemies([]);
   }
 
   const latestCombatId = useMemo(() => findLatestCombatId(events as any) ?? null, [events]);
@@ -501,12 +587,11 @@ export default function CombatSetupPanel({
     const members = (partyMembers ?? []).slice(0, 6);
     if (members.length === 0) return;
 
-    const desiredGroups = clampInt(members.length, 1, 6);
-
-    const ensuredLabels =
-      enemyGroups.length > 0
-        ? enemyGroups.slice(0, desiredGroups)
-        : buildBalancedRoster(pressureTier, desiredGroups, pressureSeed).labels;
+    const desiredCount = clampInt(members.length, 1, 6);
+    const ensuredEnemies =
+      selectedEnemies.length > 0
+        ? selectedEnemies.slice(0, desiredCount)
+        : buildRecommendedEnemyRoster(pressureTier, desiredCount, pressureSeed, partyRoleInfo);
 
     const combatId = crypto.randomUUID();
     const seed = crypto.randomUUID();
@@ -523,10 +608,16 @@ export default function CombatSetupPanel({
       });
     });
 
-    ensuredLabels.forEach((name, idx) => {
+    const duplicateTracker: Record<string, number> = {};
+
+    ensuredEnemies.forEach((enemy) => {
+      const slug = enemy.slug;
+      duplicateTracker[slug] = (duplicateTracker[slug] ?? 0) + 1;
+      const instance = duplicateTracker[slug];
+
       participants.push({
-        id: `enemy_group_${idx + 1}`,
-        name,
+        id: `enemy_${slug}_${instance}`,
+        name: enemy.name,
         kind: "enemy_group",
         initiativeMod: Math.trunc(Number(initModEnemies ?? 0)),
       });
@@ -558,30 +649,40 @@ export default function CombatSetupPanel({
 
   const enemyCards = useMemo(() => {
     const n = clampInt(partySize, 0, 6);
-    const labels = enemyGroups.slice(0, n);
+    const enemies = selectedEnemies.slice(0, n);
+    const stateLabel = locked ? "In combat" : "Deployed (database-backed)";
 
-    const hpPerEnemy = inferEnemyHpPerEnemyFromPressure(pressureTier);
-    const hpLabel = `HP ${hpPerEnemy}/${hpPerEnemy}`;
-    const stateLabel = locked ? "In combat" : "Deployed (Solace-owned)";
-
-    return labels.map((name) => ({
-      name,
+    return enemies.map((enemy, idx, all) => ({
+      key: `${enemy.id}_${idx}`,
+      enemy,
+      label: buildEnemyCardLabel(enemy, all),
       initMod: Math.trunc(Number(initModEnemies ?? 0)),
-      hpLabel,
       stateLabel,
     }));
-  }, [enemyGroups, initModEnemies, locked, partySize, pressureTier]);
+  }, [selectedEnemies, initModEnemies, locked, partySize]);
 
   const rosterInfo = useMemo(() => {
-    const roster = buildBalancedRoster(pressureTier, clampInt(partySize, 0, 6), pressureSeed);
-    const [A, B] = roster.types;
-    const hp = inferEnemyHpPerEnemyFromPressure(pressureTier);
     const band = pressureBandFromTier(pressureTier);
-    return { A, B, a: roster.counts.a, b: roster.counts.b, hp, band };
-  }, [partySize, pressureTier, pressureSeed]);
+    const recommended = buildRecommendedEnemyRoster(pressureTier, clampInt(partySize, 0, 6), pressureSeed, partyRoleInfo);
+
+    const factionCounts = new Map<string, number>();
+    for (const e of recommended) {
+      factionCounts.set(e.faction, (factionCounts.get(e.faction) ?? 0) + 1);
+    }
+
+    const factionSummary = Array.from(factionCounts.entries())
+      .map(([faction, count]) => `${count}× ${prettyFaction(faction)}`)
+      .join(" · ");
+
+    return {
+      band,
+      factionSummary,
+      recommendedCount: recommended.length,
+    };
+  }, [partySize, pressureTier, pressureSeed, partyRoleInfo]);
 
   return (
-    <CardSection title="Combat (Deterministic, Grouped Enemies)">
+    <CardSection title="Combat (Deterministic, Database-Backed Enemies)">
       <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center", marginTop: 2 }}>
         <Pill tone="info">Event-sourced turn order</Pill>
         {locked ? <Pill tone="warn">🔒 Combat active — setup locked</Pill> : <Pill>Setup ready</Pill>}
@@ -638,34 +739,34 @@ export default function CombatSetupPanel({
 
           {showBuilderControls && (
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "flex-end" }}>
-              <ControlLabel label="Enemy group (builder)">
+              <ControlLabel label="Enemy definition (builder)">
                 <select
-                  value={enemyGroupSelect}
+                  value={enemySelectName}
                   disabled={!canEdit}
-                  onChange={(e) => setEnemyGroupSelect(e.target.value)}
-                  style={{ ...selectStyle(!canEdit), minWidth: 240 }}
+                  onChange={(e) => setEnemySelectName(e.target.value)}
+                  style={{ ...selectStyle(!canEdit), minWidth: 260 }}
                 >
-                  {ENEMY_GROUP_LIBRARY.map((g) => (
-                    <option key={g} value={g}>
-                      {g}
+                  {ENEMY_LIBRARY.map((enemy) => (
+                    <option key={enemy.id} value={enemy.name}>
+                      {enemy.name} · {prettyFaction(enemy.faction)} · {prettyRole(enemy.role)}
                     </option>
                   ))}
                 </select>
               </ControlLabel>
 
               <button
-                onClick={() => addEnemyGroup(enemyGroupSelect)}
-                disabled={!canEdit || enemyGroups.length >= 6}
-                style={buttonStyle("primary", !canEdit || enemyGroups.length >= 6)}
+                onClick={() => addEnemyByName(enemySelectName)}
+                disabled={!canEdit || selectedEnemies.length >= 6}
+                style={buttonStyle("primary", !canEdit || selectedEnemies.length >= 6)}
                 title={!canEdit ? "Solace-owned (or combat locked)" : "Add enemy"}
               >
                 Add
               </button>
 
               <button
-                onClick={clearEnemyGroups}
-                disabled={!canEdit || enemyGroups.length === 0}
-                style={buttonStyle("ghost", !canEdit || enemyGroups.length === 0)}
+                onClick={clearEnemies}
+                disabled={!canEdit || selectedEnemies.length === 0}
+                style={buttonStyle("ghost", !canEdit || selectedEnemies.length === 0)}
               >
                 Clear
               </button>
@@ -688,17 +789,17 @@ export default function CombatSetupPanel({
             }}
           >
             <span className="muted" style={{ fontSize: 12 }}>
-              Enemies <span className="muted">(1:1 with party size · 50/50 mix)</span>
+              Enemies <span className="muted">(1:1 with party size · real EnemyDatabase definitions)</span>
             </span>
 
             <span className="muted" style={{ fontSize: 12 }}>
               Pressure tier: <strong>{String(pressureTier ?? "unknown")}</strong> · Band{" "}
-              <strong>{rosterInfo.band}</strong> · HP <strong>{rosterInfo.hp}</strong>
+              <strong>{rosterInfo.band}</strong>
             </span>
           </div>
 
           <div className="muted" style={{ fontSize: 12 }}>
-            Roster: <strong>{rosterInfo.a}</strong>× {rosterInfo.A} · <strong>{rosterInfo.b}</strong>× {rosterInfo.B}
+            Recommended pool: {rosterInfo.factionSummary || "—"}
           </div>
 
           <div className="muted" style={{ fontSize: 12 }}>
@@ -714,7 +815,7 @@ export default function CombatSetupPanel({
             <div
               style={{
                 display: "grid",
-                gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+                gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
                 gap: 10,
                 marginTop: 4,
                 width: "100%",
@@ -722,10 +823,10 @@ export default function CombatSetupPanel({
             >
               {enemyCards.map((c) => (
                 <EnemyCard
-                  key={c.name}
-                  name={c.name}
+                  key={c.key}
+                  enemy={c.enemy}
+                  label={c.label}
                   initMod={c.initMod}
-                  hpLabel={c.hpLabel}
                   stateLabel={c.stateLabel}
                 />
               ))}
@@ -736,11 +837,11 @@ export default function CombatSetupPanel({
             </div>
           )}
 
-          {showBuilderControls && enemyGroups.length > 0 && (
+          {showBuilderControls && selectedEnemies.length > 0 && (
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8 }}>
-              {enemyGroups.slice(0, 6).map((g) => (
+              {selectedEnemies.slice(0, 6).map((enemy, idx) => (
                 <span
-                  key={g}
+                  key={`${enemy.id}_${idx}`}
                   style={{
                     display: "inline-flex",
                     alignItems: "center",
@@ -751,11 +852,11 @@ export default function CombatSetupPanel({
                     background: "rgba(255,255,255,0.05)",
                   }}
                 >
-                  <span>{g}</span>
+                  <span>{enemy.name}</span>
                   <button
-                    onClick={() => removeEnemyGroup(g)}
+                    onClick={() => removeEnemyAt(idx)}
                     disabled={!canEdit}
-                    aria-label={`Remove ${g}`}
+                    aria-label={`Remove ${enemy.name}`}
                     style={{
                       padding: "0 10px",
                       height: 24,
