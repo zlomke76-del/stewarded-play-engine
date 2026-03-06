@@ -2,26 +2,28 @@
 
 // components/combat/EnemyTurnResolverPanel.tsx
 // ------------------------------------------------------------
-// EnemyTurnResolverPanel (V1)
+// EnemyTurnResolverPanel (V2)
 // ------------------------------------------------------------
 // In Solace Neutral Facilitator mode, enemies are driven by Solace.
 // This panel:
-// - chooses an enemy action (V1 heuristic)
+// - chooses an enemy action using enemy specialty skills when available
 // - plays suspense steps (declare → telegraph → roll → reveal → commit)
 // - does NOT write canon directly; it calls parent callbacks
 //
-// NOTE (type fix):
-// A recent damage-kind expansion introduced values like "piercing".
-// This file now defines DamageKind as a union that includes those,
-// fixing the TS error: '"piercing"' is not assignable to type '"mixed"'.
+// Upgrade:
+// - integrates enemy skill registry
+// - deterministic skill choice per enemy/target pair
+// - richer attack hint + damage typing
+// - still fully backward-compatible with existing combat flow
 // ------------------------------------------------------------
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import CardSection from "@/components/layout/CardSection";
+import { getSkillsForEnemyArchetype } from "@/lib/skills/classSkillMap";
+import { getSkillDefinition } from "@/lib/skills/skillDefinitions";
 
 type Step = "idle" | "declared" | "telegraph" | "rolled" | "revealed";
 
-// Expandable damage-kind vocabulary (kept small + RPG-obvious)
 type DamageKind =
   | "mixed"
   | "piercing"
@@ -34,15 +36,13 @@ type DamageKind =
   | "necrotic"
   | "psychic"
   | "poison"
-  | "radiant";
+  | "radiant"
+  | "shadow";
 
 type OutcomePayload = {
   description: string;
   dice: { mode: "d20"; roll: number; dc: number; source: "solace" };
   audit: string[];
-
-  // Optional future-proofing: if your pipeline consumes structured damage,
-  // keep it here as soft/optional metadata (parent may ignore).
   damage?: {
     roll: { count: number; sides: number; bonus: number };
     kind: DamageKind;
@@ -56,19 +56,23 @@ type TelegraphInfo = {
 };
 
 type Props = {
-  enabled: boolean; // true only when (dmMode === "solace-neutral" && combatActive && isEnemyTurn)
+  enabled: boolean;
   activeEnemyGroupName: string | null;
   activeEnemyGroupId: string | null;
-
-  // for targeting text (optional)
-  playerNames: string[]; // resolved names: ["Rune", "Orin", ...] for active players
-
-  // Theater trigger (parent can increment a nonce)
+  playerNames: string[];
   onTelegraph: (info: TelegraphInfo) => void;
-
-  // Parent commits OUTCOME (arbiter commit) and advances the turn pointer
   onCommitOutcome: (payload: OutcomePayload) => void;
   onAdvanceTurn: () => void;
+};
+
+type ResolvedEnemyAction = {
+  skillId: string | null;
+  skillLabel: string;
+  archetype: string;
+  attackHint: "volley" | "beam" | "charge" | "unknown";
+  dc: number;
+  damage: { count: number; sides: number; bonus: number; kind: DamageKind };
+  declared: string;
 };
 
 function randInt(minIncl: number, maxIncl: number) {
@@ -81,6 +85,15 @@ function randInt(minIncl: number, maxIncl: number) {
 function pick<T>(arr: T[]): T | null {
   if (!arr.length) return null;
   return arr[randInt(0, arr.length - 1)];
+}
+
+function hash32(s: string): number {
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return h >>> 0;
 }
 
 function archetypeFor(name: string | null) {
@@ -100,7 +113,40 @@ function archetypeFor(name: string | null) {
   return "unknown";
 }
 
-function attackHintFor(enemyName: string) {
+function enemyArchetypeKeyForSkills(name: string | null) {
+  const a = archetypeFor(name);
+  switch (a) {
+    case "archers":
+    case "sentries":
+      return "Bandit Archer";
+    case "skirmishers":
+      return "Goblin Skirmisher";
+    case "casters":
+    case "firewall_wardens":
+      return "Dark Cultist";
+    case "wraiths":
+    case "grid_knights":
+      return "Undead Knight";
+    case "stalkers":
+      return "Shadow Assassin";
+    case "brutes":
+    case "shields":
+    case "neon_hounds":
+    case "drones":
+      return "Orc Raider";
+    default:
+      return "Orc Raider";
+  }
+}
+
+function attackHintFor(enemyName: string, skillId?: string | null) {
+  const s = String(skillId ?? "").toLowerCase();
+  if (s.includes("volley")) return "volley" as const;
+  if (s.includes("blast") || s.includes("hex") || s.includes("drain")) return "beam" as const;
+  if (s.includes("strike") || s.includes("slash") || s.includes("cleave") || s.includes("frenzy")) {
+    return "charge" as const;
+  }
+
   const a = archetypeFor(enemyName);
   switch (a) {
     case "archers":
@@ -119,9 +165,103 @@ function attackHintFor(enemyName: string) {
   }
 }
 
-function buildEnemyIntent(enemyName: string, targetName: string) {
-  const a = archetypeFor(enemyName);
+function defaultDC(enemyName: string, skillId?: string | null) {
+  const s = String(skillId ?? "").toLowerCase();
+  if (s.includes("strike") || s.includes("cleave") || s.includes("slash")) return 12;
+  if (s.includes("volley")) return 13;
+  if (s.includes("hex") || s.includes("drain")) return 14;
+  if (s.includes("smoke") || s.includes("vanish")) return 12;
+  if (s.includes("march") || s.includes("frenzy")) return 11;
 
+  const a = archetypeFor(enemyName);
+  switch (a) {
+    case "archers":
+    case "sentries":
+      return 13;
+    case "stalkers":
+    case "wraiths":
+      return 14;
+    case "brutes":
+    case "grid_knights":
+      return 12;
+    case "casters":
+    case "firewall_wardens":
+      return 15;
+    default:
+      return 12;
+  }
+}
+
+function damageProfileFor(enemyName: string, skillId?: string | null): { count: number; sides: number; bonus: number; kind: DamageKind } {
+  const s = String(skillId ?? "").toLowerCase();
+
+  if (s === "bandit_volley") return { count: 1, sides: 6, bonus: 1, kind: "piercing" };
+  if (s === "suppressing_fire") return { count: 1, sides: 4, bonus: 1, kind: "piercing" };
+  if (s === "raider_cleave") return { count: 1, sides: 8, bonus: 2, kind: "slashing" };
+  if (s === "raider_frenzy") return { count: 1, sides: 8, bonus: 1, kind: "slashing" };
+  if (s === "skirmisher_harass") return { count: 1, sides: 6, bonus: 2, kind: "piercing" };
+  if (s === "skirmisher_smoke") return { count: 1, sides: 4, bonus: 0, kind: "mixed" };
+  if (s === "cultist_hex") return { count: 1, sides: 4, bonus: 1, kind: "shadow" };
+  if (s === "cultist_drain") return { count: 1, sides: 8, bonus: 0, kind: "necrotic" };
+  if (s === "undead_slash") return { count: 1, sides: 8, bonus: 1, kind: "slashing" };
+  if (s === "deathless_march") return { count: 1, sides: 6, bonus: 0, kind: "bludgeoning" };
+  if (s === "shadow_strike") return { count: 1, sides: 8, bonus: 2, kind: "shadow" };
+  if (s === "vanish") return { count: 1, sides: 4, bonus: 0, kind: "mixed" };
+
+  const a = archetypeFor(enemyName);
+  switch (a) {
+    case "archers":
+    case "sentries":
+      return { count: 1, sides: 6, bonus: 1, kind: "piercing" };
+    case "brutes":
+    case "grid_knights":
+    case "neon_hounds":
+      return { count: 1, sides: 8, bonus: 2, kind: "bludgeoning" };
+    case "casters":
+      return { count: 1, sides: 10, bonus: 0, kind: "force" };
+    case "firewall_wardens":
+      return { count: 1, sides: 10, bonus: 0, kind: "fire" };
+    case "wraiths":
+      return { count: 1, sides: 8, bonus: 0, kind: "necrotic" };
+    case "stalkers":
+    case "skirmishers":
+      return { count: 1, sides: 6, bonus: 2, kind: "slashing" };
+    default:
+      return { count: 1, sides: 6, bonus: 0, kind: "mixed" };
+  }
+}
+
+function buildEnemyIntent(enemyName: string, targetName: string, skillId?: string | null, skillLabel?: string) {
+  switch (skillId) {
+    case "bandit_volley":
+      return `The ${enemyName} unleash ${skillLabel ?? "Bandit Volley"} at ${targetName}, saturating the lane with arrows.`;
+    case "suppressing_fire":
+      return `The ${enemyName} use ${skillLabel ?? "Suppressing Fire"} to pin ${targetName} down and ruin their movement lane.`;
+    case "raider_cleave":
+      return `The ${enemyName} surge forward with ${skillLabel ?? "Raider Cleave"}, trying to break ${targetName} apart.`;
+    case "raider_frenzy":
+      return `The ${enemyName} enter ${skillLabel ?? "Raider Frenzy"} and barrel toward ${targetName} with savage momentum.`;
+    case "skirmisher_harass":
+      return `The ${enemyName} dart in with ${skillLabel ?? "Skirmisher Harass"}, cutting at ${targetName} before fading back.`;
+    case "skirmisher_smoke":
+      return `The ${enemyName} trigger ${skillLabel ?? "Skirmisher Smoke"}, masking their angle on ${targetName}.`;
+    case "cultist_hex":
+      return `The ${enemyName} lay ${skillLabel ?? "Cultist Hex"} on ${targetName}, trying to weaken their resolve.`;
+    case "cultist_drain":
+      return `The ${enemyName} invoke ${skillLabel ?? "Cultist Drain"} and leech strength from ${targetName}.`;
+    case "undead_slash":
+      return `The ${enemyName} advance with ${skillLabel ?? "Undead Slash"} and carve toward ${targetName}.`;
+    case "deathless_march":
+      return `The ${enemyName} begin a ${skillLabel ?? "Deathless March"}, grinding relentlessly into ${targetName}.`;
+    case "shadow_strike":
+      return `The ${enemyName} spring from concealment with ${skillLabel ?? "Shadow Strike"} at ${targetName}.`;
+    case "vanish":
+      return `The ${enemyName} use ${skillLabel ?? "Vanish"} to dissolve from sight and reset on ${targetName}.`;
+    default:
+      break;
+  }
+
+  const a = archetypeFor(enemyName);
   switch (a) {
     case "archers":
       return `The ${enemyName} loose a coordinated volley at ${targetName}.`;
@@ -152,28 +292,33 @@ function buildEnemyIntent(enemyName: string, targetName: string) {
   }
 }
 
-function defaultDC(enemyName: string) {
-  const a = archetypeFor(enemyName);
-  switch (a) {
-    case "archers":
-    case "sentries":
-      return 13;
-    case "stalkers":
-    case "wraiths":
-      return 14;
-    case "brutes":
-    case "grid_knights":
-      return 12;
-    case "casters":
-    case "firewall_wardens":
-      return 15;
-    default:
-      return 12;
-  }
-}
-
-function outcomeText(enemyName: string, targetName: string, roll: number, dc: number) {
+function outcomeText(enemyName: string, targetName: string, roll: number, dc: number, action: ResolvedEnemyAction) {
   const hit = roll >= dc;
+  const skillId = action.skillId;
+
+  if (skillId === "bandit_volley") {
+    return hit
+      ? `The volley converges cleanly — ${targetName} is struck through the chaos.`
+      : `The arrows scatter into stone and shadow — ${targetName} slips the kill lane.`;
+  }
+
+  if (skillId === "cultist_drain") {
+    return hit
+      ? `Dark force locks on — ${targetName} staggers as vitality is torn away.`
+      : `The ritual thread frays in the air — ${targetName} resists the drain.`;
+  }
+
+  if (skillId === "shadow_strike") {
+    return hit
+      ? `A sudden shape flashes in close — ${targetName} is hit before they can square up.`
+      : `Steel whispers past — ${targetName} twists clear at the last instant.`;
+  }
+
+  if (skillId === "raider_cleave" || skillId === "undead_slash") {
+    return hit
+      ? `The strike lands with brutal weight — ${targetName} is forced backward.`
+      : `The heavy swing goes wide — ${targetName} holds the line.`;
+  }
 
   const a = archetypeFor(enemyName);
   if (a === "archers") {
@@ -182,10 +327,10 @@ function outcomeText(enemyName: string, targetName: string, roll: number, dc: nu
       : `A volley of arrows clatters off stone — ${targetName} ducks behind cover.`;
   }
 
-  if (a === "casters") {
+  if (a === "casters" || a === "firewall_wardens") {
     return hit
       ? `The air snaps with force — ${targetName} is struck mid-step.`
-      : `The spell fractures against the dungeon’s damp air — it fizzles wide.`;
+      : `The spell fractures against the air — it fizzles wide.`;
   }
 
   return hit
@@ -193,28 +338,33 @@ function outcomeText(enemyName: string, targetName: string, roll: number, dc: nu
     : `The attack misses — ${targetName} holds their ground.`;
 }
 
-function damageProfileFor(enemyName: string): { count: number; sides: number; bonus: number; kind: DamageKind } {
-  const a = archetypeFor(enemyName);
-  switch (a) {
-    case "archers":
-    case "sentries":
-      return { count: 1, sides: 6, bonus: 1, kind: "piercing" };
-    case "brutes":
-    case "grid_knights":
-    case "neon_hounds":
-      return { count: 1, sides: 8, bonus: 2, kind: "bludgeoning" };
-    case "casters":
-      return { count: 1, sides: 10, bonus: 0, kind: "force" };
-    case "firewall_wardens":
-      return { count: 1, sides: 10, bonus: 0, kind: "fire" };
-    case "wraiths":
-      return { count: 1, sides: 8, bonus: 0, kind: "necrotic" };
-    case "stalkers":
-    case "skirmishers":
-      return { count: 1, sides: 6, bonus: 2, kind: "slashing" };
-    default:
-      return { count: 1, sides: 6, bonus: 0, kind: "mixed" };
+function resolveEnemyAction(enemyName: string, enemyId: string | null, targetName: string): ResolvedEnemyAction {
+  const archetype = enemyArchetypeKeyForSkills(enemyName);
+  const skillIds = getSkillsForEnemyArchetype(archetype);
+
+  let chosenSkillId: string | null = null;
+  if (skillIds.length > 0) {
+    const seed = `${enemyId ?? enemyName}::${targetName}::${archetype}`;
+    const idx = hash32(seed) % skillIds.length;
+    chosenSkillId = skillIds[idx] ?? null;
   }
+
+  const def = chosenSkillId ? getSkillDefinition(chosenSkillId) : null;
+  const skillLabel = def?.label ?? (chosenSkillId ? chosenSkillId : "Attack");
+  const attackHint = attackHintFor(enemyName, chosenSkillId);
+  const dc = defaultDC(enemyName, chosenSkillId);
+  const damage = damageProfileFor(enemyName, chosenSkillId);
+  const declared = buildEnemyIntent(enemyName, targetName, chosenSkillId, skillLabel);
+
+  return {
+    skillId: chosenSkillId,
+    skillLabel,
+    archetype,
+    attackHint,
+    dc,
+    damage,
+    declared,
+  };
 }
 
 export default function EnemyTurnResolverPanel({
@@ -231,6 +381,7 @@ export default function EnemyTurnResolverPanel({
   const [roll, setRoll] = useState<number | null>(null);
   const [dc, setDC] = useState<number>(12);
   const [reveal, setReveal] = useState<string>("");
+  const [resolvedAction, setResolvedAction] = useState<ResolvedEnemyAction | null>(null);
 
   const timers = useRef<number[]>([]);
   const rollRef = useRef<number | null>(null);
@@ -242,20 +393,18 @@ export default function EnemyTurnResolverPanel({
     return pick(candidates) ?? "the party";
   }, [playerNames]);
 
-  // Reset when turn/enemy changes
   useEffect(() => {
     setStep("idle");
     setDeclared("");
     setRoll(null);
     rollRef.current = null;
     setReveal("");
+    setResolvedAction(null);
     if (enemyName) setDC(defaultDC(enemyName));
 
-    // clear timers
     timers.current.forEach((t) => window.clearTimeout(t));
     timers.current = [];
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [enabled, activeEnemyGroupId, activeEnemyGroupName]);
+  }, [enabled, activeEnemyGroupId, activeEnemyGroupName, enemyName]);
 
   function queue(ms: number, fn: () => void) {
     const id = window.setTimeout(fn, ms);
@@ -265,21 +414,18 @@ export default function EnemyTurnResolverPanel({
   function begin() {
     if (!enabled || !enemyName) return;
 
-    const intent = buildEnemyIntent(enemyName, targetName);
-    const nextDC = defaultDC(enemyName);
-    const hint = attackHintFor(enemyName);
-
-    setDeclared(intent);
-    setDC(nextDC);
+    const action = resolveEnemyAction(enemyName, activeEnemyGroupId, targetName);
+    setResolvedAction(action);
+    setDeclared(action.declared);
+    setDC(action.dc);
     setStep("declared");
 
-    // suspense beats
     queue(450, () => {
       setStep("telegraph");
       onTelegraph({
         enemyName,
         targetName,
-        attackStyleHint: hint,
+        attackStyleHint: action.attackHint,
       });
     });
 
@@ -291,8 +437,8 @@ export default function EnemyTurnResolverPanel({
     });
 
     queue(1750, () => {
-      const r = rollRef.current ?? randInt(1, 20); // safety; usually roll already set
-      const text = outcomeText(enemyName, targetName, r, nextDC);
+      const r = rollRef.current ?? randInt(1, 20);
+      const text = outcomeText(enemyName, targetName, r, action.dc, action);
       setReveal(text);
       setStep("revealed");
     });
@@ -301,20 +447,30 @@ export default function EnemyTurnResolverPanel({
   function commit() {
     if (!enabled || !enemyName) return;
     const r = rollRef.current ?? roll ?? 0;
-
-    const dmg = damageProfileFor(enemyName);
+    const action = resolvedAction ?? resolveEnemyAction(enemyName, activeEnemyGroupId, targetName);
 
     const payload: OutcomePayload = {
       description: `Enemy turn — ${enemyName}. ${reveal || "Outcome pending."}`,
       dice: { mode: "d20", roll: r, dc, source: "solace" },
       audit: [
         `enemy_group=${enemyName}`,
+        `enemy_group_id=${String(activeEnemyGroupId ?? "")}`,
+        `enemy_archetype=${action.archetype}`,
+        `enemy_skill_id=${String(action.skillId ?? "none")}`,
+        `enemy_skill_label="${action.skillLabel}"`,
         `intent="${declared}"`,
         `dc=${dc}`,
         `roll=${r}`,
-        `note=V1 heuristic resolver`,
+        `note=V2 skill-aware heuristic resolver`,
       ],
-      damage: { roll: { count: dmg.count, sides: dmg.sides, bonus: dmg.bonus }, kind: dmg.kind },
+      damage: {
+        roll: {
+          count: action.damage.count,
+          sides: action.damage.sides,
+          bonus: action.damage.bonus,
+        },
+        kind: action.damage.kind,
+      },
     };
 
     onCommitOutcome(payload);
@@ -335,9 +491,37 @@ export default function EnemyTurnResolverPanel({
           <>
             {" "}
             · Target: <strong>{targetName}</strong> · DC <strong>{dc}</strong>
+            {resolvedAction ? (
+              <>
+                {" "}
+                · Move: <strong>{resolvedAction.skillLabel}</strong>
+              </>
+            ) : null}
           </>
         ) : null}
       </div>
+
+      {resolvedAction && (
+        <div
+          style={{
+            marginBottom: 10,
+            padding: "10px 12px",
+            borderRadius: 10,
+            border: "1px solid rgba(255,255,255,0.10)",
+            background: "rgba(255,255,255,0.04)",
+          }}
+        >
+          <div className="muted" style={{ fontSize: 12 }}>
+            Archetype: <strong>{resolvedAction.archetype}</strong> · Attack hint{" "}
+            <strong>{resolvedAction.attackHint}</strong> · Damage{" "}
+            <strong>
+              {resolvedAction.damage.count}d{resolvedAction.damage.sides}
+              {resolvedAction.damage.bonus >= 0 ? `+${resolvedAction.damage.bonus}` : resolvedAction.damage.bonus}
+            </strong>{" "}
+            <strong>{resolvedAction.damage.kind}</strong>
+          </div>
+        </div>
+      )}
 
       {step === "idle" && (
         <button onClick={begin} disabled={!enemyName}>
@@ -382,8 +566,8 @@ export default function EnemyTurnResolverPanel({
           </div>
 
           <div className="muted" style={{ fontSize: 11, opacity: 0.85 }}>
-            V1: action selection is heuristic. Later we’ll add per-enemy “move sets”, cooldowns, and pressure-driven
-            behavior.
+            V2: enemy behavior now resolves through mapped enemy specialty skills when available. Next layer can add
+            cooldowns, target preference, and pressure-conditioned move weighting.
           </div>
         </div>
       )}
