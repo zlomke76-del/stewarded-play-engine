@@ -1,7 +1,7 @@
 // app/demo/components/DemoHero.tsx
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useRef, useState } from "react";
 import { DMMode, DemoSectionId } from "../demoTypes";
 import { anchorId, sectionLabel } from "../demoUtils";
 
@@ -35,85 +35,58 @@ export default function DemoHero(props: {
   const playDisabled = dmMode === null || !tableAccepted;
 
   const introAudioRef = useRef<HTMLAudioElement | null>(null);
-  const hasPrimedAudioRef = useRef(false);
-  const hasPlayedHeroThemeRef = useRef(false);
+  const [isPlayingTheme, setIsPlayingTheme] = useState(false);
+  const [audioStatus, setAudioStatus] = useState<string>("ready");
 
-  useEffect(() => {
-    const audio = new Audio("/audio/music/chronicles_intro.mp3");
-    audio.preload = "auto";
-    audio.volume = 0.72;
-    introAudioRef.current = audio;
-
-    return () => {
-      try {
-        audio.pause();
-      } catch {
-        // no-op
-      }
-      introAudioRef.current = null;
-      hasPrimedAudioRef.current = false;
-      hasPlayedHeroThemeRef.current = false;
-    };
-  }, []);
-
-  function primeHeroAudio() {
+  async function playHeroTheme() {
     const audio = introAudioRef.current;
-    if (!audio || hasPrimedAudioRef.current) return;
-
-    hasPrimedAudioRef.current = true;
-
-    const playPromise = audio.play();
-    if (playPromise && typeof playPromise.then === "function") {
-      playPromise
-        .then(() => {
-          audio.pause();
-          audio.currentTime = 0;
-        })
-        .catch(() => {
-          hasPrimedAudioRef.current = false;
-        });
+    if (!audio) {
+      setAudioStatus("audio element missing");
+      return false;
     }
-  }
-
-  function playHeroTheme() {
-    const audio = introAudioRef.current;
-    if (!audio) return;
-
-    hasPlayedHeroThemeRef.current = true;
 
     try {
       audio.pause();
       audio.currentTime = 0;
-      const playPromise = audio.play();
-      if (playPromise && typeof playPromise.catch === "function") {
-        playPromise.catch(() => {
-          // autoplay/user-gesture issues should fail silently here
-        });
+      audio.volume = 0.72;
+
+      const maybePromise = audio.play();
+      if (maybePromise && typeof maybePromise.then === "function") {
+        await maybePromise;
       }
-    } catch {
-      // no-op
+
+      setIsPlayingTheme(true);
+      setAudioStatus("playing");
+      return true;
+    } catch (err) {
+      console.error("Hero theme failed to play:", err);
+      setIsPlayingTheme(false);
+      setAudioStatus("play failed");
+      return false;
     }
   }
 
-  function handleHeroPlayClick() {
+  async function handleHeroPlayClick() {
     if (playDisabled) return;
-    playHeroTheme();
-    onPlayJump();
+
+    await playHeroTheme();
+
+    // Let the click-triggered audio begin before jumping.
+    window.setTimeout(() => {
+      onPlayJump();
+    }, 120);
   }
 
   function handleStartHere() {
-    primeHeroAudio();
     onStartHere();
   }
 
   function handleSelectMode(nextMode: DMMode) {
-    primeHeroAudio();
     onSelectMode(nextMode);
   }
 
   function handleNavigate(id: DemoSectionId, disabled: boolean) {
     if (disabled) return;
-    primeHeroAudio();
     onNavigate(id);
   }
 
@@ -128,6 +101,31 @@ export default function DemoHero(props: {
         marginBottom: 14,
       }}
     >
+      <audio
+        ref={introAudioRef}
+        preload="auto"
+        src="/audio/music/chronicles_intro.mp3"
+        onPlay={() => {
+          setIsPlayingTheme(true);
+          setAudioStatus("playing");
+        }}
+        onPause={() => {
+          setIsPlayingTheme(false);
+        }}
+        onEnded={() => {
+          setIsPlayingTheme(false);
+          setAudioStatus("ended");
+        }}
+        onCanPlayThrough={() => {
+          setAudioStatus((prev) => (prev === "ready" ? "loaded" : prev));
+        }}
+        onError={() => {
+          setIsPlayingTheme(false);
+          setAudioStatus("audio error");
+        }}
+        style={{ display: "none" }}
+      />
+
       <div
         style={{
           display: "grid",
@@ -175,6 +173,11 @@ export default function DemoHero(props: {
 
           <div className="muted" style={{ fontSize: 12, marginTop: 10 }}>
             Pro-tip: choose a mode, accept the table, then submit an action and record an outcome.
+          </div>
+
+          <div className="muted" style={{ fontSize: 12, marginTop: 8 }}>
+            Hero theme status: <strong>{audioStatus}</strong>
+            {isPlayingTheme ? " · now playing" : ""}
           </div>
 
           {/* MODE (embedded in hero) */}
@@ -281,9 +284,7 @@ export default function DemoHero(props: {
                   You declare intent. The world remembers only what canon records.
                 </div>
                 <div className="muted" style={{ fontSize: 11, marginTop: 6, opacity: 0.9 }}>
-                  {hasPlayedHeroThemeRef.current
-                    ? "Chronicles intro ready."
-                    : "Press play to begin with the intro theme."}
+                  Press play to begin with the intro theme.
                 </div>
               </div>
 
