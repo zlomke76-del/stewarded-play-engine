@@ -27,9 +27,13 @@
 // - After Accept Table, user must DECLARE PLAYERS (PartySetupSection)
 // - Pressure/Map/Combat/Action stay locked until PARTY_DECLARED exists
 // - Chapters "Party" represents PARTY_DECLARED (not just party size)
+//
+// Audio update:
+// - Intro music is owned at page level (not hero component level)
+// - Hero "Enter" now triggers /audio/music/chronicles_intro.mp3
 // ------------------------------------------------------------
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { createSession, recordEvent, SessionState } from "@/lib/session/SessionState";
 
 import { parseAction } from "@/lib/parser/ActionParser";
@@ -243,6 +247,9 @@ export default function DemoPage() {
   const HERO_IMAGE_SRC = "/Hero_dungeon.png";
   const [heroImageOk, setHeroImageOk] = useState(true);
 
+  // Intro audio (page-owned so it survives hero rerenders/state changes)
+  const introAudioRef = useRef<HTMLAudioElement | null>(null);
+
   // Initial Table Gate
   const [initialTable, setInitialTable] = useState<InitialTable | null>(null);
   const [tableAccepted, setTableAccepted] = useState(false);
@@ -386,6 +393,30 @@ export default function DemoPage() {
       // fail-closed: do nothing
     }
   };
+
+  // ----------------------------------------------------------
+  // Audio helpers
+  // ----------------------------------------------------------
+
+  function playIntroTheme() {
+    const audio = introAudioRef.current;
+    if (!audio) return;
+
+    try {
+      audio.pause();
+      audio.currentTime = 0;
+      audio.volume = 0.72;
+
+      const playPromise = audio.play();
+      if (playPromise && typeof playPromise.catch === "function") {
+        playPromise.catch(() => {
+          // fail silently; browser/user-gesture issues should not break flow
+        });
+      }
+    } catch {
+      // fail silently
+    }
+  }
 
   // ----------------------------------------------------------
   // Party operations
@@ -885,7 +916,13 @@ export default function DemoPage() {
     return {
       mode: doneMode ? ("done" as const) : ("next" as const),
       party: doneParty ? ("done" as const) : doneTable ? ("next" as const) : ("locked" as const),
-      table: doneTable ? ("done" as const) : showInitialTable ? ("next" as const) : doneMode ? ("next" as const) : ("locked" as const),
+      table: doneTable
+        ? ("done" as const)
+        : showInitialTable
+          ? ("next" as const)
+          : doneMode
+            ? ("next" as const)
+            : ("locked" as const),
       pressure: doneTable && doneParty ? ("open" as const) : ("locked" as const),
       map: doneTable && doneParty ? ("open" as const) : ("locked" as const),
       combat: doneTable && doneParty ? ("open" as const) : ("locked" as const),
@@ -898,6 +935,7 @@ export default function DemoPage() {
 
   function enterDungeon() {
     if (!canEnterDungeon) return;
+    playIntroTheme();
     setEnteredDungeon(true);
     setActiveSection("table");
     queueMicrotask(() => scrollToSection("table"));
@@ -931,6 +969,13 @@ export default function DemoPage() {
 
   return (
     <AmbientBackground>
+      <audio
+        ref={introAudioRef}
+        preload="auto"
+        src="/audio/music/chronicles_intro.mp3"
+        style={{ display: "none" }}
+      />
+
       <div style={{ position: "relative", zIndex: 1 }}>
         <StewardedShell>
           <ModeHeader title="Echoes of Fate" onShare={shareCanon} showTitle={false} showRoles={false} showShare={false} />
