@@ -79,6 +79,16 @@ export default function ActionSection({
     return found?.label ?? (hasParty ? "—" : "Player 1 (player_1)");
   }, [partyMembers, actingPlayerId, hasParty]);
 
+  const nextActingPlayerId = useMemo(() => {
+    if (partyMembers.length <= 1) return null;
+
+    const currentIndex = partyMembers.findIndex((m) => m.id === actingPlayerId);
+    if (currentIndex === -1) return partyMembers[0]?.id ?? null;
+
+    const nextIndex = (currentIndex + 1) % partyMembers.length;
+    return partyMembers[nextIndex]?.id ?? null;
+  }, [partyMembers, actingPlayerId]);
+
   // true lock reasons (turn-aware)
   const lockReason = useMemo(() => {
     if (!combatActive) return null;
@@ -130,6 +140,16 @@ export default function ActionSection({
 
   // lock acting-player selection during combat in solace-neutral (turn discipline)
   const lockActingSelect = combatActive && dmMode !== "human";
+
+  function handleSubmit() {
+    if (!canSubmit) return;
+
+    onSubmit();
+
+    if (nextActingPlayerId) {
+      onSetActingPlayerId(nextActingPlayerId);
+    }
+  }
 
   return (
     <div id="player-action" style={{ scrollMarginTop: 90 }}>
@@ -354,7 +374,7 @@ export default function ActionSection({
             }}
           >
             <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-              <button onClick={onSubmit} disabled={!canSubmit}>
+              <button onClick={handleSubmit} disabled={!canSubmit}>
                 Submit Action
               </button>
               <span className="muted" style={{ fontSize: 12 }}>
