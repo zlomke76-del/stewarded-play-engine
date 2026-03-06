@@ -17,7 +17,6 @@ import {
 import {
   ENEMY_LIST,
   EnemyDefinition,
-  EnemyPressureBand,
   getEnemyDefinitionByName,
 } from "@/lib/game/EnemyDatabase";
 
@@ -50,6 +49,8 @@ type PartyRoleInfo = {
   stealthy: number;
 };
 
+type PressureBand = "low" | "medium" | "high" | "extreme";
+
 function clampInt(n: number, min: number, max: number) {
   const x = Number.isFinite(n) ? Math.trunc(n) : min;
   return Math.max(min, Math.min(max, x));
@@ -61,10 +62,6 @@ function normalizeName(s: string) {
 
 function normalizeClassKey(v: string) {
   return String(v ?? "").trim().toLowerCase();
-}
-
-function shouldFirstTypeGetExtra(seed: string): boolean {
-  return (hash32(seed) & 1) === 1;
 }
 
 function computeCombatLocked(events: readonly any[]) {
@@ -186,8 +183,6 @@ function hash32(s: string): number {
   }
   return h >>> 0;
 }
-
-type PressureBand = "low" | "medium" | "high" | "extreme";
 
 function pressureBandFromTier(pressureTier: any): PressureBand {
   const t = String(pressureTier ?? "").toLowerCase();
@@ -331,38 +326,61 @@ function getBasePoolForPressure(band: PressureBand): EnemyDefinition[] {
   return namesToDefs(namesByBand[band]);
 }
 
+function dedupeEnemies(items: EnemyDefinition[]): EnemyDefinition[] {
+  const seen = new Set<string>();
+  const out: EnemyDefinition[] = [];
+
+  for (const e of items) {
+    if (!e || seen.has(e.id)) continue;
+    seen.add(e.id);
+    out.push(e);
+  }
+
+  return out;
+}
+
+function filterByRole(items: EnemyDefinition[], roles: string[]): EnemyDefinition[] {
+  const roleSet = new Set(roles.map((r) => String(r).toLowerCase()));
+  return items.filter((e) => roleSet.has(String(e.role).toLowerCase()));
+}
+
+function filterByBehavior(items: EnemyDefinition[], predicate: (enemy: EnemyDefinition) => boolean): EnemyDefinition[] {
+  return items.filter(predicate);
+}
+
 function getAdaptiveCandidates(band: PressureBand, partyRoleInfo: PartyRoleInfo): EnemyDefinition[] {
   const base = getBasePoolForPressure(band);
-  const extraNames: string[] = [];
+
+  const rangedPressure = filterByRole(base, ["archer", "caster", "support", "controller"]);
+  const antiBackline = filterByBehavior(
+    base,
+    (e) => !!e.behavior.prefersBackline || !!e.behavior.prefersWeakTargets || e.role === "assassin" || e.role === "skirmisher"
+  );
+  const supportPunish = filterByRole(base, ["support", "soldier", "controller", "caster"]);
+  const stealthResponse = filterByBehavior(
+    base,
+    (e) => e.role === "beast" || e.role === "skirmisher" || !!e.behavior.prefersWeakTargets
+  );
+
+  const extras: EnemyDefinition[] = [];
 
   if (partyRoleInfo.frontliners >= 2) {
-    extraNames.push("Bandit Archer", "Goblin Archer", "Cultist Acolyte", "Arcane Sentinel");
+    extras.push(...rangedPressure);
   }
 
   if (partyRoleInfo.casters >= 2) {
-    extraNames.push("Goblin Skirmisher", "Bandit Rogue", "Cult Assassin", "Wraith");
+    extras.push(...antiBackline);
   }
 
   if (partyRoleInfo.healers >= 1) {
-    extraNames.push("Cult Priest", "Bandit Captain", "Hobgoblin Soldier");
+    extras.push(...supportPunish);
   }
 
   if (partyRoleInfo.stealthy >= 2) {
-    extraNames.push("Wolf", "Dire Wolf", "Giant Spider", "Cult Assassin");
+    extras.push(...stealthResponse);
   }
 
-  const extras = namesToDefs(extraNames);
-  const merged = [...base, ...extras];
-
-  const seen = new Set<string>();
-  const unique: EnemyDefinition[] = [];
-  for (const e of merged) {
-    if (!e || seen.has(e.id)) continue;
-    seen.add(e.id);
-    unique.push(e);
-  }
-
-  return unique;
+  return dedupeEnemies([...base, ...extras]);
 }
 
 function buildRecommendedEnemyRoster(
@@ -375,18 +393,27 @@ function buildRecommendedEnemyRoster(
   if (n <= 0) return [];
 
   const band = pressureBandFromTier(pressureTier);
-  const adaptive = getAdaptiveCandidates(band, partyRoleInfo);
+  const basePool = getBasePoolForPressure(band);
+  const adaptivePool = getAdaptiveCandidates(band, partyRoleInfo);
 
-  if (adaptive.length >= n) {
-    return pickUniqueDeterministic(adaptive, n, `${seed}::adaptive`);
+  const pickedAdaptive = pickUniqueDeterministic(adaptivePool, Math.min(n, adaptivePool.length), `${seed}::adaptive`);
+  if (pickedAdaptive.length >= n) {
+    return pickedAdaptive.slice(0, n);
   }
 
-  const fillerPool = getBasePoolForPressure(band);
-  const picked = pickUniqueDeterministic(adaptive, adaptive.length, `${seed}::adaptive`);
-  const needed = n - picked.length;
-  const filler = repeatDeterministic(fillerPool.length > 0 ? fillerPool : adaptive, needed, `${seed}::filler`);
+  const remainingNeeded = n - pickedAdaptive.length;
+  const remainingBase = basePool.filter((e) => !pickedAdaptive.some((x) => x.id === e.id));
 
-  return [...picked, ...filler].slice(0, n);
+  const uniqueFill = pickUniqueDeterministic(remainingBase, Math.min(remainingNeeded, remainingBase.length), `${seed}::base_unique`);
+  if (pickedAdaptive.length + uniqueFill.length >= n) {
+    return [...pickedAdaptive, ...uniqueFill].slice(0, n);
+  }
+
+  const stillNeeded = n - pickedAdaptive.length - uniqueFill.length;
+  const repeatPool = basePool.length > 0 ? basePool : adaptivePool;
+  const repeatFill = repeatDeterministic(repeatPool, stillNeeded, `${seed}::base_repeat`);
+
+  return [...pickedAdaptive, ...uniqueFill, ...repeatFill].slice(0, n);
 }
 
 function nextEnemyInstanceIndex(enemyName: string, existing: EnemyDefinition[]) {
