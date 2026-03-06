@@ -14,11 +14,7 @@ export type SkillCategory =
   | "passive"
   | "reaction";
 
-export type SkillUsePhase =
-  | "combat"
-  | "exploration"
-  | "social"
-  | "any";
+export type SkillUsePhase = "combat" | "exploration" | "social" | "any";
 
 export type SkillTargetType =
   | "self"
@@ -100,12 +96,7 @@ export type DamageType =
   | "holy"
   | "shadow";
 
-export type SkillScalingStat =
-  | "ac"
-  | "hpMax"
-  | "hpCurrent"
-  | "initiativeMod"
-  | "none";
+export type SkillScalingStat = "ac" | "hpMax" | "hpCurrent" | "initiativeMod" | "none";
 
 export type SkillTrigger =
   | "on_use"
@@ -301,16 +292,50 @@ export type SkillDefinition = {
   };
 };
 
+export type SpeciesTraitCategory =
+  | "combat_passive"
+  | "exploration_passive"
+  | "resistance"
+  | "mobility"
+  | "perception"
+  | "social";
+
+export type SpeciesTraitDefinition = {
+  id: string;
+  label: string;
+  species: string;
+  category: SpeciesTraitCategory;
+  description: string;
+  shortDescription: string;
+  effects: SkillEffect[];
+  tags?: {
+    passive?: boolean;
+    exploration?: boolean;
+    combat?: boolean;
+    magical?: boolean;
+    stealth?: boolean;
+    resilience?: boolean;
+  };
+};
+
 export type SkillDefinitionMap = Record<string, SkillDefinition>;
-
+export type SpeciesTraitDefinitionMap = Record<string, SpeciesTraitDefinition>;
 export type ClassSkillMap = Record<string, string[]>;
-
 export type EnemySkillMap = Record<string, string[]>;
+export type SpeciesTraitMap = Record<string, string[]>;
 
 export type ActorSkillLoadout = {
   actorId: string;
   actorKind: SkillActorKind;
   skillIds: string[];
+  traitIds?: string[];
+};
+
+export type ResolvedPartyLoadout = {
+  className: string;
+  species: string;
+  skillIds: string[];
+  traitIds: string[];
 };
 
 export function normalizeSkillLookupKey(value: string): string {
