@@ -160,7 +160,7 @@ export const SKILL_DEFINITIONS: SkillDefinitionMap = {
       { type: "mark_zone", note: "Trap neutralized." },
       { type: "spawn_audit_note", note: "Trap disarmed successfully." },
     ],
-    tags: { stealth: true, utility: true as never, playerOnly: true },
+        tags: { stealth: true, playerOnly: true },
   },
 
   // =========================================================
