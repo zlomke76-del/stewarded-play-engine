@@ -3,8 +3,9 @@
 
 import React from "react";
 import { getPortraitPath } from "@/lib/portraits/getPortraitPath";
-import { getSkillsForClass } from "@/lib/skills/classSkillMap";
 import { getSkillDefinition } from "@/lib/skills/skillDefinitions";
+import { getSpeciesTraitDefinition } from "@/lib/skills/speciesTraitMap";
+import { resolvePartyLoadout } from "@/lib/skills/loadoutResolver";
 
 type PortraitType = "Male" | "Female";
 
@@ -13,12 +14,13 @@ type PartyMember = {
   name: string;
 
   // identity
-  species?: string; // optional for backward-compat with existing party payloads
+  species?: string;
   className: string;
   portrait: PortraitType;
 
   // progression / rules
   skills?: string[];
+  traits?: string[];
 
   // stats
   ac: number;
@@ -125,36 +127,31 @@ export default function PartySetupSection(props: {
   function getResolvedSpecies(value?: string) {
     const normalized = normalizeSpeciesValue(value ?? "");
     if (!normalized) return "Human";
-
-    const known =
-      SAFE_SPECIES.find((x) => x.toLowerCase() === normalized.toLowerCase()) ?? normalized;
-
-    return known;
+    return SAFE_SPECIES.find((x) => x.toLowerCase() === normalized.toLowerCase()) ?? normalized;
   }
 
   function getResolvedClass(value?: string) {
     const normalized = normalizeClassValue(value ?? "");
     if (!normalized) return "Warrior";
-
-    const known =
-      SAFE_CLASS_ARCHETYPES.find((x) => x.toLowerCase() === normalized.toLowerCase()) ?? normalized;
-
-    return known;
+    return SAFE_CLASS_ARCHETYPES.find((x) => x.toLowerCase() === normalized.toLowerCase()) ?? normalized;
   }
 
-  function resolveSkillsForClass(className?: string) {
-    const resolvedClass = getResolvedClass(className);
-    return getSkillsForClass(resolvedClass);
-  }
+  function getResolvedLoadout(row: PartyMember) {
+    const resolvedClass = getResolvedClass(row.className);
+    const resolvedSpecies = getResolvedSpecies(row.species);
 
-  function getResolvedSkillIds(row: PartyMember) {
-    const fromRow = Array.isArray(row.skills) ? row.skills.filter(Boolean) : [];
-    if (fromRow.length > 0) return fromRow;
-    return resolveSkillsForClass(row.className);
+    const canonical = resolvePartyLoadout(resolvedClass, resolvedSpecies);
+
+    return {
+      skillIds: Array.isArray(row.skills) && row.skills.length > 0 ? row.skills : canonical.skillIds,
+      traitIds: Array.isArray(row.traits) && row.traits.length > 0 ? row.traits : canonical.traitIds,
+      resolvedClass,
+      resolvedSpecies,
+    };
   }
 
   const desktopGridColumns =
-    "84px minmax(160px, 1.45fr) minmax(130px, 1fr) minmax(130px, 1fr) 88px 60px 64px 74px 74px";
+    "84px minmax(170px, 1.45fr) minmax(130px, 1fr) minmax(130px, 1fr) 88px 60px 64px 74px 74px";
 
   const compactInputStyle: React.CSSProperties = {
     width: "100%",
@@ -197,6 +194,12 @@ export default function PartySetupSection(props: {
     background: "rgba(255,255,255,0.08)",
     border: "1px solid rgba(255,255,255,0.10)",
     whiteSpace: "nowrap",
+  };
+
+  const traitChipStyle: React.CSSProperties = {
+    ...skillChipStyle,
+    background: "rgba(120,180,255,0.10)",
+    border: "1px solid rgba(120,180,255,0.22)",
   };
 
   return (
@@ -245,14 +248,14 @@ export default function PartySetupSection(props: {
               gap: 8,
               alignItems: "center",
               width: "100%",
-              minWidth: 920,
+              minWidth: 960,
             }}
           >
             <div className="muted" style={{ fontSize: 12 }}>
               PORTRAIT
             </div>
             <div className="muted" style={{ fontSize: 12 }}>
-              NAME
+              NAME / LOADOUT
             </div>
             <div className="muted" style={{ fontSize: 12 }}>
               SPECIES
@@ -300,18 +303,12 @@ export default function PartySetupSection(props: {
                     ? "__custom__"
                     : SAFE_CLASS_ARCHETYPES.find((x) => x.toLowerCase() === classValue.toLowerCase()) ?? "";
 
-              const resolvedSpecies = getResolvedSpecies(row?.species);
-              const resolvedClass = getResolvedClass(row?.className);
-              const portraitPath = getPortraitPath(
-                resolvedSpecies,
-                resolvedClass,
-                row?.portrait ?? "Male"
-              );
+              const { resolvedSpecies, resolvedClass, skillIds, traitIds } = getResolvedLoadout(row);
 
-              const resolvedSkillIds = getResolvedSkillIds(row);
-              const resolvedSkillLabels = resolvedSkillIds.map(
-                (skillId) => getSkillDefinition(skillId)?.label ?? skillId
-              );
+              const portraitPath = getPortraitPath(resolvedSpecies, resolvedClass, row?.portrait ?? "Male");
+
+              const skillLabels = skillIds.map((skillId) => getSkillDefinition(skillId)?.label ?? skillId);
+              const traitLabels = traitIds.map((traitId) => getSpeciesTraitDefinition(traitId)?.label ?? traitId);
 
               return (
                 <React.Fragment key={row.id || `player_${i1}`}>
@@ -340,23 +337,30 @@ export default function PartySetupSection(props: {
                       style={compactInputStyle}
                     />
 
-                    <div
-                      style={{
-                        display: "flex",
-                        flexWrap: "wrap",
-                        gap: 6,
-                        minHeight: 22,
-                      }}
-                    >
-                      {resolvedSkillLabels.length > 0 ? (
-                        resolvedSkillLabels.map((label, skillIdx) => (
-                          <span key={`${row.id || i1}_${label}_${skillIdx}`} style={skillChipStyle}>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 6, minHeight: 22 }}>
+                      {skillLabels.length > 0 ? (
+                        skillLabels.map((label, skillIdx) => (
+                          <span key={`${row.id || i1}_skill_${label}_${skillIdx}`} style={skillChipStyle}>
                             {label}
                           </span>
                         ))
                       ) : (
                         <span className="muted" style={{ fontSize: 11 }}>
-                          No specialty skills assigned
+                          No class skills
+                        </span>
+                      )}
+                    </div>
+
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 6, minHeight: 22 }}>
+                      {traitLabels.length > 0 ? (
+                        traitLabels.map((label, traitIdx) => (
+                          <span key={`${row.id || i1}_trait_${label}_${traitIdx}`} style={traitChipStyle}>
+                            {label}
+                          </span>
+                        ))
+                      ) : (
+                        <span className="muted" style={{ fontSize: 11 }}>
+                          No species traits
                         </span>
                       )}
                     </div>
@@ -369,14 +373,26 @@ export default function PartySetupSection(props: {
                       onChange={(e) => {
                         const v = e.target.value;
                         if (v === "") {
-                          setMemberField(idx, { species: "" });
+                          const next = resolvePartyLoadout(row.className || "Warrior", "Human");
+                          setMemberField(idx, {
+                            species: "",
+                            traits: next.traitIds,
+                          });
                           return;
                         }
+
                         if (v === "__custom__") {
-                          if (!speciesIsCustom) setMemberField(idx, { species: "" });
+                          if (!speciesIsCustom) {
+                            setMemberField(idx, { species: "", traits: [] });
+                          }
                           return;
                         }
-                        setMemberField(idx, { species: v });
+
+                        const next = resolvePartyLoadout(row.className || "Warrior", v);
+                        setMemberField(idx, {
+                          species: v,
+                          traits: next.traitIds,
+                        });
                       }}
                       style={compactInputStyle}
                     >
@@ -393,7 +409,14 @@ export default function PartySetupSection(props: {
                       <input
                         value={speciesIsCustom ? speciesValue : ""}
                         disabled={!editable}
-                        onChange={(e) => setMemberField(idx, { species: e.target.value })}
+                        onChange={(e) => {
+                          const nextSpecies = e.target.value;
+                          const next = resolvePartyLoadout(row.className || "Warrior", nextSpecies);
+                          setMemberField(idx, {
+                            species: nextSpecies,
+                            traits: next.traitIds,
+                          });
+                        }}
                         placeholder="Custom species"
                         style={compactInputStyle}
                       />
@@ -407,12 +430,14 @@ export default function PartySetupSection(props: {
                       onChange={(e) => {
                         const v = e.target.value;
                         if (v === "") {
+                          const next = resolvePartyLoadout("Warrior", row.species || "Human");
                           setMemberField(idx, {
                             className: "",
-                            skills: [],
+                            skills: next.skillIds,
                           });
                           return;
                         }
+
                         if (v === "__custom__") {
                           if (!classIsCustom) {
                             setMemberField(idx, {
@@ -423,9 +448,10 @@ export default function PartySetupSection(props: {
                           return;
                         }
 
+                        const next = resolvePartyLoadout(v, row.species || "Human");
                         setMemberField(idx, {
                           className: v,
-                          skills: getSkillsForClass(v),
+                          skills: next.skillIds,
                         });
                       }}
                       style={compactInputStyle}
@@ -445,9 +471,10 @@ export default function PartySetupSection(props: {
                         disabled={!editable}
                         onChange={(e) => {
                           const nextClassName = e.target.value;
+                          const next = resolvePartyLoadout(nextClassName, row.species || "Human");
                           setMemberField(idx, {
                             className: nextClassName,
-                            skills: getSkillsForClass(nextClassName),
+                            skills: next.skillIds,
                           });
                         }}
                         placeholder="Custom class"
@@ -477,9 +504,7 @@ export default function PartySetupSection(props: {
                   <input
                     value={String(row?.hpCurrent ?? 12)}
                     disabled={!editable}
-                    onChange={(e) =>
-                      setMemberField(idx, { hpCurrent: safeInt(e.target.value, 12, 0, 999) })
-                    }
+                    onChange={(e) => setMemberField(idx, { hpCurrent: safeInt(e.target.value, 12, 0, 999) })}
                     inputMode="numeric"
                     style={compactNumberStyle}
                   />
@@ -518,8 +543,7 @@ export default function PartySetupSection(props: {
 
         <div className="muted" style={{ marginTop: 10, fontSize: 12 }}>
           Recommended: keep this roster stable. Combat turn order is still per combat, but <em>who the
-          players are</em> is session truth. Specialty skills are auto-assigned from class and become part
-          of the declared roster.
+          players are</em> is session truth. Class determines specialty skills. Species adds passive traits.
         </div>
       </div>
     </div>
