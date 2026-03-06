@@ -31,6 +31,9 @@
 // Audio update:
 // - Intro music is owned at page level (not hero component level)
 // - Hero "Enter" now triggers /audio/music/chronicles_intro.mp3
+// - Ambient dungeon music rotates across two exploration tracks
+// - Combat music rotates across two battle tracks
+// - Combat transitions override ambient cleanly, then return to ambient
 // ------------------------------------------------------------
 
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -232,6 +235,29 @@ function awarenessDeltaFor(kind: ReturnType<typeof inferOptionKind>, success: bo
   return base + byKind + byResult;
 }
 
+type MusicMode = "none" | "intro" | "ambient" | "combat";
+
+const AMBIENT_TRACKS = ["/audio/music/dungeon_ambient1.mp3", "/audio/music/dungeon_ambient2.mp3"] as const;
+const COMBAT_TRACKS = ["/audio/music/combat_theme1.mp3", "/audio/music/combat_theme2.mp3"] as const;
+
+function chooseNextTrack(
+  tracks: readonly string[],
+  lastIndexRef: React.MutableRefObject<number>
+): string {
+  if (tracks.length <= 1) {
+    lastIndexRef.current = 0;
+    return tracks[0] ?? "";
+  }
+
+  let nextIndex = Math.floor(Math.random() * tracks.length);
+  if (nextIndex === lastIndexRef.current) {
+    nextIndex = (nextIndex + 1) % tracks.length;
+  }
+
+  lastIndexRef.current = nextIndex;
+  return tracks[nextIndex];
+}
+
 export default function DemoPage() {
   const role: "arbiter" = "arbiter";
 
@@ -247,8 +273,12 @@ export default function DemoPage() {
   const HERO_IMAGE_SRC = "/Hero_dungeon.png";
   const [heroImageOk, setHeroImageOk] = useState(true);
 
-  // Intro audio (page-owned so it survives hero rerenders/state changes)
+  // Page-owned music
   const introAudioRef = useRef<HTMLAudioElement | null>(null);
+  const bgmAudioRef = useRef<HTMLAudioElement | null>(null);
+  const currentMusicModeRef = useRef<MusicMode>("none");
+  const lastAmbientIndexRef = useRef(-1);
+  const lastCombatIndexRef = useRef(-1);
 
   // Initial Table Gate
   const [initialTable, setInitialTable] = useState<InitialTable | null>(null);
@@ -398,16 +428,90 @@ export default function DemoPage() {
   // Audio helpers
   // ----------------------------------------------------------
 
-  function playIntroTheme() {
-    const audio = introAudioRef.current;
-    if (!audio) return;
+  function pauseIntroTheme() {
+    const intro = introAudioRef.current;
+    if (!intro) return;
 
     try {
-      audio.pause();
-      audio.currentTime = 0;
-      audio.volume = 0.72;
+      intro.pause();
+      intro.currentTime = 0;
+    } catch {
+      // fail silently
+    }
+  }
 
-      const playPromise = audio.play();
+  function pauseBackgroundTheme() {
+    const bgm = bgmAudioRef.current;
+    if (!bgm) return;
+
+    try {
+      bgm.pause();
+      bgm.currentTime = 0;
+      bgm.removeAttribute("src");
+      bgm.load();
+    } catch {
+      // fail silently
+    }
+  }
+
+  function stopAllMusic() {
+    pauseIntroTheme();
+    pauseBackgroundTheme();
+    currentMusicModeRef.current = "none";
+  }
+
+  function startLoopingTrack(src: string, volume: number, mode: Exclude<MusicMode, "none" | "intro">) {
+    const bgm = bgmAudioRef.current;
+    if (!bgm || !src) return;
+
+    try {
+      pauseIntroTheme();
+
+      const sameSrc = bgm.getAttribute("src") === src;
+      bgm.loop = true;
+      bgm.volume = volume;
+
+      if (!sameSrc) {
+        bgm.src = src;
+        bgm.load();
+      }
+
+      const playPromise = bgm.play();
+      currentMusicModeRef.current = mode;
+
+      if (playPromise && typeof playPromise.catch === "function") {
+        playPromise.catch(() => {
+          // fail silently; audio should never break gameplay flow
+        });
+      }
+    } catch {
+      // fail silently
+    }
+  }
+
+  function startAmbientTheme() {
+    const src = chooseNextTrack(AMBIENT_TRACKS, lastAmbientIndexRef);
+    startLoopingTrack(src, 0.36, "ambient");
+  }
+
+  function startCombatTheme() {
+    const src = chooseNextTrack(COMBAT_TRACKS, lastCombatIndexRef);
+    startLoopingTrack(src, 0.72, "combat");
+  }
+
+  function playIntroTheme() {
+    const intro = introAudioRef.current;
+    if (!intro) return;
+
+    try {
+      pauseBackgroundTheme();
+
+      intro.pause();
+      intro.currentTime = 0;
+      intro.volume = 0.72;
+      currentMusicModeRef.current = "intro";
+
+      const playPromise = intro.play();
       if (playPromise && typeof playPromise.catch === "function") {
         playPromise.catch(() => {
           // fail silently; browser/user-gesture issues should not break flow
@@ -417,6 +521,35 @@ export default function DemoPage() {
       // fail silently
     }
   }
+
+  // Stop/reset music when user is not actively inside the dungeon flow.
+  useEffect(() => {
+    if (enteredDungeon) return;
+    stopAllMusic();
+  }, [enteredDungeon]);
+
+  // Combat overrides ambient cleanly. Non-combat falls back to ambient after intro.
+  useEffect(() => {
+    if (!enteredDungeon) return;
+
+    const intro = introAudioRef.current;
+    const introIsPlaying = !!intro && !intro.paused && !intro.ended && intro.currentTime > 0;
+
+    if (combatActive) {
+      if (currentMusicModeRef.current !== "combat") {
+        startCombatTheme();
+      }
+      return;
+    }
+
+    if (introIsPlaying && currentMusicModeRef.current === "intro") {
+      return;
+    }
+
+    if (currentMusicModeRef.current !== "ambient") {
+      startAmbientTheme();
+    }
+  }, [enteredDungeon, combatActive]);
 
   // ----------------------------------------------------------
   // Party operations
@@ -974,7 +1107,17 @@ export default function DemoPage() {
         preload="auto"
         src="/audio/music/chronicles_intro.mp3"
         style={{ display: "none" }}
+        onEnded={() => {
+          if (!enteredDungeon) return;
+          if (combatActive) {
+            startCombatTheme();
+            return;
+          }
+          startAmbientTheme();
+        }}
       />
+
+      <audio ref={bgmAudioRef} preload="auto" style={{ display: "none" }} />
 
       <div style={{ position: "relative", zIndex: 1 }}>
         <StewardedShell>
