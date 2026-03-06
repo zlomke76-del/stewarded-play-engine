@@ -5,6 +5,10 @@
 // ------------------------------------------------------------
 // Player action input surface.
 // Orchestrator passes party + state + callbacks.
+// Upgraded:
+// - supports acting-player class skills / species traits
+// - renders loadout chips for the active player
+// - adds specialty quick-action buttons driven by skill labels
 // ------------------------------------------------------------
 
 import React, { useEffect, useMemo, useRef } from "react";
@@ -13,6 +17,8 @@ import CardSection from "@/components/layout/CardSection";
 type PartyMemberLite = {
   id: string;
   label: string;
+  skills?: string[];
+  traits?: string[];
 };
 
 type Props = {
@@ -49,6 +55,99 @@ function appendIntent(prev: string, addition: string) {
   return base.endsWith("\n") ? `${base}${addition}` : `${base}\n${addition}`;
 }
 
+function titleCaseFromId(value: string) {
+  return String(value ?? "")
+    .split("_")
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
+function buildSkillIntent(skillId: string, label: string) {
+  switch (skillId) {
+    case "guard_break":
+      return "I close hard and use Guard Break on the enemy's defense, trying to crack their stance open for the party.";
+    case "shield_wall":
+      return "I form a Shield Wall and protect the most exposed ally, bracing for the incoming strike.";
+    case "second_wind":
+      return "I draw a Second Wind, steady myself, and recover before pressing forward.";
+    case "rage":
+      return "I enter a Rage and surge forward with overwhelming force, committing fully to the fight.";
+    case "reckless_strike":
+      return "I launch a Reckless Strike at the nearest dangerous enemy, accepting the risk to hit hard.";
+    case "intimidating_roar":
+      return "I unleash an Intimidating Roar to shake enemy nerve and break their momentum.";
+    case "backstab":
+      return "I slip into position and use Backstab on the most exposed target.";
+    case "shadowstep":
+      return "I Shadowstep to a better angle, slipping out of danger and setting up my next move.";
+    case "disarm_trap":
+      return "I carefully Disarm Trap, searching for the trigger and neutralizing the hazard.";
+    case "arc_bolt":
+      return "I fire an Arc Bolt at the most dangerous enemy at range.";
+    case "frost_bind":
+      return "I cast Frost Bind to slow and pin the target in place.";
+    case "detect_arcana":
+      return "I use Detect Arcana and search the area for magical residue, hidden wards, or unstable pathways.";
+    case "heal":
+      return "I cast Heal on the ally who needs it most.";
+    case "bless":
+      return "I cast Bless on our front-line ally to steady their aim and spirit.";
+    case "turn_undead":
+      return "I invoke Turn Undead and drive the undead back with sacred force.";
+    case "mark_target":
+      return "I Mark Target on the highest-priority enemy and call the focus to the party.";
+    case "volley":
+      return "I loose a Volley into the clustered enemies to pressure the whole group.";
+    case "track":
+      return "I Track the signs ahead, reading movement, prints, and disturbance to reveal the safest route.";
+    case "smite":
+      return "I bring down a Smite on the enemy in front of me with full conviction.";
+    case "protect":
+      return "I Protect the ally under the most pressure and step into the threat lane for them.";
+    case "rally":
+      return "I Rally the party, restoring courage and pulling everyone back into formation.";
+    case "inspire":
+      return "I Inspire my ally, sharpening their confidence and timing for the next exchange.";
+    case "distract":
+      return "I Distract the enemy and create an opening for the party to exploit.";
+    case "soothing_verse":
+      return "I use a Soothing Verse to calm and restore the ally who is faltering.";
+    case "vinesnare":
+      return "I cast Vinesnare to bind the target and disrupt their movement.";
+    case "wild_shape":
+      return "I use Wild Shape, taking on a tougher form to control the battlefield.";
+    case "nature_sense":
+      return "I use Nature Sense and read the living pattern of the area for danger or hidden paths.";
+    case "flurry":
+      return "I unleash a Flurry of rapid strikes to overwhelm the target's rhythm.";
+    case "deflect":
+      return "I prepare to Deflect the next incoming blow with timing and discipline.";
+    case "center_self":
+      return "I Center Self, clearing my mind and readying a precise follow-up.";
+    case "gadget_trap":
+      return "I deploy a Gadget Trap to hinder the enemy and create a tactical opening.";
+    case "infuse_weapon":
+      return "I Infuse Weapon, empowering an ally's strike with focused energy.";
+    case "deploy_device":
+      return "I Deploy Device and scan the area for hazards, structure, and tactical advantage.";
+    case "chaos_bolt":
+      return "I unleash a Chaos Bolt at the enemy and let raw arcane force break across them.";
+    case "surge":
+      return "I draw on a Surge of power to amplify my next spell.";
+    case "quickened_cast":
+      return "I use Quickened Cast to compress the casting window and keep tempo.";
+    case "hex":
+      return "I place a Hex on the enemy, weakening them and making them easier to punish.";
+    case "eldritch_blast":
+      return "I fire Eldritch Blast at the most dangerous enemy in sight.";
+    case "pact_ward":
+      return "I raise a Pact Ward around the ally under the greatest threat.";
+    default:
+      return `I use ${label} to shape the situation in our favor.`;
+  }
+}
+
 export default function ActionSection({
   partyMembers,
   actingPlayerId,
@@ -74,10 +173,39 @@ export default function ActionSection({
   const hasParty = partyMembers.length > 0;
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 
+  const actingMember = useMemo(() => {
+    return partyMembers.find((m) => m.id === actingPlayerId) ?? null;
+  }, [partyMembers, actingPlayerId]);
+
   const actingLabel = useMemo(() => {
-    const found = partyMembers.find((m) => m.id === actingPlayerId);
-    return found?.label ?? (hasParty ? "—" : "Player 1 (player_1)");
-  }, [partyMembers, actingPlayerId, hasParty]);
+    return actingMember?.label ?? (hasParty ? "—" : "Player 1 (player_1)");
+  }, [actingMember, hasParty]);
+
+  const actingSkillIds = useMemo(() => {
+    return Array.isArray(actingMember?.skills) ? actingMember!.skills!.filter(Boolean) : [];
+  }, [actingMember]);
+
+  const actingTraitIds = useMemo(() => {
+    return Array.isArray(actingMember?.traits) ? actingMember!.traits!.filter(Boolean) : [];
+  }, [actingMember]);
+
+  const actingSkillLabels = useMemo(() => {
+    return actingSkillIds.map((id) => ({
+      id,
+      label: titleCaseFromId(id),
+    }));
+  }, [actingSkillIds]);
+
+  const actingTraitLabels = useMemo(() => {
+    return actingTraitIds.map((id) => ({
+      id,
+      label: titleCaseFromId(id),
+    }));
+  }, [actingTraitIds]);
+
+  const specialtyButtons = useMemo(() => {
+    return actingSkillLabels.slice(0, 3);
+  }, [actingSkillLabels]);
 
   const nextActingPlayerId = useMemo(() => {
     if (partyMembers.length <= 1) return null;
@@ -92,7 +220,7 @@ export default function ActionSection({
   // true lock reasons (turn-aware)
   const lockReason = useMemo(() => {
     if (!combatActive) return null;
-    if (dmMode === "human") return null; // human can always run the table
+    if (dmMode === "human") return null;
     if (isEnemyTurn) return "Enemy turn in progress.";
     if (isWrongPlayerForTurn) return "Not your turn.";
     return null;
@@ -104,7 +232,6 @@ export default function ActionSection({
     return "Unselected";
   }, [dmMode]);
 
-  // Focus when it becomes actionable (ties UX to “your turn”)
   useEffect(() => {
     if (!canSubmit) return;
     const id = window.setTimeout(() => textareaRef.current?.focus(), 50);
@@ -138,8 +265,25 @@ export default function ActionSection({
     return "Your Turn";
   }, [combatActive, dmMode, isEnemyTurn, isWrongPlayerForTurn]);
 
-  // lock acting-player selection during combat in solace-neutral (turn discipline)
   const lockActingSelect = combatActive && dmMode !== "human";
+
+  const chipStyle: React.CSSProperties = {
+    display: "inline-flex",
+    alignItems: "center",
+    borderRadius: 999,
+    padding: "2px 8px",
+    fontSize: 11,
+    lineHeight: 1.3,
+    background: "rgba(255,255,255,0.08)",
+    border: "1px solid rgba(255,255,255,0.10)",
+    whiteSpace: "nowrap",
+  };
+
+  const traitChipStyle: React.CSSProperties = {
+    ...chipStyle,
+    background: "rgba(120,180,255,0.10)",
+    border: "1px solid rgba(120,180,255,0.22)",
+  };
 
   function handleSubmit() {
     if (!canSubmit) return;
@@ -154,7 +298,6 @@ export default function ActionSection({
   return (
     <div id="player-action" style={{ scrollMarginTop: 90 }}>
       <CardSection title="Player Action">
-        {/* Turn / Mode Banner */}
         <div
           style={{
             ...bannerStyle,
@@ -251,7 +394,63 @@ export default function ActionSection({
           </div>
         </div>
 
-        {/* Intent Console */}
+        {(actingSkillLabels.length > 0 || actingTraitLabels.length > 0) && (
+          <div
+            style={{
+              borderRadius: 14,
+              border: "1px solid rgba(255,255,255,0.10)",
+              background: "rgba(0,0,0,0.18)",
+              padding: "10px 12px",
+              marginBottom: 10,
+              display: "flex",
+              flexDirection: "column",
+              gap: 8,
+            }}
+          >
+            <div className="muted" style={{ fontSize: 12, textTransform: "uppercase", letterSpacing: 0.4 }}>
+              Active Loadout
+            </div>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              <div className="muted" style={{ fontSize: 12 }}>
+                Class Skills
+              </div>
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap", minHeight: 22 }}>
+                {actingSkillLabels.length > 0 ? (
+                  actingSkillLabels.map((skill) => (
+                    <span key={skill.id} style={chipStyle} title={skill.id}>
+                      {skill.label}
+                    </span>
+                  ))
+                ) : (
+                  <span className="muted" style={{ fontSize: 12 }}>
+                    No class skills
+                  </span>
+                )}
+              </div>
+            </div>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              <div className="muted" style={{ fontSize: 12 }}>
+                Species Traits
+              </div>
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap", minHeight: 22 }}>
+                {actingTraitLabels.length > 0 ? (
+                  actingTraitLabels.map((trait) => (
+                    <span key={trait.id} style={traitChipStyle} title={trait.id}>
+                      {trait.label}
+                    </span>
+                  ))
+                ) : (
+                  <span className="muted" style={{ fontSize: 12 }}>
+                    No species traits
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
         <div
           style={{
             borderRadius: 18,
@@ -277,7 +476,6 @@ export default function ActionSection({
             </div>
           </div>
 
-          {/* Quick intent chips */}
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 10, marginBottom: 10 }}>
             <button
               type="button"
@@ -330,6 +528,19 @@ export default function ActionSection({
             >
               Help Ally
             </button>
+
+            {specialtyButtons.map((skill) => (
+              <button
+                key={skill.id}
+                type="button"
+                disabled={!canSubmit}
+                onClick={() => onSetPlayerInput(appendIntent(playerInput, buildSkillIntent(skill.id, skill.label)))}
+                style={{ opacity: canSubmit ? 1 : 0.6 }}
+                title={`Insert ${skill.label} intent`}
+              >
+                {skill.label}
+              </button>
+            ))}
 
             <button
               type="button"
