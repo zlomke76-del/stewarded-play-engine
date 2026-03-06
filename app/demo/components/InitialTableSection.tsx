@@ -14,6 +14,8 @@ type Props = {
   onAccept: () => void;
 };
 
+const ACCEPT_LABEL = "Begin the Descent";
+
 export default function InitialTableSection({
   dmMode,
   initialTable,
@@ -74,7 +76,7 @@ export default function InitialTableSection({
         </details>
 
         <div style={{ marginTop: 10 }}>
-          <button onClick={onAccept}>Accept Table</button>
+          <button onClick={onAccept}>{ACCEPT_LABEL}</button>
         </div>
       </CardSection>
     );
@@ -112,7 +114,7 @@ export default function InitialTableSection({
       </details>
 
       <div style={{ marginTop: 10 }}>
-        <button onClick={onAccept}>Accept Table</button>
+        <button onClick={onAccept}>{ACCEPT_LABEL}</button>
       </div>
     </CardSection>
   );
