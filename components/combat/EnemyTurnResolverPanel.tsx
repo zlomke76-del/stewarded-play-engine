@@ -2,7 +2,7 @@
 
 // components/combat/EnemyTurnResolverPanel.tsx
 // ------------------------------------------------------------
-// EnemyTurnResolverPanel (V2)
+// EnemyTurnResolverPanel (V3)
 // ------------------------------------------------------------
 // In Solace Neutral Facilitator mode, enemies are driven by Solace.
 // This panel:
@@ -14,6 +14,7 @@
 // - integrates enemy skill registry
 // - deterministic skill choice per enemy/target pair
 // - richer attack hint + damage typing
+// - enemy portrait rendering via deterministic asset resolver
 // - still fully backward-compatible with existing combat flow
 // ------------------------------------------------------------
 
@@ -21,6 +22,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import CardSection from "@/components/layout/CardSection";
 import { getSkillsForEnemyArchetype } from "@/lib/skills/classSkillMap";
 import { getSkillDefinition } from "@/lib/skills/skillDefinitions";
+import { getEnemyPortraitPath } from "@/lib/portraits/getEnemyPortraitPath";
 
 type Step = "idle" | "declared" | "telegraph" | "rolled" | "revealed";
 
@@ -192,7 +194,10 @@ function defaultDC(enemyName: string, skillId?: string | null) {
   }
 }
 
-function damageProfileFor(enemyName: string, skillId?: string | null): { count: number; sides: number; bonus: number; kind: DamageKind } {
+function damageProfileFor(
+  enemyName: string,
+  skillId?: string | null
+): { count: number; sides: number; bonus: number; kind: DamageKind } {
   const s = String(skillId ?? "").toLowerCase();
 
   if (s === "bandit_volley") return { count: 1, sides: 6, bonus: 1, kind: "piercing" };
@@ -393,6 +398,10 @@ export default function EnemyTurnResolverPanel({
     return pick(candidates) ?? "the party";
   }, [playerNames]);
 
+  const portraitSrc = useMemo(() => {
+    return enemyName ? getEnemyPortraitPath(enemyName) : "";
+  }, [enemyName]);
+
   useEffect(() => {
     setStep("idle");
     setDeclared("");
@@ -405,6 +414,13 @@ export default function EnemyTurnResolverPanel({
     timers.current.forEach((t) => window.clearTimeout(t));
     timers.current = [];
   }, [enabled, activeEnemyGroupId, activeEnemyGroupName, enemyName]);
+
+  useEffect(() => {
+    return () => {
+      timers.current.forEach((t) => window.clearTimeout(t));
+      timers.current = [];
+    };
+  }, []);
 
   function queue(ms: number, fn: () => void) {
     const id = window.setTimeout(fn, ms);
@@ -461,7 +477,7 @@ export default function EnemyTurnResolverPanel({
         `intent="${declared}"`,
         `dc=${dc}`,
         `roll=${r}`,
-        `note=V2 skill-aware heuristic resolver`,
+        `note=V3 skill-aware heuristic resolver with portrait support`,
       ],
       damage: {
         roll: {
@@ -485,43 +501,81 @@ export default function EnemyTurnResolverPanel({
         Solace drives enemy intent and suspense. You only commit the outcome.
       </p>
 
-      <div className="muted" style={{ marginBottom: 10 }}>
-        Active enemy: <strong>{enemyName ?? "—"}</strong>
-        {enemyName ? (
-          <>
-            {" "}
-            · Target: <strong>{targetName}</strong> · DC <strong>{dc}</strong>
-            {resolvedAction ? (
-              <>
-                {" "}
-                · Move: <strong>{resolvedAction.skillLabel}</strong>
-              </>
-            ) : null}
-          </>
-        ) : null}
-      </div>
-
-      {resolvedAction && (
+      <div
+        style={{
+          display: "flex",
+          alignItems: "flex-start",
+          gap: 12,
+          marginBottom: 12,
+          padding: "10px 12px",
+          borderRadius: 12,
+          border: "1px solid rgba(255,255,255,0.10)",
+          background: "rgba(255,255,255,0.04)",
+        }}
+      >
         <div
           style={{
-            marginBottom: 10,
-            padding: "10px 12px",
-            borderRadius: 10,
-            border: "1px solid rgba(255,255,255,0.10)",
-            background: "rgba(255,255,255,0.04)",
+            width: 72,
+            height: 72,
+            borderRadius: 14,
+            overflow: "hidden",
+            border: "1px solid rgba(255,255,255,0.16)",
+            background: "rgba(0,0,0,0.28)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            flexShrink: 0,
           }}
+          title={enemyName ?? "Enemy"}
         >
-          <div className="muted" style={{ fontSize: 12 }}>
-            Archetype: <strong>{resolvedAction.archetype}</strong> · Attack hint{" "}
-            <strong>{resolvedAction.attackHint}</strong> · Damage{" "}
-            <strong>
-              {resolvedAction.damage.count}d{resolvedAction.damage.sides}
-              {resolvedAction.damage.bonus >= 0 ? `+${resolvedAction.damage.bonus}` : resolvedAction.damage.bonus}
-            </strong>{" "}
-            <strong>{resolvedAction.damage.kind}</strong>
-          </div>
+          {enemyName ? (
+            <img
+              src={portraitSrc}
+              alt={enemyName}
+              width={72}
+              height={72}
+              style={{ width: 72, height: 72, objectFit: "cover", display: "block" }}
+              onError={(e) => {
+                const el = e.currentTarget;
+                el.onerror = null;
+                el.src = "/assets/V2/Enemy/Enemy_Bandit_Warrior.png";
+              }}
+            />
+          ) : (
+            <span style={{ fontSize: 12, opacity: 0.7 }}>No Enemy</span>
+          )}
         </div>
-      )}
+
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div className="muted" style={{ marginBottom: 6 }}>
+            Active enemy: <strong>{enemyName ?? "—"}</strong>
+            {enemyName ? (
+              <>
+                {" "}
+                · Target: <strong>{targetName}</strong> · DC <strong>{dc}</strong>
+                {resolvedAction ? (
+                  <>
+                    {" "}
+                    · Move: <strong>{resolvedAction.skillLabel}</strong>
+                  </>
+                ) : null}
+              </>
+            ) : null}
+          </div>
+
+          {resolvedAction && (
+            <div className="muted" style={{ fontSize: 12, lineHeight: 1.5 }}>
+              Archetype: <strong>{resolvedAction.archetype}</strong> · Attack hint{" "}
+              <strong>{resolvedAction.attackHint}</strong> · Damage{" "}
+              <strong>
+                {resolvedAction.damage.count}d{resolvedAction.damage.sides}
+                {resolvedAction.damage.bonus >= 0 ? `+${resolvedAction.damage.bonus}` : resolvedAction.damage.bonus}
+              </strong>{" "}
+              <strong>{resolvedAction.damage.kind}</strong>
+            </div>
+          )}
+        </div>
+      </div>
 
       {step === "idle" && (
         <button onClick={begin} disabled={!enemyName}>
@@ -566,8 +620,8 @@ export default function EnemyTurnResolverPanel({
           </div>
 
           <div className="muted" style={{ fontSize: 11, opacity: 0.85 }}>
-            V2: enemy behavior now resolves through mapped enemy specialty skills when available. Next layer can add
-            cooldowns, target preference, and pressure-conditioned move weighting.
+            V3: enemy behavior now resolves through mapped enemy specialty skills when available, with deterministic
+            portrait loading. Next layer can add cooldowns, target preference, and pressure-conditioned move weighting.
           </div>
         </div>
       )}
