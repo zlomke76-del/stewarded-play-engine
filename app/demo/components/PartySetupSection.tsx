@@ -1,7 +1,7 @@
 // app/demo/components/PartySetupSection.tsx
 "use client";
 
-import React from "react";
+import React, { useState } from "react";
 import { getPortraitPath } from "@/lib/portraits/getPortraitPath";
 import { getSkillDefinition } from "@/lib/skills/skillDefinitions";
 import { getSpeciesTraitDefinition } from "@/lib/skills/speciesTraitMap";
@@ -94,6 +94,8 @@ export default function PartySetupSection(props: {
     safeInt,
     setPartyDraft,
   } = props;
+
+  const [showDeclaredEditor, setShowDeclaredEditor] = useState(false);
 
   if (!enabled) return null;
 
@@ -202,349 +204,425 @@ export default function PartySetupSection(props: {
     border: "1px solid rgba(120,180,255,0.22)",
   };
 
+  const summaryPillStyle: React.CSSProperties = {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 8,
+    padding: "7px 10px",
+    borderRadius: 999,
+    border: "1px solid rgba(255,255,255,0.12)",
+    background: "rgba(255,255,255,0.05)",
+    fontSize: 12,
+  };
+
+  const canCollapseToSummary = partyCanonicalExists && partyLocked;
+  const showFullEditor = !canCollapseToSummary || showDeclaredEditor;
+
   return (
     <div style={{ scrollMarginTop: 90 }}>
       <div style={{ padding: "14px 16px" }}>
-        <p className="muted" style={{ marginTop: 0 }}>
-          Declare players once at the start. This roster becomes the source for combatants. After you
-          commit, it locks for the session.
-        </p>
-
-        <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
-          <label style={{ display: "flex", flexDirection: "column", gap: 6, minWidth: 190 }}>
-            Players (1–6)
-            <select
-              value={currentCount}
-              onChange={(e) => setPartySize(Number(e.target.value))}
-              disabled={partyLocked}
+        {!showFullEditor && (
+          <>
+            <div
+              style={{
+                display: "flex",
+                gap: 10,
+                flexWrap: "wrap",
+                alignItems: "center",
+                justifyContent: "space-between",
+                padding: "12px 14px",
+                borderRadius: 12,
+                border: "1px solid rgba(255,255,255,0.10)",
+                background: "rgba(255,255,255,0.04)",
+              }}
             >
-              {[1, 2, 3, 4, 5, 6].map((n) => (
-                <option key={n} value={n}>
-                  {n}
-                </option>
-              ))}
-            </select>
-          </label>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                <span style={summaryPillStyle}>
+                  <strong>Party declared</strong>
+                </span>
 
-          <button onClick={randomizePartyNames} disabled={partyLocked || !partyDraft}>
-            🎲 Random names
-          </button>
+                <span style={summaryPillStyle}>
+                  <strong>{rows.length}</strong> {rows.length === 1 ? "player" : "players"}
+                </span>
 
-          <button onClick={commitParty} disabled={partyLocked || !partyDraft}>
-            Commit Party (Append-only)
-          </button>
+                <span style={summaryPillStyle}>
+                  Canonical roster locked {partyLockedByCombat ? "· combat active" : ""}
+                </span>
+              </div>
 
-          <span className="muted" style={{ fontSize: 12 }}>
-            {partyCanonicalExists ? "Canonical party declared ✅ (locked)" : "Draft only (not yet canon)"}
-            {partyLockedByCombat ? " · Locked (combat active)" : ""}
-          </span>
-        </div>
-
-        <div style={{ marginTop: 14, overflowX: "auto" }}>
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: desktopGridColumns,
-              gap: 8,
-              alignItems: "center",
-              width: "100%",
-              minWidth: 960,
-            }}
-          >
-            <div className="muted" style={{ fontSize: 12 }}>
-              PORTRAIT
-            </div>
-            <div className="muted" style={{ fontSize: 12 }}>
-              NAME / LOADOUT
-            </div>
-            <div className="muted" style={{ fontSize: 12 }}>
-              SPECIES
-            </div>
-            <div className="muted" style={{ fontSize: 12 }}>
-              CLASS
-            </div>
-            <div className="muted" style={{ fontSize: 12 }}>
-              PORT
-            </div>
-            <div className="muted" style={{ fontSize: 12, textAlign: "center" }}>
-              AC
-            </div>
-            <div className="muted" style={{ fontSize: 12, textAlign: "center" }}>
-              HP
-            </div>
-            <div className="muted" style={{ fontSize: 12, textAlign: "center" }}>
-              HP MAX
-            </div>
-            <div className="muted" style={{ fontSize: 12, textAlign: "center" }}>
-              INIT
+              <button
+                onClick={() => setShowDeclaredEditor(true)}
+                style={{
+                  padding: "8px 12px",
+                  borderRadius: 10,
+                  border: "1px solid rgba(255,255,255,0.12)",
+                  background: "rgba(255,255,255,0.05)",
+                  color: "inherit",
+                  cursor: "pointer",
+                }}
+              >
+                Review roster
+              </button>
             </div>
 
-            {rows.map((row, idx) => {
-              const i1 = idx + 1;
+            <div className="muted" style={{ marginTop: 10, fontSize: 12 }}>
+              The declaration grid is collapsed because the party is already committed. The session-truth
+              player cards below are now the primary visible roster.
+            </div>
+          </>
+        )}
 
-              const speciesValue = normalizeSpeciesValue(row?.species ?? "");
-              const speciesIsCustom = speciesValue.length > 0 && !isKnownValue(speciesValue, SAFE_SPECIES);
+        {showFullEditor && (
+          <>
+            <p className="muted" style={{ marginTop: 0 }}>
+              Declare players once at the start. This roster becomes the source for combatants. After you
+              commit, it locks for the session.
+            </p>
 
-              const speciesSelectValue =
-                speciesValue.length === 0
-                  ? ""
-                  : speciesIsCustom
-                    ? "__custom__"
-                    : SAFE_SPECIES.find((x) => x.toLowerCase() === speciesValue.toLowerCase()) ?? "";
+            <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+              <label style={{ display: "flex", flexDirection: "column", gap: 6, minWidth: 190 }}>
+                Players (1–6)
+                <select
+                  value={currentCount}
+                  onChange={(e) => setPartySize(Number(e.target.value))}
+                  disabled={partyLocked}
+                >
+                  {[1, 2, 3, 4, 5, 6].map((n) => (
+                    <option key={n} value={n}>
+                      {n}
+                    </option>
+                  ))}
+                </select>
+              </label>
 
-              const classValue = normalizeClassValue(row?.className ?? "");
-              const classIsCustom =
-                classValue.length > 0 && !isKnownValue(classValue, SAFE_CLASS_ARCHETYPES);
+              <button onClick={randomizePartyNames} disabled={partyLocked || !partyDraft}>
+                🎲 Random names
+              </button>
 
-              const classSelectValue =
-                classValue.length === 0
-                  ? ""
-                  : classIsCustom
-                    ? "__custom__"
-                    : SAFE_CLASS_ARCHETYPES.find((x) => x.toLowerCase() === classValue.toLowerCase()) ?? "";
+              <button onClick={commitParty} disabled={partyLocked || !partyDraft}>
+                Commit Party (Append-only)
+              </button>
 
-              const { resolvedSpecies, resolvedClass, skillIds, traitIds } = getResolvedLoadout(row);
+              {canCollapseToSummary && (
+                <button onClick={() => setShowDeclaredEditor(false)} disabled={!partyCanonicalExists}>
+                  Collapse
+                </button>
+              )}
 
-              const portraitPath = getPortraitPath(resolvedSpecies, resolvedClass, row?.portrait ?? "Male");
+              <span className="muted" style={{ fontSize: 12 }}>
+                {partyCanonicalExists ? "Canonical party declared ✅ (locked)" : "Draft only (not yet canon)"}
+                {partyLockedByCombat ? " · Locked (combat active)" : ""}
+              </span>
+            </div>
 
-              const skillLabels = skillIds.map((skillId) => getSkillDefinition(skillId)?.label ?? skillId);
-              const traitLabels = traitIds.map((traitId) => getSpeciesTraitDefinition(traitId)?.label ?? traitId);
+            <div style={{ marginTop: 14, overflowX: "auto" }}>
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: desktopGridColumns,
+                  gap: 8,
+                  alignItems: "center",
+                  width: "100%",
+                  minWidth: 960,
+                }}
+              >
+                <div className="muted" style={{ fontSize: 12 }}>
+                  PORTRAIT
+                </div>
+                <div className="muted" style={{ fontSize: 12 }}>
+                  NAME / LOADOUT
+                </div>
+                <div className="muted" style={{ fontSize: 12 }}>
+                  SPECIES
+                </div>
+                <div className="muted" style={{ fontSize: 12 }}>
+                  CLASS
+                </div>
+                <div className="muted" style={{ fontSize: 12 }}>
+                  PORT
+                </div>
+                <div className="muted" style={{ fontSize: 12, textAlign: "center" }}>
+                  AC
+                </div>
+                <div className="muted" style={{ fontSize: 12, textAlign: "center" }}>
+                  HP
+                </div>
+                <div className="muted" style={{ fontSize: 12, textAlign: "center" }}>
+                  HP MAX
+                </div>
+                <div className="muted" style={{ fontSize: 12, textAlign: "center" }}>
+                  INIT
+                </div>
 
-              return (
-                <React.Fragment key={row.id || `player_${i1}`}>
-                  <div
-                    style={portraitFrameStyle}
-                    title={`${resolvedSpecies} ${resolvedClass} ${row?.portrait ?? "Male"}`}
-                  >
-                    <img
-                      src={portraitPath}
-                      alt={`${row?.name || `Player ${i1}`} portrait`}
-                      style={portraitImageStyle}
-                      onError={(e) => {
-                        const img = e.currentTarget;
-                        img.onerror = null;
-                        img.src = getPortraitPath("Human", "Warrior", row?.portrait ?? "Male");
-                      }}
-                    />
-                  </div>
+                {rows.map((row, idx) => {
+                  const i1 = idx + 1;
 
-                  <div style={{ minWidth: 0, display: "flex", flexDirection: "column", gap: 6 }}>
-                    <input
-                      value={row?.name ?? ""}
-                      disabled={!editable}
-                      onChange={(e) => setMemberField(idx, { name: e.target.value })}
-                      placeholder={`Player ${i1}`}
-                      style={compactInputStyle}
-                    />
+                  const speciesValue = normalizeSpeciesValue(row?.species ?? "");
+                  const speciesIsCustom = speciesValue.length > 0 && !isKnownValue(speciesValue, SAFE_SPECIES);
 
-                    <div style={{ display: "flex", flexWrap: "wrap", gap: 6, minHeight: 22 }}>
-                      {skillLabels.length > 0 ? (
-                        skillLabels.map((label, skillIdx) => (
-                          <span key={`${row.id || i1}_skill_${label}_${skillIdx}`} style={skillChipStyle}>
-                            {label}
-                          </span>
-                        ))
-                      ) : (
-                        <span className="muted" style={{ fontSize: 11 }}>
-                          No class skills
-                        </span>
-                      )}
-                    </div>
+                  const speciesSelectValue =
+                    speciesValue.length === 0
+                      ? ""
+                      : speciesIsCustom
+                        ? "__custom__"
+                        : SAFE_SPECIES.find((x) => x.toLowerCase() === speciesValue.toLowerCase()) ?? "";
 
-                    <div style={{ display: "flex", flexWrap: "wrap", gap: 6, minHeight: 22 }}>
-                      {traitLabels.length > 0 ? (
-                        traitLabels.map((label, traitIdx) => (
-                          <span key={`${row.id || i1}_trait_${label}_${traitIdx}`} style={traitChipStyle}>
-                            {label}
-                          </span>
-                        ))
-                      ) : (
-                        <span className="muted" style={{ fontSize: 11 }}>
-                          No species traits
-                        </span>
-                      )}
-                    </div>
-                  </div>
+                  const classValue = normalizeClassValue(row?.className ?? "");
+                  const classIsCustom =
+                    classValue.length > 0 && !isKnownValue(classValue, SAFE_CLASS_ARCHETYPES);
 
-                  <div style={{ display: "flex", flexDirection: "column", gap: 6, minWidth: 0 }}>
-                    <select
-                      value={speciesSelectValue}
-                      disabled={!editable}
-                      onChange={(e) => {
-                        const v = e.target.value;
-                        if (v === "") {
-                          const next = resolvePartyLoadout(row.className || "Warrior", "Human");
-                          setMemberField(idx, {
-                            species: "",
-                            traits: next.traitIds,
-                          });
-                          return;
-                        }
+                  const classSelectValue =
+                    classValue.length === 0
+                      ? ""
+                      : classIsCustom
+                        ? "__custom__"
+                        : SAFE_CLASS_ARCHETYPES.find((x) => x.toLowerCase() === classValue.toLowerCase()) ?? "";
 
-                        if (v === "__custom__") {
-                          if (!speciesIsCustom) {
-                            setMemberField(idx, { species: "", traits: [] });
-                          }
-                          return;
-                        }
+                  const { resolvedSpecies, resolvedClass, skillIds, traitIds } = getResolvedLoadout(row);
 
-                        const next = resolvePartyLoadout(row.className || "Warrior", v);
-                        setMemberField(idx, {
-                          species: v,
-                          traits: next.traitIds,
-                        });
-                      }}
-                      style={compactInputStyle}
-                    >
-                      <option value="">—</option>
-                      {SAFE_SPECIES.map((s) => (
-                        <option key={s} value={s}>
-                          {s}
-                        </option>
-                      ))}
-                      <option value="__custom__">Custom…</option>
-                    </select>
+                  const portraitPath = getPortraitPath(resolvedSpecies, resolvedClass, row?.portrait ?? "Male");
 
-                    {speciesSelectValue === "__custom__" && (
-                      <input
-                        value={speciesIsCustom ? speciesValue : ""}
-                        disabled={!editable}
-                        onChange={(e) => {
-                          const nextSpecies = e.target.value;
-                          const next = resolvePartyLoadout(row.className || "Warrior", nextSpecies);
-                          setMemberField(idx, {
-                            species: nextSpecies,
-                            traits: next.traitIds,
-                          });
-                        }}
-                        placeholder="Custom species"
-                        style={compactInputStyle}
-                      />
-                    )}
-                  </div>
+                  const skillLabels = skillIds.map((skillId) => getSkillDefinition(skillId)?.label ?? skillId);
+                  const traitLabels = traitIds.map((traitId) => getSpeciesTraitDefinition(traitId)?.label ?? traitId);
 
-                  <div style={{ display: "flex", flexDirection: "column", gap: 6, minWidth: 0 }}>
-                    <select
-                      value={classSelectValue}
-                      disabled={!editable}
-                      onChange={(e) => {
-                        const v = e.target.value;
-                        if (v === "") {
-                          const next = resolvePartyLoadout("Warrior", row.species || "Human");
-                          setMemberField(idx, {
-                            className: "",
-                            skills: next.skillIds,
-                          });
-                          return;
-                        }
+                  return (
+                    <React.Fragment key={row.id || `player_${i1}`}>
+                      <div
+                        style={portraitFrameStyle}
+                        title={`${resolvedSpecies} ${resolvedClass} ${row?.portrait ?? "Male"}`}
+                      >
+                        <img
+                          src={portraitPath}
+                          alt={`${row?.name || `Player ${i1}`} portrait`}
+                          style={portraitImageStyle}
+                          onError={(e) => {
+                            const img = e.currentTarget;
+                            img.onerror = null;
+                            img.src = getPortraitPath("Human", "Warrior", row?.portrait ?? "Male");
+                          }}
+                        />
+                      </div>
 
-                        if (v === "__custom__") {
-                          if (!classIsCustom) {
+                      <div style={{ minWidth: 0, display: "flex", flexDirection: "column", gap: 6 }}>
+                        <input
+                          value={row?.name ?? ""}
+                          disabled={!editable}
+                          onChange={(e) => setMemberField(idx, { name: e.target.value })}
+                          placeholder={`Player ${i1}`}
+                          style={compactInputStyle}
+                        />
+
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: 6, minHeight: 22 }}>
+                          {skillLabels.length > 0 ? (
+                            skillLabels.map((label, skillIdx) => (
+                              <span key={`${row.id || i1}_skill_${label}_${skillIdx}`} style={skillChipStyle}>
+                                {label}
+                              </span>
+                            ))
+                          ) : (
+                            <span className="muted" style={{ fontSize: 11 }}>
+                              No class skills
+                            </span>
+                          )}
+                        </div>
+
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: 6, minHeight: 22 }}>
+                          {traitLabels.length > 0 ? (
+                            traitLabels.map((label, traitIdx) => (
+                              <span key={`${row.id || i1}_trait_${label}_${traitIdx}`} style={traitChipStyle}>
+                                {label}
+                              </span>
+                            ))
+                          ) : (
+                            <span className="muted" style={{ fontSize: 11 }}>
+                              No species traits
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      <div style={{ display: "flex", flexDirection: "column", gap: 6, minWidth: 0 }}>
+                        <select
+                          value={speciesSelectValue}
+                          disabled={!editable}
+                          onChange={(e) => {
+                            const v = e.target.value;
+                            if (v === "") {
+                              const next = resolvePartyLoadout(row.className || "Warrior", "Human");
+                              setMemberField(idx, {
+                                species: "",
+                                traits: next.traitIds,
+                              });
+                              return;
+                            }
+
+                            if (v === "__custom__") {
+                              if (!speciesIsCustom) {
+                                setMemberField(idx, { species: "", traits: [] });
+                              }
+                              return;
+                            }
+
+                            const next = resolvePartyLoadout(row.className || "Warrior", v);
                             setMemberField(idx, {
-                              className: "",
-                              skills: [],
+                              species: v,
+                              traits: next.traitIds,
                             });
-                          }
-                          return;
-                        }
+                          }}
+                          style={compactInputStyle}
+                        >
+                          <option value="">—</option>
+                          {SAFE_SPECIES.map((s) => (
+                            <option key={s} value={s}>
+                              {s}
+                            </option>
+                          ))}
+                          <option value="__custom__">Custom…</option>
+                        </select>
 
-                        const next = resolvePartyLoadout(v, row.species || "Human");
-                        setMemberField(idx, {
-                          className: v,
-                          skills: next.skillIds,
-                        });
-                      }}
-                      style={compactInputStyle}
-                    >
-                      <option value="">—</option>
-                      {SAFE_CLASS_ARCHETYPES.map((c) => (
-                        <option key={c} value={c}>
-                          {c}
-                        </option>
-                      ))}
-                      <option value="__custom__">Custom…</option>
-                    </select>
+                        {speciesSelectValue === "__custom__" && (
+                          <input
+                            value={speciesIsCustom ? speciesValue : ""}
+                            disabled={!editable}
+                            onChange={(e) => {
+                              const nextSpecies = e.target.value;
+                              const next = resolvePartyLoadout(row.className || "Warrior", nextSpecies);
+                              setMemberField(idx, {
+                                species: nextSpecies,
+                                traits: next.traitIds,
+                              });
+                            }}
+                            placeholder="Custom species"
+                            style={compactInputStyle}
+                          />
+                        )}
+                      </div>
 
-                    {classSelectValue === "__custom__" && (
+                      <div style={{ display: "flex", flexDirection: "column", gap: 6, minWidth: 0 }}>
+                        <select
+                          value={classSelectValue}
+                          disabled={!editable}
+                          onChange={(e) => {
+                            const v = e.target.value;
+                            if (v === "") {
+                              const next = resolvePartyLoadout("Warrior", row.species || "Human");
+                              setMemberField(idx, {
+                                className: "",
+                                skills: next.skillIds,
+                              });
+                              return;
+                            }
+
+                            if (v === "__custom__") {
+                              if (!classIsCustom) {
+                                setMemberField(idx, {
+                                  className: "",
+                                  skills: [],
+                                });
+                              }
+                              return;
+                            }
+
+                            const next = resolvePartyLoadout(v, row.species || "Human");
+                            setMemberField(idx, {
+                              className: v,
+                              skills: next.skillIds,
+                            });
+                          }}
+                          style={compactInputStyle}
+                        >
+                          <option value="">—</option>
+                          {SAFE_CLASS_ARCHETYPES.map((c) => (
+                            <option key={c} value={c}>
+                              {c}
+                            </option>
+                          ))}
+                          <option value="__custom__">Custom…</option>
+                        </select>
+
+                        {classSelectValue === "__custom__" && (
+                          <input
+                            value={classIsCustom ? classValue : ""}
+                            disabled={!editable}
+                            onChange={(e) => {
+                              const nextClassName = e.target.value;
+                              const next = resolvePartyLoadout(nextClassName, row.species || "Human");
+                              setMemberField(idx, {
+                                className: nextClassName,
+                                skills: next.skillIds,
+                              });
+                            }}
+                            placeholder="Custom class"
+                            style={compactInputStyle}
+                          />
+                        )}
+                      </div>
+
+                      <select
+                        value={row?.portrait ?? "Male"}
+                        disabled={!editable}
+                        onChange={(e) => setMemberField(idx, { portrait: e.target.value as PortraitType })}
+                        style={compactInputStyle}
+                      >
+                        <option value="Male">Male</option>
+                        <option value="Female">Female</option>
+                      </select>
+
                       <input
-                        value={classIsCustom ? classValue : ""}
+                        value={String(row?.ac ?? 14)}
+                        disabled={!editable}
+                        onChange={(e) => setMemberField(idx, { ac: safeInt(e.target.value, 14, 1, 40) })}
+                        inputMode="numeric"
+                        style={compactNumberStyle}
+                      />
+
+                      <input
+                        value={String(row?.hpCurrent ?? 12)}
+                        disabled={!editable}
+                        onChange={(e) => setMemberField(idx, { hpCurrent: safeInt(e.target.value, 12, 0, 999) })}
+                        inputMode="numeric"
+                        style={compactNumberStyle}
+                      />
+
+                      <input
+                        value={String(row?.hpMax ?? 12)}
                         disabled={!editable}
                         onChange={(e) => {
-                          const nextClassName = e.target.value;
-                          const next = resolvePartyLoadout(nextClassName, row.species || "Human");
-                          setMemberField(idx, {
-                            className: nextClassName,
-                            skills: next.skillIds,
+                          const v = safeInt(e.target.value, 12, 1, 999);
+                          setPartyDraft((prev) => {
+                            if (!prev) return prev;
+                            const next = { ...prev, members: prev.members.map((x) => ({ ...x })) };
+                            next.members[idx].hpMax = v;
+                            if (next.members[idx].hpCurrent > v) next.members[idx].hpCurrent = v;
+                            return next;
                           });
                         }}
-                        placeholder="Custom class"
-                        style={compactInputStyle}
+                        inputMode="numeric"
+                        style={compactNumberStyle}
                       />
-                    )}
-                  </div>
 
-                  <select
-                    value={row?.portrait ?? "Male"}
-                    disabled={!editable}
-                    onChange={(e) => setMemberField(idx, { portrait: e.target.value as PortraitType })}
-                    style={compactInputStyle}
-                  >
-                    <option value="Male">Male</option>
-                    <option value="Female">Female</option>
-                  </select>
+                      <input
+                        value={String(row?.initiativeMod ?? 1)}
+                        disabled={!editable}
+                        onChange={(e) =>
+                          setMemberField(idx, { initiativeMod: safeInt(e.target.value, 1, -10, 20) })
+                        }
+                        inputMode="numeric"
+                        style={compactNumberStyle}
+                      />
+                    </React.Fragment>
+                  );
+                })}
+              </div>
+            </div>
 
-                  <input
-                    value={String(row?.ac ?? 14)}
-                    disabled={!editable}
-                    onChange={(e) => setMemberField(idx, { ac: safeInt(e.target.value, 14, 1, 40) })}
-                    inputMode="numeric"
-                    style={compactNumberStyle}
-                  />
-
-                  <input
-                    value={String(row?.hpCurrent ?? 12)}
-                    disabled={!editable}
-                    onChange={(e) => setMemberField(idx, { hpCurrent: safeInt(e.target.value, 12, 0, 999) })}
-                    inputMode="numeric"
-                    style={compactNumberStyle}
-                  />
-
-                  <input
-                    value={String(row?.hpMax ?? 12)}
-                    disabled={!editable}
-                    onChange={(e) => {
-                      const v = safeInt(e.target.value, 12, 1, 999);
-                      setPartyDraft((prev) => {
-                        if (!prev) return prev;
-                        const next = { ...prev, members: prev.members.map((x) => ({ ...x })) };
-                        next.members[idx].hpMax = v;
-                        if (next.members[idx].hpCurrent > v) next.members[idx].hpCurrent = v;
-                        return next;
-                      });
-                    }}
-                    inputMode="numeric"
-                    style={compactNumberStyle}
-                  />
-
-                  <input
-                    value={String(row?.initiativeMod ?? 1)}
-                    disabled={!editable}
-                    onChange={(e) =>
-                      setMemberField(idx, { initiativeMod: safeInt(e.target.value, 1, -10, 20) })
-                    }
-                    inputMode="numeric"
-                    style={compactNumberStyle}
-                  />
-                </React.Fragment>
-              );
-            })}
-          </div>
-        </div>
-
-        <div className="muted" style={{ marginTop: 10, fontSize: 12 }}>
-          Recommended: keep this roster stable. Combat turn order is still per combat, but <em>who the
-          players are</em> is session truth. Class determines specialty skills. Species adds passive traits.
-        </div>
+            <div className="muted" style={{ marginTop: 10, fontSize: 12 }}>
+              Recommended: keep this roster stable. Combat turn order is still per combat, but{" "}
+              <em>who the players are</em> is session truth. Class determines specialty skills. Species adds
+              passive traits.
+            </div>
+          </>
+        )}
       </div>
     </div>
   );
