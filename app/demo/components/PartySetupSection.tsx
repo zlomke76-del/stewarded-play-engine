@@ -42,7 +42,6 @@ const SAFE_CLASS_ARCHETYPES = [
   "Warlock",
 ] as const;
 
-// Keep this light + classic. You can expand later (or swap to “Ancestry”).
 const SAFE_SPECIES = [
   "Human",
   "Elf",
@@ -111,6 +110,24 @@ export default function PartySetupSection(props: {
     return (v ?? "").trim();
   }
 
+  function isKnownValue(value: string, allowed: readonly string[]) {
+    const normalized = value.trim().toLowerCase();
+    if (!normalized) return false;
+    return allowed.some((x) => x.toLowerCase() === normalized);
+  }
+
+  const desktopGridColumns = "minmax(160px, 1.45fr) minmax(130px, 1fr) minmax(130px, 1fr) 88px 60px 64px 74px 74px";
+  const compactInputStyle: React.CSSProperties = {
+    width: "100%",
+    minWidth: 0,
+    boxSizing: "border-box",
+  };
+
+  const compactNumberStyle: React.CSSProperties = {
+    ...compactInputStyle,
+    textAlign: "center",
+  };
+
   return (
     <div style={{ scrollMarginTop: 90 }}>
       <div style={{ padding: "14px 16px" }}>
@@ -120,7 +137,7 @@ export default function PartySetupSection(props: {
         </p>
 
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
-          <label style={{ display: "flex", flexDirection: "column", gap: 6, minWidth: 220 }}>
+          <label style={{ display: "flex", flexDirection: "column", gap: 6, minWidth: 190 }}>
             Players (1–6)
             <select value={currentCount} onChange={(e) => setPartySize(Number(e.target.value))} disabled={partyLocked}>
               {[1, 2, 3, 4, 5, 6].map((n) => (
@@ -145,14 +162,14 @@ export default function PartySetupSection(props: {
           </span>
         </div>
 
-        <div style={{ marginTop: 14, overflowX: "auto" }}>
+        <div style={{ marginTop: 14 }}>
           <div
             style={{
               display: "grid",
-              gridTemplateColumns: "220px 220px 190px 100px 80px 90px 90px 110px",
+              gridTemplateColumns: desktopGridColumns,
               gap: 8,
-              minWidth: 1100,
               alignItems: "center",
+              width: "100%",
             }}
           >
             <div className="muted" style={{ fontSize: 12 }}>
@@ -165,61 +182,56 @@ export default function PartySetupSection(props: {
               CLASS
             </div>
             <div className="muted" style={{ fontSize: 12 }}>
-              PORTRAIT
+              PORT
             </div>
-            <div className="muted" style={{ fontSize: 12 }}>
+            <div className="muted" style={{ fontSize: 12, textAlign: "center" }}>
               AC
             </div>
-            <div className="muted" style={{ fontSize: 12 }}>
+            <div className="muted" style={{ fontSize: 12, textAlign: "center" }}>
               HP
             </div>
-            <div className="muted" style={{ fontSize: 12 }}>
+            <div className="muted" style={{ fontSize: 12, textAlign: "center" }}>
               HP MAX
             </div>
-            <div className="muted" style={{ fontSize: 12 }}>
-              INIT MOD
+            <div className="muted" style={{ fontSize: 12, textAlign: "center" }}>
+              INIT
             </div>
 
             {rows.map((row, idx) => {
               const i1 = idx + 1;
 
-              // --- Species select + custom
               const speciesValue = normalizeSpeciesValue(row?.species ?? "");
-              const speciesIsCustom =
-                speciesValue.length > 0 &&
-                !SAFE_SPECIES.map((x) => x.toLowerCase()).includes(speciesValue.toLowerCase());
+              const speciesIsCustom = speciesValue.length > 0 && !isKnownValue(speciesValue, SAFE_SPECIES);
 
               const speciesSelectValue =
                 speciesValue.length === 0
                   ? ""
                   : speciesIsCustom
-                  ? "__custom__"
-                  : SAFE_SPECIES.find((x) => x.toLowerCase() === speciesValue.toLowerCase()) ?? "__custom__";
+                    ? "__custom__"
+                    : SAFE_SPECIES.find((x) => x.toLowerCase() === speciesValue.toLowerCase()) ?? "";
 
-              // --- Class select + custom
               const classValue = normalizeClassValue(row?.className ?? "");
               const classIsCustom =
-                classValue.length > 0 &&
-                !SAFE_CLASS_ARCHETYPES.map((x) => x.toLowerCase()).includes(classValue.toLowerCase());
+                classValue.length > 0 && !isKnownValue(classValue, SAFE_CLASS_ARCHETYPES);
 
               const classSelectValue =
                 classValue.length === 0
                   ? ""
                   : classIsCustom
-                  ? "__custom__"
-                  : SAFE_CLASS_ARCHETYPES.find((x) => x.toLowerCase() === classValue.toLowerCase()) ?? "__custom__";
+                    ? "__custom__"
+                    : SAFE_CLASS_ARCHETYPES.find((x) => x.toLowerCase() === classValue.toLowerCase()) ?? "";
 
               return (
-                <div key={row.id || `player_${i1}`} style={{ display: "contents" }}>
+                <React.Fragment key={row.id || `player_${i1}`}>
                   <input
                     value={row?.name ?? ""}
                     disabled={!editable}
                     onChange={(e) => setMemberField(idx, { name: e.target.value })}
                     placeholder={`Player ${i1}`}
+                    style={compactInputStyle}
                   />
 
-                  {/* SPECIES */}
-                  <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 6, minWidth: 0 }}>
                     <select
                       value={speciesSelectValue}
                       disabled={!editable}
@@ -235,7 +247,7 @@ export default function PartySetupSection(props: {
                         }
                         setMemberField(idx, { species: v });
                       }}
-                      style={{ minWidth: 150 }}
+                      style={compactInputStyle}
                     >
                       <option value="">—</option>
                       {SAFE_SPECIES.map((s) => (
@@ -246,20 +258,18 @@ export default function PartySetupSection(props: {
                       <option value="__custom__">Custom…</option>
                     </select>
 
-                    <input
-                      value={speciesIsCustom ? speciesValue : ""}
-                      disabled={!editable || speciesSelectValue !== "__custom__"}
-                      onChange={(e) => setMemberField(idx, { species: e.target.value })}
-                      placeholder="Custom"
-                      style={{
-                        width: 120,
-                        opacity: speciesSelectValue === "__custom__" ? 1 : 0.65,
-                      }}
-                    />
+                    {speciesSelectValue === "__custom__" && (
+                      <input
+                        value={speciesIsCustom ? speciesValue : ""}
+                        disabled={!editable}
+                        onChange={(e) => setMemberField(idx, { species: e.target.value })}
+                        placeholder="Custom species"
+                        style={compactInputStyle}
+                      />
+                    )}
                   </div>
 
-                  {/* CLASS */}
-                  <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 6, minWidth: 0 }}>
                     <select
                       value={classSelectValue}
                       disabled={!editable}
@@ -276,10 +286,9 @@ export default function PartySetupSection(props: {
 
                         setMemberField(idx, {
                           className: v,
-                          portrait: "Male",
                         });
                       }}
-                      style={{ minWidth: 150 }}
+                      style={compactInputStyle}
                     >
                       <option value="">—</option>
                       {SAFE_CLASS_ARCHETYPES.map((c) => (
@@ -290,22 +299,22 @@ export default function PartySetupSection(props: {
                       <option value="__custom__">Custom…</option>
                     </select>
 
-                    <input
-                      value={classIsCustom ? classValue : ""}
-                      disabled={!editable || classSelectValue !== "__custom__"}
-                      onChange={(e) => setMemberField(idx, { className: e.target.value })}
-                      placeholder="Custom"
-                      style={{
-                        width: 120,
-                        opacity: classSelectValue === "__custom__" ? 1 : 0.65,
-                      }}
-                    />
+                    {classSelectValue === "__custom__" && (
+                      <input
+                        value={classIsCustom ? classValue : ""}
+                        disabled={!editable}
+                        onChange={(e) => setMemberField(idx, { className: e.target.value })}
+                        placeholder="Custom class"
+                        style={compactInputStyle}
+                      />
+                    )}
                   </div>
 
                   <select
                     value={row?.portrait ?? "Male"}
                     disabled={!editable}
                     onChange={(e) => setMemberField(idx, { portrait: e.target.value as PortraitType })}
+                    style={compactInputStyle}
                   >
                     <option value="Male">Male</option>
                     <option value="Female">Female</option>
@@ -316,6 +325,7 @@ export default function PartySetupSection(props: {
                     disabled={!editable}
                     onChange={(e) => setMemberField(idx, { ac: safeInt(e.target.value, 14, 1, 40) })}
                     inputMode="numeric"
+                    style={compactNumberStyle}
                   />
 
                   <input
@@ -323,6 +333,7 @@ export default function PartySetupSection(props: {
                     disabled={!editable}
                     onChange={(e) => setMemberField(idx, { hpCurrent: safeInt(e.target.value, 12, 0, 999) })}
                     inputMode="numeric"
+                    style={compactNumberStyle}
                   />
 
                   <input
@@ -339,6 +350,7 @@ export default function PartySetupSection(props: {
                       });
                     }}
                     inputMode="numeric"
+                    style={compactNumberStyle}
                   />
 
                   <input
@@ -346,8 +358,9 @@ export default function PartySetupSection(props: {
                     disabled={!editable}
                     onChange={(e) => setMemberField(idx, { initiativeMod: safeInt(e.target.value, 1, -10, 20) })}
                     inputMode="numeric"
+                    style={compactNumberStyle}
                   />
-                </div>
+                </React.Fragment>
               );
             })}
           </div>
