@@ -3,9 +3,6 @@
 import type { SkillDefinition, SkillDefinitionMap } from "./SkillTypes";
 
 export const SKILL_DEFINITIONS: SkillDefinitionMap = {
-  // =========================================================
-  // PLAYER — WARRIOR
-  // =========================================================
   guard_break: {
     id: "guard_break",
     label: "Guard Break",
@@ -83,9 +80,80 @@ export const SKILL_DEFINITIONS: SkillDefinitionMap = {
     aiHints: { preferredWhenSelfBelowHpPct: 45 },
   },
 
-  // =========================================================
-  // PLAYER — ROGUE
-  // =========================================================
+  rage: {
+    id: "rage",
+    label: "Rage",
+    actorKind: "player",
+    category: "support",
+    phase: "combat",
+    className: "Barbarian",
+    description: "Enter a battle fury that increases offense and hardens pain tolerance.",
+    shortDescription: "Gain damage and damage reduction.",
+    targeting: {
+      targetType: "self",
+      range: "self",
+      requiresTarget: false,
+      canTargetSelf: true,
+    },
+    usage: { type: "per_combat", maxUses: 1 },
+    effectsOnUse: [
+      { type: "damage_bonus", amount: 2, duration: "combat" },
+      { type: "reduce_incoming_damage", amount: 2, duration: "combat" },
+      { type: "pressure_shift", amount: 1 },
+      { type: "spawn_audit_note", note: "Barbarian entered Rage." },
+    ],
+    tags: { martial: true, playerOnly: true },
+  },
+
+  reckless_strike: {
+    id: "reckless_strike",
+    label: "Reckless Strike",
+    actorKind: "player",
+    category: "attack",
+    phase: "combat",
+    className: "Barbarian",
+    description: "Commit fully to offense, hitting harder while opening yourself to reprisal.",
+    shortDescription: "Heavy damage but self-exposed.",
+    targeting: {
+      targetType: "single_enemy",
+      range: "melee",
+      requiresTarget: true,
+      canTargetEnemies: true,
+    },
+    usage: { type: "per_turn", maxUses: 1 },
+    hitRoll: { enabled: true, baseBonus: 2, contestedBy: "ac" },
+    effectsOnHit: [{ type: "damage", amount: 6, damageType: "slashing" }],
+    effectsOnUse: [
+      { type: "apply_condition", condition: "exposed", duration: "end_of_turn" },
+      { type: "spawn_audit_note", note: "Reckless Strike left the barbarian open." },
+    ],
+    tags: { martial: true, playerOnly: true },
+  },
+
+  intimidating_roar: {
+    id: "intimidating_roar",
+    label: "Intimidating Roar",
+    actorKind: "player",
+    category: "control",
+    phase: "combat",
+    className: "Barbarian",
+    description: "A terrifying roar disrupts enemy nerve and battlefield cohesion.",
+    shortDescription: "Weaken and frighten enemies.",
+    targeting: {
+      targetType: "all_enemies",
+      range: "zone",
+      requiresTarget: false,
+      canTargetEnemies: true,
+    },
+    usage: { type: "per_combat", maxUses: 1 },
+    effectsOnUse: [
+      { type: "apply_condition", condition: "frightened", duration: "rounds", rounds: 1 },
+      { type: "apply_condition", condition: "weakened", duration: "rounds", rounds: 1 },
+      { type: "awareness_shift", amount: 1 },
+    ],
+    tags: { martial: true, playerOnly: true },
+  },
+
   backstab: {
     id: "backstab",
     label: "Backstab",
@@ -105,12 +173,7 @@ export const SKILL_DEFINITIONS: SkillDefinitionMap = {
     hitRoll: { enabled: true, baseBonus: 2, contestedBy: "ac" },
     effectsOnHit: [
       { type: "damage", amount: 3, damageType: "piercing" },
-      {
-        type: "damage",
-        amount: 4,
-        damageType: "piercing",
-        bonusIfCondition: "exposed",
-      },
+      { type: "damage", amount: 4, damageType: "piercing", bonusIfCondition: "exposed" },
     ],
     tags: { martial: true, stealth: true, openerOnly: true, playerOnly: true },
     aiHints: { preferredWhenTargetHasCondition: "exposed", openerPriority: 9 },
@@ -160,12 +223,9 @@ export const SKILL_DEFINITIONS: SkillDefinitionMap = {
       { type: "mark_zone", note: "Trap neutralized." },
       { type: "spawn_audit_note", note: "Trap disarmed successfully." },
     ],
-        tags: { stealth: true, playerOnly: true },
+    tags: { stealth: true, playerOnly: true },
   },
 
-  // =========================================================
-  // PLAYER — MAGE
-  // =========================================================
   arc_bolt: {
     id: "arc_bolt",
     label: "Arc Bolt",
@@ -235,9 +295,6 @@ export const SKILL_DEFINITIONS: SkillDefinitionMap = {
     tags: { magical: true, arcane: true, playerOnly: true },
   },
 
-  // =========================================================
-  // PLAYER — CLERIC
-  // =========================================================
   heal: {
     id: "heal",
     label: "Heal",
@@ -255,10 +312,7 @@ export const SKILL_DEFINITIONS: SkillDefinitionMap = {
       canTargetSelf: true,
     },
     usage: { type: "per_turn", maxUses: 1 },
-    effectsOnUse: [
-      { type: "heal", amount: 7 },
-      { type: "remove_condition", condition: "bleeding" },
-    ],
+    effectsOnUse: [{ type: "heal", amount: 7 }, { type: "remove_condition", condition: "bleeding" }],
     tags: { magical: true, holy: true, playerOnly: true },
   },
 
@@ -311,9 +365,6 @@ export const SKILL_DEFINITIONS: SkillDefinitionMap = {
     aiHints: { preferredWhenUndeadTarget: true, openerPriority: 10 },
   },
 
-  // =========================================================
-  // PLAYER — RANGER
-  // =========================================================
   mark_target: {
     id: "mark_target",
     label: "Mark Target",
@@ -383,9 +434,6 @@ export const SKILL_DEFINITIONS: SkillDefinitionMap = {
     tags: { playerOnly: true },
   },
 
-  // =========================================================
-  // PLAYER — PALADIN
-  // =========================================================
   smite: {
     id: "smite",
     label: "Smite",
@@ -459,9 +507,6 @@ export const SKILL_DEFINITIONS: SkillDefinitionMap = {
     tags: { holy: true, playerOnly: true },
   },
 
-  // =========================================================
-  // PLAYER — BARD
-  // =========================================================
   inspire: {
     id: "inspire",
     label: "Inspire",
@@ -534,9 +579,6 @@ export const SKILL_DEFINITIONS: SkillDefinitionMap = {
     tags: { magical: true, playerOnly: true },
   },
 
-  // =========================================================
-  // PLAYER — DRUID
-  // =========================================================
   vinesnare: {
     id: "vinesnare",
     label: "Vinesnare",
@@ -607,9 +649,6 @@ export const SKILL_DEFINITIONS: SkillDefinitionMap = {
     tags: { magical: true, primal: true, playerOnly: true },
   },
 
-  // =========================================================
-  // PLAYER — MONK
-  // =========================================================
   flurry: {
     id: "flurry",
     label: "Flurry",
@@ -681,9 +720,6 @@ export const SKILL_DEFINITIONS: SkillDefinitionMap = {
     tags: { playerOnly: true },
   },
 
-  // =========================================================
-  // PLAYER — ARTIFICER
-  // =========================================================
   gadget_trap: {
     id: "gadget_trap",
     label: "Gadget Trap",
@@ -724,9 +760,7 @@ export const SKILL_DEFINITIONS: SkillDefinitionMap = {
       canTargetSelf: true,
     },
     usage: { type: "per_combat", maxUses: 2 },
-    effectsOnUse: [
-      { type: "damage_bonus", amount: 2, damageType: "arcane", duration: "rounds", rounds: 1 },
-    ],
+    effectsOnUse: [{ type: "damage_bonus", amount: 2, damageType: "arcane", duration: "rounds", rounds: 1 }],
     tags: { tech: true, arcane: true, playerOnly: true },
   },
 
@@ -753,9 +787,6 @@ export const SKILL_DEFINITIONS: SkillDefinitionMap = {
     tags: { tech: true, playerOnly: true },
   },
 
-  // =========================================================
-  // PLAYER — SORCERER
-  // =========================================================
   chaos_bolt: {
     id: "chaos_bolt",
     label: "Chaos Bolt",
@@ -826,9 +857,6 @@ export const SKILL_DEFINITIONS: SkillDefinitionMap = {
     tags: { magical: true, arcane: true, playerOnly: true },
   },
 
-  // =========================================================
-  // PLAYER — WARLOCK
-  // =========================================================
   hex: {
     id: "hex",
     label: "Hex",
@@ -897,9 +925,6 @@ export const SKILL_DEFINITIONS: SkillDefinitionMap = {
     tags: { magical: true, shadow: true, playerOnly: true },
   },
 
-  // =========================================================
-  // ENEMIES
-  // =========================================================
   raider_cleave: {
     id: "raider_cleave",
     label: "Raider Cleave",
@@ -922,7 +947,6 @@ export const SKILL_DEFINITIONS: SkillDefinitionMap = {
       { type: "apply_condition", condition: "bleeding", duration: "rounds", rounds: 1 },
     ],
     tags: { enemyOnly: true, martial: true },
-    aiHints: { openerPriority: 7 },
   },
 
   raider_frenzy: {
@@ -1120,7 +1144,7 @@ export const SKILL_DEFINITIONS: SkillDefinitionMap = {
     phase: "combat",
     enemyArchetype: "Bandit Archer",
     description: "Force the party into hesitation and poor movement lanes.",
-    shortDescription: "Raise awareness and root tempo.",
+    shortDescription: "Raise awareness and reveal the party.",
     targeting: {
       targetType: "enemy_group",
       range: "ranged",
