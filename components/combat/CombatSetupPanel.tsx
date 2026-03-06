@@ -17,6 +17,11 @@ import {
 type PartyMemberLite = {
   id: string;
   name: string;
+  species?: string;
+  className?: string;
+  portrait?: "Male" | "Female";
+  skills?: string[];
+  traits?: string[];
   initiativeMod: number;
 };
 
@@ -38,6 +43,10 @@ function clampInt(n: number, min: number, max: number) {
 
 function normalizeName(s: string) {
   return String(s ?? "").replace(/\s+/g, " ").trim();
+}
+
+function normalizeClassKey(v: string) {
+  return String(v ?? "").trim().toLowerCase();
 }
 
 function computeCombatLocked(events: readonly any[]) {
@@ -67,14 +76,14 @@ function Pill({
           background: "rgba(138,180,255,0.08)",
         }
       : tone === "warn"
-      ? {
-          border: "1px solid rgba(255,200,140,0.22)",
-          background: "rgba(255,200,140,0.08)",
-        }
-      : {
-          border: "1px solid rgba(255,255,255,0.12)",
-          background: "rgba(255,255,255,0.05)",
-        };
+        ? {
+            border: "1px solid rgba(255,200,140,0.22)",
+            background: "rgba(255,200,140,0.08)",
+          }
+        : {
+            border: "1px solid rgba(255,255,255,0.12)",
+            background: "rgba(255,255,255,0.05)",
+          };
 
   return (
     <span
@@ -199,12 +208,10 @@ function enemyTypesForPressure(pressureTier: any): [string, string] {
 }
 
 function makeInstanceLabel(base: string, idx1: number) {
-  // Keep it readable + stable, and still match asset resolver (includes("archer"), etc.)
   return `${base} #${idx1}`;
 }
 
 function shouldFirstTypeGetExtra(seed: string): boolean {
-  // deterministic: 0/1 based on hash
   return (hash32(seed) & 1) === 1;
 }
 
@@ -219,11 +226,9 @@ function buildBalancedRoster(
 
   if (n === 0) return { labels: [], counts: { a: 0, b: 0 }, types };
 
-  // Base 50/50 split.
   let a = Math.floor(n / 2);
   let b = n - a;
 
-  // If odd, deterministically choose which side gets the extra (variety without RNG).
   if (n % 2 === 1) {
     const aGetsExtra = shouldFirstTypeGetExtra(`${seed}::odd_split::${String(pressureTier ?? "")}`);
     if (aGetsExtra) {
@@ -239,8 +244,6 @@ function buildBalancedRoster(
   for (let i = 1; i <= a; i++) labels.push(makeInstanceLabel(A, i));
   for (let i = 1; i <= b; i++) labels.push(makeInstanceLabel(B, i));
 
-  // Deterministic order shuffle-lite: keep it stable, but avoid “all archers then all shields” sometimes.
-  // We interleave based on a deterministic bit.
   const interleave = shouldFirstTypeGetExtra(`${seed}::interleave::${A}::${B}`);
   if (interleave && labels.length > 1) {
     const aLabels = labels.filter((x) => x.toLowerCase().includes(A.toLowerCase().split(" ")[0]));
@@ -261,7 +264,6 @@ function buildBalancedRoster(
 function enemyAssetForGroupName(name: string): string {
   const n = String(name ?? "").toLowerCase().trim();
 
-  // Prefer explicit group art when you have it; fall back to base.
   if (n.includes("archer")) return "/assets/v1/enemy_archers.png";
   if (n.includes("brute")) return "/assets/v1/enemy_brutes.png";
   if (n.includes("shield")) return "/assets/v1/enemy_shields.png";
@@ -316,7 +318,6 @@ function EnemyCard({
           flex: "0 0 auto",
         }}
       >
-        {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src={src}
           alt=""
@@ -343,6 +344,35 @@ function EnemyCard({
   );
 }
 
+function classifyPartyRoles(partyMembers: PartyMemberLite[]) {
+  let healers = 0;
+  let casters = 0;
+  let frontliners = 0;
+  let stealthy = 0;
+
+  for (const m of partyMembers) {
+    const k = normalizeClassKey(m.className ?? "");
+
+    if (k === "cleric" || k === "paladin" || k === "druid" || k === "bard" || k === "artificer") {
+      healers += 1;
+    }
+
+    if (k === "mage" || k === "sorcerer" || k === "warlock" || k === "cleric" || k === "druid") {
+      casters += 1;
+    }
+
+    if (k === "warrior" || k === "barbarian" || k === "paladin" || k === "monk") {
+      frontliners += 1;
+    }
+
+    if (k === "rogue" || k === "ranger" || k === "bard") {
+      stealthy += 1;
+    }
+  }
+
+  return { healers, casters, frontliners, stealthy };
+}
+
 export default function CombatSetupPanel({
   events,
   onAppendCanon,
@@ -356,7 +386,6 @@ export default function CombatSetupPanel({
   const isHuman = dmMode === "human";
   const canEdit = !locked && (isHuman || allowDevControls);
 
-  // In Solace-neutral (no dev), hide the visual-noise “builder” controls.
   const showBuilderControls = isHuman || allowDevControls;
 
   const INIT_MODS = [-2, -1, 0, 1, 2, 3, 4, 5, 6, 7, 8] as const;
@@ -381,14 +410,12 @@ export default function CombatSetupPanel({
 
   const partySize = useMemo(() => clampInt(partyMembers?.length ?? 0, 0, 6), [partyMembers]);
 
+  const partyRoleInfo = useMemo(() => classifyPartyRoles(partyMembers ?? []), [partyMembers]);
+
   const pressureSeed = useMemo(() => {
     const outcomes = (events as any[]).filter((e) => e?.type === "OUTCOME").length;
     return `pressure=${String(pressureTier ?? "unknown")}::outcomes=${outcomes}::party=${partySize}`;
   }, [events, partySize, pressureTier]);
-
-  // -----------------------------
-  // Enemy list (instances) + knobs
-  // -----------------------------
 
   const [enemyGroups, setEnemyGroups] = useState<string[]>([
     makeInstanceLabel("Archers", 1),
@@ -398,19 +425,16 @@ export default function CombatSetupPanel({
   const [enemyGroupSelect, setEnemyGroupSelect] = useState<string>("Archers");
   const [initModEnemies, setInitModEnemies] = useState<number>(1);
 
-  // Solace-owned: pressure -> init mod (quality)
   useEffect(() => {
     if (isHuman && !allowDevControls) return;
 
     const inferred = inferEnemyInitModFromPressure(pressureTier);
     setInitModEnemies((prev) => {
-      if (isHuman && allowDevControls) return prev; // don’t stomp dev edits
+      if (isHuman && allowDevControls) return prev;
       return inferred;
     });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pressureTier, isHuman, allowDevControls]);
 
-  // Solace-owned: 1:1 enemies to party size, 50/50 composition, pressure drives *type*
   useEffect(() => {
     if (isHuman && !allowDevControls) return;
 
@@ -418,10 +442,9 @@ export default function CombatSetupPanel({
     const roster = buildBalancedRoster(pressureTier, desired, pressureSeed);
 
     setEnemyGroups((prev) => {
-      if (isHuman && allowDevControls) return prev; // dev can override
+      if (isHuman && allowDevControls) return prev;
       return roster.labels;
     });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [partySize, pressureTier, pressureSeed, isHuman, allowDevControls]);
 
   function nextInstanceIndexForBase(base: string, existing: string[]) {
@@ -459,10 +482,6 @@ export default function CombatSetupPanel({
     setEnemyGroups([]);
   }
 
-  // -----------------------------
-  // Derived combat display
-  // -----------------------------
-
   const latestCombatId = useMemo(() => findLatestCombatId(events as any) ?? null, [events]);
 
   const derivedCombat = useMemo(() => {
@@ -474,10 +493,6 @@ export default function CombatSetupPanel({
     }
   }, [latestCombatId, events]);
 
-  // -----------------------------
-  // Canon actions
-  // -----------------------------
-
   const canStartCombat = !locked && (isHuman || allowDevControls);
 
   function startCombatDeterministic() {
@@ -488,7 +503,6 @@ export default function CombatSetupPanel({
 
     const desiredGroups = clampInt(members.length, 1, 6);
 
-    // Use exactly N enemies (1:1 with party size). If empty, rebuild from Solace roster.
     const ensuredLabels =
       enemyGroups.length > 0
         ? enemyGroups.slice(0, desiredGroups)
@@ -542,15 +556,10 @@ export default function CombatSetupPanel({
     onAppendCanon("COMBAT_ENDED", { combatId });
   }
 
-  // -----------------------------
-  // Enemy cards (no squared math)
-  // -----------------------------
-
   const enemyCards = useMemo(() => {
     const n = clampInt(partySize, 0, 6);
     const labels = enemyGroups.slice(0, n);
 
-    // Key fix: HP is PER ENEMY, not multiplied by party size.
     const hpPerEnemy = inferEnemyHpPerEnemyFromPressure(pressureTier);
     const hpLabel = `HP ${hpPerEnemy}/${hpPerEnemy}`;
     const stateLabel = locked ? "In combat" : "Deployed (Solace-owned)";
@@ -583,7 +592,6 @@ export default function CombatSetupPanel({
         Players roll individually. Enemies roll once per enemy. Turn order is derived from events.
       </p>
 
-      {/* Setup console */}
       <div
         style={{
           marginTop: 12,
@@ -594,10 +602,16 @@ export default function CombatSetupPanel({
           boxShadow: "inset 0 1px 0 rgba(255,255,255,0.05)",
         }}
       >
-        {/* Row 1: compact controls */}
         <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "flex-end" }}>
           <ControlLabel label="Party size (session truth)">
-            <div style={{ ...selectStyle(true), display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+            <div
+              style={{
+                ...selectStyle(true),
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+              }}
+            >
               <span>
                 <strong>{partySize}</strong> {partySize === 1 ? "member" : "members"}
               </span>
@@ -622,7 +636,6 @@ export default function CombatSetupPanel({
             </select>
           </ControlLabel>
 
-          {/* Optional builder controls stay up top in human/dev to avoid pushing the enemy grid right. */}
           {showBuilderControls && (
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "flex-end" }}>
               <ControlLabel label="Enemy group (builder)">
@@ -664,16 +677,23 @@ export default function CombatSetupPanel({
           )}
         </div>
 
-        {/* Row 2: enemy area FULL WIDTH (fixes the left dead-space in your screenshot) */}
         <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 8 }}>
-          <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "baseline",
+              justifyContent: "space-between",
+              gap: 10,
+              flexWrap: "wrap",
+            }}
+          >
             <span className="muted" style={{ fontSize: 12 }}>
               Enemies <span className="muted">(1:1 with party size · 50/50 mix)</span>
             </span>
 
             <span className="muted" style={{ fontSize: 12 }}>
-              Pressure tier: <strong>{String(pressureTier ?? "unknown")}</strong> · Band <strong>{rosterInfo.band}</strong> · HP{" "}
-              <strong>{rosterInfo.hp}</strong>
+              Pressure tier: <strong>{String(pressureTier ?? "unknown")}</strong> · Band{" "}
+              <strong>{rosterInfo.band}</strong> · HP <strong>{rosterInfo.hp}</strong>
             </span>
           </div>
 
@@ -681,7 +701,15 @@ export default function CombatSetupPanel({
             Roster: <strong>{rosterInfo.a}</strong>× {rosterInfo.A} · <strong>{rosterInfo.b}</strong>× {rosterInfo.B}
           </div>
 
-          {/* Cards */}
+          <div className="muted" style={{ fontSize: 12 }}>
+            Party profile: <strong>{partyRoleInfo.frontliners}</strong> frontliner
+            {partyRoleInfo.frontliners === 1 ? "" : "s"} · <strong>{partyRoleInfo.healers}</strong> healer
+            {partyRoleInfo.healers === 1 ? "" : "s"} · <strong>{partyRoleInfo.casters}</strong> caster
+            {partyRoleInfo.casters === 1 ? "" : "s"} · <strong>{partyRoleInfo.stealthy}</strong> stealth
+            {partyRoleInfo.stealthy === 1 ? "" : "y"} role
+            {partyRoleInfo.stealthy === 1 ? "" : "s"}
+          </div>
+
           {enemyCards.length > 0 ? (
             <div
               style={{
@@ -693,7 +721,13 @@ export default function CombatSetupPanel({
               }}
             >
               {enemyCards.map((c) => (
-                <EnemyCard key={c.name} name={c.name} initMod={c.initMod} hpLabel={c.hpLabel} stateLabel={c.stateLabel} />
+                <EnemyCard
+                  key={c.name}
+                  name={c.name}
+                  initMod={c.initMod}
+                  hpLabel={c.hpLabel}
+                  stateLabel={c.stateLabel}
+                />
               ))}
             </div>
           ) : (
@@ -702,7 +736,6 @@ export default function CombatSetupPanel({
             </div>
           )}
 
-          {/* If we’re showing builder controls (human/dev), keep removable chips too. */}
           {showBuilderControls && enemyGroups.length > 0 && (
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8 }}>
               {enemyGroups.slice(0, 6).map((g) => (
@@ -743,7 +776,6 @@ export default function CombatSetupPanel({
         </div>
       </div>
 
-      {/* Actions */}
       <div style={{ marginTop: 14, display: "flex", gap: 8, flexWrap: "wrap" }}>
         <button
           onClick={startCombatDeterministic}
@@ -773,7 +805,6 @@ export default function CombatSetupPanel({
         )}
       </div>
 
-      {/* Derived order */}
       {derivedCombat && (
         <div style={{ marginTop: 14 }}>
           <div className="muted">
