@@ -1,4 +1,3 @@
-// app/demo/components/PartySetupSection.tsx
 "use client";
 
 import React, { useMemo, useState } from "react";
@@ -403,6 +402,23 @@ export default function PartySetupSection(props: {
     outline: "none",
   };
 
+  const selectStyle: React.CSSProperties = {
+    ...inputStyle,
+    appearance: "none",
+    WebkitAppearance: "none",
+    MozAppearance: "none",
+    backgroundColor: "rgba(24,24,24,0.96)",
+    color: "rgba(245,236,216,0.96)",
+    border: "1px solid rgba(255,255,255,0.14)",
+    colorScheme: "dark",
+    backgroundImage:
+      'linear-gradient(45deg, transparent 50%, rgba(245,236,216,0.82) 50%), linear-gradient(135deg, rgba(245,236,216,0.82) 50%, transparent 50%)',
+    backgroundPosition: "calc(100% - 18px) calc(50% - 3px), calc(100% - 12px) calc(50% - 3px)",
+    backgroundSize: "6px 6px, 6px 6px",
+    backgroundRepeat: "no-repeat",
+    paddingRight: 34,
+  };
+
   const tagStyle: React.CSSProperties = {
     display: "inline-flex",
     alignItems: "center",
@@ -612,7 +628,7 @@ export default function PartySetupSection(props: {
                       setPartySize(Number(e.target.value));
                     }}
                     disabled={partyLocked}
-                    style={inputStyle}
+                    style={selectStyle}
                   >
                     {[1, 2, 3, 4, 5, 6].map((n) => (
                       <option key={n} value={n}>
@@ -905,7 +921,7 @@ export default function PartySetupSection(props: {
 
                                   setSpecies(idx, row, v);
                                 }}
-                                style={inputStyle}
+                                style={selectStyle}
                               >
                                 <option value="">—</option>
                                 {SAFE_SPECIES.map((s) => (
@@ -956,7 +972,7 @@ export default function PartySetupSection(props: {
 
                                   setClass(idx, row, v);
                                 }}
-                                style={inputStyle}
+                                style={selectStyle}
                               >
                                 <option value="">—</option>
                                 {SAFE_CLASS_ARCHETYPES.map((c) => (
