@@ -10,6 +10,7 @@
 // - renders loadout chips for the active player
 // - adds specialty quick-action buttons driven by skill labels
 // - adds browser speech-to-text dictation for the action textarea
+// - adds component-level SFX wiring for action UI + arbiter cues
 // ------------------------------------------------------------
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
@@ -68,6 +69,24 @@ declare global {
   interface Window {
     SpeechRecognition?: SpeechRecognitionCtor;
     webkitSpeechRecognition?: SpeechRecognitionCtor;
+  }
+}
+
+const SFX = {
+  buttonClick: "/assets/audio/sfx_button_click_01.mp3",
+  arbiterRoll: "/assets/audio/sfx_arbiter_resolution_roll_01.mp3",
+  arbiterCanonRecord: "/assets/audio/sfx_arbiter_cannon_record_01.mp3",
+} as const;
+
+function playSfx(src: string, volume = 0.72) {
+  try {
+    const audio = new Audio(src);
+    audio.volume = volume;
+    void audio.play().catch(() => {
+      // fail silently; SFX should never block gameplay
+    });
+  } catch {
+    // fail silently
   }
 }
 
@@ -414,6 +433,8 @@ export default function ActionSection({
   function handleSubmit() {
     if (!canSubmit) return;
 
+    playSfx(SFX.arbiterRoll, 0.78);
+
     if (isListening) {
       shouldResumeListeningRef.current = false;
       try {
@@ -435,6 +456,7 @@ export default function ActionSection({
     const recognition = recognitionRef.current;
     if (!recognition) return;
 
+    playSfx(SFX.buttonClick, 0.6);
     setSpeechError(null);
 
     if (isListening) {
@@ -507,7 +529,10 @@ export default function ActionSection({
               </span>
               <select
                 value={actingPlayerId}
-                onChange={(e) => onSetActingPlayerId(e.target.value)}
+                onChange={(e) => {
+                  playSfx(SFX.buttonClick, 0.56);
+                  onSetActingPlayerId(e.target.value);
+                }}
                 disabled={!hasParty || lockActingSelect}
                 style={{ minWidth: 240 }}
                 title={
@@ -528,7 +553,15 @@ export default function ActionSection({
               </select>
             </label>
 
-            <button onClick={onPassTurn} disabled={!combatActive || passDisabled} title="Advance to the next turn">
+            <button
+              onClick={() => {
+                if (!combatActive || passDisabled) return;
+                playSfx(SFX.buttonClick, 0.66);
+                onPassTurn();
+              }}
+              disabled={!combatActive || passDisabled}
+              title="Advance to the next turn"
+            >
               Pass / End Turn
             </button>
 
@@ -536,7 +569,11 @@ export default function ActionSection({
               <>
                 <button
                   type="button"
-                  onClick={onCommitParty}
+                  onClick={() => {
+                    if (commitDisabled) return;
+                    playSfx(SFX.arbiterCanonRecord, 0.78);
+                    onCommitParty?.();
+                  }}
                   disabled={!!commitDisabled}
                   title="Commit PARTY_DECLARED (canon)"
                   style={{ opacity: 0.8 }}
@@ -546,7 +583,10 @@ export default function ActionSection({
 
                 <button
                   type="button"
-                  onClick={onRandomNames}
+                  onClick={() => {
+                    playSfx(SFX.buttonClick, 0.6);
+                    onRandomNames?.();
+                  }}
                   title="Fill missing party names"
                   style={{ opacity: 0.6 }}
                 >
@@ -643,11 +683,13 @@ export default function ActionSection({
             <button
               type="button"
               disabled={!canSubmit}
-              onClick={() =>
+              onClick={() => {
+                if (!canSubmit) return;
+                playSfx(SFX.buttonClick, 0.58);
                 onSetPlayerInput(
                   appendIntent(playerInput, "I move to cover and take a guarded stance, watching for openings.")
-                )
-              }
+                );
+              }}
               style={{ opacity: canSubmit ? 1 : 0.6 }}
               title="Insert a cover + posture intent"
             >
@@ -657,7 +699,11 @@ export default function ActionSection({
             <button
               type="button"
               disabled={!canSubmit}
-              onClick={() => onSetPlayerInput(appendIntent(playerInput, "I attack the nearest threat decisively."))}
+              onClick={() => {
+                if (!canSubmit) return;
+                playSfx(SFX.buttonClick, 0.58);
+                onSetPlayerInput(appendIntent(playerInput, "I attack the nearest threat decisively."));
+              }}
               style={{ opacity: canSubmit ? 1 : 0.6 }}
               title="Insert an attack intent"
             >
@@ -667,11 +713,13 @@ export default function ActionSection({
             <button
               type="button"
               disabled={!canSubmit}
-              onClick={() =>
+              onClick={() => {
+                if (!canSubmit) return;
+                playSfx(SFX.buttonClick, 0.58);
                 onSetPlayerInput(
                   appendIntent(playerInput, "I reposition to a better angle and try to draw attention off an ally.")
-                )
-              }
+                );
+              }}
               style={{ opacity: canSubmit ? 1 : 0.6 }}
               title="Insert a reposition intent"
             >
@@ -681,11 +729,13 @@ export default function ActionSection({
             <button
               type="button"
               disabled={!canSubmit}
-              onClick={() =>
+              onClick={() => {
+                if (!canSubmit) return;
+                playSfx(SFX.buttonClick, 0.58);
                 onSetPlayerInput(
                   appendIntent(playerInput, "I assist an ally—calling out timing and creating an opening for them.")
-                )
-              }
+                );
+              }}
               style={{ opacity: canSubmit ? 1 : 0.6 }}
               title="Insert a help/assist intent"
             >
@@ -697,7 +747,11 @@ export default function ActionSection({
                 key={skill.id}
                 type="button"
                 disabled={!canSubmit}
-                onClick={() => onSetPlayerInput(appendIntent(playerInput, buildSkillIntent(skill.id, skill.label)))}
+                onClick={() => {
+                  if (!canSubmit) return;
+                  playSfx(SFX.buttonClick, 0.58);
+                  onSetPlayerInput(appendIntent(playerInput, buildSkillIntent(skill.id, skill.label)));
+                }}
                 style={{ opacity: canSubmit ? 1 : 0.6 }}
                 title={`Insert ${skill.label} intent`}
               >
@@ -724,7 +778,11 @@ export default function ActionSection({
             <button
               type="button"
               disabled={!canSubmit}
-              onClick={() => onSetPlayerInput("")}
+              onClick={() => {
+                if (!canSubmit) return;
+                playSfx(SFX.buttonClick, 0.54);
+                onSetPlayerInput("");
+              }}
               style={{ opacity: canSubmit ? 0.85 : 0.5 }}
               title="Clear intent text"
             >
