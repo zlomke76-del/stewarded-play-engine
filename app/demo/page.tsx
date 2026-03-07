@@ -1522,6 +1522,10 @@ export default function DemoPage() {
                             portrait: m.portrait ?? "Male",
                             skills: m.skills ?? [],
                             traits: m.traits ?? [],
+                            ac: m.ac,
+                            hpMax: m.hpMax,
+                            hpCurrent: m.hpCurrent,
+                            initiativeMod: m.initiativeMod,
                           }))
                         : []
                     }
