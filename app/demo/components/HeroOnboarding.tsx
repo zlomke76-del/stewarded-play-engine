@@ -3,11 +3,14 @@
 // ------------------------------------------------------------
 // HeroOnboarding.tsx
 // ------------------------------------------------------------
-// Visual-only onboarding hero.
+// Visual-only onboarding hero / compact adventure header.
 // Receives all values and callbacks from the page orchestrator.
 //
 // Upgraded:
-// - adds local UI SFX for mode selection, party size, chapter chips,
+// - supports two presentation modes:
+//   1) "full"    -> pre-entry onboarding hero
+//   2) "compact" -> slim adventure header after entry
+// - keeps local UI SFX for mode selection, party size, chapter chips,
 //   and the Enter button
 // - keeps music ownership in page/orchestrator
 // ------------------------------------------------------------
@@ -28,6 +31,7 @@ type ChapterKey =
   | "ledger";
 
 type ChipState = "done" | "next" | "locked" | "open";
+type PresentationMode = "full" | "compact";
 
 const SFX = {
   buttonClick: "/assets/audio/sfx_button_click_01.mp3",
@@ -55,10 +59,12 @@ function Chip({
   label,
   state,
   onClick,
+  compact = false,
 }: {
   label: string;
   state: ChipState;
   onClick?: () => void;
+  compact?: boolean;
 }) {
   const clickable = !!onClick && state !== "locked";
   const bg =
@@ -88,17 +94,18 @@ function Chip({
       disabled={!clickable}
       style={{
         cursor: clickable ? "pointer" : "default",
-        padding: "8px 10px",
+        padding: compact ? "6px 9px" : "8px 10px",
         borderRadius: 999,
         background: bg,
         border,
         color: "rgba(255,255,255,0.92)",
         opacity,
-        fontSize: 12,
+        fontSize: compact ? 11 : 12,
         letterSpacing: 0.2,
         display: "inline-flex",
         alignItems: "center",
-        gap: 8,
+        gap: compact ? 6 : 8,
+        whiteSpace: "nowrap",
       }}
       title={state === "locked" ? "Locked until you progress" : undefined}
     >
@@ -125,7 +132,6 @@ function TriToggle({
   const isHuman = dmMode === "human";
   const isSolace = dmMode === "solace-neutral";
 
-  // 3 positions: left (human), center (null), right (solace-neutral)
   const knobLeft = dmMode === null ? 16 : isSolace ? 32 : 0;
 
   const labelStyle = (active: boolean) => ({
@@ -197,22 +203,24 @@ function TriToggle({
   );
 }
 
-function PartyPips({ count }: { count: number }) {
+function PartyPips({ count, compact = false }: { count: number; compact?: boolean }) {
   const n = clampInt(count, 1, 6);
+  const size = compact ? 28 : 34;
+
   return (
-    <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+    <div style={{ display: "flex", gap: compact ? 8 : 10, flexWrap: "wrap", alignItems: "center" }}>
       {Array.from({ length: n }, (_, i) => (
         <span
           key={i}
           style={{
-            width: 34,
-            height: 34,
+            width: size,
+            height: size,
             borderRadius: 999,
             display: "grid",
             placeItems: "center",
             border: "1px solid rgba(255,255,255,0.14)",
             background: "rgba(255,255,255,0.04)",
-            fontSize: 16,
+            fontSize: compact ? 13 : 16,
           }}
           title={`Adventurer ${i + 1}`}
         >
@@ -223,9 +231,39 @@ function PartyPips({ count }: { count: number }) {
   );
 }
 
+function SummaryPill({
+  label,
+  value,
+}: {
+  label: string;
+  value: React.ReactNode;
+}) {
+  return (
+    <div
+      style={{
+        padding: "8px 10px",
+        borderRadius: 12,
+        border: "1px solid rgba(255,255,255,0.10)",
+        background: "rgba(255,255,255,0.04)",
+        display: "flex",
+        alignItems: "center",
+        gap: 8,
+        minHeight: 38,
+      }}
+    >
+      <span style={{ fontSize: 11, opacity: 0.7, textTransform: "uppercase", letterSpacing: 0.5 }}>
+        {label}
+      </span>
+      <span style={{ fontSize: 13, fontWeight: 850 }}>{value}</span>
+    </div>
+  );
+}
+
 type Props = {
   heroTitle: string;
   heroSubtitle: string;
+
+  presentationMode?: PresentationMode;
 
   dmMode: DMMode | null;
   onSetDmMode: (next: DMMode) => void;
@@ -237,16 +275,13 @@ type Props = {
   onEnter: () => void;
   canEnter: boolean;
 
-  // hero image
   heroImageSrc: string;
   heroImageOk: boolean;
   onHeroImageError: () => void;
 
-  // chapter nav
   chapterState: Record<ChapterKey, ChipState>;
   onJump: (key: ChapterKey) => void;
 
-  // counts (pure display)
   outcomesCount: number;
   canonCount: number;
 };
@@ -254,6 +289,7 @@ type Props = {
 export default function HeroOnboarding({
   heroTitle,
   heroSubtitle,
+  presentationMode = "full",
   dmMode,
   onSetDmMode,
   partySize,
@@ -275,6 +311,187 @@ export default function HeroOnboarding({
     return "Pick a style to begin.";
   }, [dmMode]);
 
+  const modeLabel = useMemo(() => {
+    if (dmMode === "solace-neutral") return "Solace";
+    if (dmMode === "human") return "Human";
+    return "Unchosen";
+  }, [dmMode]);
+
+  const compactActiveChapter = useMemo(() => {
+    const ordered: Array<{ key: ChapterKey; label: string }> = [
+      { key: "mode", label: "Mode" },
+      { key: "table", label: "Chronicle" },
+      { key: "party", label: "Party" },
+      { key: "pressure", label: "Pressure" },
+      { key: "map", label: "Map" },
+      { key: "combat", label: "Combat" },
+      { key: "action", label: "Action" },
+      { key: "resolution", label: "Resolution" },
+      { key: "canon", label: "Canon" },
+      { key: "ledger", label: "Chronicle" },
+    ];
+
+    const next = ordered.find((item) => chapterState[item.key] === "next");
+    if (next) return next.label;
+
+    const open = ordered.find((item) => chapterState[item.key] === "open");
+    if (open) return open.label;
+
+    const lastDone = [...ordered].reverse().find((item) => chapterState[item.key] === "done");
+    return lastDone?.label ?? "Mode";
+  }, [chapterState]);
+
+  if (presentationMode === "compact") {
+    return (
+      <section
+        className="card"
+        style={{
+          background: "rgba(17,17,17,0.82)",
+          border: "1px solid rgba(255,255,255,0.10)",
+          borderRadius: 16,
+          padding: 14,
+        }}
+      >
+        <div style={{ display: "grid", gap: 12 }}>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "minmax(0, 1.15fr) minmax(0, 1fr)",
+              gap: 12,
+              alignItems: "start",
+            }}
+          >
+            <div style={{ display: "grid", gap: 10 }}>
+              <div>
+                <div style={{ fontSize: 24, fontWeight: 950, letterSpacing: 0.2 }}>{heroTitle}</div>
+                <div style={{ marginTop: 4, fontSize: 13, opacity: 0.8 }}>{heroSubtitle}</div>
+              </div>
+
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))",
+                  gap: 8,
+                }}
+              >
+                <SummaryPill label="Mode" value={modeLabel} />
+                <SummaryPill label="Party" value={`${partySize} Adventurer${partySize === 1 ? "" : "s"}`} />
+                <SummaryPill label="Chapter" value={compactActiveChapter} />
+                <SummaryPill label="Canon" value={`${canonCount}`} />
+              </div>
+
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                <PartyPips count={partySize} compact />
+                <div style={{ fontSize: 12, opacity: 0.72 }}>
+                  {dmHint}
+                </div>
+              </div>
+            </div>
+
+            <div
+              style={{
+                borderRadius: 14,
+                overflow: "hidden",
+                border: "1px solid rgba(255,255,255,0.10)",
+                background: "rgba(0,0,0,0.34)",
+                position: "relative",
+                minHeight: 138,
+              }}
+            >
+              {heroImageOk ? (
+                <img
+                  src={heroImageSrc}
+                  alt="Echoes of Fate"
+                  onError={onHeroImageError}
+                  style={{
+                    position: "absolute",
+                    inset: 0,
+                    width: "100%",
+                    height: "100%",
+                    objectFit: "cover",
+                    display: "block",
+                    opacity: 0.82,
+                    filter: "brightness(0.88) contrast(1.06) saturate(1.04)",
+                    transform: "scale(1.02)",
+                  }}
+                />
+              ) : (
+                <div
+                  style={{
+                    position: "absolute",
+                    inset: 0,
+                    background:
+                      "radial-gradient(700px 300px at 70% 40%, rgba(255,190,120,0.12), rgba(0,0,0,0) 60%), linear-gradient(180deg, rgba(255,255,255,0.06), rgba(0,0,0,0.10))",
+                  }}
+                />
+              )}
+
+              <div
+                style={{
+                  position: "absolute",
+                  inset: 0,
+                  background:
+                    "linear-gradient(90deg, rgba(0,0,0,0.58) 0%, rgba(0,0,0,0.24) 40%, rgba(0,0,0,0.52) 100%)",
+                  pointerEvents: "none",
+                }}
+              />
+
+              <div
+                style={{
+                  position: "absolute",
+                  left: 12,
+                  right: 12,
+                  bottom: 12,
+                  padding: 10,
+                  borderRadius: 12,
+                  border: "1px solid rgba(255,255,255,0.10)",
+                  background: "linear-gradient(180deg, rgba(10,10,10,0.32), rgba(10,10,10,0.58))",
+                  backdropFilter: "blur(8px)",
+                }}
+              >
+                <div style={{ fontWeight: 900, fontSize: 14 }}>Adventure in Progress</div>
+                <div style={{ marginTop: 3, fontSize: 12, opacity: 0.78 }}>
+                  Earlier rites are complete. The deeper chapters now take the stage.
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div
+            style={{
+              paddingTop: 10,
+              borderTop: "1px solid rgba(255,255,255,0.10)",
+              display: "grid",
+              gap: 8,
+            }}
+          >
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <Chip label="Mode" state={chapterState.mode} compact onClick={() => { playSfx(SFX.buttonClick, 0.58); onJump("mode"); }} />
+              <Chip label="Party" state={chapterState.party} compact onClick={() => { playSfx(SFX.buttonClick, 0.58); onJump("party"); }} />
+              <Chip label="Table" state={chapterState.table} compact onClick={() => { playSfx(SFX.buttonClick, 0.58); onJump("table"); }} />
+              <Chip label="Pressure" state={chapterState.pressure} compact onClick={() => { playSfx(SFX.buttonClick, 0.58); onJump("pressure"); }} />
+              <Chip label="Map" state={chapterState.map} compact onClick={() => { playSfx(SFX.buttonClick, 0.58); onJump("map"); }} />
+              <Chip label="Combat" state={chapterState.combat} compact onClick={() => { playSfx(SFX.buttonClick, 0.58); onJump("combat"); }} />
+              <Chip label="Action" state={chapterState.action} compact onClick={() => { playSfx(SFX.buttonClick, 0.58); onJump("action"); }} />
+              <Chip label="Resolution" state={chapterState.resolution} compact onClick={() => { playSfx(SFX.buttonClick, 0.58); onJump("resolution"); }} />
+              <Chip label="Canon" state={chapterState.canon} compact onClick={() => { playSfx(SFX.buttonClick, 0.58); onJump("canon"); }} />
+              <Chip label="Chronicle" state={chapterState.ledger} compact onClick={() => { playSfx(SFX.buttonClick, 0.58); onJump("ledger"); }} />
+            </div>
+
+            <div style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 10 }}>
+              <div className="muted" style={{ fontSize: 12 }}>
+                outcomes: <strong>{outcomesCount}</strong> · canon events: <strong>{canonCount}</strong>
+              </div>
+              <div style={{ fontSize: 12, opacity: 0.68 }}>
+                The current chapter now owns the screen.
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+    );
+  }
+
   return (
     <section
       className="card"
@@ -286,13 +503,11 @@ export default function HeroOnboarding({
       }}
     >
       <div style={{ display: "grid", gap: 14 }}>
-        {/* Single title lives here */}
         <div>
           <div style={{ fontSize: 26, fontWeight: 950, letterSpacing: 0.2 }}>{heroTitle}</div>
           <div style={{ marginTop: 6, fontSize: 14, opacity: 0.86 }}>{heroSubtitle}</div>
         </div>
 
-        {/* Two-column hero */}
         <div
           style={{
             display: "grid",
@@ -301,9 +516,7 @@ export default function HeroOnboarding({
             alignItems: "stretch",
           }}
         >
-          {/* LEFT */}
           <div style={{ display: "grid", gap: 12 }}>
-            {/* Mode */}
             <div
               style={{
                 display: "grid",
@@ -330,7 +543,6 @@ export default function HeroOnboarding({
               <div style={{ fontSize: 12, opacity: 0.78 }}>{dmHint}</div>
             </div>
 
-            {/* Party size */}
             <div
               style={{
                 display: "grid",
@@ -397,7 +609,6 @@ export default function HeroOnboarding({
               </div>
             </div>
 
-            {/* Chapters */}
             <div
               style={{
                 marginTop: 2,
@@ -410,93 +621,22 @@ export default function HeroOnboarding({
               <div style={{ fontWeight: 900, letterSpacing: 0.2 }}>Chapters</div>
 
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                <Chip
-                  label="Mode"
-                  state={chapterState.mode}
-                  onClick={() => {
-                    playSfx(SFX.buttonClick, 0.58);
-                    onJump("mode");
-                  }}
-                />
-                <Chip
-                  label="Party"
-                  state={chapterState.party}
-                  onClick={() => {
-                    playSfx(SFX.buttonClick, 0.58);
-                    onJump("party");
-                  }}
-                />
-                <Chip
-                  label="Table"
-                  state={chapterState.table}
-                  onClick={() => {
-                    playSfx(SFX.buttonClick, 0.58);
-                    onJump("table");
-                  }}
-                />
-                <Chip
-                  label="Pressure"
-                  state={chapterState.pressure}
-                  onClick={() => {
-                    playSfx(SFX.buttonClick, 0.58);
-                    onJump("pressure");
-                  }}
-                />
-                <Chip
-                  label="Map"
-                  state={chapterState.map}
-                  onClick={() => {
-                    playSfx(SFX.buttonClick, 0.58);
-                    onJump("map");
-                  }}
-                />
-                <Chip
-                  label="Combat"
-                  state={chapterState.combat}
-                  onClick={() => {
-                    playSfx(SFX.buttonClick, 0.58);
-                    onJump("combat");
-                  }}
-                />
-                <Chip
-                  label="Action"
-                  state={chapterState.action}
-                  onClick={() => {
-                    playSfx(SFX.buttonClick, 0.58);
-                    onJump("action");
-                  }}
-                />
-                <Chip
-                  label="Resolution"
-                  state={chapterState.resolution}
-                  onClick={() => {
-                    playSfx(SFX.buttonClick, 0.58);
-                    onJump("resolution");
-                  }}
-                />
-                <Chip
-                  label="Canon"
-                  state={chapterState.canon}
-                  onClick={() => {
-                    playSfx(SFX.buttonClick, 0.58);
-                    onJump("canon");
-                  }}
-                />
-                <Chip
-                  label="Chronicle"
-                  state={chapterState.ledger}
-                  onClick={() => {
-                    playSfx(SFX.buttonClick, 0.58);
-                    onJump("ledger");
-                  }}
-                />
+                <Chip label="Mode" state={chapterState.mode} onClick={() => { playSfx(SFX.buttonClick, 0.58); onJump("mode"); }} />
+                <Chip label="Party" state={chapterState.party} onClick={() => { playSfx(SFX.buttonClick, 0.58); onJump("party"); }} />
+                <Chip label="Table" state={chapterState.table} onClick={() => { playSfx(SFX.buttonClick, 0.58); onJump("table"); }} />
+                <Chip label="Pressure" state={chapterState.pressure} onClick={() => { playSfx(SFX.buttonClick, 0.58); onJump("pressure"); }} />
+                <Chip label="Map" state={chapterState.map} onClick={() => { playSfx(SFX.buttonClick, 0.58); onJump("map"); }} />
+                <Chip label="Combat" state={chapterState.combat} onClick={() => { playSfx(SFX.buttonClick, 0.58); onJump("combat"); }} />
+                <Chip label="Action" state={chapterState.action} onClick={() => { playSfx(SFX.buttonClick, 0.58); onJump("action"); }} />
+                <Chip label="Resolution" state={chapterState.resolution} onClick={() => { playSfx(SFX.buttonClick, 0.58); onJump("resolution"); }} />
+                <Chip label="Canon" state={chapterState.canon} onClick={() => { playSfx(SFX.buttonClick, 0.58); onJump("canon"); }} />
+                <Chip label="Chronicle" state={chapterState.ledger} onClick={() => { playSfx(SFX.buttonClick, 0.58); onJump("ledger"); }} />
               </div>
 
               <div style={{ fontSize: 12, opacity: 0.70 }}>Progress unlocks the deeper chapters.</div>
             </div>
           </div>
 
-          {/* RIGHT: cinematic tile */}
           <div
             style={{
               borderRadius: 16,
@@ -610,7 +750,6 @@ export default function HeroOnboarding({
           </div>
         </div>
 
-        {/* stats only */}
         <div style={{ marginTop: 10, display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 10 }}>
           <div className="muted" style={{ fontSize: 12 }}>
             outcomes: <strong>{outcomesCount}</strong> · canon events: <strong>{canonCount}</strong>
