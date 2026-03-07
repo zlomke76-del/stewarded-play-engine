@@ -227,8 +227,6 @@ export default function PartySetupSection(props: {
 
   const [showDeclaredEditor, setShowDeclaredEditor] = useState(false);
 
-  if (!enabled) return null;
-
   const editable = !partyLocked && !!partyDraft;
   const rows = (partyDraft?.members ?? partyMembersFallback) as PartyMember[];
   const currentCount = partyDraft?.members?.length ?? partyMembersFallback.length ?? 4;
@@ -335,6 +333,8 @@ export default function PartySetupSection(props: {
     background: "rgba(120,180,255,0.10)",
     border: "1px solid rgba(120,180,255,0.22)",
   };
+
+  if (!enabled) return null;
 
   return (
     <div style={{ scrollMarginTop: 90 }}>
