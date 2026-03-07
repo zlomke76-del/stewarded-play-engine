@@ -62,6 +62,25 @@ const SAFE_SPECIES = [
   "Dragonborn",
 ] as const;
 
+const SFX = {
+  buttonClick: "/assets/audio/sfx_button_click_01.mp3",
+  uiSuccess: "/assets/audio/sfx_success_01.mp3",
+  uiFailure: "/assets/audio/sfx_failure_01.mp3",
+  arbiterCanonRecord: "/assets/audio/sfx_arbiter_cannon_record_01.mp3",
+} as const;
+
+function playSfx(src: string, volume = 0.66) {
+  try {
+    const audio = new Audio(src);
+    audio.volume = volume;
+    void audio.play().catch(() => {
+      // fail silently; UI audio should never block editing flow
+    });
+  } catch {
+    // fail silently
+  }
+}
+
 export default function PartySetupSection(props: {
   enabled: boolean;
 
@@ -251,7 +270,10 @@ export default function PartySetupSection(props: {
               </div>
 
               <button
-                onClick={() => setShowDeclaredEditor(true)}
+                onClick={() => {
+                  playSfx(SFX.buttonClick, 0.58);
+                  setShowDeclaredEditor(true);
+                }}
                 style={{
                   padding: "8px 12px",
                   borderRadius: 10,
@@ -284,7 +306,14 @@ export default function PartySetupSection(props: {
                 Players (1–6)
                 <select
                   value={currentCount}
-                  onChange={(e) => setPartySize(Number(e.target.value))}
+                  onChange={(e) => {
+                    if (partyLocked) {
+                      playSfx(SFX.uiFailure, 0.5);
+                      return;
+                    }
+                    playSfx(SFX.buttonClick, 0.58);
+                    setPartySize(Number(e.target.value));
+                  }}
                   disabled={partyLocked}
                 >
                   {[1, 2, 3, 4, 5, 6].map((n) => (
@@ -295,16 +324,46 @@ export default function PartySetupSection(props: {
                 </select>
               </label>
 
-              <button onClick={randomizePartyNames} disabled={partyLocked || !partyDraft}>
+              <button
+                onClick={() => {
+                  if (partyLocked || !partyDraft) {
+                    playSfx(SFX.uiFailure, 0.5);
+                    return;
+                  }
+                  playSfx(SFX.buttonClick, 0.58);
+                  randomizePartyNames();
+                }}
+                disabled={partyLocked || !partyDraft}
+              >
                 🎲 Random names
               </button>
 
-              <button onClick={commitParty} disabled={partyLocked || !partyDraft}>
+              <button
+                onClick={() => {
+                  if (partyLocked || !partyDraft) {
+                    playSfx(SFX.uiFailure, 0.5);
+                    return;
+                  }
+                  playSfx(SFX.arbiterCanonRecord, 0.78);
+                  commitParty();
+                }}
+                disabled={partyLocked || !partyDraft}
+              >
                 Commit Party (Append-only)
               </button>
 
               {canCollapseToSummary && (
-                <button onClick={() => setShowDeclaredEditor(false)} disabled={!partyCanonicalExists}>
+                <button
+                  onClick={() => {
+                    if (!partyCanonicalExists) {
+                      playSfx(SFX.uiFailure, 0.5);
+                      return;
+                    }
+                    playSfx(SFX.buttonClick, 0.56);
+                    setShowDeclaredEditor(false);
+                  }}
+                  disabled={!partyCanonicalExists}
+                >
                   Collapse
                 </button>
               )}
@@ -447,6 +506,8 @@ export default function PartySetupSection(props: {
                           disabled={!editable}
                           onChange={(e) => {
                             const v = e.target.value;
+                            playSfx(SFX.buttonClick, 0.54);
+
                             if (v === "") {
                               const next = resolvePartyLoadout(row.className || "Warrior", "Human");
                               setMemberField(idx, {
@@ -504,6 +565,8 @@ export default function PartySetupSection(props: {
                           disabled={!editable}
                           onChange={(e) => {
                             const v = e.target.value;
+                            playSfx(SFX.buttonClick, 0.54);
+
                             if (v === "") {
                               const next = resolvePartyLoadout("Warrior", row.species || "Human");
                               setMemberField(idx, {
@@ -561,7 +624,10 @@ export default function PartySetupSection(props: {
                       <select
                         value={row?.portrait ?? "Male"}
                         disabled={!editable}
-                        onChange={(e) => setMemberField(idx, { portrait: e.target.value as PortraitType })}
+                        onChange={(e) => {
+                          playSfx(SFX.buttonClick, 0.52);
+                          setMemberField(idx, { portrait: e.target.value as PortraitType });
+                        }}
                         style={compactInputStyle}
                       >
                         <option value="Male">Male</option>
