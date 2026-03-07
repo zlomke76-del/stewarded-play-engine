@@ -187,26 +187,23 @@ export default function InitialTableSection({
     });
   }, [revealedCount]);
 
-  // Gate: nothing below should be reachable until mode is chosen
   if (dmMode === null) return <Disclaimer />;
 
-  // Once accepted, we don’t need to show the setup block again.
   if (tableAccepted) return null;
 
-  // Defensive: mode chosen but table not ready yet
   if (!initialTable) {
     return (
-      <CardSection title="Initial Table">
-        <div className="muted">Preparing the table…</div>
+      <CardSection title="Opening Chronicle">
+        <div className="muted">Preparing the chronicle…</div>
       </CardSection>
     );
   }
 
   if (dmMode === "solace-neutral") {
     return (
-      <CardSection title="Initial Table (Solace)">
+      <CardSection title="Opening Chronicle">
         <p className="muted" style={{ marginBottom: 10 }}>
-          The opening canon is being inscribed.
+          The first record of your descent is being inscribed.
         </p>
 
         <div
@@ -310,7 +307,7 @@ export default function InitialTableSection({
                     marginTop: 2,
                   }}
                 >
-                  Torchlit record of first descent
+                  The first record of your descent
                 </div>
               </div>
 
@@ -467,7 +464,7 @@ export default function InitialTableSection({
           }}
         >
           <summary className="muted" style={{ cursor: "pointer" }}>
-            Show underlying table signals
+            Show chronicle origins
           </summary>
 
           <div style={{ marginTop: 10 }}>
@@ -520,11 +517,10 @@ export default function InitialTableSection({
     );
   }
 
-  // Human DM
   return (
-    <CardSection title="Solace Setup Helper (Optional)">
+    <CardSection title="Opening Chronicle">
       <p className="muted" style={{ marginTop: 0 }}>
-        If you want a fast-start table, edit it, then run the game.
+        If you want a fast-start opening, refine the chronicle below, then begin the descent.
       </p>
 
       <textarea
@@ -542,7 +538,7 @@ export default function InitialTableSection({
           }}
           style={{ cursor: "pointer" }}
         >
-          Show underlying table signals
+          Show chronicle origins
         </summary>
         <div style={{ marginTop: 10 }}>
           <p>{initialTable.openingFrame}</p>
