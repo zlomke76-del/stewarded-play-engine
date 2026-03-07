@@ -86,6 +86,10 @@ type DerivedFeature =
 
 const ZONE_SIZE_TILES = 4;
 
+function clampInt(n: number, lo: number, hi: number) {
+  return Math.max(lo, Math.min(hi, n));
+}
+
 function keyXY(p: XY) {
   return `${p.x},${p.y}`;
 }
@@ -186,6 +190,7 @@ function deriveDoorFeature(x: number, y: number): DerivedFeature | null {
   if (threshold > 18) return null;
 
   const locked = tileHash(x, y, "lock") % 100 < 44;
+
   return {
     kind: "door",
     locked,
@@ -200,11 +205,7 @@ function deriveTrapFeature(x: number, y: number): DerivedFeature | null {
   if (threshold > 8) return null;
 
   const trapType =
-    threshold <= 2
-      ? "spike"
-      : threshold <= 5
-        ? "pressure_plate"
-        : "wire";
+    threshold <= 2 ? "spike" : threshold <= 5 ? "pressure_plate" : "wire";
 
   return {
     kind: "trap",
