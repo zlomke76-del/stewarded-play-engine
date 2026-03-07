@@ -7,6 +7,24 @@ import { anchorId, sectionLabel } from "../demoUtils";
 
 type ChapterButton = { id: DemoSectionId; hint: string };
 
+const SFX = {
+  buttonClick: "/assets/audio/sfx_button_click_01.mp3",
+  uiSuccess: "/assets/audio/sfx_success_01.mp3",
+  uiFailure: "/assets/audio/sfx_failure_01.mp3",
+} as const;
+
+function playSfx(src: string, volume = 0.68) {
+  try {
+    const audio = new Audio(src);
+    audio.volume = volume;
+    void audio.play().catch(() => {
+      // fail silently; UI audio should never block flow
+    });
+  } catch {
+    // fail silently
+  }
+}
+
 export default function DemoHero(props: {
   dmMode: DMMode | null;
   tableAccepted: boolean;
@@ -42,6 +60,7 @@ export default function DemoHero(props: {
     const audio = introAudioRef.current;
     if (!audio) {
       setAudioStatus("audio element missing");
+      playSfx(SFX.uiFailure, 0.56);
       return false;
     }
 
@@ -62,14 +81,21 @@ export default function DemoHero(props: {
       console.error("Hero theme failed to play:", err);
       setIsPlayingTheme(false);
       setAudioStatus("play failed");
+      playSfx(SFX.uiFailure, 0.56);
       return false;
     }
   }
 
   async function handleHeroPlayClick() {
-    if (playDisabled) return;
+    if (playDisabled) {
+      playSfx(SFX.uiFailure, 0.54);
+      return;
+    }
 
-    await playHeroTheme();
+    playSfx(SFX.buttonClick, 0.62);
+    const started = await playHeroTheme();
+
+    if (!started) return;
 
     // Let the click-triggered audio begin before jumping.
     window.setTimeout(() => {
@@ -78,15 +104,21 @@ export default function DemoHero(props: {
   }
 
   function handleStartHere() {
+    playSfx(SFX.buttonClick, 0.6);
     onStartHere();
   }
 
   function handleSelectMode(nextMode: DMMode) {
+    playSfx(SFX.buttonClick, 0.62);
     onSelectMode(nextMode);
   }
 
   function handleNavigate(id: DemoSectionId, disabled: boolean) {
-    if (disabled) return;
+    if (disabled) {
+      playSfx(SFX.uiFailure, 0.52);
+      return;
+    }
+    playSfx(SFX.buttonClick, 0.6);
     onNavigate(id);
   }
 
