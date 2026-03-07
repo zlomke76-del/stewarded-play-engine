@@ -9,8 +9,10 @@
 // Upgraded:
 // - replaces acting-player dropdown with party turn cards
 // - renders real portraits in the turn cards
-// - adds a cinematic active-player header
-// - upgrades quick-action buttons into tactical ability pills
+// - adds HP / AC / Init to party cards
+// - adds turn order rail
+// - adds a stronger active-player header
+// - groups action controls into tactical categories
 // - renames Submit Action -> Resolve Action
 // - preserves all existing action / dictation / turn logic
 // ------------------------------------------------------------
@@ -27,6 +29,10 @@ type PartyMemberLite = {
   portrait?: "Male" | "Female";
   skills?: string[];
   traits?: string[];
+  ac?: number;
+  hpMax?: number;
+  hpCurrent?: number;
+  initiativeMod?: number;
 };
 
 type Props = {
@@ -130,6 +136,18 @@ function extractMetaLabel(label: string) {
   const close = raw.indexOf(")");
   if (open >= 0 && close > open) return raw.slice(open + 1, close).trim();
   return "";
+}
+
+function roleLineForMember(member: PartyMemberLite | null) {
+  if (!member) return "Adventurer";
+
+  const cls = String(member.className ?? "").toLowerCase();
+  if (cls === "warrior" || cls === "paladin" || cls === "barbarian") return "Frontline Defender";
+  if (cls === "rogue" || cls === "monk" || cls === "ranger") return "Mobile Striker";
+  if (cls === "mage" || cls === "sorcerer" || cls === "warlock") return "Arcane Control";
+  if (cls === "cleric" || cls === "bard" || cls === "druid") return "Support Specialist";
+  if (cls === "artificer") return "Utility Tactician";
+  return "Adventurer";
 }
 
 function flavorLineForMember(label: string, skills: string[], traits: string[]) {
@@ -284,6 +302,91 @@ function ActionChipButton(props: {
   );
 }
 
+function StatMiniChip(props: { label: string; value: React.ReactNode }) {
+  return (
+    <span
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 4,
+        padding: "3px 7px",
+        borderRadius: 999,
+        fontSize: 10,
+        lineHeight: 1,
+        border: "1px solid rgba(255,255,255,0.10)",
+        background: "rgba(255,255,255,0.05)",
+        whiteSpace: "nowrap",
+      }}
+    >
+      <span style={{ opacity: 0.58, textTransform: "uppercase", letterSpacing: 0.4 }}>{props.label}</span>
+      <strong style={{ fontSize: 11 }}>{props.value}</strong>
+    </span>
+  );
+}
+
+function TurnOrderRail(props: {
+  members: PartyMemberLite[];
+  actingPlayerId: string;
+}) {
+  const { members, actingPlayerId } = props;
+
+  if (!members.length) return null;
+
+  const actingIndex = members.findIndex((m) => m.id === actingPlayerId);
+  const ordered =
+    actingIndex >= 0
+      ? [...members.slice(actingIndex), ...members.slice(0, actingIndex)]
+      : members;
+
+  return (
+    <div style={{ display: "grid", gap: 6, marginBottom: 12 }}>
+      <div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: 0.6, opacity: 0.64 }}>
+        Turn Flow
+      </div>
+
+      <div
+        style={{
+          display: "flex",
+          gap: 8,
+          flexWrap: "wrap",
+          alignItems: "center",
+        }}
+      >
+        {ordered.map((member, idx) => {
+          const active = member.id === actingPlayerId;
+          const label = extractDisplayName(member.label);
+
+          return (
+            <React.Fragment key={`turn_${member.id}`}>
+              <div
+                style={{
+                  padding: "7px 10px",
+                  borderRadius: 999,
+                  border: active
+                    ? "1px solid rgba(255,196,118,0.28)"
+                    : "1px solid rgba(255,255,255,0.10)",
+                  background: active
+                    ? "rgba(255,196,118,0.10)"
+                    : "rgba(255,255,255,0.04)",
+                  fontSize: 12,
+                  fontWeight: active ? 800 : 600,
+                  whiteSpace: "nowrap",
+                }}
+              >
+                {idx === 0 ? "Now: " : idx === 1 ? "Next: " : "Then: "}
+                {label}
+              </div>
+              {idx < ordered.length - 1 ? (
+                <span style={{ opacity: 0.36, fontSize: 14 }}>→</span>
+              ) : null}
+            </React.Fragment>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 export default function ActionSection({
   partyMembers,
   actingPlayerId,
@@ -326,6 +429,7 @@ export default function ActionSection({
 
   const actingDisplayName = useMemo(() => extractDisplayName(actingLabel), [actingLabel]);
   const actingMetaLabel = useMemo(() => extractMetaLabel(actingLabel), [actingLabel]);
+  const actingRoleLine = useMemo(() => roleLineForMember(actingMember), [actingMember]);
 
   const actingSkillIds = useMemo(() => {
     return Array.isArray(actingMember?.skills) ? actingMember.skills.filter(Boolean) : [];
@@ -378,8 +482,8 @@ export default function ActionSection({
   const lockReason = useMemo(() => {
     if (!combatActive) return null;
     if (dmMode === "human") return null;
-    if (isEnemyTurn) return "Enemy turn in progress.";
-    if (isWrongPlayerForTurn) return "Not your turn.";
+    if (isEnemyTurn) return "Enemy movement is unfolding.";
+    if (isWrongPlayerForTurn) return "This opening belongs to another ally.";
     return null;
   }, [combatActive, dmMode, isEnemyTurn, isWrongPlayerForTurn]);
 
@@ -624,7 +728,7 @@ export default function ActionSection({
               <div style={{ fontSize: 12, opacity: 0.76 }}>{lockReason}</div>
             ) : (
               <div style={{ fontSize: 12, opacity: 0.76 }}>
-                Declare intent and send it to resolution.
+                Issue a command with movement, target, and intent. Resolution will follow.
               </div>
             )}
           </div>
@@ -698,6 +802,8 @@ export default function ActionSection({
             )}
           </div>
         </div>
+
+        <TurnOrderRail members={partyMembers} actingPlayerId={actingPlayerId} />
 
         {hasParty && (
           <div
@@ -795,7 +901,7 @@ export default function ActionSection({
                       />
                     </div>
 
-                    <div style={{ minWidth: 0, display: "grid", gap: 2 }}>
+                    <div style={{ minWidth: 0, display: "grid", gap: 4 }}>
                       <div
                         style={{
                           fontSize: 13,
@@ -819,6 +925,12 @@ export default function ActionSection({
                         }}
                       >
                         {meta || member.id}
+                      </div>
+
+                      <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
+                        <StatMiniChip label="HP" value={`${member.hpCurrent ?? 0}/${member.hpMax ?? 0}`} />
+                        <StatMiniChip label="AC" value={member.ac ?? "—"} />
+                        <StatMiniChip label="Init" value={member.initiativeMod ?? "—"} />
                       </div>
 
                       {active ? (
@@ -893,6 +1005,14 @@ export default function ActionSection({
                 ) : null}
               </div>
 
+              <div style={{ fontSize: 12, opacity: 0.68, fontWeight: 700 }}>{actingRoleLine}</div>
+
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                <StatMiniChip label="HP" value={`${actingMember?.hpCurrent ?? 0}/${actingMember?.hpMax ?? 0}`} />
+                <StatMiniChip label="AC" value={actingMember?.ac ?? "—"} />
+                <StatMiniChip label="Init" value={actingMember?.initiativeMod ?? "—"} />
+              </div>
+
               <div style={{ fontSize: 13, opacity: 0.82, lineHeight: 1.55 }}>{actingFlavorLine}</div>
             </div>
           </div>
@@ -958,11 +1078,10 @@ export default function ActionSection({
           >
             <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
               <div style={{ fontSize: 11, letterSpacing: 0.6, textTransform: "uppercase", opacity: 0.64 }}>
-                Intent
+                Command Chamber
               </div>
               <div style={{ fontSize: 13, opacity: 0.78 }}>
-                Concrete actions work best. Example: “I sprint to the pillar, take cover, then fire at the nearest
-                archer.”
+                Best commands usually include <strong>movement + target + intent</strong>. Example: “I sprint to the pillar, take cover, then fire at the nearest archer.”
               </div>
             </div>
 
@@ -971,93 +1090,118 @@ export default function ActionSection({
             </div>
           </div>
 
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
-            <ActionChipButton
-              label="🛡 Guard"
-              disabled={!canSubmit}
-              title="Insert a cover + posture intent"
-              onClick={() => {
-                if (!canSubmit) return;
-                playSfx(SFX.buttonClick, 0.58);
-                onSetPlayerInput(
-                  appendIntent(playerInput, "I move to cover and take a guarded stance, watching for openings.")
-                );
-              }}
-            />
+          <div style={{ display: "grid", gap: 10, marginBottom: 10 }}>
+            <div style={{ display: "grid", gap: 6 }}>
+              <div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: 0.5, opacity: 0.6 }}>
+                Core Actions
+              </div>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <ActionChipButton
+                  label="🛡 Guard"
+                  disabled={!canSubmit}
+                  title="Insert a cover + posture intent"
+                  onClick={() => {
+                    if (!canSubmit) return;
+                    playSfx(SFX.buttonClick, 0.58);
+                    onSetPlayerInput(
+                      appendIntent(playerInput, "I move to cover and take a guarded stance, watching for openings.")
+                    );
+                  }}
+                />
 
-            <ActionChipButton
-              label="⚔ Strike"
-              disabled={!canSubmit}
-              title="Insert an attack intent"
-              onClick={() => {
-                if (!canSubmit) return;
-                playSfx(SFX.buttonClick, 0.58);
-                onSetPlayerInput(appendIntent(playerInput, "I attack the nearest threat decisively."));
-              }}
-            />
+                <ActionChipButton
+                  label="⚔ Strike"
+                  disabled={!canSubmit}
+                  title="Insert an attack intent"
+                  onClick={() => {
+                    if (!canSubmit) return;
+                    playSfx(SFX.buttonClick, 0.58);
+                    onSetPlayerInput(appendIntent(playerInput, "I attack the nearest threat decisively."));
+                  }}
+                />
 
-            <ActionChipButton
-              label="🏃 Reposition"
-              disabled={!canSubmit}
-              title="Insert a reposition intent"
-              onClick={() => {
-                if (!canSubmit) return;
-                playSfx(SFX.buttonClick, 0.58);
-                onSetPlayerInput(
-                  appendIntent(playerInput, "I reposition to a better angle and try to draw attention off an ally.")
-                );
-              }}
-            />
+                <ActionChipButton
+                  label="🏃 Reposition"
+                  disabled={!canSubmit}
+                  title="Insert a reposition intent"
+                  onClick={() => {
+                    if (!canSubmit) return;
+                    playSfx(SFX.buttonClick, 0.58);
+                    onSetPlayerInput(
+                      appendIntent(playerInput, "I reposition to a better angle and try to draw attention off an ally.")
+                    );
+                  }}
+                />
 
-            <ActionChipButton
-              label="🤝 Aid Ally"
-              disabled={!canSubmit}
-              title="Insert a help/assist intent"
-              onClick={() => {
-                if (!canSubmit) return;
-                playSfx(SFX.buttonClick, 0.58);
-                onSetPlayerInput(
-                  appendIntent(playerInput, "I assist an ally—calling out timing and creating an opening for them.")
-                );
-              }}
-            />
+                <ActionChipButton
+                  label="🤝 Aid Ally"
+                  disabled={!canSubmit}
+                  title="Insert a help/assist intent"
+                  onClick={() => {
+                    if (!canSubmit) return;
+                    playSfx(SFX.buttonClick, 0.58);
+                    onSetPlayerInput(
+                      appendIntent(playerInput, "I assist an ally—calling out timing and creating an opening for them.")
+                    );
+                  }}
+                />
+              </div>
+            </div>
 
-            {specialtyButtons.map((skill) => (
-              <ActionChipButton
-                key={skill.id}
-                label={skill.label}
-                disabled={!canSubmit}
-                title={`Insert ${skill.label} intent`}
-                accent="skill"
-                onClick={() => {
-                  if (!canSubmit) return;
-                  playSfx(SFX.buttonClick, 0.58);
-                  onSetPlayerInput(appendIntent(playerInput, buildSkillIntent(skill.id, skill.label)));
-                }}
-              />
-            ))}
+            <div style={{ display: "grid", gap: 6 }}>
+              <div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: 0.5, opacity: 0.6 }}>
+                Signature Skills
+              </div>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                {specialtyButtons.length > 0 ? (
+                  specialtyButtons.map((skill) => (
+                    <ActionChipButton
+                      key={skill.id}
+                      label={skill.label}
+                      disabled={!canSubmit}
+                      title={`Insert ${skill.label} intent`}
+                      accent="skill"
+                      onClick={() => {
+                        if (!canSubmit) return;
+                        playSfx(SFX.buttonClick, 0.58);
+                        onSetPlayerInput(appendIntent(playerInput, buildSkillIntent(skill.id, skill.label)));
+                      }}
+                    />
+                  ))
+                ) : (
+                  <span style={{ fontSize: 12, opacity: 0.6 }}>No signature skills available.</span>
+                )}
+              </div>
+            </div>
 
-            {speechSupported && (
-              <ActionChipButton
-                label={isListening ? "■ Stop Dictation" : "🎙 Dictate"}
-                disabled={!canSubmit}
-                title={isListening ? "Stop microphone dictation" : "Start microphone dictation"}
-                accent="dictate"
-                onClick={toggleListening}
-              />
-            )}
+            <div style={{ display: "grid", gap: 6 }}>
+              <div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: 0.5, opacity: 0.6 }}>
+                Voice / Utility
+              </div>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                {speechSupported && (
+                  <ActionChipButton
+                    label={isListening ? "■ Stop Dictation" : "🎙 Dictate"}
+                    disabled={!canSubmit}
+                    title={isListening ? "Stop microphone dictation" : "Start microphone dictation"}
+                    accent="dictate"
+                    onClick={toggleListening}
+                  />
+                )}
 
-            <ActionChipButton
-              label="Clear"
-              disabled={!canSubmit}
-              title="Clear intent text"
-              accent="clear"
-              onClick={() => {
-                if (!canSubmit) return;
-                playSfx(SFX.buttonClick, 0.54);
-                onSetPlayerInput("");
-              }}
-            />
+                <ActionChipButton
+                  label="Clear"
+                  disabled={!canSubmit}
+                  title="Clear intent text"
+                  accent="clear"
+                  onClick={() => {
+                    if (!canSubmit) return;
+                    playSfx(SFX.buttonClick, 0.54);
+                    onSetPlayerInput("");
+                  }}
+                />
+              </div>
+            </div>
           </div>
 
           {(speechSupported || speechError) && (
@@ -1106,7 +1250,7 @@ export default function ActionSection({
             ref={textareaRef}
             value={playerInput}
             onChange={(e) => onSetPlayerInput(e.target.value)}
-            placeholder={lockReason ? "Input locked during this turn…" : "Describe what your character does…"}
+            placeholder={lockReason ? "Hold position while the current turn resolves…" : "Describe what your character does…"}
             disabled={!canSubmit}
             style={{
               width: "100%",
@@ -1115,12 +1259,15 @@ export default function ActionSection({
               boxSizing: "border-box",
               lineHeight: 1.55,
               borderRadius: 14,
-              border: "1px solid rgba(255,255,255,0.10)",
+              border: canSubmit
+                ? "1px solid rgba(255,196,118,0.16)"
+                : "1px solid rgba(255,255,255,0.10)",
               background: canSubmit ? "rgba(0,0,0,0.34)" : "rgba(0,0,0,0.22)",
               color: "inherit",
               padding: "12px 12px",
               outline: "none",
               opacity: canSubmit ? 1 : 0.86,
+              boxShadow: canSubmit ? "inset 0 0 0 1px rgba(255,196,118,0.03)" : "none",
             }}
           />
 
@@ -1163,7 +1310,7 @@ export default function ActionSection({
 
             {!canSubmit && combatActive && dmMode !== "human" ? (
               <span style={{ fontSize: 12, opacity: 0.72 }}>
-                {isEnemyTurn ? "Enemy turn — watch the theater above." : "Turn locked — match the active player."}
+                {isEnemyTurn ? "Enemy turn — watch the battlefield above." : "Turn locked — wait for the next opening."}
               </span>
             ) : null}
           </div>
