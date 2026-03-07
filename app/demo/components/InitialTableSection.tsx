@@ -455,7 +455,15 @@ export default function InitialTableSection({
         </div>
 
         <details
-          style={{ marginTop: 12 }}
+          style={{
+            marginTop: 14,
+            border: "1px solid rgba(193,145,84,0.18)",
+            borderRadius: 12,
+            background:
+              "linear-gradient(180deg, rgba(18,12,8,0.9), rgba(11,8,6,0.94))",
+            boxShadow: "inset 0 1px 0 rgba(255,220,160,0.04)",
+            overflow: "hidden",
+          }}
           open={showSignals}
           onToggle={(e) => {
             const nextOpen = (e.currentTarget as HTMLDetailsElement).open;
@@ -463,32 +471,207 @@ export default function InitialTableSection({
             playSfx(SFX.buttonClick, 0.5);
           }}
         >
-          <summary className="muted" style={{ cursor: "pointer" }}>
-            Show chronicle origins
+          <summary
+            style={{
+              cursor: "pointer",
+              listStyle: "none",
+              padding: "12px 14px",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: 12,
+              userSelect: "none",
+              color: "rgba(244,220,184,0.92)",
+              fontSize: 13,
+              fontWeight: 700,
+              letterSpacing: "0.04em",
+            }}
+          >
+            <span>
+              {showSignals ? "▾" : "▸"} Behind the Chronicle
+            </span>
+            <span
+              style={{
+                fontSize: 11,
+                opacity: 0.62,
+                fontWeight: 600,
+              }}
+            >
+              hidden threads and omens
+            </span>
           </summary>
 
-          <div style={{ marginTop: 10 }}>
-            <p>{initialTable.openingFrame}</p>
-            <p className="muted">
-              Traits: {initialTable.locationTraits.join(", ")}
-            </p>
-            <ul>
-              {initialTable.latentFactions.map((f, i) => (
-                <li key={i}>
-                  <strong>{f.name}</strong> — {f.desire} ({f.pressure})
-                </li>
-              ))}
-            </ul>
-            <p className="muted">
-              Oddity: {initialTable.environmentalOddities.join(", ")}
-            </p>
-            <p className="muted">
-              Hook: {initialTable.dormantHooks.join(", ")}
-            </p>
+          <div
+            style={{
+              padding: "0 14px 14px",
+              borderTop: "1px solid rgba(193,145,84,0.12)",
+              color: "rgba(240,230,213,0.88)",
+            }}
+          >
+            <div
+              style={{
+                marginTop: 12,
+                padding: "12px 14px",
+                borderRadius: 10,
+                background: "rgba(255,255,255,0.02)",
+                border: "1px solid rgba(193,145,84,0.08)",
+              }}
+            >
+              <div
+                style={{
+                  fontSize: 11,
+                  textTransform: "uppercase",
+                  letterSpacing: "0.12em",
+                  opacity: 0.56,
+                  marginBottom: 8,
+                }}
+              >
+                Opening Frame
+              </div>
+              <div style={{ lineHeight: 1.7 }}>{initialTable.openingFrame}</div>
+            </div>
+
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+                gap: 10,
+                marginTop: 10,
+              }}
+            >
+              <div
+                style={{
+                  padding: "12px 14px",
+                  borderRadius: 10,
+                  background: "rgba(255,255,255,0.02)",
+                  border: "1px solid rgba(193,145,84,0.08)",
+                }}
+              >
+                <div
+                  style={{
+                    fontSize: 11,
+                    textTransform: "uppercase",
+                    letterSpacing: "0.12em",
+                    opacity: 0.56,
+                    marginBottom: 8,
+                  }}
+                >
+                  Location Traits
+                </div>
+                <div style={{ lineHeight: 1.7 }}>
+                  {initialTable.locationTraits.join(" · ")}
+                </div>
+              </div>
+
+              <div
+                style={{
+                  padding: "12px 14px",
+                  borderRadius: 10,
+                  background: "rgba(255,255,255,0.02)",
+                  border: "1px solid rgba(193,145,84,0.08)",
+                }}
+              >
+                <div
+                  style={{
+                    fontSize: 11,
+                    textTransform: "uppercase",
+                    letterSpacing: "0.12em",
+                    opacity: 0.56,
+                    marginBottom: 8,
+                  }}
+                >
+                  Oddities
+                </div>
+                <div style={{ lineHeight: 1.7 }}>
+                  {initialTable.environmentalOddities.join(" · ")}
+                </div>
+              </div>
+            </div>
+
+            <div
+              style={{
+                marginTop: 10,
+                padding: "12px 14px",
+                borderRadius: 10,
+                background: "rgba(255,255,255,0.02)",
+                border: "1px solid rgba(193,145,84,0.08)",
+              }}
+            >
+              <div
+                style={{
+                  fontSize: 11,
+                  textTransform: "uppercase",
+                  letterSpacing: "0.12em",
+                  opacity: 0.56,
+                  marginBottom: 8,
+                }}
+              >
+                Factions in Motion
+              </div>
+
+              <div style={{ display: "grid", gap: 8 }}>
+                {initialTable.latentFactions.map((f, i) => (
+                  <div
+                    key={i}
+                    style={{
+                      padding: "10px 12px",
+                      borderRadius: 8,
+                      background: "rgba(255,255,255,0.018)",
+                      border: "1px solid rgba(193,145,84,0.06)",
+                    }}
+                  >
+                    <div
+                      style={{
+                        fontWeight: 700,
+                        color: "rgba(255,230,193,0.95)",
+                        marginBottom: 3,
+                      }}
+                    >
+                      {f.name}
+                    </div>
+                    <div style={{ lineHeight: 1.6 }}>
+                      {f.desire}
+                      <span style={{ opacity: 0.58 }}> · {f.pressure}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div
+              style={{
+                marginTop: 10,
+                padding: "12px 14px",
+                borderRadius: 10,
+                background: "rgba(255,255,255,0.02)",
+                border: "1px solid rgba(193,145,84,0.08)",
+              }}
+            >
+              <div
+                style={{
+                  fontSize: 11,
+                  textTransform: "uppercase",
+                  letterSpacing: "0.12em",
+                  opacity: 0.56,
+                  marginBottom: 8,
+                }}
+              >
+                Dormant Hook
+              </div>
+              <div style={{ lineHeight: 1.7 }}>
+                {initialTable.dormantHooks.join(" · ")}
+              </div>
+            </div>
           </div>
         </details>
 
-        <div style={{ marginTop: 12, display: "flex", gap: 8, flexWrap: "wrap" }}>
+        <div
+          style={{
+            marginTop: 18,
+            display: "flex",
+            justifyContent: "center",
+          }}
+        >
           <button
             onClick={() => {
               if (!writingComplete) {
@@ -501,17 +684,62 @@ export default function InitialTableSection({
             }}
             disabled={!writingComplete}
             style={{
-              opacity: writingComplete ? 1 : 0.55,
+              minWidth: 240,
+              padding: "14px 22px",
+              borderRadius: 14,
+              border: "1px solid rgba(255,203,122,0.42)",
+              background: writingComplete
+                ? "linear-gradient(180deg, rgba(255,201,116,0.98), rgba(218,132,47,0.98))"
+                : "linear-gradient(180deg, rgba(107,89,69,0.7), rgba(74,55,39,0.74))",
+              color: writingComplete ? "#2f1606" : "rgba(244,227,201,0.75)",
+              fontSize: 15,
+              fontWeight: 800,
+              letterSpacing: "0.04em",
+              boxShadow: writingComplete
+                ? "0 0 0 1px rgba(255,224,163,0.08), 0 10px 28px rgba(255,145,42,0.22), inset 0 1px 0 rgba(255,244,220,0.72)"
+                : "inset 0 1px 0 rgba(255,255,255,0.05)",
               cursor: writingComplete ? "pointer" : "not-allowed",
+              opacity: writingComplete ? 1 : 0.62,
+              transform: writingComplete ? "translateY(0)" : "none",
+              transition:
+                "transform 160ms ease, box-shadow 160ms ease, filter 160ms ease, opacity 160ms ease",
             }}
             title={
               writingComplete
                 ? ACCEPT_LABEL
                 : "Wait for the chronicle to finish, or use Skip Writing."
             }
+            onMouseEnter={(e) => {
+              if (!writingComplete) return;
+              e.currentTarget.style.transform = "translateY(-1px)";
+              e.currentTarget.style.filter = "brightness(1.03)";
+              e.currentTarget.style.boxShadow =
+                "0 0 0 1px rgba(255,224,163,0.08), 0 14px 36px rgba(255,145,42,0.28), inset 0 1px 0 rgba(255,244,220,0.76)";
+            }}
+            onMouseLeave={(e) => {
+              if (!writingComplete) return;
+              e.currentTarget.style.transform = "translateY(0)";
+              e.currentTarget.style.filter = "none";
+              e.currentTarget.style.boxShadow =
+                "0 0 0 1px rgba(255,224,163,0.08), 0 10px 28px rgba(255,145,42,0.22), inset 0 1px 0 rgba(255,244,220,0.72)";
+            }}
           >
             {ACCEPT_LABEL}
           </button>
+        </div>
+
+        <div
+          style={{
+            marginTop: 8,
+            textAlign: "center",
+            fontSize: 12,
+            opacity: 0.56,
+            letterSpacing: "0.03em",
+          }}
+        >
+          {writingComplete
+            ? "Step below and let the dungeon answer."
+            : "The descent awaits the sealing of the chronicle."}
         </div>
       </CardSection>
     );
@@ -530,47 +758,117 @@ export default function InitialTableSection({
         style={{ width: "100%" }}
       />
 
-      <details style={{ marginTop: 12 }} open>
+      <details
+        style={{
+          marginTop: 14,
+          border: "1px solid rgba(193,145,84,0.18)",
+          borderRadius: 12,
+          background:
+            "linear-gradient(180deg, rgba(18,12,8,0.9), rgba(11,8,6,0.94))",
+          boxShadow: "inset 0 1px 0 rgba(255,220,160,0.04)",
+          overflow: "hidden",
+        }}
+        open
+      >
         <summary
           className="muted"
           onClick={() => {
             playSfx(SFX.buttonClick, 0.54);
           }}
-          style={{ cursor: "pointer" }}
+          style={{
+            cursor: "pointer",
+            padding: "12px 14px",
+            userSelect: "none",
+          }}
         >
-          Show chronicle origins
+          Behind the Chronicle
         </summary>
-        <div style={{ marginTop: 10 }}>
-          <p>{initialTable.openingFrame}</p>
-          <p className="muted">
-            Traits: {initialTable.locationTraits.join(", ")}
-          </p>
-          <ul>
-            {initialTable.latentFactions.map((f, i) => (
-              <li key={i}>
-                <strong>{f.name}</strong> — {f.desire} ({f.pressure})
-              </li>
-            ))}
-          </ul>
-          <p className="muted">
-            Oddity: {initialTable.environmentalOddities.join(", ")}
-          </p>
-          <p className="muted">
-            Hook: {initialTable.dormantHooks.join(", ")}
-          </p>
+
+        <div
+          style={{
+            padding: "0 14px 14px",
+            borderTop: "1px solid rgba(193,145,84,0.12)",
+          }}
+        >
+          <div style={{ marginTop: 12, lineHeight: 1.7 }}>
+            <p>{initialTable.openingFrame}</p>
+            <p className="muted">
+              Traits: {initialTable.locationTraits.join(", ")}
+            </p>
+            <ul>
+              {initialTable.latentFactions.map((f, i) => (
+                <li key={i}>
+                  <strong>{f.name}</strong> — {f.desire} ({f.pressure})
+                </li>
+              ))}
+            </ul>
+            <p className="muted">
+              Oddity: {initialTable.environmentalOddities.join(", ")}
+            </p>
+            <p className="muted">
+              Hook: {initialTable.dormantHooks.join(", ")}
+            </p>
+          </div>
         </div>
       </details>
 
-      <div style={{ marginTop: 10 }}>
+      <div
+        style={{
+          marginTop: 18,
+          display: "flex",
+          justifyContent: "center",
+        }}
+      >
         <button
           onClick={() => {
             playSfx(SFX.uiSuccess, 0.72);
             playSfx(SFX.stoneDoor, 0.56);
             onAccept();
           }}
+          style={{
+            minWidth: 240,
+            padding: "14px 22px",
+            borderRadius: 14,
+            border: "1px solid rgba(255,203,122,0.42)",
+            background:
+              "linear-gradient(180deg, rgba(255,201,116,0.98), rgba(218,132,47,0.98))",
+            color: "#2f1606",
+            fontSize: 15,
+            fontWeight: 800,
+            letterSpacing: "0.04em",
+            boxShadow:
+              "0 0 0 1px rgba(255,224,163,0.08), 0 10px 28px rgba(255,145,42,0.22), inset 0 1px 0 rgba(255,244,220,0.72)",
+            cursor: "pointer",
+            transition:
+              "transform 160ms ease, box-shadow 160ms ease, filter 160ms ease",
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.transform = "translateY(-1px)";
+            e.currentTarget.style.filter = "brightness(1.03)";
+            e.currentTarget.style.boxShadow =
+              "0 0 0 1px rgba(255,224,163,0.08), 0 14px 36px rgba(255,145,42,0.28), inset 0 1px 0 rgba(255,244,220,0.76)";
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.transform = "translateY(0)";
+            e.currentTarget.style.filter = "none";
+            e.currentTarget.style.boxShadow =
+              "0 0 0 1px rgba(255,224,163,0.08), 0 10px 28px rgba(255,145,42,0.22), inset 0 1px 0 rgba(255,244,220,0.72)";
+          }}
         >
           {ACCEPT_LABEL}
         </button>
+      </div>
+
+      <div
+        style={{
+          marginTop: 8,
+          textAlign: "center",
+          fontSize: 12,
+          opacity: 0.56,
+          letterSpacing: "0.03em",
+        }}
+      >
+        Step below and let the dungeon answer.
       </div>
     </CardSection>
   );
