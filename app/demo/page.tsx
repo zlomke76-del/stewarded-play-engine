@@ -35,6 +35,11 @@
 // - Ambient dungeon music rotates across two exploration tracks
 // - Combat music rotates across two battle tracks
 // - Combat transitions override ambient cleanly, then return to ambient
+//
+// Party defaults update:
+// - Starter parties now generate with curated class/species/portrait variety
+// - Defaults are balanced and visually diverse instead of blank / all-Human
+// - Names remain blank so players can still author identity intentionally
 // ------------------------------------------------------------
 
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -53,6 +58,7 @@ import ModeHeader from "@/components/layout/ModeHeader";
 import CardSection from "@/components/layout/CardSection";
 
 import { deriveCombatState, findLatestCombatId, nextTurnPointer } from "@/lib/combat/CombatState";
+import { resolvePartyLoadout } from "@/lib/skills/loadoutResolver";
 
 import AmbientBackground from "./components/AmbientBackground";
 import InitialTableSection from "./components/InitialTableSection";
@@ -114,6 +120,33 @@ type PresentationPhase =
   | "party-declaration"
   | "gameplay";
 
+const STARTER_CLASS_PLANS: Record<1 | 2 | 3 | 4 | 5 | 6, readonly string[]> = {
+  1: ["Warrior"],
+  2: ["Warrior", "Cleric"],
+  3: ["Warrior", "Rogue", "Mage"],
+  4: ["Warrior", "Rogue", "Mage", "Cleric"],
+  5: ["Warrior", "Rogue", "Mage", "Cleric", "Ranger"],
+  6: ["Warrior", "Rogue", "Mage", "Cleric", "Ranger", "Paladin"],
+};
+
+const STARTER_SPECIES_PLAN = [
+  "Human",
+  "Elf",
+  "Dwarf",
+  "Tiefling",
+  "Halfling",
+  "Dragonborn",
+] as const;
+
+const STARTER_PORTRAIT_PLAN: ReadonlyArray<"Male" | "Female"> = [
+  "Male",
+  "Female",
+  "Male",
+  "Female",
+  "Male",
+  "Female",
+];
+
 function safeInt(n: unknown, fallback: number, lo: number, hi: number) {
   const x = Number.isFinite(Number(n)) ? Math.trunc(Number(n)) : fallback;
   return Math.max(lo, Math.min(hi, x));
@@ -124,26 +157,87 @@ function displayName(m: PartyMember, i1: number) {
   return n.length > 0 ? n : `Player ${i1}`;
 }
 
+function buildStarterMember(slotIndex: number, partyCount: number): PartyMember {
+  const count = clampInt(partyCount, 1, 6) as 1 | 2 | 3 | 4 | 5 | 6;
+  const classPlan = STARTER_CLASS_PLANS[count];
+  const className = classPlan[Math.min(slotIndex, classPlan.length - 1)] ?? "Warrior";
+  const species = STARTER_SPECIES_PLAN[slotIndex % STARTER_SPECIES_PLAN.length] ?? "Human";
+  const portrait = STARTER_PORTRAIT_PLAN[slotIndex % STARTER_PORTRAIT_PLAN.length] ?? "Male";
+
+  const canonical = resolvePartyLoadout(className, species);
+
+  const hpBaseByClass: Record<string, number> = {
+    Warrior: 14,
+    Paladin: 14,
+    Barbarian: 15,
+    Cleric: 12,
+    Ranger: 12,
+    Rogue: 11,
+    Monk: 11,
+    Artificer: 11,
+    Bard: 10,
+    Druid: 10,
+    Mage: 9,
+    Sorcerer: 9,
+    Warlock: 10,
+  };
+
+  const acBaseByClass: Record<string, number> = {
+    Warrior: 14,
+    Paladin: 15,
+    Barbarian: 13,
+    Cleric: 13,
+    Ranger: 13,
+    Rogue: 13,
+    Monk: 13,
+    Artificer: 13,
+    Bard: 12,
+    Druid: 12,
+    Mage: 11,
+    Sorcerer: 11,
+    Warlock: 12,
+  };
+
+  const initBaseByClass: Record<string, number> = {
+    Warrior: 1,
+    Paladin: 0,
+    Barbarian: 1,
+    Cleric: 0,
+    Ranger: 2,
+    Rogue: 3,
+    Monk: 3,
+    Artificer: 1,
+    Bard: 2,
+    Druid: 1,
+    Mage: 1,
+    Sorcerer: 2,
+    Warlock: 1,
+  };
+
+  const hpMax = hpBaseByClass[className] ?? 12;
+  const ac = acBaseByClass[className] ?? 14;
+  const initiativeMod = initBaseByClass[className] ?? 1;
+
+  return {
+    id: `player_${slotIndex + 1}`,
+    name: "",
+    species,
+    className,
+    portrait,
+    skills: canonical.skillIds,
+    traits: canonical.traitIds,
+    ac,
+    hpMax,
+    hpCurrent: hpMax,
+    initiativeMod,
+  };
+}
+
 function defaultParty(count: number): PartyDeclaredPayload {
   const n = clampInt(count, 1, 6);
   return {
     partyId: crypto.randomUUID(),
-    members: Array.from({ length: n }, (_, i) => {
-      const idx = i + 1;
-      return {
-        id: `player_${idx}`,
-        name: "",
-        species: "Human",
-        className: "",
-        portrait: "Male",
-        skills: [],
-        traits: [],
-        ac: 14,
-        hpMax: 12,
-        hpCurrent: 12,
-        initiativeMod: 1,
-      };
-    }),
+    members: Array.from({ length: n }, (_, i) => buildStarterMember(i, n)),
   };
 }
 
@@ -555,20 +649,7 @@ export default function DemoPage() {
 
       const startIdx = members.length;
       for (let i = startIdx; i < n; i++) {
-        const i1 = i + 1;
-        members.push({
-          id: `player_${i1}`,
-          name: "",
-          species: "Human",
-          className: "",
-          portrait: "Male",
-          skills: [],
-          traits: [],
-          ac: 14,
-          hpMax: 12,
-          hpCurrent: 12,
-          initiativeMod: 1,
-        });
+        members.push(buildStarterMember(i, n));
       }
 
       return { ...base, members };
