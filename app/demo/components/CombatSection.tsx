@@ -24,9 +24,14 @@
 // Update (loadout-aware visuals):
 // - Species-aware portrait loading via getPortraitPath()
 // - Optional class skill + species trait chips on player cards
+//
+// Update (SFX wiring):
+// - combat controls play local UI / combat sounds
+// - enemy outcome commits trigger hit / death sounds
+// - telegraph updates trigger a subtle enemy cue
 // ------------------------------------------------------------
 
-import React, { useMemo } from "react";
+import React, { useEffect, useMemo, useRef } from "react";
 import CardSection from "@/components/layout/CardSection";
 import CombatSetupPanel from "@/components/combat/CombatSetupPanel";
 import EnemyTurnResolverPanel from "@/components/combat/EnemyTurnResolverPanel";
@@ -95,6 +100,26 @@ type Props = {
   onPassTurnBtn: () => void;
   onEndCombatBtn: () => void;
 };
+
+const SFX = {
+  uiClick: "/assets/audio/sfx_button_click_01.mp3",
+  combatHit: "/assets/audio/sfx_sword_hit_01.mp3",
+  enemyDeath: "/assets/audio/sfx_monster_dying_01.mp3",
+  enemyTelegraph: "/assets/audio/sfx_goblin_attack_01.mp3",
+  combatAdvance: "/assets/audio/sfx_button_click_01.mp3",
+} as const;
+
+function playSfx(src: string, volume = 0.72) {
+  try {
+    const audio = new Audio(src);
+    audio.volume = volume;
+    void audio.play().catch(() => {
+      // fail silently; SFX should never interrupt combat flow
+    });
+  } catch {
+    // fail silently
+  }
+}
 
 function normalizeClassValue(v?: string) {
   return String(v ?? "").trim();
@@ -282,6 +307,7 @@ export default function CombatSection({
   onEndCombatBtn,
 }: Props) {
   const combatId = derivedCombat?.combatId ?? null;
+  const prevTelegraphKeyRef = useRef<string>("");
 
   const playerHpById = useMemo(
     () => derivePlayerHpFromCanon({ events, combatId, partyMembers }),
@@ -307,6 +333,28 @@ export default function CombatSection({
     const t = enemyTelegraphHint?.targetName ? nameKey(enemyTelegraphHint.targetName) : "";
     return t || null;
   }, [enemyTelegraphHint?.targetName]);
+
+  useEffect(() => {
+    const key = enemyTelegraphHint
+      ? `${enemyTelegraphHint.enemyName}|${enemyTelegraphHint.targetName}|${enemyTelegraphHint.attackStyleHint}`
+      : "";
+
+    if (!key) {
+      prevTelegraphKeyRef.current = "";
+      return;
+    }
+
+    if (prevTelegraphKeyRef.current && prevTelegraphKeyRef.current !== key) {
+      playSfx(SFX.enemyTelegraph, 0.42);
+    }
+
+    if (!prevTelegraphKeyRef.current) {
+      prevTelegraphKeyRef.current = key;
+      return;
+    }
+
+    prevTelegraphKeyRef.current = key;
+  }, [enemyTelegraphHint]);
 
   const skillChipStyle: React.CSSProperties = {
     display: "inline-flex",
@@ -380,6 +428,8 @@ export default function CombatSection({
       kind: style,
     });
 
+    playSfx(SFX.combatHit, 0.74);
+
     const before = playerHpById[targetCombatantId];
     const beforeCur =
       before?.hpCurrent ??
@@ -393,6 +443,7 @@ export default function CombatSection({
 
     if (afterCur <= 0) {
       onAppendCanon("COMBATANT_DOWNED", { combatId, combatantId: targetCombatantId, reason: "hp_zero" });
+      playSfx(SFX.enemyDeath, 0.76);
     }
   }
 
@@ -698,7 +749,10 @@ export default function CombatSection({
             activeEnemyGroupName={activeEnemyGroupName ?? ""}
             activeEnemyGroupId={activeEnemyGroupId ?? ""}
             playerNames={playerNames}
-            onTelegraph={onTelegraph}
+            onTelegraph={(info) => {
+              playSfx(SFX.enemyTelegraph, 0.42);
+              onTelegraph(info);
+            }}
             onCommitOutcome={handleEnemyCommitOutcomeAndDamage}
             onAdvanceTurn={onAdvanceTurn}
           />
@@ -765,14 +819,29 @@ export default function CombatSection({
 
           <div style={{ marginTop: 12, display: "flex", gap: 8, flexWrap: "wrap" }}>
             <button
-              onClick={onAdvanceTurnBtn}
+              onClick={() => {
+                if (!derivedCombat || combatEnded || (dmMode === "solace-neutral" && isEnemyTurn)) return;
+                playSfx(SFX.combatAdvance, 0.64);
+                onAdvanceTurnBtn();
+              }}
               disabled={!derivedCombat || combatEnded || (dmMode === "solace-neutral" && isEnemyTurn)}
             >
               Advance Turn
             </button>
 
             <button
-              onClick={onPassTurnBtn}
+              onClick={() => {
+                if (
+                  !derivedCombat ||
+                  combatEnded ||
+                  (dmMode === "solace-neutral" && isEnemyTurn) ||
+                  isWrongPlayerForTurn
+                ) {
+                  return;
+                }
+                playSfx(SFX.uiClick, 0.64);
+                onPassTurnBtn();
+              }}
               disabled={
                 !derivedCombat || combatEnded || (dmMode === "solace-neutral" && isEnemyTurn) || isWrongPlayerForTurn
               }
@@ -780,7 +849,14 @@ export default function CombatSection({
               Pass / End Turn
             </button>
 
-            <button onClick={onEndCombatBtn} disabled={!derivedCombat || combatEnded}>
+            <button
+              onClick={() => {
+                if (!derivedCombat || combatEnded) return;
+                playSfx(SFX.uiClick, 0.66);
+                onEndCombatBtn();
+              }}
+              disabled={!derivedCombat || combatEnded}
+            >
               End Combat
             </button>
           </div>
