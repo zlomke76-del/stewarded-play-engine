@@ -29,14 +29,12 @@
 // - Chapters "Party" represents PARTY_DECLARED (not just party size)
 //
 // Gameplay focus update:
-// - After PARTY_DECLARED, gameplay no longer drops straight into command input
-// - First-time runtime attention is guided in sequence:
-//     1) Pressure
-//     2) Map
-//     3) Action / command
-// - Pressure owns the stage first
-// - Then the map takes focus
-// - Only then does the command surface become primary
+// - After PARTY_DECLARED, gameplay is staged:
+//     1) Pressure focus
+//     2) Map focus
+//     3) Action focus
+// - The command window no longer steals immediate attention
+// - The player first reads danger, then space, then acts
 //
 // Audio update:
 // - Intro music is owned at page level (not hero component level)
@@ -836,7 +834,6 @@ export default function DemoPage() {
     setParsed(parsedAction);
     setOptions([...optionSet.options]);
     setSelectedOption(null);
-    setGameplayFocusStep("action");
 
     setActiveSection("resolution");
     queueMicrotask(() => scrollToSection("resolution"));
@@ -847,7 +844,6 @@ export default function DemoPage() {
     if (!options || options.length === 0) return;
 
     setSelectedOption(options[0]);
-    setGameplayFocusStep("action");
     setActiveSection("resolution");
     queueMicrotask(() => scrollToSection("resolution"));
   }, [dmMode, options]);
@@ -1026,8 +1022,8 @@ export default function DemoPage() {
     setParsed(null);
     setOptions(null);
     setSelectedOption(null);
-    setGameplayFocusStep("action");
 
+    setGameplayFocusStep("action");
     setActiveSection("action");
     queueMicrotask(() => scrollToSection("action"));
   }
@@ -1133,6 +1129,21 @@ export default function DemoPage() {
   const showCompactHero = presentationPhase !== "onboarding";
   const showGameplay = presentationPhase === "gameplay";
 
+  const activeEnemyOverlayName =
+    dmMode !== "human" && combatActive && isEnemyTurn ? String(activeCombatantSpec?.name ?? "") : null;
+
+  const activeEnemyOverlayId =
+    dmMode !== "human" && combatActive && isEnemyTurn ? String(activeCombatantSpec?.id ?? "") : null;
+
+  const solaceNeutralEnemyTurnEnabled =
+    dmMode === "solace-neutral" &&
+    combatActive &&
+    isEnemyTurn &&
+    !!activeEnemyOverlayName &&
+    !!activeEnemyOverlayId;
+
+  const resolutionDmMode = useMemo(() => (dmMode === "solace-neutral" ? "solace_neutral" : "human"), [dmMode]);
+
   const allowGameplay = dmMode !== null && tableAccepted && partyCanonicalExists;
 
   const gameplayAllowsPressure = showGameplay && allowGameplay;
@@ -1141,14 +1152,20 @@ export default function DemoPage() {
 
   useEffect(() => {
     if (!showGameplay || !allowGameplay) return;
+
     if (gameplayFocusStep === "pressure") {
+      setActiveSection("pressure");
       queueMicrotask(() => scrollToSection("pressure"));
       return;
     }
+
     if (gameplayFocusStep === "map") {
+      setActiveSection("map");
       queueMicrotask(() => scrollToSection("map"));
       return;
     }
+
+    setActiveSection("action");
     queueMicrotask(() => scrollToSection("action"));
   }, [showGameplay, allowGameplay, gameplayFocusStep]);
 
@@ -1182,21 +1199,6 @@ export default function DemoPage() {
     setActiveSection(nextKey);
     scrollToSection(nextKey);
   }
-
-  const activeEnemyOverlayName =
-    dmMode !== "human" && combatActive && isEnemyTurn ? String(activeCombatantSpec?.name ?? "") : null;
-
-  const activeEnemyOverlayId =
-    dmMode !== "human" && combatActive && isEnemyTurn ? String(activeCombatantSpec?.id ?? "") : null;
-
-  const solaceNeutralEnemyTurnEnabled =
-    dmMode === "solace-neutral" &&
-    combatActive &&
-    isEnemyTurn &&
-    !!activeEnemyOverlayName &&
-    !!activeEnemyOverlayId;
-
-  const resolutionDmMode = useMemo(() => (dmMode === "solace-neutral" ? "solace_neutral" : "human"), [dmMode]);
 
   return (
     <AmbientBackground>
@@ -1327,9 +1329,18 @@ export default function DemoPage() {
                 <CardSection title="The Air Tightens">
                   <div style={{ display: "grid", gap: 10 }}>
                     <p style={{ margin: 0 }}>
-                      The party has entered the depths. First, read the danger state before making a move.
+                      The party has crossed the threshold. Read the danger state first, then survey the ground before
+                      issuing the first command.
                     </p>
-                    <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+
+                    <div
+                      style={{
+                        display: "flex",
+                        gap: 10,
+                        flexWrap: "wrap",
+                        alignItems: "center",
+                      }}
+                    >
                       <button
                         onClick={() => {
                           setGameplayFocusStep("map");
@@ -1339,6 +1350,10 @@ export default function DemoPage() {
                       >
                         Survey the Dungeon Map
                       </button>
+
+                      <span style={{ fontSize: 12, opacity: 0.72 }}>
+                        Pressure first. Space second. Action third.
+                      </span>
                     </div>
                   </div>
                 </CardSection>
@@ -1348,13 +1363,22 @@ export default function DemoPage() {
                 {gameplayAllowsPressure && <DungeonPressurePanel turn={outcomesCount} events={state.events} />}
               </div>
 
-              {gameplayAllowsMap && gameplayFocusStep === "map" && (
+              {gameplayFocusStep === "map" && (
                 <CardSection title="The Path Reveals Itself">
                   <div style={{ display: "grid", gap: 10 }}>
                     <p style={{ margin: 0 }}>
-                      Now take in the terrain and position. Once the space is clear, the first command can be given.
+                      The dungeon has shape now. Read the terrain, your position, and remembered marks before choosing
+                      how the party moves.
                     </p>
-                    <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+
+                    <div
+                      style={{
+                        display: "flex",
+                        gap: 10,
+                        flexWrap: "wrap",
+                        alignItems: "center",
+                      }}
+                    >
                       <button
                         onClick={() => {
                           setGameplayFocusStep("action");
@@ -1364,6 +1388,10 @@ export default function DemoPage() {
                       >
                         Prepare the First Move
                       </button>
+
+                      <span style={{ fontSize: 12, opacity: 0.72 }}>
+                        Once space is clear, command can take the stage.
+                      </span>
                     </div>
                   </div>
                 </CardSection>
@@ -1473,7 +1501,6 @@ export default function DemoPage() {
                         <button
                           onClick={() => {
                             setSelectedOption(opt);
-                            setGameplayFocusStep("action");
                             setActiveSection("resolution");
                             queueMicrotask(() => scrollToSection("resolution"));
                           }}
