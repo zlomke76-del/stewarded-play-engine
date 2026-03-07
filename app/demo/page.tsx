@@ -1,4 +1,3 @@
-// app/demo/page.tsx
 "use client";
 
 // ------------------------------------------------------------
@@ -91,7 +90,7 @@ import {
 // ------------------------------------------------------------
 
 type PartyMember = {
-  id: string; // stable per session (ex: "player_1")
+  id: string;
   name: string;
   species?: string;
   className: string;
@@ -108,6 +107,12 @@ type PartyDeclaredPayload = {
   partyId: string;
   members: PartyMember[];
 };
+
+type PresentationPhase =
+  | "onboarding"
+  | "chronicle"
+  | "party-declaration"
+  | "gameplay";
 
 function safeInt(n: unknown, fallback: number, lo: number, hi: number) {
   const x = Number.isFinite(Number(n)) ? Math.trunc(Number(n)) : fallback;
@@ -174,7 +179,6 @@ function deriveInjuryStacksForPlayer(events: readonly any[], playerId: string): 
   for (let i = 0; i < events.length; i++) {
     const e = events[i];
     const t = e?.type;
-
     const p = e?.payload ?? {};
 
     if (t === "INJURY_APPLIED") {
@@ -213,7 +217,7 @@ function deriveInjuryStacksForPlayer(events: readonly any[], playerId: string): 
 }
 
 // ------------------------------------------------------------
-// Zone derivation helpers (must match DungeonPressurePanel semantics)
+// Zone derivation helpers
 // ------------------------------------------------------------
 
 const ZONE_SIZE_TILES = 4;
@@ -267,55 +271,41 @@ export default function DemoPage() {
   const role: "arbiter" = "arbiter";
 
   const [state, setState] = useState<SessionState>(createSession("demo-session", "demo"));
-
-  // mode must be explicitly selected
   const [dmMode, setDmMode] = useState<DMMode | null>(null);
 
   const MAP_W = 13;
   const MAP_H = 9;
 
-  // Hero image
   const HERO_IMAGE_SRC = "/Hero_dungeon.png";
   const [heroImageOk, setHeroImageOk] = useState(true);
 
-  // Page-owned music
   const introAudioRef = useRef<HTMLAudioElement | null>(null);
   const bgmAudioRef = useRef<HTMLAudioElement | null>(null);
   const currentMusicModeRef = useRef<MusicMode>("none");
   const lastAmbientIndexRef = useRef(-1);
   const lastCombatIndexRef = useRef(-1);
 
-  // Initial Table Gate
   const [initialTable, setInitialTable] = useState<InitialTable | null>(null);
   const [tableAccepted, setTableAccepted] = useState(false);
   const [tableDraftText, setTableDraftText] = useState("");
   const [enteredDungeon, setEnteredDungeon] = useState(false);
 
-  // Chapter UI (visual only)
   const [activeSection, setActiveSection] = useState<DemoSectionId>("mode");
 
-  // Action parsing + options
   const [playerInput, setPlayerInput] = useState("");
   const [parsed, setParsed] = useState<any>(null);
   const [options, setOptions] = useState<Option[] | null>(null);
   const [selectedOption, setSelectedOption] = useState<Option | null>(null);
 
-  // Which party member is acting
   const [actingPlayerId, setActingPlayerId] = useState<string>("player_1");
 
-  // Combat renderer trigger
   const [enemyPlayNonce, setEnemyPlayNonce] = useState(0);
 
-  // Enemy telegraph metadata
   const [enemyTelegraphHint, setEnemyTelegraphHint] = useState<{
     enemyName: string;
     targetName: string;
     attackStyleHint: "volley" | "beam" | "charge" | "unknown";
   } | null>(null);
-
-  // ----------------------------------------------------------
-  // Counts
-  // ----------------------------------------------------------
 
   const outcomesCount = useMemo(() => state.events.filter((e: any) => e?.type === "OUTCOME").length, [state.events]);
 
@@ -323,10 +313,6 @@ export default function DemoPage() {
     () => state.events.filter((e: any) => e?.type && e?.type !== "OUTCOME").length,
     [state.events]
   );
-
-  // ----------------------------------------------------------
-  // Party sheet (session-level)
-  // ----------------------------------------------------------
 
   const partyCanonical = useMemo(() => deriveLatestParty(state.events as any[]) ?? null, [state.events]);
   const [partyDraft, setPartyDraft] = useState<PartyDeclaredPayload | null>(null);
@@ -360,10 +346,6 @@ export default function DemoPage() {
     setActingPlayerId(String(partyMembers[0].id ?? "player_1"));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [partyMembers.map((m) => m.id).join("|")]);
-
-  // ----------------------------------------------------------
-  // Combat derived + party lock
-  // ----------------------------------------------------------
 
   const latestCombatId = useMemo(() => findLatestCombatId(state.events as any) ?? null, [state.events]);
 
@@ -400,10 +382,6 @@ export default function DemoPage() {
     return null;
   }, [combatActive, activeCombatantSpec]);
 
-  // ----------------------------------------------------------
-  // Injury modifier (applies to Resolution checks)
-  // ----------------------------------------------------------
-
   const actingPlayerInjuryStacks = useMemo(() => {
     const pid = String(actingPlayerId ?? "").trim();
     return deriveInjuryStacksForPlayer(state.events as any[], pid);
@@ -414,10 +392,6 @@ export default function DemoPage() {
     return -2 * s;
   }, [actingPlayerInjuryStacks]);
 
-  // ----------------------------------------------------------
-  // Share canon
-  // ----------------------------------------------------------
-
   const shareCanon = () => {
     try {
       exportCanon(state.events as any);
@@ -425,10 +399,6 @@ export default function DemoPage() {
       // fail-closed
     }
   };
-
-  // ----------------------------------------------------------
-  // Audio helpers
-  // ----------------------------------------------------------
 
   function pauseIntroTheme(resetTime = true) {
     const intro = introAudioRef.current;
@@ -524,14 +494,11 @@ export default function DemoPage() {
     }
   }
 
-  // Stop/reset music when user is not actively inside the dungeon flow.
   useEffect(() => {
     if (enteredDungeon) return;
     stopAllMusic();
   }, [enteredDungeon]);
 
-  // Intro loops until table is accepted.
-  // After acceptance, ambient/combat takes over.
   useEffect(() => {
     const intro = introAudioRef.current;
     if (!intro) return;
@@ -567,10 +534,6 @@ export default function DemoPage() {
       startAmbientTheme();
     }
   }, [enteredDungeon, tableAccepted, combatActive]);
-
-  // ----------------------------------------------------------
-  // Party operations
-  // ----------------------------------------------------------
 
   function setPartySize(nextCount: number) {
     const n = clampInt(nextCount, 1, 6);
@@ -685,10 +648,6 @@ export default function DemoPage() {
     }
   }
 
-  // ----------------------------------------------------------
-  // Exploration draft (auto-prepared AFTER intent + option)
-  // ----------------------------------------------------------
-
   const currentPos = useMemo(() => deriveCurrentPosition(state.events as any[], MAP_W, MAP_H), [state.events]);
 
   const [explorationDraft, setExplorationDraft] = useState<ExplorationDraft>({
@@ -722,10 +681,6 @@ export default function DemoPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedOption?.id]);
 
-  // ----------------------------------------------------------
-  // Generate table ONCE per session
-  // ----------------------------------------------------------
-
   useEffect(() => {
     if (initialTable) return;
     setInitialTable(generateInitialTable());
@@ -747,10 +702,6 @@ export default function DemoPage() {
     setEnteredDungeon(false);
   }, [dmMode]);
 
-  // ----------------------------------------------------------
-  // Canon append helper
-  // ----------------------------------------------------------
-
   function appendCanon(type: string, payload: any) {
     setState((prev) =>
       recordEvent(prev, {
@@ -762,10 +713,6 @@ export default function DemoPage() {
       })
     );
   }
-
-  // ----------------------------------------------------------
-  // Player submits action (intent)
-  // ----------------------------------------------------------
 
   const pressureTier = useMemo(() => inferPressureTier(outcomesCount), [outcomesCount]);
 
@@ -807,10 +754,6 @@ export default function DemoPage() {
     queueMicrotask(() => scrollToSection("resolution"));
   }, [dmMode, options]);
 
-  // ----------------------------------------------------------
-  // Turn controls
-  // ----------------------------------------------------------
-
   function advanceTurn() {
     if (!derivedCombat) return;
     if (combatEnded) return;
@@ -849,10 +792,6 @@ export default function DemoPage() {
     if (dmMode !== "human" && isPlayerTurn && isWrongPlayerForTurn) return;
     advanceTurn();
   }
-
-  // ----------------------------------------------------------
-  // Record canon (OUTCOME + optional exploration bundle)
-  // ----------------------------------------------------------
 
   function commitExplorationBundle(nextState: SessionState) {
     const d = explorationDraft;
@@ -1053,10 +992,6 @@ export default function DemoPage() {
     queueMicrotask(() => scrollToSection("canon"));
   }
 
-  // ----------------------------------------------------------
-  // Onboarding / Chapters
-  // ----------------------------------------------------------
-
   const canEnterDungeon = dmMode !== null && partySize > 0;
 
   const partyCanonicalExists = !!partyCanonical;
@@ -1087,6 +1022,17 @@ export default function DemoPage() {
     };
   }, [dmMode, tableAccepted, partyCanonicalExists, showInitialTable]);
 
+  const presentationPhase: PresentationPhase = useMemo(() => {
+    if (dmMode === null || !enteredDungeon) return "onboarding";
+    if (!tableAccepted) return "chronicle";
+    if (!partyCanonicalExists) return "party-declaration";
+    return "gameplay";
+  }, [dmMode, enteredDungeon, tableAccepted, partyCanonicalExists]);
+
+  const showFullHero = presentationPhase === "onboarding";
+  const showCompactHero = presentationPhase !== "onboarding";
+  const showGameplay = presentationPhase === "gameplay";
+
   function enterDungeon() {
     if (!canEnterDungeon) return;
     playIntroTheme(true);
@@ -1115,56 +1061,85 @@ export default function DemoPage() {
 
   const resolutionDmMode = useMemo(() => (dmMode === "solace-neutral" ? "solace_neutral" : "human"), [dmMode]);
 
-  // ----------------------------------------------------------
-  // Render
-  // ----------------------------------------------------------
-
   const allowGameplay = dmMode !== null && tableAccepted && partyCanonicalExists;
 
   return (
     <AmbientBackground>
       <audio ref={introAudioRef} preload="auto" src="/audio/music/chronicles_intro.mp3" style={{ display: "none" }} />
-
       <audio ref={bgmAudioRef} preload="auto" style={{ display: "none" }} />
 
       <div style={{ position: "relative", zIndex: 1 }}>
         <StewardedShell>
           <ModeHeader title="Echoes of Fate" onShare={shareCanon} showTitle={false} showRoles={false} showShare={false} />
 
-          {/* HERO / ONBOARDING */}
           <div id={anchorId("mode")} style={{ scrollMarginTop: 90 }}>
-            <HeroOnboarding
-              heroTitle="Echoes of Fate"
-              heroSubtitle="Every action leaves an echo."
-              dmMode={dmMode}
-              onSetDmMode={(nextMode) => {
-                setDmMode(nextMode);
-                setEnteredDungeon(false);
-                setTableAccepted(false);
-                setActiveSection("mode");
-                setPartyDraft((prev) => prev ?? defaultParty(partySize));
-              }}
-              partySize={partySize}
-              partyLocked={partyLocked}
-              onSetPartySize={(n) => {
-                if (dmMode === null) return;
-                setEnteredDungeon(false);
-                setTableAccepted(false);
-                setPartySize(n);
-              }}
-              onEnter={enterDungeon}
-              canEnter={canEnterDungeon}
-              heroImageSrc={HERO_IMAGE_SRC}
-              heroImageOk={heroImageOk}
-              onHeroImageError={() => setHeroImageOk(false)}
-              chapterState={chapterState as any}
-              onJump={(k) => jumpTo(k)}
-              outcomesCount={outcomesCount}
-              canonCount={canonCount}
-            />
+            {showFullHero && (
+              <HeroOnboarding
+                presentationMode="full"
+                heroTitle="Echoes of Fate"
+                heroSubtitle="Every action leaves an echo."
+                dmMode={dmMode}
+                onSetDmMode={(nextMode) => {
+                  setDmMode(nextMode);
+                  setEnteredDungeon(false);
+                  setTableAccepted(false);
+                  setActiveSection("mode");
+                  setPartyDraft((prev) => prev ?? defaultParty(partySize));
+                }}
+                partySize={partySize}
+                partyLocked={partyLocked}
+                onSetPartySize={(n) => {
+                  if (dmMode === null) return;
+                  setEnteredDungeon(false);
+                  setTableAccepted(false);
+                  setPartySize(n);
+                }}
+                onEnter={enterDungeon}
+                canEnter={canEnterDungeon}
+                heroImageSrc={HERO_IMAGE_SRC}
+                heroImageOk={heroImageOk}
+                onHeroImageError={() => setHeroImageOk(false)}
+                chapterState={chapterState as any}
+                onJump={(k) => jumpTo(k)}
+                outcomesCount={outcomesCount}
+                canonCount={canonCount}
+              />
+            )}
+
+            {showCompactHero && (
+              <HeroOnboarding
+                presentationMode="compact"
+                heroTitle="Echoes of Fate"
+                heroSubtitle="Every action leaves an echo."
+                dmMode={dmMode}
+                onSetDmMode={(nextMode) => {
+                  setDmMode(nextMode);
+                  setEnteredDungeon(false);
+                  setTableAccepted(false);
+                  setActiveSection("mode");
+                  setPartyDraft((prev) => prev ?? defaultParty(partySize));
+                }}
+                partySize={partySize}
+                partyLocked={partyLocked}
+                onSetPartySize={(n) => {
+                  if (dmMode === null) return;
+                  setEnteredDungeon(false);
+                  setTableAccepted(false);
+                  setPartySize(n);
+                }}
+                onEnter={enterDungeon}
+                canEnter={canEnterDungeon}
+                heroImageSrc={HERO_IMAGE_SRC}
+                heroImageOk={heroImageOk}
+                onHeroImageError={() => setHeroImageOk(false)}
+                chapterState={chapterState as any}
+                onJump={(k) => jumpTo(k)}
+                outcomesCount={outcomesCount}
+                canonCount={canonCount}
+              />
+            )}
           </div>
 
-          {/* TABLE */}
           {showInitialTable && (
             <div id={anchorId("table")} style={{ scrollMarginTop: 90, marginTop: 16 }}>
               <InitialTableSection
@@ -1190,7 +1165,6 @@ export default function DemoPage() {
             </div>
           )}
 
-          {/* PARTY DECLARATION */}
           <div id={anchorId("party")} style={{ scrollMarginTop: 90, marginTop: 16 }}>
             <PartySetupSection
               enabled={showInitialTable && dmMode !== null && tableAccepted}
@@ -1207,14 +1181,12 @@ export default function DemoPage() {
             />
           </div>
 
-          {allowGameplay && (
+          {showGameplay && allowGameplay && (
             <>
-              {/* PRESSURE */}
               <div id={anchorId("pressure")} style={{ scrollMarginTop: 90 }}>
                 <DungeonPressurePanel turn={outcomesCount} events={state.events} />
               </div>
 
-              {/* MAP */}
               <div id={anchorId("map")} style={{ scrollMarginTop: 90 }}>
                 <MapSection
                   events={state.events as any[]}
@@ -1225,7 +1197,6 @@ export default function DemoPage() {
                 />
               </div>
 
-              {/* COMBAT */}
               <div id={anchorId("combat")} style={{ scrollMarginTop: 90 }}>
                 <CombatSection
                   events={state.events as any[]}
@@ -1268,7 +1239,6 @@ export default function DemoPage() {
                 />
               </div>
 
-              {/* ACTION */}
               <div id={anchorId("action")} style={{ scrollMarginTop: 90 }}>
                 <ActionSection
                   partyMembers={
@@ -1301,14 +1271,12 @@ export default function DemoPage() {
                 />
               </div>
 
-              {/* PARSED */}
               {parsed && (
                 <CardSection title="Parsed Action">
                   <pre>{JSON.stringify(parsed, null, 2)}</pre>
                 </CardSection>
               )}
 
-              {/* OPTIONS (Human DM) */}
               {options && dmMode === "human" && (
                 <CardSection title="Options">
                   <ul>
@@ -1329,7 +1297,6 @@ export default function DemoPage() {
                 </CardSection>
               )}
 
-              {/* RESOLUTION */}
               <div id={anchorId("resolution")} style={{ scrollMarginTop: 90 }}>
                 {selectedOption && (
                   <ResolutionDraftAdvisoryPanel
@@ -1348,7 +1315,6 @@ export default function DemoPage() {
 
               <NextActionHint state={state} />
 
-              {/* CANON + CHRONICLE */}
               <div id={anchorId("canon")} style={{ scrollMarginTop: 90 }}>
                 <CanonChronicleSection events={state.events as any[]} />
               </div>
