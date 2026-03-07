@@ -24,11 +24,13 @@ const SFX = {
   stoneDoor: "/assets/audio/sfx_stone_door_01.mp3",
   quillWritingA: "/assets/audio/sfx_quill_pen_scroll_01.mp3",
   quillWritingB: "/assets/audio/sfx_quill_pen_scroll_02.mp3",
+  waxSeal: "/assets/audio/sfx_wax_seal_01.mp3",
 } as const;
 
 const LINE_REVEAL_MS = 1180;
 const START_DELAY_MS = 420;
 const FADE_STAGGER_MS = 120;
+const SEAL_REVEAL_DELAY_MS = 280;
 
 function playSfx(src: string, volume = 0.68) {
   try {
@@ -60,8 +62,10 @@ export default function InitialTableSection({
   const scrollBodyRef = useRef<HTMLDivElement | null>(null);
   const revealTimerRef = useRef<number | null>(null);
   const startTimerRef = useRef<number | null>(null);
+  const sealTimerRef = useRef<number | null>(null);
   const activeQuillAudioRef = useRef<HTMLAudioElement | null>(null);
   const nextQuillVariantRef = useRef<"a" | "b">("a");
+  const sealSfxPlayedRef = useRef(false);
 
   const narrationLines = useMemo(
     () => buildNarrationLines(tableDraftText),
@@ -72,6 +76,7 @@ export default function InitialTableSection({
   const [isWriting, setIsWriting] = useState(false);
   const [writingStarted, setWritingStarted] = useState(false);
   const [showSignals, setShowSignals] = useState(false);
+  const [showWaxSeal, setShowWaxSeal] = useState(false);
 
   const writingComplete =
     narrationLines.length === 0 || revealedCount >= narrationLines.length;
@@ -119,6 +124,10 @@ export default function InitialTableSection({
       window.clearInterval(revealTimerRef.current);
       revealTimerRef.current = null;
     }
+    if (sealTimerRef.current !== null) {
+      window.clearTimeout(sealTimerRef.current);
+      sealTimerRef.current = null;
+    }
   }
 
   useEffect(() => {
@@ -128,13 +137,17 @@ export default function InitialTableSection({
       setIsWriting(false);
       setWritingStarted(false);
       setRevealedCount(0);
+      setShowWaxSeal(false);
+      sealSfxPlayedRef.current = false;
       return;
     }
 
     setRevealedCount(0);
     setIsWriting(false);
     setWritingStarted(false);
+    setShowWaxSeal(false);
     nextQuillVariantRef.current = "a";
+    sealSfxPlayedRef.current = false;
 
     if (narrationLines.length === 0) {
       setWritingStarted(true);
@@ -186,6 +199,34 @@ export default function InitialTableSection({
       behavior: "smooth",
     });
   }, [revealedCount]);
+
+  useEffect(() => {
+    if (!writingComplete || dmMode !== "solace-neutral") {
+      if (sealTimerRef.current !== null) {
+        window.clearTimeout(sealTimerRef.current);
+        sealTimerRef.current = null;
+      }
+      return;
+    }
+
+    if (showWaxSeal) return;
+
+    sealTimerRef.current = window.setTimeout(() => {
+      setShowWaxSeal(true);
+
+      if (!sealSfxPlayedRef.current) {
+        sealSfxPlayedRef.current = true;
+        playSfx(SFX.waxSeal, 0.72);
+      }
+    }, SEAL_REVEAL_DELAY_MS);
+
+    return () => {
+      if (sealTimerRef.current !== null) {
+        window.clearTimeout(sealTimerRef.current);
+        sealTimerRef.current = null;
+      }
+    };
+  }, [writingComplete, dmMode, showWaxSeal]);
 
   if (dmMode === null) return <Disclaimer />;
 
@@ -320,6 +361,11 @@ export default function InitialTableSection({
                   setWritingStarted(true);
                   setIsWriting(false);
                   setRevealedCount(narrationLines.length);
+                  setShowWaxSeal(true);
+                  if (!sealSfxPlayedRef.current) {
+                    sealSfxPlayedRef.current = true;
+                    playSfx(SFX.waxSeal, 0.72);
+                  }
                 }}
                 style={{
                   borderRadius: 999,
@@ -487,9 +533,7 @@ export default function InitialTableSection({
               letterSpacing: "0.04em",
             }}
           >
-            <span>
-              {showSignals ? "▾" : "▸"} Behind the Chronicle
-            </span>
+            <span>{showSignals ? "▾" : "▸"} Behind the Chronicle</span>
             <span
               style={{
                 fontSize: 11,
@@ -669,9 +713,85 @@ export default function InitialTableSection({
           style={{
             marginTop: 18,
             display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
             justifyContent: "center",
+            gap: 10,
           }}
         >
+          <div
+            style={{
+              position: "relative",
+              height: showWaxSeal ? 88 : 0,
+              width: "100%",
+              display: "flex",
+              justifyContent: "center",
+              alignItems: "flex-end",
+              transition: "height 320ms ease",
+              overflow: "visible",
+              pointerEvents: "none",
+            }}
+          >
+            <div
+              aria-hidden="true"
+              style={{
+                position: "absolute",
+                bottom: 6,
+                width: showWaxSeal ? 112 : 0,
+                height: showWaxSeal ? 112 : 0,
+                borderRadius: "999px",
+                background:
+                  "radial-gradient(circle, rgba(255,162,110,0.35) 0%, rgba(255,110,60,0.16) 38%, rgba(255,90,42,0.04) 68%, transparent 78%)",
+                filter: "blur(10px)",
+                opacity: showWaxSeal ? 1 : 0,
+                transition: "opacity 360ms ease, width 360ms ease, height 360ms ease",
+              }}
+            />
+
+            <div
+              aria-hidden="true"
+              style={{
+                position: "relative",
+                width: 74,
+                height: 74,
+                borderRadius: "999px",
+                transform: showWaxSeal
+                  ? "translateY(0) scale(1) rotate(-6deg)"
+                  : "translateY(18px) scale(0.72) rotate(-10deg)",
+                opacity: showWaxSeal ? 1 : 0,
+                transition:
+                  "transform 420ms cubic-bezier(0.2, 0.9, 0.2, 1), opacity 320ms ease",
+                background:
+                  "radial-gradient(circle at 34% 28%, rgba(255,213,190,0.24), transparent 18%), radial-gradient(circle at 50% 45%, rgba(166,22,25,0.96), rgba(120,10,17,0.98) 68%, rgba(82,6,12,1) 100%)",
+                border: "1px solid rgba(255,210,185,0.16)",
+                boxShadow:
+                  "0 10px 22px rgba(92,8,12,0.42), inset 0 2px 5px rgba(255,228,214,0.18), inset 0 -10px 16px rgba(58,0,4,0.28)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
+              <div
+                style={{
+                  position: "absolute",
+                  inset: 8,
+                  borderRadius: "999px",
+                  border: "1px solid rgba(255,214,192,0.12)",
+                }}
+              />
+              <div
+                style={{
+                  fontSize: 24,
+                  color: "rgba(255,232,214,0.92)",
+                  textShadow: "0 1px 2px rgba(43,0,0,0.4)",
+                  transform: "translateY(-1px)",
+                }}
+              >
+                ✢
+              </div>
+            </div>
+          </div>
+
           <button
             onClick={() => {
               if (!writingComplete) {
@@ -748,7 +868,8 @@ export default function InitialTableSection({
   return (
     <CardSection title="Opening Chronicle">
       <p className="muted" style={{ marginTop: 0 }}>
-        If you want a fast-start opening, refine the chronicle below, then begin the descent.
+        If you want a fast-start opening, refine the chronicle below, then begin
+        the descent.
       </p>
 
       <textarea
