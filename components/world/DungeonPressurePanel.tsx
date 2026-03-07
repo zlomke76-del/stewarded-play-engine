@@ -15,6 +15,8 @@
 // Upgrade:
 // - Integrates DungeonEvolution (dragon/apex pacing + dungeon condition) as
 //   a READ-ONLY, deterministic layer derived from canon events.
+// - Environmental Memory now derives from discovery + pressure + patrol +
+//   outcome signals instead of only narrow OUTCOME.world fields.
 // ------------------------------------------------------------
 
 import React, { useMemo } from "react";
@@ -49,6 +51,7 @@ type Props = {
 
 type ZoneCoord = { zx: number; zy: number };
 type ZoneId = string;
+type XY = { x: number; y: number };
 
 const ZONE_SIZE_TILES = 4;
 
@@ -58,6 +61,10 @@ function clamp(n: number, min: number, max: number) {
 
 function safeNum(x: any): number | null {
   return typeof x === "number" && Number.isFinite(x) ? x : null;
+}
+
+function safeStr(x: any): string | null {
+  return typeof x === "string" && x.trim() ? x.trim() : null;
 }
 
 function parseZoneId(zoneId: string): ZoneCoord | null {
@@ -91,6 +98,47 @@ function adjacentZones(zoneId: ZoneId): ZoneId[] {
   ];
 }
 
+function formatDir(dx: number, dy: number): string {
+  if (dx === 0 && dy < 0) return "north";
+  if (dx === 0 && dy > 0) return "south";
+  if (dx < 0 && dy === 0) return "west";
+  if (dx > 0 && dy === 0) return "east";
+  if (dx < 0 && dy < 0) return "northwest";
+  if (dx > 0 && dy < 0) return "northeast";
+  if (dx < 0 && dy > 0) return "southwest";
+  if (dx > 0 && dy > 0) return "southeast";
+  return "nearby";
+}
+
+function relativeDirection(fromZoneId: ZoneId, targetZoneId: ZoneId): string {
+  const a = parseZoneId(fromZoneId);
+  const b = parseZoneId(targetZoneId);
+  if (!a || !b) return "nearby";
+
+  const dx = b.zx - a.zx;
+  const dy = b.zy - a.zy;
+  return formatDir(dx, dy);
+}
+
+function tileToZoneIdFromPayload(payload: any): ZoneId | null {
+  const zoneId = safeStr(payload?.zoneId);
+  if (zoneId) return zoneId;
+
+  const x =
+    safeNum(payload?.x) ??
+    safeNum(payload?.at?.x) ??
+    safeNum(payload?.tile?.x) ??
+    safeNum(payload?.to?.x);
+  const y =
+    safeNum(payload?.y) ??
+    safeNum(payload?.at?.y) ??
+    safeNum(payload?.tile?.y) ??
+    safeNum(payload?.to?.y);
+
+  if (x === null || y === null) return null;
+  return zoneFromTileXY(x, y, ZONE_SIZE_TILES);
+}
+
 function tierForPressure(p: number): {
   tier: "Quiet" | "Uneasy" | "Alert" | "Hunting" | "Active Threat" | "Crisis";
   rangeLabel: string;
@@ -120,10 +168,7 @@ function statusForAwareness(a: number): {
 // Canon-derived position + zone inference
 // ------------------------------------------------------------
 
-type XY = { x: number; y: number };
-
 function derivePlayerPosition(events: readonly SessionEvent[]): XY | null {
-  // Matches the engine convention used elsewhere: PLAYER_MOVED payload.to {x,y}
   let last: XY | null = null;
   for (const e of events as any[]) {
     if (e?.type !== "PLAYER_MOVED") continue;
@@ -160,8 +205,6 @@ function deriveZonePressure(events: readonly SessionEvent[]): ZonePressureState 
     byZone.set(zoneId, clamp(prev + delta, 0, 100));
   }
 
-  // If no canonical pressure exists yet, we keep everything at 0.
-  // (We intentionally do NOT infer from narration text.)
   return { byZone, estimated: !sawCanonical };
 }
 
@@ -175,7 +218,6 @@ function deriveZoneAwareness(events: readonly SessionEvent[], pressure: ZonePres
   let sawCanonical = false;
 
   for (const e of events as any[]) {
-    // Optional explicit awareness deltas (best)
     if (e?.type === "ZONE_AWARENESS_CHANGED") {
       const zoneId = typeof e?.payload?.zoneId === "string" ? e.payload.zoneId : null;
       const delta = safeNum(e?.payload?.delta);
@@ -187,7 +229,6 @@ function deriveZoneAwareness(events: readonly SessionEvent[], pressure: ZonePres
       continue;
     }
 
-    // Guaranteed response trigger at 100 (we reset to baseline; default 40)
     if (e?.type === "ZONE_RESPONSE_TRIGGERED") {
       const zoneId = typeof e?.payload?.zoneId === "string" ? e.payload.zoneId : null;
       if (!zoneId) continue;
@@ -201,11 +242,8 @@ function deriveZoneAwareness(events: readonly SessionEvent[], pressure: ZonePres
 
   if (sawCanonical) return { byZone, estimated: false };
 
-  // No canonical awareness yet: estimate from pressure (advisory only).
-  // This keeps the UI useful while you roll in the canonical events.
   const estimatedMap = new Map<ZoneId, number>();
   for (const [zoneId, p] of pressure.byZone.entries()) {
-    // Mildly more sensitive than pressure (tripwire feel), still deterministic.
     estimatedMap.set(zoneId, clamp(Math.round(p * 1.15), 0, 100));
   }
   return { byZone: estimatedMap, estimated: true };
@@ -232,37 +270,419 @@ function recommendLocation(parsedCommand?: any): { label: string; reason: string
 }
 
 // ------------------------------------------------------------
-// Persistent world notes (room-scoped) — advisory aggregator
+// Environmental Memory derivation
 // ------------------------------------------------------------
 
-function derivePersistentWorldState(events: readonly SessionEvent[], roomId?: string): string[] {
-  const notes: string[] = [];
+type MemorySection = {
+  title: string;
+  items: string[];
+  emptyLabel?: string;
+};
 
-  events.forEach((e) => {
-    if (e.type !== "OUTCOME") return;
-    const w = e.payload?.world;
-    if (!w) return;
+type EnvironmentalMemory = {
+  sections: MemorySection[];
+};
 
-    if (roomId && w.roomId && w.roomId !== roomId) return;
+function pushUnique(map: Map<string, string>, key: string, value: string) {
+  if (!map.has(key)) map.set(key, value);
+}
 
-    if (w.lock) {
-      notes.push(`Door ${w.lock.state}${w.lock.keyId ? ` (Key: ${w.lock.keyId})` : ""}`);
+function deriveEnvironmentalMemory(args: {
+  events: readonly SessionEvent[];
+  currentZoneId: ZoneId;
+  adjacentZoneIds: ZoneId[];
+  currentRoomId?: string;
+  currentPressure: number;
+  currentAwareness: number;
+  nearbyMaxPressure: number;
+}): EnvironmentalMemory {
+  const {
+    events,
+    currentZoneId,
+    adjacentZoneIds,
+    currentPressure,
+    currentAwareness,
+    nearbyMaxPressure,
+  } = args;
+
+  const localThreats = new Map<string, string>();
+  const localObstacles = new Map<string, string>();
+  const localOpportunities = new Map<string, string>();
+  const nearbySignals = new Map<string, string>();
+  const recentChanges = new Map<string, string>();
+
+  const adjacentSet = new Set(adjacentZoneIds);
+
+  let localHazardCount = 0;
+  let localLockedDoorCount = 0;
+  let localDoorCount = 0;
+  let localCacheCount = 0;
+  let localAltarCount = 0;
+  let localStairsCount = 0;
+  let localPatrolSignsCount = 0;
+  let localCombatStarted = 0;
+  let localCombatEnded = 0;
+
+  let nearbyPatrolSigns = 0;
+  let nearbyHazards = 0;
+  let nearbyLockedDoors = 0;
+
+  let latestPressureDelta: number | null = null;
+  let latestAwarenessDelta: number | null = null;
+
+  const recentEventLines: string[] = [];
+
+  for (const e of events as any[]) {
+    const zoneId =
+      safeStr(e?.payload?.zoneId) ??
+      tileToZoneIdFromPayload(e?.payload) ??
+      (e?.type === "PLAYER_MOVED"
+        ? (() => {
+            const x = safeNum(e?.payload?.to?.x);
+            const y = safeNum(e?.payload?.to?.y);
+            return x !== null && y !== null ? zoneFromTileXY(x, y, ZONE_SIZE_TILES) : null;
+          })()
+        : null);
+
+    const isLocal = zoneId === currentZoneId;
+    const isNearby = !!zoneId && adjacentSet.has(zoneId);
+
+    switch (e?.type) {
+      case "DOOR_DISCOVERED": {
+        if (isLocal) {
+          localDoorCount += 1;
+          pushUnique(localObstacles, "door-discovered", "A discovered door offers a possible route forward.");
+        } else if (isNearby && zoneId) {
+          pushUnique(
+            nearbySignals,
+            `door-discovered-${zoneId}`,
+            `A possible passage lies ${relativeDirection(currentZoneId, zoneId)}.`
+          );
+        }
+        recentEventLines.push("A hidden or obscured doorway was discovered.");
+        break;
+      }
+
+      case "DOOR_LOCKED": {
+        if (isLocal) {
+          localLockedDoorCount += 1;
+          pushUnique(localObstacles, "door-locked", "A locked passage is preventing immediate progress.");
+        } else if (isNearby && zoneId) {
+          nearbyLockedDoors += 1;
+          pushUnique(
+            nearbySignals,
+            `door-locked-${zoneId}`,
+            `A locked route blocks movement ${relativeDirection(currentZoneId, zoneId)}.`
+          );
+        }
+        recentEventLines.push("Iron locks were found securing a door.");
+        break;
+      }
+
+      case "HAZARD_REVEALED": {
+        if (isLocal) {
+          localHazardCount += 1;
+          pushUnique(localThreats, "hazard-local", "A revealed hazard makes this zone unsafe.");
+        } else if (isNearby && zoneId) {
+          nearbyHazards += 1;
+          pushUnique(
+            nearbySignals,
+            `hazard-${zoneId}`,
+            `Dangerous terrain or a trap is known ${relativeDirection(currentZoneId, zoneId)}.`
+          );
+        }
+        recentEventLines.push("A hidden danger was revealed.");
+        break;
+      }
+
+      case "CACHE_REVEALED": {
+        if (isLocal) {
+          localCacheCount += 1;
+          pushUnique(localOpportunities, "cache-local", "A discovered cache may reward a careful return.");
+        } else if (isNearby && zoneId) {
+          pushUnique(
+            nearbySignals,
+            `cache-${zoneId}`,
+            `Valuable supplies may be reachable ${relativeDirection(currentZoneId, zoneId)}.`
+          );
+        }
+        recentEventLines.push("A useful cache was identified.");
+        break;
+      }
+
+      case "ALTAR_REVEALED": {
+        if (isLocal) {
+          localAltarCount += 1;
+          pushUnique(localOpportunities, "altar-local", "An altar or sacred point may offer a ritual advantage.");
+        } else if (isNearby && zoneId) {
+          pushUnique(
+            nearbySignals,
+            `altar-${zoneId}`,
+            `A place of ritual significance lies ${relativeDirection(currentZoneId, zoneId)}.`
+          );
+        }
+        recentEventLines.push("A ritual site was brought to light.");
+        break;
+      }
+
+      case "STAIRS_REVEALED": {
+        if (isLocal) {
+          localStairsCount += 1;
+          pushUnique(localOpportunities, "stairs-local", "A stairway offers a deeper route through the dungeon.");
+        } else if (isNearby && zoneId) {
+          pushUnique(
+            nearbySignals,
+            `stairs-${zoneId}`,
+            `A route deeper into the dungeon lies ${relativeDirection(currentZoneId, zoneId)}.`
+          );
+        }
+        recentEventLines.push("A transition point deeper into the dungeon was revealed.");
+        break;
+      }
+
+      case "PATROL_SIGNS_REVEALED": {
+        if (isLocal) {
+          localPatrolSignsCount += 1;
+          pushUnique(localThreats, "patrol-local", "Enemy movement has been detected nearby.");
+        } else if (isNearby && zoneId) {
+          nearbyPatrolSigns += 1;
+          pushUnique(
+            nearbySignals,
+            `patrol-${zoneId}`,
+            `Patrol signs suggest enemy movement ${relativeDirection(currentZoneId, zoneId)}.`
+          );
+        }
+        recentEventLines.push("Signs of patrol traffic were discovered.");
+        break;
+      }
+
+      case "COMBAT_STARTED": {
+        if (isLocal) {
+          localCombatStarted += 1;
+          pushUnique(localThreats, "combat-started", "Violence has already broken out in this zone.");
+        } else if (isNearby && zoneId) {
+          pushUnique(
+            nearbySignals,
+            `combat-started-${zoneId}`,
+            `Conflict has flared ${relativeDirection(currentZoneId, zoneId)}.`
+          );
+        }
+        recentEventLines.push("Combat erupted nearby.");
+        break;
+      }
+
+      case "COMBAT_ENDED": {
+        if (isLocal) {
+          localCombatEnded += 1;
+          pushUnique(localThreats, "combat-ended", "The aftermath of recent combat lingers here.");
+        } else if (isNearby && zoneId) {
+          pushUnique(
+            nearbySignals,
+            `combat-ended-${zoneId}`,
+            `The signs of recent violence lie ${relativeDirection(currentZoneId, zoneId)}.`
+          );
+        }
+        recentEventLines.push("A clash recently ended.");
+        break;
+      }
+
+      case "ZONE_PRESSURE_CHANGED": {
+        const eventZoneId = safeStr(e?.payload?.zoneId);
+        const delta = safeNum(e?.payload?.delta);
+        if (eventZoneId === currentZoneId && delta !== null) {
+          latestPressureDelta = delta;
+        }
+        break;
+      }
+
+      case "ZONE_AWARENESS_CHANGED": {
+        const eventZoneId = safeStr(e?.payload?.zoneId);
+        const delta = safeNum(e?.payload?.delta);
+        if (eventZoneId === currentZoneId && delta !== null) {
+          latestAwarenessDelta = delta;
+        }
+        break;
+      }
+
+      case "ZONE_RESPONSE_TRIGGERED": {
+        const eventZoneId = safeStr(e?.payload?.zoneId);
+        if (eventZoneId === currentZoneId) {
+          pushUnique(localThreats, "zone-response", "The zone has already mounted a response to disturbance.");
+          recentEventLines.push("The dungeon responded to the party's activity.");
+        }
+        break;
+      }
+
+      case "OUTCOME": {
+        const world = e?.payload?.world;
+        if (!world) break;
+
+        const outcomeZoneId =
+          safeStr(world?.zoneId) ??
+          tileToZoneIdFromPayload(world) ??
+          tileToZoneIdFromPayload(world?.at) ??
+          zoneId;
+
+        const outcomeIsLocal = outcomeZoneId === currentZoneId;
+        const outcomeIsNearby = !!outcomeZoneId && adjacentSet.has(outcomeZoneId);
+
+        if (world?.lock) {
+          const state = safeStr(world.lock.state) ?? "changed";
+          const keyId = safeStr(world.lock.keyId);
+          const line = `A door here is ${state}${keyId ? ` (key: ${keyId})` : ""}.`;
+
+          if (outcomeIsLocal) {
+            pushUnique(localObstacles, `outcome-lock-${state}-${keyId ?? "none"}`, line);
+          } else if (outcomeIsNearby && outcomeZoneId) {
+            pushUnique(
+              nearbySignals,
+              `outcome-lock-${outcomeZoneId}-${state}-${keyId ?? "none"}`,
+              `A manipulated door lies ${relativeDirection(currentZoneId, outcomeZoneId)}.`
+            );
+          }
+        }
+
+        if (world?.trap) {
+          const state = safeStr(world.trap.state) ?? "present";
+          const line =
+            state === "disarmed"
+              ? "A trap here has been disarmed, but the area remains suspicious."
+              : `A trap here is ${state}.`;
+
+          if (outcomeIsLocal) {
+            if (state === "disarmed") {
+              pushUnique(localOpportunities, `outcome-trap-${state}`, line);
+            } else {
+              pushUnique(localThreats, `outcome-trap-${state}`, line);
+            }
+          } else if (outcomeIsNearby && outcomeZoneId) {
+            pushUnique(
+              nearbySignals,
+              `outcome-trap-${outcomeZoneId}-${state}`,
+              `Trap activity is known ${relativeDirection(currentZoneId, outcomeZoneId)}.`
+            );
+          }
+        }
+
+        break;
+      }
+
+      default:
+        break;
     }
-
-    if (w.trap) {
-      notes.push(`Trap ${w.trap.state}`);
-    }
-  });
-
-  // De-dup while preserving order
-  const seen = new Set<string>();
-  const out: string[] = [];
-  for (const n of notes) {
-    if (seen.has(n)) continue;
-    seen.add(n);
-    out.push(n);
   }
-  return out;
+
+  if (localHazardCount > 1) {
+    pushUnique(localThreats, "hazard-count", `Multiple hazards have been identified in this zone (${localHazardCount}).`);
+  }
+
+  if (localLockedDoorCount > 1) {
+    pushUnique(localObstacles, "locked-door-count", `More than one locked barrier is slowing progress here (${localLockedDoorCount}).`);
+  }
+
+  if (localDoorCount > 1 && localLockedDoorCount === 0) {
+    pushUnique(localObstacles, "door-count", `Several potential routes have been revealed in this zone (${localDoorCount}).`);
+  }
+
+  if (localCacheCount > 1) {
+    pushUnique(localOpportunities, "cache-count", `More than one useful cache has been identified nearby (${localCacheCount}).`);
+  }
+
+  if (localAltarCount > 0 && localStairsCount > 0) {
+    pushUnique(localOpportunities, "altar-stairs-combo", "This area holds both ritual significance and a path onward.");
+  }
+
+  if (localPatrolSignsCount > 1) {
+    pushUnique(localThreats, "patrol-count", `Repeated patrol traces suggest organized enemy activity (${localPatrolSignsCount}).`);
+  }
+
+  if (localCombatStarted > 0 && localCombatEnded === 0) {
+    pushUnique(localThreats, "combat-ongoing-memory", "This zone has already drawn blood and may not settle quickly.");
+  }
+
+  if (localCombatEnded > 0) {
+    pushUnique(localThreats, "combat-aftermath", "The aftermath of violence may still attract attention.");
+  }
+
+  if (currentPressure >= 70) {
+    pushUnique(localThreats, "pressure-high", "Pressure in this zone is severe; the dungeon is actively pushing back.");
+  } else if (currentPressure >= 40) {
+    pushUnique(localThreats, "pressure-rising", "Pressure is building in this zone.");
+  }
+
+  if (currentAwareness >= 75) {
+    pushUnique(localThreats, "awareness-high", "The area is close to open alarm.");
+  } else if (currentAwareness >= 45) {
+    pushUnique(localThreats, "awareness-mid", "Enemy awareness is elevated and probing behavior is likely.");
+  }
+
+  if (nearbyMaxPressure >= 70) {
+    pushUnique(nearbySignals, "nearby-pressure-high", "A neighboring zone is under extreme pressure.");
+  } else if (nearbyMaxPressure >= 40) {
+    pushUnique(nearbySignals, "nearby-pressure-mid", "Tension is rising in an adjacent zone.");
+  }
+
+  if (nearbyPatrolSigns > 1) {
+    pushUnique(nearbySignals, "nearby-patrol-count", "Multiple adjacent patrol indicators suggest the dungeon is moving pieces around.");
+  }
+
+  if (nearbyHazards > 1) {
+    pushUnique(nearbySignals, "nearby-hazard-count", "Several dangers have been identified in neighboring zones.");
+  }
+
+  if (nearbyLockedDoors > 1) {
+    pushUnique(nearbySignals, "nearby-locked-count", "Adjacent routes appear heavily controlled or sealed.");
+  }
+
+  if (latestPressureDelta !== null) {
+    if (latestPressureDelta > 0) {
+      pushUnique(recentChanges, "pressure-up", `Zone pressure recently increased by ${latestPressureDelta}.`);
+    } else if (latestPressureDelta < 0) {
+      pushUnique(recentChanges, "pressure-down", `Zone pressure recently eased by ${Math.abs(latestPressureDelta)}.`);
+    }
+  }
+
+  if (latestAwarenessDelta !== null) {
+    if (latestAwarenessDelta > 0) {
+      pushUnique(recentChanges, "awareness-up", `Enemy awareness recently rose by ${latestAwarenessDelta}.`);
+    } else if (latestAwarenessDelta < 0) {
+      pushUnique(recentChanges, "awareness-down", `Enemy awareness recently fell by ${Math.abs(latestAwarenessDelta)}.`);
+    }
+  }
+
+  for (const line of recentEventLines.slice(-3)) {
+    pushUnique(recentChanges, `recent-${line}`, line);
+  }
+
+  const sections: MemorySection[] = [
+    {
+      title: "Threats",
+      items: Array.from(localThreats.values()),
+      emptyLabel: "No immediate local threats have been clearly established.",
+    },
+    {
+      title: "Obstacles",
+      items: Array.from(localObstacles.values()),
+      emptyLabel: "No persistent local obstacles are known.",
+    },
+    {
+      title: "Opportunities",
+      items: Array.from(localOpportunities.values()),
+      emptyLabel: "No clear opportunities have been revealed here yet.",
+    },
+    {
+      title: "Nearby Signals",
+      items: Array.from(nearbySignals.values()),
+      emptyLabel: "No significant nearby signals are known.",
+    },
+    {
+      title: "Recent Changes",
+      items: Array.from(recentChanges.values()),
+      emptyLabel: "No notable recent changes have been recorded.",
+    },
+  ];
+
+  return { sections };
 }
 
 // ------------------------------------------------------------
@@ -298,9 +718,7 @@ function RingGauge({
     <div style={{ display: "grid", placeItems: "center", gap: 8 }}>
       <div style={{ width: 132, height: 132, position: "relative" }}>
         <svg viewBox="0 0 120 120" width="132" height="132" style={{ display: "block" }}>
-          {/* track */}
           <circle cx="60" cy="60" r={r} fill="none" stroke="rgba(255,255,255,0.10)" strokeWidth="10" />
-          {/* glow ring */}
           <circle
             cx="60"
             cy="60"
@@ -310,7 +728,6 @@ function RingGauge({
             strokeWidth="10"
             style={{ filter: "blur(0.6px)" }}
           />
-          {/* progress */}
           <g style={{ transformOrigin: "60px 60px", transform: "rotate(-90deg)" }}>
             <circle
               cx="60"
@@ -453,7 +870,6 @@ export default function DungeonPressurePanel({ turn, currentRoomId, events, pars
 
   const zoneId = useMemo<ZoneId>(() => {
     if (playerPos) return zoneFromTileXY(playerPos.x, playerPos.y, ZONE_SIZE_TILES);
-    // If no player position, place in a deterministic fallback zone
     return makeZoneId(0, 0);
   }, [playerPos]);
 
@@ -477,7 +893,6 @@ export default function DungeonPressurePanel({ turn, currentRoomId, events, pars
   const nearbyTier = tierForPressure(nearbyMaxPressure);
 
   const location = useMemo(() => {
-    // Canonical room label (if present)
     if (currentRoomId) {
       return {
         label: currentRoomId,
@@ -486,7 +901,6 @@ export default function DungeonPressurePanel({ turn, currentRoomId, events, pars
       };
     }
 
-    // If we have a player position, we can at least label by zone
     if (playerPos) {
       return {
         label: `Zone ${zoneId}`,
@@ -499,16 +913,23 @@ export default function DungeonPressurePanel({ turn, currentRoomId, events, pars
     return { label: rec.label, canonical: false, reason: rec.reason };
   }, [currentRoomId, parsedCommand, playerPos, zoneId]);
 
-  const persistent = useMemo(
-    () => derivePersistentWorldState(events, location.canonical ? location.label : undefined),
-    [events, location]
+  const environmentalMemory = useMemo(
+    () =>
+      deriveEnvironmentalMemory({
+        events,
+        currentZoneId: zoneId,
+        adjacentZoneIds: adjacent,
+        currentRoomId: location.canonical ? location.label : undefined,
+        currentPressure,
+        currentAwareness,
+        nearbyMaxPressure,
+      }),
+    [events, zoneId, adjacent, location, currentPressure, currentAwareness, nearbyMaxPressure]
   );
 
-  // Pulse logic: only visual, derived
   const pressurePulse: "none" | "breathe" | "heartbeat" =
     currentPressure >= 70 ? "heartbeat" : currentPressure >= 25 ? "breathe" : "none";
 
-  // Dungeon Evolution (apex/dragon pacing + condition) — derived, advisory
   const evolution = useMemo(() => {
     return deriveDungeonEvolution({
       events: events as any,
@@ -541,7 +962,6 @@ export default function DungeonPressurePanel({ turn, currentRoomId, events, pars
     >
       <h3 style={{ marginBottom: 10 }}>🧭 Dungeon State (Advisory)</h3>
 
-      {/* Top grid: gauges */}
       <div
         style={{
           display: "grid",
@@ -559,7 +979,6 @@ export default function DungeonPressurePanel({ turn, currentRoomId, events, pars
         />
 
         <div style={{ display: "grid", gap: 12 }}>
-          {/* Location */}
           <div>
             <div style={{ fontWeight: 800 }}>
               📍 Location: <span style={{ opacity: 0.95 }}>{location.label}</span>
@@ -583,21 +1002,18 @@ export default function DungeonPressurePanel({ turn, currentRoomId, events, pars
             )}
           </div>
 
-          {/* Awareness meter */}
           <MeterBar
             value={currentAwareness}
             label={`Zone Awareness — ${awarenessStatus.label}`}
             sublabel={awarenessStatus.nextHint}
           />
 
-          {/* Nearby heat */}
           <MeterBar
             value={nearbyMaxPressure}
             label={`Nearby Heat — ${nearbyTier.tier}`}
             sublabel={`Max adjacent zone pressure: ${Math.round(nearbyMaxPressure)} (derived)`}
           />
 
-          {/* NEW: Dungeon evolution (dragon/apex pacing) */}
           <div
             style={{
               padding: 12,
@@ -634,7 +1050,6 @@ export default function DungeonPressurePanel({ turn, currentRoomId, events, pars
             </div>
           </div>
 
-          {/* Small status row */}
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap", fontSize: 12, opacity: 0.78 }}>
             <span>
               <strong>Turn:</strong> {turn}
@@ -651,23 +1066,36 @@ export default function DungeonPressurePanel({ turn, currentRoomId, events, pars
 
       <hr style={{ opacity: 0.2, margin: "14px 0" }} />
 
-      {/* Persistent memory */}
-      <div style={{ display: "grid", gap: 8 }}>
+      <div style={{ display: "grid", gap: 10 }}>
         <div style={{ fontWeight: 800 }}>🧱 Environmental Memory</div>
 
-        {persistent.length === 0 ? (
-          <div style={{ fontSize: 12, opacity: 0.72 }}>No notable persistent changes detected.</div>
-        ) : (
-          <ul style={{ margin: 0, paddingLeft: 18 }}>
-            {persistent.map((n, i) => (
-              <li key={i} style={{ fontSize: 12, opacity: 0.86, marginBottom: 4 }}>
-                {n}
-              </li>
-            ))}
-          </ul>
-        )}
+        {environmentalMemory.sections.map((section) => (
+          <div
+            key={section.title}
+            style={{
+              padding: 10,
+              borderRadius: 10,
+              border: "1px solid rgba(255,255,255,0.08)",
+              background: "rgba(255,255,255,0.03)",
+            }}
+          >
+            <div style={{ fontSize: 12, fontWeight: 800, opacity: 0.92, marginBottom: 6 }}>{section.title}</div>
 
-        <div style={{ display: "grid", gap: 4, marginTop: 8 }}>
+            {section.items.length === 0 ? (
+              <div style={{ fontSize: 12, opacity: 0.62 }}>{section.emptyLabel ?? "No notable state detected."}</div>
+            ) : (
+              <ul style={{ margin: 0, paddingLeft: 18 }}>
+                {section.items.map((n, i) => (
+                  <li key={`${section.title}-${i}`} style={{ fontSize: 12, opacity: 0.86, marginBottom: 4 }}>
+                    {n}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        ))}
+
+        <div style={{ display: "grid", gap: 4, marginTop: 2 }}>
           {advisoryNotes.map((n, i) => (
             <div key={i} style={{ fontSize: 11, opacity: 0.62 }}>
               {n}
