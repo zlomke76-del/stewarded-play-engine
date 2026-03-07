@@ -1,4 +1,3 @@
-// components/resolution/ResolutionDraftAdvisoryPanel.tsx
 "use client";
 
 // ------------------------------------------------------------
@@ -15,6 +14,12 @@
 // - Optional rollModifier applied to the rolled value for DC comparisons.
 //   This supports deterministic penalties like "Injury: -2 per stack"
 //   without changing existing callers.
+//
+// Premium UX upgrade:
+// - animated digital roll sequence
+// - roll / land / record SFX
+// - Solace Neutral mode is digital-roll only
+// - Human mode retains physical-roll acceptance path
 // ------------------------------------------------------------
 
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -118,7 +123,36 @@ function safeInt(n: unknown, fallback: number) {
   return Number.isFinite(x) ? Math.trunc(x) : fallback;
 }
 
+function maxForDiceMode(mode: DiceMode) {
+  return clampInt(Number(mode.slice(1)), 2, 100);
+}
+
+function playSfx(src: string, volume = 0.7) {
+  try {
+    const audio = new Audio(src);
+    audio.volume = volume;
+    void audio.play().catch(() => {
+      // fail silently
+    });
+  } catch {
+    // fail silently
+  }
+}
+
+function toneForMargin(margin: number) {
+  if (margin >= 6) return "decisive-success";
+  if (margin >= 0) return "success";
+  if (margin <= -6) return "hard-failure";
+  return "failure";
+}
+
 /* ------------------------------------------------------------ */
+
+const SFX = {
+  diceRoll: "/assets/audio/sfx_button_click_01.mp3",
+  diceLand: "/assets/audio/sfx_success_01.mp3",
+  recordOutcome: "/assets/audio/sfx_arbiter_cannon_record_01.mp3",
+} as const;
 
 export default function ResolutionDraftAdvisoryPanel({
   context,
@@ -137,8 +171,12 @@ export default function ResolutionDraftAdvisoryPanel({
   const [diceMode, setDiceMode] = useState<DiceMode>("d20");
   const [rawRoll, setRawRoll] = useState<number | null>(null);
   const [manualRoll, setManualRoll] = useState("");
+  const [isRolling, setIsRolling] = useState(false);
+  const [displayRoll, setDisplayRoll] = useState<number | null>(null);
 
   const committedRef = useRef(false);
+  const rollIntervalRef = useRef<number | null>(null);
+  const rollTimeoutRef = useRef<number | null>(null);
 
   // Draft narration (editable in human DM mode; read-only in Solace Neutral mode)
   const [draftText, setDraftText] = useState("");
@@ -146,35 +184,93 @@ export default function ResolutionDraftAdvisoryPanel({
   // Reset on new intent
   useEffect(() => {
     setRawRoll(null);
+    setDisplayRoll(null);
     setManualRoll("");
     setDraftText("");
+    setIsRolling(false);
     committedRef.current = false;
+
+    if (rollIntervalRef.current) {
+      window.clearInterval(rollIntervalRef.current);
+      rollIntervalRef.current = null;
+    }
+
+    if (rollTimeoutRef.current) {
+      window.clearTimeout(rollTimeoutRef.current);
+      rollTimeoutRef.current = null;
+    }
   }, [context.optionDescription]);
+
+  useEffect(() => {
+    return () => {
+      if (rollIntervalRef.current) {
+        window.clearInterval(rollIntervalRef.current);
+      }
+      if (rollTimeoutRef.current) {
+        window.clearTimeout(rollTimeoutRef.current);
+      }
+    };
+  }, []);
 
   /* ----------------------------------------------------------
      Dice handling
   ---------------------------------------------------------- */
 
   function rollDice() {
-    const max = clampInt(Number(diceMode.slice(1)), 2, 100);
-    setRawRoll(Math.ceil(Math.random() * max));
+    if (isRolling) return;
+
+    const max = maxForDiceMode(diceMode);
+    const finalRoll = Math.ceil(Math.random() * max);
+
+    setIsRolling(true);
+    setRawRoll(null);
+    setDisplayRoll(Math.ceil(Math.random() * max));
+    playSfx(SFX.diceRoll, 0.56);
+
+    let tickCount = 0;
+
+    rollIntervalRef.current = window.setInterval(() => {
+      tickCount += 1;
+      setDisplayRoll(Math.ceil(Math.random() * max));
+
+      if (tickCount === 4 || tickCount === 8) {
+        playSfx(SFX.diceRoll, 0.42);
+      }
+    }, 85);
+
+    rollTimeoutRef.current = window.setTimeout(() => {
+      if (rollIntervalRef.current) {
+        window.clearInterval(rollIntervalRef.current);
+        rollIntervalRef.current = null;
+      }
+
+      setDisplayRoll(finalRoll);
+      setRawRoll(finalRoll);
+      setIsRolling(false);
+      playSfx(SFX.diceLand, 0.72);
+    }, 900);
   }
 
   function acceptManualRoll() {
+    if (isSolaceNeutral) return;
+
     const r = Number(manualRoll);
     if (!Number.isInteger(r) || r <= 0) return;
+
     setRawRoll(r);
+    setDisplayRoll(r);
+    playSfx(SFX.diceLand, 0.6);
   }
 
   const effectiveRoll = useMemo(() => {
     if (rawRoll === null) return null;
-
-    // Apply modifier only when it matters most (d20 checks),
-    // but keep it generic for future flexibility.
-    // If you want it d20-only, replace with:
-    // return diceMode === "d20" ? rawRoll + rollModifier : rawRoll;
     return rawRoll + safeInt(rollModifier, 0);
   }, [rawRoll, rollModifier]);
+
+  const margin = useMemo(() => {
+    if (effectiveRoll === null) return null;
+    return effectiveRoll - dc;
+  }, [effectiveRoll, dc]);
 
   /* ----------------------------------------------------------
      Creative narration (NON-AUTHORITATIVE flavor)
@@ -185,9 +281,8 @@ export default function ResolutionDraftAdvisoryPanel({
   const generatedNarration = useMemo(() => {
     if (rawRoll === null || effectiveRoll === null) return "";
 
-    const margin = effectiveRoll - dc;
+    const localMargin = effectiveRoll - dc;
 
-    // Build truth anchors only when Solace Neutral is active
     const truth = isSolaceNeutral
       ? {
           setup: (setupText ?? "").trim() || undefined,
@@ -210,8 +305,8 @@ export default function ResolutionDraftAdvisoryPanel({
             roll: effectiveRoll,
             rawRoll,
             rollModifier: safeInt(rollModifier, 0),
-            margin,
-            success: margin >= 0,
+            margin: localMargin,
+            success: localMargin >= 0,
             optionKind: context.optionKind,
           },
         }
@@ -219,7 +314,7 @@ export default function ResolutionDraftAdvisoryPanel({
 
     return generateNarration({
       intentText: context.optionDescription,
-      margin,
+      margin: localMargin,
       lens: isSolaceNeutral ? "mythic" : "heroic",
       depth: isSolaceNeutral ? 2 : 1.5,
       truth,
@@ -237,9 +332,6 @@ export default function ResolutionDraftAdvisoryPanel({
     rollModifier,
   ]);
 
-  // Seed draft text:
-  // - Human DM mode: seed once, then allow edits
-  // - Solace Neutral mode: always keep aligned to generated narration (read-only)
   useEffect(() => {
     if (rawRoll === null) return;
 
@@ -258,7 +350,7 @@ export default function ResolutionDraftAdvisoryPanel({
   ---------------------------------------------------------- */
 
   function handleRecord() {
-    if (rawRoll === null || effectiveRoll === null || committedRef.current) return;
+    if (rawRoll === null || effectiveRoll === null || committedRef.current || isRolling) return;
     committedRef.current = true;
 
     const source: RollSource = manualRoll ? "manual" : "solace";
@@ -266,7 +358,6 @@ export default function ResolutionDraftAdvisoryPanel({
     const audit: string[] = [];
     audit.push("Drafted by CreativeNarrator");
 
-    // Always capture mechanical transparency (raw vs effective)
     const mod = safeInt(rollModifier, 0);
     if (mod !== 0) {
       const modLabel = (rollModifierLabel ?? "").trim();
@@ -280,10 +371,14 @@ export default function ResolutionDraftAdvisoryPanel({
 
     if (isSolaceNeutral) {
       audit.push("Presented as Solace (Neutral Facilitator) Arbiter narration (read-only)");
+      audit.push("Digital roll path only");
       audit.push("Recorded by Arbiter");
     } else {
+      audit.push(manualRoll ? "Physical roll accepted by Arbiter" : "Digital roll used");
       audit.push("Edited by Arbiter");
     }
+
+    playSfx(SFX.recordOutcome, 0.74);
 
     onRecord({
       description: draftText.trim(),
@@ -299,150 +394,475 @@ export default function ResolutionDraftAdvisoryPanel({
     rawRoll !== null &&
     (!!setupText || !!movement?.from || !!movement?.to || !!combat?.activeEnemyGroupName);
 
+  const resultTone =
+    margin === null ? "pending" : toneForMargin(margin);
+
+  const resultToneStyle: React.CSSProperties =
+    resultTone === "decisive-success"
+      ? {
+          border: "1px solid rgba(120,190,140,0.28)",
+          background: "rgba(120,190,140,0.10)",
+        }
+      : resultTone === "success"
+        ? {
+            border: "1px solid rgba(120,170,255,0.24)",
+            background: "rgba(120,170,255,0.09)",
+          }
+        : resultTone === "hard-failure"
+          ? {
+              border: "1px solid rgba(220,120,120,0.28)",
+              background: "rgba(220,120,120,0.10)",
+            }
+          : resultTone === "failure"
+            ? {
+                border: "1px solid rgba(255,196,118,0.22)",
+                background: "rgba(255,196,118,0.08)",
+              }
+            : {
+                border: "1px solid rgba(255,255,255,0.10)",
+                background: "rgba(255,255,255,0.04)",
+              };
+
   return (
     <section
       style={{
-        border: "1px dashed #666",
-        padding: 16,
+        borderRadius: 18,
+        border: "1px solid rgba(255,255,255,0.10)",
+        background:
+          "radial-gradient(circle at top, rgba(255,194,116,0.06), transparent 24%), linear-gradient(180deg, rgba(17,17,17,0.92), rgba(10,10,10,0.88))",
+        boxShadow: "inset 0 1px 0 rgba(255,255,255,0.04), 0 18px 40px rgba(0,0,0,0.24)",
+        padding: 18,
       }}
     >
-      <h3>Resolution Draft</h3>
+      <div style={{ display: "grid", gap: 16 }}>
+        <div style={{ display: "grid", gap: 6 }}>
+          <div style={{ fontSize: 22, fontWeight: 900, letterSpacing: 0.2 }}>
+            Adjudication
+          </div>
+          <div style={{ fontSize: 13, opacity: 0.76, lineHeight: 1.6 }}>
+            Fate now weighs the intent against the danger of the moment.
+          </div>
+        </div>
 
-      <p className="muted">Difficulty {dc}</p>
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "minmax(0, 1fr) auto",
+            gap: 14,
+            alignItems: "start",
+          }}
+        >
+          <div
+            style={{
+              padding: "12px 14px",
+              borderRadius: 14,
+              border: "1px solid rgba(255,255,255,0.10)",
+              background: "rgba(255,255,255,0.04)",
+            }}
+          >
+            <div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: 0.6, opacity: 0.62 }}>
+              Resolution Context
+            </div>
+            <div style={{ marginTop: 8, fontSize: 14, lineHeight: 1.65, opacity: 0.92 }}>
+              {context.optionDescription}
+            </div>
+          </div>
 
-      <label>
-        Dice:
-        <select value={diceMode} onChange={(e) => setDiceMode(e.target.value as DiceMode)}>
-          <option>d4</option>
-          <option>d6</option>
-          <option>d8</option>
-          <option>d10</option>
-          <option>d12</option>
-          <option>d20</option>
-        </select>
-      </label>
+          <div
+            style={{
+              minWidth: 160,
+              padding: "12px 14px",
+              borderRadius: 14,
+              border: "1px solid rgba(255,255,255,0.10)",
+              background: "rgba(255,255,255,0.04)",
+            }}
+          >
+            <div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: 0.6, opacity: 0.62 }}>
+              Difficulty
+            </div>
+            <div style={{ marginTop: 8, fontSize: 28, fontWeight: 900 }}>DC {dc}</div>
+            <div style={{ marginTop: 4, fontSize: 12, opacity: 0.7 }}>
+              {context.optionKind ? `Tone: ${context.optionKind}` : "Standard challenge"}
+            </div>
+          </div>
+        </div>
 
-      <div style={{ marginTop: 8 }}>
-        <button onClick={rollDice}>Roll Here</button>
-      </div>
-
-      <div style={{ marginTop: 8 }}>
-        <input
-          placeholder="Enter physical roll"
-          value={manualRoll}
-          onChange={(e) => setManualRoll(e.target.value)}
-        />
-        <button onClick={acceptManualRoll}>Accept Roll</button>
-      </div>
-
-      {rawRoll !== null && (
-        <p>
-          🎲 {diceMode} rolled <strong>{rawRoll}</strong>
-          {safeInt(rollModifier, 0) !== 0 && effectiveRoll !== null && (
-            <>
-              {" "}
-              <span className="muted">
-                (modifier {safeInt(rollModifier, 0) >= 0 ? `+${safeInt(rollModifier, 0)}` : `${safeInt(rollModifier, 0)}`}
-                {rollModifierLabel ? ` · ${rollModifierLabel}` : ""})
-              </span>{" "}
-              → effective <strong>{effectiveRoll}</strong>
-            </>
-          )}{" "}
-          vs DC <strong>{dc}</strong>
-        </p>
-      )}
-
-      {rawRoll !== null && (
-        <>
-          {isSolaceNeutral ? (
-            <>
-              <div className="muted" style={{ marginTop: 10, marginBottom: 6, fontSize: 12 }}>
-                Arbiter Narration — <strong>Solace (Neutral Facilitator)</strong>{" "}
-                <span style={{ opacity: 0.75 }}>(read-only)</span>
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "minmax(0, 1fr) 220px",
+            gap: 16,
+            alignItems: "stretch",
+          }}
+        >
+          <div
+            style={{
+              padding: "14px 16px",
+              borderRadius: 16,
+              border: "1px solid rgba(255,255,255,0.10)",
+              background: "rgba(0,0,0,0.22)",
+              display: "grid",
+              gap: 14,
+            }}
+          >
+            <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+              <div>
+                <div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: 0.6, opacity: 0.62 }}>
+                  Roll Method
+                </div>
+                <div style={{ marginTop: 6, fontSize: 14, fontWeight: 700 }}>
+                  {isSolaceNeutral ? "Digital roll only" : "Digital or physical roll"}
+                </div>
               </div>
 
-              <div
+              <div>
+                <div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: 0.6, opacity: 0.62 }}>
+                  Dice
+                </div>
+                <div style={{ marginTop: 6 }}>
+                  <select
+                    value={diceMode}
+                    onChange={(e) => setDiceMode(e.target.value as DiceMode)}
+                    disabled={isRolling}
+                    style={{
+                      padding: "10px 12px",
+                      borderRadius: 10,
+                      border: "1px solid rgba(255,255,255,0.12)",
+                      background: "rgba(255,255,255,0.06)",
+                      color: "inherit",
+                    }}
+                  >
+                    <option>d4</option>
+                    <option>d6</option>
+                    <option>d8</option>
+                    <option>d10</option>
+                    <option>d12</option>
+                    <option>d20</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+              <button
+                onClick={rollDice}
+                disabled={isRolling}
                 style={{
-                  border: "1px solid rgba(255,255,255,0.12)",
-                  borderRadius: 10,
-                  padding: "10px 12px",
-                  background: "rgba(0,0,0,0.35)",
-                  whiteSpace: "pre-wrap",
-                  lineHeight: 1.55,
+                  padding: "10px 14px",
+                  borderRadius: 12,
+                  border: "1px solid rgba(255,196,118,0.28)",
+                  background: isRolling
+                    ? "linear-gradient(180deg, rgba(107,89,69,0.7), rgba(74,55,39,0.74))"
+                    : "linear-gradient(180deg, rgba(255,201,116,0.98), rgba(218,132,47,0.98))",
+                  color: isRolling ? "rgba(244,227,201,0.75)" : "#2f1606",
+                  boxShadow: isRolling
+                    ? "none"
+                    : "0 10px 28px rgba(255,145,42,0.16), inset 0 1px 0 rgba(255,244,220,0.72)",
+                  fontWeight: 900,
+                  cursor: isRolling ? "not-allowed" : "pointer",
                 }}
               >
-                {draftText || generatedNarration || "—"}
+                {isRolling ? "Rolling..." : "Roll Fate"}
+              </button>
+
+              {!isSolaceNeutral && (
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                  <input
+                    placeholder="Enter physical roll"
+                    value={manualRoll}
+                    onChange={(e) => setManualRoll(e.target.value)}
+                    disabled={isRolling}
+                    style={{
+                      minWidth: 170,
+                      padding: "10px 12px",
+                      borderRadius: 10,
+                      border: "1px solid rgba(255,255,255,0.12)",
+                      background: "rgba(255,255,255,0.06)",
+                      color: "inherit",
+                      outline: "none",
+                    }}
+                  />
+                  <button
+                    onClick={acceptManualRoll}
+                    disabled={isRolling}
+                    style={{
+                      padding: "10px 12px",
+                      borderRadius: 10,
+                      border: "1px solid rgba(255,255,255,0.12)",
+                      background: "rgba(255,255,255,0.06)",
+                      color: "inherit",
+                      cursor: isRolling ? "not-allowed" : "pointer",
+                    }}
+                  >
+                    Accept Physical Roll
+                  </button>
+                </div>
+              )}
+            </div>
+
+            <div
+              style={{
+                ...resultToneStyle,
+                padding: "14px 16px",
+                borderRadius: 14,
+                display: "grid",
+                gap: 10,
+              }}
+            >
+              <div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: 0.6, opacity: 0.68 }}>
+                Fate Result
               </div>
 
-              <div style={{ marginTop: 6, fontSize: 11, opacity: 0.75 }}>
-                Narration is read-only in Solace Neutral mode.
-              </div>
+              <div style={{ display: "flex", gap: 16, alignItems: "baseline", flexWrap: "wrap" }}>
+                <div
+                  style={{
+                    fontSize: 46,
+                    fontWeight: 950,
+                    lineHeight: 1,
+                    minWidth: 56,
+                    transform: isRolling ? "scale(1.06) rotate(-2deg)" : "scale(1)",
+                    transition: "transform 120ms ease",
+                    textShadow: isRolling ? "0 0 18px rgba(255,196,118,0.16)" : "none",
+                  }}
+                >
+                  {displayRoll ?? "—"}
+                </div>
 
-              {showAnchors && (
-                <details style={{ marginTop: 10 }}>
-                  <summary style={{ cursor: "pointer", opacity: 0.9 }}>
-                    Truth anchors (why the narration says what it says)
-                  </summary>
-                  <div style={{ marginTop: 8, fontSize: 12, opacity: 0.85, lineHeight: 1.5 }}>
-                    {!!setupText && (
-                      <div style={{ marginBottom: 6 }}>
-                        <strong>Setup:</strong> {String(setupText).slice(0, 240)}
-                        {String(setupText).length > 240 ? "…" : ""}
-                      </div>
-                    )}
+                <div style={{ display: "grid", gap: 4 }}>
+                  <div style={{ fontSize: 14, opacity: 0.84 }}>
+                    {rawRoll === null
+                      ? "Awaiting roll."
+                      : safeInt(rollModifier, 0) !== 0 && effectiveRoll !== null
+                        ? `Raw ${rawRoll} ${safeInt(rollModifier, 0) >= 0 ? "+" : ""}${safeInt(rollModifier, 0)} → Effective ${effectiveRoll}`
+                        : `Effective roll ${effectiveRoll}`}
+                  </div>
 
-                    {(movement?.from || movement?.to) && (
-                      <div style={{ marginBottom: 6 }}>
-                        <strong>Movement:</strong>{" "}
-                        {movement?.from ? `(${movement.from.x},${movement.from.y})` : "(?)"}{" "}
-                        {movement?.direction && movement.direction !== "none" ? `→ ${movement.direction}` : ""}
-                        {"  "}
-                        {movement?.to ? `(${movement.to.x},${movement.to.y})` : "(?)"}
-                      </div>
-                    )}
-
-                    {!!combat?.activeEnemyGroupName && (
-                      <div style={{ marginBottom: 6 }}>
-                        <strong>Combat:</strong> {combat.activeEnemyGroupName}
-                        {combat.isEnemyTurn ? " (enemy turn)" : ""}
-                      </div>
-                    )}
-
-                    <div>
-                      <strong>Mechanics:</strong>{" "}
-                      {effectiveRoll !== null ? (
+                  {rawRoll !== null && effectiveRoll !== null && (
+                    <div style={{ fontSize: 13, opacity: 0.8 }}>
+                      vs DC <strong>{dc}</strong>{" "}
+                      {margin !== null && (
                         <>
-                          margin {effectiveRoll - dc >= 0 ? "+" : ""}
-                          {effectiveRoll - dc} (effective {effectiveRoll} vs DC {dc}
-                          {safeInt(rollModifier, 0) !== 0 ? `; raw ${rawRoll}` : ""})
+                          · Margin{" "}
+                          <strong>
+                            {margin >= 0 ? "+" : ""}
+                            {margin}
+                          </strong>
                         </>
-                      ) : (
-                        <>—</>
                       )}
                     </div>
-                  </div>
-                </details>
-              )}
-            </>
-          ) : (
-            <>
-              <label className="muted">Narration (editable)</label>
-              <textarea
-                rows={4}
-                value={draftText}
-                onChange={(e) => setDraftText(e.target.value)}
-                style={{ width: "100%" }}
-              />
-            </>
-          )}
-        </>
-      )}
+                  )}
 
-      {role === "arbiter" && (
-        <button onClick={handleRecord} disabled={rawRoll === null}>
-          Record Outcome
-        </button>
-      )}
+                  {safeInt(rollModifier, 0) !== 0 && (
+                    <div style={{ fontSize: 12, opacity: 0.72 }}>
+                      Modifier {safeInt(rollModifier, 0) >= 0 ? "+" : ""}
+                      {safeInt(rollModifier, 0)}
+                      {rollModifierLabel ? ` · ${rollModifierLabel}` : ""}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div
+            style={{
+              padding: "16px 14px",
+              borderRadius: 16,
+              border: "1px solid rgba(255,255,255,0.10)",
+              background: "rgba(0,0,0,0.22)",
+              display: "grid",
+              placeItems: "center",
+            }}
+          >
+            <div
+              style={{
+                width: 126,
+                height: 126,
+                borderRadius: 22,
+                border: "1px solid rgba(255,196,118,0.22)",
+                background:
+                  "radial-gradient(circle at 30% 25%, rgba(255,220,160,0.18), rgba(255,196,118,0.05) 36%, rgba(0,0,0,0.18) 72%)",
+                boxShadow: isRolling
+                  ? "0 0 0 6px rgba(255,196,118,0.04), 0 0 28px rgba(255,196,118,0.14)"
+                  : "0 0 0 4px rgba(255,196,118,0.03)",
+                display: "grid",
+                placeItems: "center",
+                transform: isRolling ? "rotate(10deg) scale(1.04)" : "rotate(0deg) scale(1)",
+                transition: "transform 120ms ease, box-shadow 120ms ease",
+              }}
+            >
+              <div
+                style={{
+                  width: 86,
+                  height: 86,
+                  borderRadius: 18,
+                  border: "1px solid rgba(255,255,255,0.12)",
+                  background: "rgba(0,0,0,0.34)",
+                  display: "grid",
+                  placeItems: "center",
+                  fontSize: 34,
+                  fontWeight: 950,
+                }}
+              >
+                {displayRoll ?? "?"}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {rawRoll !== null && (
+          <>
+            {isSolaceNeutral ? (
+              <>
+                <div
+                  style={{
+                    padding: "12px 14px",
+                    borderRadius: 14,
+                    border: "1px solid rgba(255,255,255,0.10)",
+                    background: "rgba(255,255,255,0.04)",
+                  }}
+                >
+                  <div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: 0.6, opacity: 0.62 }}>
+                    Arbiter Narration
+                  </div>
+                  <div style={{ marginTop: 8, fontSize: 12, opacity: 0.78 }}>
+                    Solace (Neutral Facilitator) · Read-only
+                  </div>
+
+                  <div
+                    style={{
+                      marginTop: 10,
+                      border: "1px solid rgba(255,255,255,0.10)",
+                      borderRadius: 12,
+                      padding: "12px 14px",
+                      background: "rgba(0,0,0,0.28)",
+                      whiteSpace: "pre-wrap",
+                      lineHeight: 1.65,
+                    }}
+                  >
+                    {draftText || generatedNarration || "—"}
+                  </div>
+
+                  <div style={{ marginTop: 8, fontSize: 11, opacity: 0.7 }}>
+                    Narration is read-only in Solace-neutral mode.
+                  </div>
+
+                  {showAnchors && (
+                    <details style={{ marginTop: 12 }}>
+                      <summary style={{ cursor: "pointer", opacity: 0.9 }}>
+                        Truth anchors
+                      </summary>
+                      <div style={{ marginTop: 8, fontSize: 12, opacity: 0.85, lineHeight: 1.55 }}>
+                        {!!setupText && (
+                          <div style={{ marginBottom: 6 }}>
+                            <strong>Setup:</strong> {String(setupText).slice(0, 240)}
+                            {String(setupText).length > 240 ? "…" : ""}
+                          </div>
+                        )}
+
+                        {(movement?.from || movement?.to) && (
+                          <div style={{ marginBottom: 6 }}>
+                            <strong>Movement:</strong>{" "}
+                            {movement?.from ? `(${movement.from.x},${movement.from.y})` : "(?)"}{" "}
+                            {movement?.direction && movement.direction !== "none" ? `→ ${movement.direction}` : ""}
+                            {"  "}
+                            {movement?.to ? `(${movement.to.x},${movement.to.y})` : "(?)"}
+                          </div>
+                        )}
+
+                        {!!combat?.activeEnemyGroupName && (
+                          <div style={{ marginBottom: 6 }}>
+                            <strong>Combat:</strong> {combat.activeEnemyGroupName}
+                            {combat.isEnemyTurn ? " (enemy turn)" : ""}
+                          </div>
+                        )}
+
+                        <div>
+                          <strong>Mechanics:</strong>{" "}
+                          {effectiveRoll !== null ? (
+                            <>
+                              margin {effectiveRoll - dc >= 0 ? "+" : ""}
+                              {effectiveRoll - dc} (effective {effectiveRoll} vs DC {dc}
+                              {safeInt(rollModifier, 0) !== 0 ? `; raw ${rawRoll}` : ""})
+                            </>
+                          ) : (
+                            <>—</>
+                          )}
+                        </div>
+                      </div>
+                    </details>
+                  )}
+                </div>
+              </>
+            ) : (
+              <div
+                style={{
+                  padding: "12px 14px",
+                  borderRadius: 14,
+                  border: "1px solid rgba(255,255,255,0.10)",
+                  background: "rgba(255,255,255,0.04)",
+                  display: "grid",
+                  gap: 8,
+                }}
+              >
+                <div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: 0.6, opacity: 0.62 }}>
+                  Narration
+                </div>
+                <div style={{ fontSize: 12, opacity: 0.76 }}>
+                  Arbiter-editable in Human mode
+                </div>
+                <textarea
+                  rows={5}
+                  value={draftText}
+                  onChange={(e) => setDraftText(e.target.value)}
+                  style={{
+                    width: "100%",
+                    boxSizing: "border-box",
+                    borderRadius: 12,
+                    border: "1px solid rgba(255,255,255,0.10)",
+                    background: "rgba(0,0,0,0.28)",
+                    color: "inherit",
+                    padding: "12px 12px",
+                    lineHeight: 1.6,
+                    resize: "vertical",
+                    outline: "none",
+                  }}
+                />
+              </div>
+            )}
+          </>
+        )}
+
+        {role === "arbiter" && (
+          <div style={{ display: "flex", justifyContent: "flex-end" }}>
+            <button
+              onClick={handleRecord}
+              disabled={rawRoll === null || isRolling}
+              style={{
+                padding: "11px 16px",
+                borderRadius: 12,
+                border: "1px solid rgba(255,196,118,0.28)",
+                background:
+                  rawRoll === null || isRolling
+                    ? "linear-gradient(180deg, rgba(107,89,69,0.7), rgba(74,55,39,0.74))"
+                    : "linear-gradient(180deg, rgba(255,201,116,0.98), rgba(218,132,47,0.98))",
+                color:
+                  rawRoll === null || isRolling
+                    ? "rgba(244,227,201,0.75)"
+                    : "#2f1606",
+                boxShadow:
+                  rawRoll === null || isRolling
+                    ? "none"
+                    : "0 10px 28px rgba(255,145,42,0.16), inset 0 1px 0 rgba(255,244,220,0.72)",
+                fontWeight: 900,
+                cursor: rawRoll === null || isRolling ? "not-allowed" : "pointer",
+              }}
+            >
+              Record Outcome
+            </button>
+          </div>
+        )}
+      </div>
     </section>
   );
 }
