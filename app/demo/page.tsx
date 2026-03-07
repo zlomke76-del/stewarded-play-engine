@@ -72,6 +72,7 @@ import CardSection from "@/components/layout/CardSection";
 
 import { deriveCombatState, findLatestCombatId, nextTurnPointer } from "@/lib/combat/CombatState";
 import { resolvePartyLoadout } from "@/lib/skills/loadoutResolver";
+import { deriveDiscoveryEvents } from "@/lib/world/ExplorationDiscovery";
 
 import AmbientBackground from "./components/AmbientBackground";
 import InitialTableSection from "./components/InitialTableSection";
@@ -991,7 +992,12 @@ export default function DemoPage() {
     const to = d.enableMove && d.direction !== "none" ? stepFrom(here, d.direction) : null;
     const canMove = to ? withinBounds(to, MAP_W, MAP_H) : false;
 
+    let movedTo: { x: number; y: number } | null = null;
+    let revealedTiles: Array<{ x: number; y: number }> = [];
+
     if (d.enableMove && canMove && to) {
+      movedTo = to;
+
       next = recordEvent(next, {
         id: crypto.randomUUID(),
         timestamp: Date.now(),
@@ -1001,12 +1007,14 @@ export default function DemoPage() {
       });
 
       if (d.enableReveal && d.revealRadius > 0) {
+        revealedTiles = revealRadius(to, d.revealRadius, MAP_W, MAP_H);
+
         next = recordEvent(next, {
           id: crypto.randomUUID(),
           timestamp: Date.now(),
           actor: "arbiter",
           type: "MAP_REVEALED",
-          payload: { tiles: revealRadius(to, d.revealRadius, MAP_W, MAP_H) } as any,
+          payload: { tiles: revealedTiles } as any,
         });
       }
 
@@ -1021,16 +1029,36 @@ export default function DemoPage() {
         });
       }
 
+      const discoveryDrafts = deriveDiscoveryEvents({
+        events: next.events as any[],
+        movedTo,
+        revealedTiles,
+        mapW: MAP_W,
+        mapH: MAP_H,
+      });
+
+      for (const draft of discoveryDrafts) {
+        next = recordEvent(next, {
+          id: crypto.randomUUID(),
+          timestamp: Date.now(),
+          actor: "arbiter",
+          type: draft.type,
+          payload: draft.payload as any,
+        });
+      }
+
       return next;
     }
 
     if (d.enableReveal && d.revealRadius > 0) {
+      revealedTiles = revealRadius(here, d.revealRadius, MAP_W, MAP_H);
+
       next = recordEvent(next, {
         id: crypto.randomUUID(),
         timestamp: Date.now(),
         actor: "arbiter",
         type: "MAP_REVEALED",
-        payload: { tiles: revealRadius(here, d.revealRadius, MAP_W, MAP_H) } as any,
+        payload: { tiles: revealedTiles } as any,
       });
     }
 
@@ -1042,6 +1070,24 @@ export default function DemoPage() {
         actor: "arbiter",
         type: "MAP_MARKED",
         payload: { at: here, kind: d.markKind, note } as any,
+      });
+    }
+
+    const discoveryDrafts = deriveDiscoveryEvents({
+      events: next.events as any[],
+      movedTo: null,
+      revealedTiles,
+      mapW: MAP_W,
+      mapH: MAP_H,
+    });
+
+    for (const draft of discoveryDrafts) {
+      next = recordEvent(next, {
+        id: crypto.randomUUID(),
+        timestamp: Date.now(),
+        actor: "arbiter",
+        type: draft.type,
+        payload: draft.payload as any,
       });
     }
 
