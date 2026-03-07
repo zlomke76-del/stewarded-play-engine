@@ -8,6 +8,7 @@ import { getSpeciesTraitDefinition } from "@/lib/skills/speciesTraitMap";
 import { resolvePartyLoadout } from "@/lib/skills/loadoutResolver";
 
 type PortraitType = "Male" | "Female";
+type BuildFocus = "balanced" | "guardian" | "swift" | "hardy";
 
 type PartyMember = {
   id: string;
@@ -55,6 +56,17 @@ const SAFE_SPECIES = [
   "Tiefling",
   "Dragonborn",
 ] as const;
+
+const BUILD_FOCUS_OPTIONS: Array<{
+  id: BuildFocus;
+  label: string;
+  hint: string;
+}> = [
+  { id: "balanced", label: "Balanced", hint: "Steady all-around profile." },
+  { id: "guardian", label: "Guardian", hint: "Higher AC, lower speed." },
+  { id: "swift", label: "Swift", hint: "Higher initiative, lighter defense." },
+  { id: "hardy", label: "Hardy", hint: "More vitality for longer fights." },
+];
 
 const SFX = {
   buttonClick: "/assets/audio/sfx_button_click_01.mp3",
@@ -113,6 +125,66 @@ function getResolvedLoadout(row: PartyMember) {
     resolvedClass,
     resolvedSpecies,
   };
+}
+
+function getBaseStatsForClass(className: string) {
+  const table: Record<string, { ac: number; hpMax: number; initiativeMod: number }> = {
+    Warrior: { ac: 14, hpMax: 14, initiativeMod: 1 },
+    Rogue: { ac: 13, hpMax: 11, initiativeMod: 3 },
+    Mage: { ac: 11, hpMax: 9, initiativeMod: 1 },
+    Cleric: { ac: 13, hpMax: 12, initiativeMod: 0 },
+    Ranger: { ac: 13, hpMax: 12, initiativeMod: 2 },
+    Paladin: { ac: 15, hpMax: 14, initiativeMod: 0 },
+    Bard: { ac: 12, hpMax: 10, initiativeMod: 2 },
+    Druid: { ac: 12, hpMax: 10, initiativeMod: 1 },
+    Monk: { ac: 13, hpMax: 11, initiativeMod: 3 },
+    Artificer: { ac: 13, hpMax: 11, initiativeMod: 1 },
+    Barbarian: { ac: 13, hpMax: 15, initiativeMod: 1 },
+    Sorcerer: { ac: 11, hpMax: 9, initiativeMod: 2 },
+    Warlock: { ac: 12, hpMax: 10, initiativeMod: 1 },
+  };
+
+  return table[className] ?? { ac: 14, hpMax: 12, initiativeMod: 1 };
+}
+
+function applyBuildFocusToStats(
+  base: { ac: number; hpMax: number; initiativeMod: number },
+  focus: BuildFocus
+) {
+  if (focus === "guardian") {
+    return {
+      ac: Math.min(18, base.ac + 1),
+      hpMax: base.hpMax,
+      initiativeMod: Math.max(-2, base.initiativeMod - 1),
+    };
+  }
+
+  if (focus === "swift") {
+    return {
+      ac: Math.max(10, base.ac - 1),
+      hpMax: base.hpMax,
+      initiativeMod: Math.min(6, base.initiativeMod + 2),
+    };
+  }
+
+  if (focus === "hardy") {
+    return {
+      ac: base.ac,
+      hpMax: base.hpMax + 2,
+      initiativeMod: base.initiativeMod,
+    };
+  }
+
+  return base;
+}
+
+function inferBuildFocus(row: PartyMember, resolvedClass: string): BuildFocus {
+  const base = getBaseStatsForClass(resolvedClass);
+
+  if (row.initiativeMod >= base.initiativeMod + 2) return "swift";
+  if (row.hpMax >= base.hpMax + 2) return "hardy";
+  if (row.ac >= base.ac + 1 && row.initiativeMod <= base.initiativeMod - 1) return "guardian";
+  return "balanced";
 }
 
 function SectionPill({
@@ -221,7 +293,6 @@ export default function PartySetupSection(props: {
     setPartySize,
     randomizePartyNames,
     commitParty,
-    safeInt,
     setPartyDraft,
   } = props;
 
@@ -273,9 +344,31 @@ export default function PartySetupSection(props: {
 
   function setClass(idx: number, row: PartyMember, nextClassName: string) {
     const next = resolvePartyLoadout(nextClassName || "Warrior", row.species || "Human");
+    const resolvedClass = getResolvedClass(nextClassName || "Warrior");
+    const focus = inferBuildFocus(row, getResolvedClass(row.className || "Warrior"));
+    const focusedStats = applyBuildFocusToStats(getBaseStatsForClass(resolvedClass), focus);
+
     setMemberField(idx, {
       className: nextClassName,
       skills: next.skillIds,
+      ac: focusedStats.ac,
+      hpMax: focusedStats.hpMax,
+      hpCurrent: focusedStats.hpMax,
+      initiativeMod: focusedStats.initiativeMod,
+    });
+  }
+
+  function setBuildFocus(idx: number, row: PartyMember, focus: BuildFocus) {
+    const resolvedClass = getResolvedClass(row.className || "Warrior");
+    const base = getBaseStatsForClass(resolvedClass);
+    const nextStats = applyBuildFocusToStats(base, focus);
+
+    playSfx(SFX.buttonClick, 0.54);
+    setMemberField(idx, {
+      ac: nextStats.ac,
+      hpMax: nextStats.hpMax,
+      hpCurrent: nextStats.hpMax,
+      initiativeMod: nextStats.initiativeMod,
     });
   }
 
@@ -308,12 +401,6 @@ export default function PartySetupSection(props: {
     background: "rgba(255,255,255,0.06)",
     color: "inherit",
     outline: "none",
-  };
-
-  const numberInputStyle: React.CSSProperties = {
-    ...inputStyle,
-    textAlign: "center",
-    padding: "10px 8px",
   };
 
   const tagStyle: React.CSSProperties = {
@@ -353,8 +440,8 @@ export default function PartySetupSection(props: {
                 Assemble the Party
               </div>
               <div style={{ marginTop: 6, fontSize: 14, opacity: 0.82, maxWidth: 820, lineHeight: 1.6 }}>
-                Declare the adventurers once. This roster becomes session truth for identity, class,
-                species, and combat-ready stats. After you commit, the party is bound to canon.
+                Declare the adventurers once. Identity comes first: portrait, name, species, class, and
+                build focus. Stats are then shaped through that role rather than raw freeform tuning.
               </div>
 
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 12 }}>
@@ -626,6 +713,7 @@ export default function PartySetupSection(props: {
                         : SAFE_CLASS_ARCHETYPES.find((x) => x.toLowerCase() === classValue.toLowerCase()) ?? "";
 
                   const { resolvedSpecies, resolvedClass, skillIds, traitIds } = getResolvedLoadout(row);
+                  const currentFocus = inferBuildFocus(row, resolvedClass);
 
                   const portraitPath = getPortraitPath(resolvedSpecies, resolvedClass, row?.portrait ?? "Male");
                   const skillLabels = skillIds.map((skillId) => getSkillDefinition(skillId)?.label ?? skillId);
@@ -767,68 +855,29 @@ export default function PartySetupSection(props: {
 
                             <div>
                               <TinyLabel>Armor Class</TinyLabel>
-                              <input
-                                value={String(row?.ac ?? 14)}
-                                disabled={!editable}
-                                onChange={(e) => setMemberField(idx, { ac: safeInt(e.target.value, 14, 1, 40) })}
-                                inputMode="numeric"
-                                style={numberInputStyle}
-                              />
+                              <StatChip label="AC" value={row?.ac ?? 14} />
                             </div>
 
                             <div>
                               <TinyLabel>HP</TinyLabel>
-                              <input
-                                value={String(row?.hpCurrent ?? 12)}
-                                disabled={!editable}
-                                onChange={(e) =>
-                                  setMemberField(idx, { hpCurrent: safeInt(e.target.value, 12, 0, 999) })
-                                }
-                                inputMode="numeric"
-                                style={numberInputStyle}
-                              />
+                              <StatChip label="HP" value={row?.hpCurrent ?? 12} />
                             </div>
 
                             <div>
                               <TinyLabel>HP Max</TinyLabel>
-                              <input
-                                value={String(row?.hpMax ?? 12)}
-                                disabled={!editable}
-                                onChange={(e) => {
-                                  const v = safeInt(e.target.value, 12, 1, 999);
-                                  setPartyDraft((prev) => {
-                                    if (!prev) return prev;
-                                    const next = { ...prev, members: prev.members.map((x) => ({ ...x })) };
-                                    next.members[idx].hpMax = v;
-                                    if (next.members[idx].hpCurrent > v) next.members[idx].hpCurrent = v;
-                                    return next;
-                                  });
-                                }}
-                                inputMode="numeric"
-                                style={numberInputStyle}
-                              />
+                              <StatChip label="HP Max" value={row?.hpMax ?? 12} />
                             </div>
 
                             <div>
                               <TinyLabel>Initiative</TinyLabel>
-                              <input
-                                value={String(row?.initiativeMod ?? 1)}
-                                disabled={!editable}
-                                onChange={(e) =>
-                                  setMemberField(idx, {
-                                    initiativeMod: safeInt(e.target.value, 1, -10, 20),
-                                  })
-                                }
-                                inputMode="numeric"
-                                style={numberInputStyle}
-                              />
+                              <StatChip label="Init" value={row?.initiativeMod ?? 1} />
                             </div>
                           </div>
 
                           <div
                             style={{
                               display: "grid",
-                              gridTemplateColumns: "minmax(180px, 1fr) minmax(180px, 1fr) auto",
+                              gridTemplateColumns: "minmax(180px, 1fr) minmax(180px, 1fr)",
                               gap: 12,
                               alignItems: "start",
                             }}
@@ -931,19 +980,57 @@ export default function PartySetupSection(props: {
                                 />
                               )}
                             </div>
+                          </div>
 
-                            <div
-                              style={{
-                                display: "grid",
-                                gridTemplateColumns: "repeat(4, minmax(72px, auto))",
-                                gap: 8,
-                                alignSelf: "end",
-                              }}
-                            >
-                              <StatChip label="AC" value={row?.ac ?? 14} />
-                              <StatChip label="HP" value={row?.hpCurrent ?? 12} />
-                              <StatChip label="HP Max" value={row?.hpMax ?? 12} />
-                              <StatChip label="Init" value={row?.initiativeMod ?? 1} />
+                          <div
+                            style={{
+                              padding: "12px 14px",
+                              borderRadius: 12,
+                              border: "1px solid rgba(255,255,255,0.08)",
+                              background: "rgba(255,255,255,0.03)",
+                            }}
+                          >
+                            <TinyLabel>Build Focus</TinyLabel>
+
+                            <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                              {BUILD_FOCUS_OPTIONS.map((option) => {
+                                const active = currentFocus === option.id;
+                                return (
+                                  <button
+                                    key={option.id}
+                                    type="button"
+                                    onClick={() => {
+                                      if (!editable) {
+                                        playSfx(SFX.uiFailure, 0.5);
+                                        return;
+                                      }
+                                      setBuildFocus(idx, row, option.id);
+                                    }}
+                                    disabled={!editable}
+                                    title={option.hint}
+                                    style={{
+                                      ...controlButtonBase,
+                                      padding: "8px 10px",
+                                      fontSize: 12,
+                                      border: active
+                                        ? "1px solid rgba(138,180,255,0.42)"
+                                        : "1px solid rgba(255,255,255,0.12)",
+                                      background: active
+                                        ? "rgba(138,180,255,0.12)"
+                                        : "rgba(255,255,255,0.04)",
+                                      color: "inherit",
+                                      opacity: editable ? 1 : 0.6,
+                                      cursor: editable ? "pointer" : "not-allowed",
+                                    }}
+                                  >
+                                    {option.label}
+                                  </button>
+                                );
+                              })}
+                            </div>
+
+                            <div style={{ marginTop: 8, fontSize: 12, opacity: 0.72 }}>
+                              Choose one stance to shape survivability and speed without raw stat editing.
                             </div>
                           </div>
 
@@ -1020,9 +1107,9 @@ export default function PartySetupSection(props: {
                   lineHeight: 1.7,
                 }}
               >
-                Keep this roster stable once committed. Combat turn order is still generated per combat, but{" "}
-                <em>who the adventurers are</em> remains session truth. Class determines specialty skills.
-                Species contributes passive traits and flavor identity.
+                Combat numbers are now shaped through role focus instead of raw freeform stat entry. That
+                keeps party creation readable, bounded, and more game-like while still letting the player
+                meaningfully define each adventurer.
               </div>
             </>
           )}
