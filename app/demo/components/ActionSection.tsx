@@ -5,12 +5,17 @@
 // ------------------------------------------------------------
 // Player action input surface.
 // Orchestrator passes party + state + callbacks.
+//
 // Upgraded:
-// - supports acting-player class skills / species traits
-// - renders loadout chips for the active player
-// - adds specialty quick-action buttons driven by skill labels
-// - adds browser speech-to-text dictation for the action textarea
-// - adds component-level SFX wiring for action UI + arbiter cues
+// - replaces acting-player dropdown with party turn cards
+// - adds a cinematic active-player header
+// - upgrades quick-action buttons into tactical ability pills
+// - renames Submit Action -> Resolve Action
+// - preserves all existing action / dictation / turn logic
+//
+// Note:
+// - this version uses player labels to render turn cards
+// - true portrait cards would require portrait/class/species props from page-level orchestration
 // ------------------------------------------------------------
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
@@ -38,7 +43,6 @@ type Props = {
   passDisabled: boolean;
   onPassTurn: () => void;
 
-  // NEW (turn truth)
   dmMode: "human" | "solace-neutral" | null;
   isEnemyTurn: boolean;
   isWrongPlayerForTurn: boolean;
@@ -111,6 +115,43 @@ function titleCaseFromId(value: string) {
     .filter(Boolean)
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
     .join(" ");
+}
+
+function extractDisplayName(label: string) {
+  const raw = String(label ?? "").trim();
+  const idx = raw.indexOf("(");
+  return idx > 0 ? raw.slice(0, idx).trim() : raw;
+}
+
+function extractMetaLabel(label: string) {
+  const raw = String(label ?? "").trim();
+  const open = raw.indexOf("(");
+  const close = raw.indexOf(")");
+  if (open >= 0 && close > open) return raw.slice(open + 1, close).trim();
+  return "";
+}
+
+function initialsFromLabel(label: string) {
+  const name = extractDisplayName(label);
+  const words = name.split(/\s+/).filter(Boolean);
+  if (words.length === 0) return "?";
+  if (words.length === 1) return words[0].slice(0, 2).toUpperCase();
+  return `${words[0][0] ?? ""}${words[1][0] ?? ""}`.toUpperCase();
+}
+
+function flavorLineForMember(label: string, skills: string[], traits: string[]) {
+  const name = extractDisplayName(label);
+
+  if (skills.includes("arc_bolt")) return `${name} gathers arcane force and watches the field for the right release.`;
+  if (skills.includes("frost_bind")) return `${name} studies movement lanes, waiting to pin the enemy in place.`;
+  if (skills.includes("backstab")) return `${name} searches for the exposed angle and the unguarded flank.`;
+  if (skills.includes("smite")) return `${name} steadies conviction, ready to break the line at the crucial moment.`;
+  if (skills.includes("heal")) return `${name} keeps one eye on the wounded, prepared to restore the faltering.`;
+  if (skills.includes("volley")) return `${name} measures distance and spacing, ready to pressure the whole formation.`;
+  if (traits.includes("elf_keen_senses")) return `${name} listens beyond the torchlight, reading danger before it shows itself.`;
+  if (traits.includes("human_resolve")) return `${name} braces with steady resolve, ready to answer the next threat.`;
+
+  return `${name} studies the chamber, weighing position, risk, and the next decisive move.`;
 }
 
 function buildSkillIntent(skillId: string, label: string) {
@@ -198,6 +239,58 @@ function buildSkillIntent(skillId: string, label: string) {
   }
 }
 
+function ActionChipButton(props: {
+  label: string;
+  title?: string;
+  disabled?: boolean;
+  onClick: () => void;
+  accent?: "default" | "skill" | "dictate" | "clear";
+}) {
+  const { label, title, disabled, onClick, accent = "default" } = props;
+
+  const styleByAccent: Record<NonNullable<typeof accent>, React.CSSProperties> = {
+    default: {
+      border: "1px solid rgba(255,255,255,0.12)",
+      background: "rgba(255,255,255,0.06)",
+    },
+    skill: {
+      border: "1px solid rgba(255,196,118,0.22)",
+      background: "rgba(255,196,118,0.08)",
+    },
+    dictate: {
+      border: "1px solid rgba(170,140,255,0.24)",
+      background: "rgba(170,140,255,0.09)",
+    },
+    clear: {
+      border: "1px solid rgba(255,255,255,0.10)",
+      background: "rgba(255,255,255,0.04)",
+    },
+  };
+
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      onClick={onClick}
+      title={title}
+      style={{
+        padding: "8px 10px",
+        borderRadius: 12,
+        color: "inherit",
+        fontSize: 12,
+        fontWeight: 700,
+        lineHeight: 1.1,
+        cursor: disabled ? "not-allowed" : "pointer",
+        opacity: disabled ? 0.56 : 1,
+        transition: "transform 140ms ease, filter 140ms ease, border-color 140ms ease, background 140ms ease",
+        ...styleByAccent[accent],
+      }}
+    >
+      {label}
+    </button>
+  );
+}
+
 export default function ActionSection({
   partyMembers,
   actingPlayerId,
@@ -238,6 +331,9 @@ export default function ActionSection({
     return actingMember?.label ?? (hasParty ? "—" : "Player 1 (player_1)");
   }, [actingMember, hasParty]);
 
+  const actingDisplayName = useMemo(() => extractDisplayName(actingLabel), [actingLabel]);
+  const actingMetaLabel = useMemo(() => extractMetaLabel(actingLabel), [actingLabel]);
+
   const actingSkillIds = useMemo(() => {
     return Array.isArray(actingMember?.skills) ? actingMember.skills.filter(Boolean) : [];
   }, [actingMember]);
@@ -259,6 +355,10 @@ export default function ActionSection({
       label: titleCaseFromId(id),
     }));
   }, [actingTraitIds]);
+
+  const actingFlavorLine = useMemo(() => {
+    return flavorLineForMember(actingLabel, actingSkillIds, actingTraitIds);
+  }, [actingLabel, actingSkillIds, actingTraitIds]);
 
   const specialtyButtons = useMemo(() => {
     return actingSkillLabels.slice(0, 3);
@@ -393,7 +493,11 @@ export default function ActionSection({
 
   const bannerStyle: React.CSSProperties =
     bannerTone === "yourturn"
-      ? { border: "1px solid rgba(255,255,255,0.16)", background: "rgba(0,0,0,0.30)" }
+      ? {
+          border: "1px solid rgba(255,196,118,0.20)",
+          background: "linear-gradient(180deg, rgba(255,196,118,0.08), rgba(0,0,0,0.24))",
+          boxShadow: "0 0 0 1px rgba(255,196,118,0.04), 0 14px 34px rgba(0,0,0,0.20)",
+        }
       : bannerTone === "enemy"
         ? { border: "1px solid rgba(255,255,255,0.12)", background: "rgba(0,0,0,0.22)" }
         : bannerTone === "blocked"
@@ -410,13 +514,13 @@ export default function ActionSection({
     return "Your Turn";
   }, [combatActive, dmMode, isEnemyTurn, isWrongPlayerForTurn]);
 
-  const lockActingSelect = combatActive && dmMode !== "human";
+  const actingCardsLocked = combatActive && dmMode !== "human";
 
   const chipStyle: React.CSSProperties = {
     display: "inline-flex",
     alignItems: "center",
     borderRadius: 999,
-    padding: "2px 8px",
+    padding: "4px 9px",
     fontSize: 11,
     lineHeight: 1.3,
     background: "rgba(255,255,255,0.08)",
@@ -486,73 +590,45 @@ export default function ActionSection({
         <div
           style={{
             ...bannerStyle,
-            borderRadius: 14,
-            padding: "10px 12px",
-            marginBottom: 10,
+            borderRadius: 16,
+            padding: "12px 14px",
+            marginBottom: 12,
             display: "flex",
             alignItems: "center",
             justifyContent: "space-between",
-            gap: 12,
+            gap: 14,
             flexWrap: "wrap",
           }}
         >
-          <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-            <div style={{ fontSize: 12, letterSpacing: 0.4, textTransform: "uppercase" }} className="muted">
+          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+            <div style={{ fontSize: 11, letterSpacing: 0.6, textTransform: "uppercase", opacity: 0.68 }}>
               {combatActive ? "Combat Turn" : "Scene"} · {modeLabel}
             </div>
+
             <div style={{ display: "flex", gap: 8, alignItems: "baseline", flexWrap: "wrap" }}>
-              <strong style={{ fontSize: 14 }}>{bannerTitle}</strong>
+              <strong style={{ fontSize: 16 }}>{bannerTitle}</strong>
+
               {combatActive && activeTurnLabel ? (
-                <span className="muted" style={{ fontSize: 12 }}>
+                <span style={{ fontSize: 12, opacity: 0.78 }}>
                   · Active: <strong>{activeTurnLabel}</strong>
                 </span>
               ) : null}
-              <span className="muted" style={{ fontSize: 12 }}>
-                · Acting: <strong>{actingLabel}</strong>
+
+              <span style={{ fontSize: 12, opacity: 0.78 }}>
+                · Acting: <strong>{actingDisplayName}</strong>
               </span>
             </div>
+
             {lockReason ? (
-              <div className="muted" style={{ fontSize: 12 }}>
-                {lockReason}
-              </div>
+              <div style={{ fontSize: 12, opacity: 0.76 }}>{lockReason}</div>
             ) : (
-              <div className="muted" style={{ fontSize: 12 }}>
-                Declare intent and submit. Resolution will follow.
+              <div style={{ fontSize: 12, opacity: 0.76 }}>
+                Declare intent and send it to resolution.
               </div>
             )}
           </div>
 
-          <div style={{ display: "flex", gap: 10, alignItems: "flex-end", flexWrap: "wrap" }}>
-            <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-              <span className="muted" style={{ fontSize: 12 }}>
-                Acting player
-              </span>
-              <select
-                value={actingPlayerId}
-                onChange={(e) => {
-                  playSfx(SFX.buttonClick, 0.56);
-                  onSetActingPlayerId(e.target.value);
-                }}
-                disabled={!hasParty || lockActingSelect}
-                style={{ minWidth: 240 }}
-                title={
-                  lockActingSelect
-                    ? "Locked during combat (Solace-neutral) to preserve turn integrity."
-                    : "Select who is acting."
-                }
-              >
-                {hasParty ? (
-                  partyMembers.map((m) => (
-                    <option key={m.id} value={m.id}>
-                      {m.label}
-                    </option>
-                  ))
-                ) : (
-                  <option value="player_1">Player 1 (player_1)</option>
-                )}
-              </select>
-            </label>
-
+          <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
             <button
               onClick={() => {
                 if (!combatActive || passDisabled) return;
@@ -561,6 +637,15 @@ export default function ActionSection({
               }}
               disabled={!combatActive || passDisabled}
               title="Advance to the next turn"
+              style={{
+                padding: "9px 12px",
+                borderRadius: 12,
+                border: "1px solid rgba(255,255,255,0.12)",
+                background: "rgba(255,255,255,0.06)",
+                color: "inherit",
+                opacity: !combatActive || passDisabled ? 0.5 : 1,
+                cursor: !combatActive || passDisabled ? "not-allowed" : "pointer",
+              }}
             >
               Pass / End Turn
             </button>
@@ -576,9 +661,17 @@ export default function ActionSection({
                   }}
                   disabled={!!commitDisabled}
                   title="Commit PARTY_DECLARED (canon)"
-                  style={{ opacity: 0.8 }}
+                  style={{
+                    padding: "9px 12px",
+                    borderRadius: 12,
+                    border: "1px solid rgba(255,196,118,0.24)",
+                    background: "rgba(255,196,118,0.08)",
+                    color: "inherit",
+                    opacity: commitDisabled ? 0.5 : 0.92,
+                    cursor: commitDisabled ? "not-allowed" : "pointer",
+                  }}
                 >
-                  Commit Party (Canon)
+                  Commit Party
                 </button>
 
                 <button
@@ -588,7 +681,15 @@ export default function ActionSection({
                     onRandomNames?.();
                   }}
                   title="Fill missing party names"
-                  style={{ opacity: 0.6 }}
+                  style={{
+                    padding: "9px 12px",
+                    borderRadius: 12,
+                    border: "1px solid rgba(255,255,255,0.10)",
+                    background: "rgba(255,255,255,0.04)",
+                    color: "inherit",
+                    opacity: 0.7,
+                    cursor: "pointer",
+                  }}
                 >
                   Random Names
                 </button>
@@ -597,92 +698,261 @@ export default function ActionSection({
           </div>
         </div>
 
-        {(actingSkillLabels.length > 0 || actingTraitLabels.length > 0) && (
+        {hasParty && (
           <div
             style={{
-              borderRadius: 14,
-              border: "1px solid rgba(255,255,255,0.10)",
-              background: "rgba(0,0,0,0.18)",
-              padding: "10px 12px",
-              marginBottom: 10,
-              display: "flex",
-              flexDirection: "column",
+              marginBottom: 12,
+              display: "grid",
               gap: 8,
             }}
           >
-            <div className="muted" style={{ fontSize: 12, textTransform: "uppercase", letterSpacing: 0.4 }}>
-              Active Loadout
+            <div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: 0.6, opacity: 0.64 }}>
+              Party Turn Cards
             </div>
 
-            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-              <div className="muted" style={{ fontSize: 12 }}>
-                Class Skills
-              </div>
-              <div style={{ display: "flex", gap: 6, flexWrap: "wrap", minHeight: 22 }}>
-                {actingSkillLabels.length > 0 ? (
-                  actingSkillLabels.map((skill) => (
-                    <span key={skill.id} style={chipStyle} title={skill.id}>
-                      {skill.label}
-                    </span>
-                  ))
-                ) : (
-                  <span className="muted" style={{ fontSize: 12 }}>
-                    No class skills
-                  </span>
-                )}
-              </div>
-            </div>
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: `repeat(${partyMembers.length}, minmax(0, 1fr))`,
+                gap: 8,
+              }}
+            >
+              {partyMembers.map((member) => {
+                const active = member.id === actingPlayerId;
+                const lockedByTurn = actingCardsLocked;
+                const displayName = extractDisplayName(member.label);
+                const meta = extractMetaLabel(member.label);
+                const initials = initialsFromLabel(member.label);
 
-            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-              <div className="muted" style={{ fontSize: 12 }}>
-                Species Traits
-              </div>
-              <div style={{ display: "flex", gap: 6, flexWrap: "wrap", minHeight: 22 }}>
-                {actingTraitLabels.length > 0 ? (
-                  actingTraitLabels.map((trait) => (
-                    <span key={trait.id} style={traitChipStyle} title={trait.id}>
-                      {trait.label}
-                    </span>
-                  ))
-                ) : (
-                  <span className="muted" style={{ fontSize: 12 }}>
-                    No species traits
-                  </span>
-                )}
-              </div>
+                return (
+                  <button
+                    key={member.id}
+                    type="button"
+                    disabled={lockedByTurn}
+                    onClick={() => {
+                      if (lockedByTurn) return;
+                      playSfx(SFX.buttonClick, 0.56);
+                      onSetActingPlayerId(member.id);
+                    }}
+                    title={
+                      lockedByTurn
+                        ? "Locked during combat (Solace-neutral) to preserve turn integrity."
+                        : `Act as ${displayName}`
+                    }
+                    style={{
+                      textAlign: "left",
+                      padding: "10px 10px",
+                      borderRadius: 14,
+                      border: active
+                        ? "1px solid rgba(255,196,118,0.34)"
+                        : "1px solid rgba(255,255,255,0.10)",
+                      background: active
+                        ? "linear-gradient(180deg, rgba(255,196,118,0.10), rgba(255,255,255,0.03))"
+                        : "rgba(255,255,255,0.04)",
+                      color: "inherit",
+                      opacity: lockedByTurn ? 0.7 : 1,
+                      cursor: lockedByTurn ? "not-allowed" : "pointer",
+                      display: "grid",
+                      gridTemplateColumns: "40px 1fr",
+                      gap: 10,
+                      alignItems: "center",
+                      boxShadow: active ? "0 10px 24px rgba(0,0,0,0.18)" : "none",
+                      transition: "transform 140ms ease, border-color 140ms ease, background 140ms ease",
+                    }}
+                  >
+                    <div
+                      aria-hidden
+                      style={{
+                        width: 40,
+                        height: 40,
+                        borderRadius: 999,
+                        display: "grid",
+                        placeItems: "center",
+                        fontWeight: 900,
+                        fontSize: 13,
+                        letterSpacing: 0.4,
+                        border: active
+                          ? "1px solid rgba(255,196,118,0.30)"
+                          : "1px solid rgba(255,255,255,0.10)",
+                        background: active
+                          ? "rgba(255,196,118,0.12)"
+                          : "rgba(255,255,255,0.06)",
+                      }}
+                    >
+                      {initials}
+                    </div>
+
+                    <div style={{ minWidth: 0, display: "grid", gap: 2 }}>
+                      <div
+                        style={{
+                          fontSize: 13,
+                          fontWeight: 800,
+                          lineHeight: 1.2,
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        {displayName}
+                      </div>
+
+                      <div
+                        style={{
+                          fontSize: 11,
+                          opacity: 0.66,
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        {meta || member.id}
+                      </div>
+
+                      {active ? (
+                        <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: 0.5, opacity: 0.72 }}>
+                          Acting
+                        </div>
+                      ) : null}
+                    </div>
+                  </button>
+                );
+              })}
             </div>
           </div>
         )}
 
         <div
           style={{
-            borderRadius: 18,
+            borderRadius: 16,
             border: "1px solid rgba(255,255,255,0.10)",
-            background: "rgba(0,0,0,0.26)",
+            background:
+              canSubmit
+                ? "linear-gradient(180deg, rgba(255,196,118,0.05), rgba(0,0,0,0.28) 24%, rgba(0,0,0,0.24))"
+                : "rgba(0,0,0,0.24)",
+            boxShadow: canSubmit ? "0 16px 36px rgba(0,0,0,0.22)" : "none",
             backdropFilter: "blur(10px)",
-            padding: 12,
+            padding: 14,
+            marginBottom: 10,
           }}
         >
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 10 }}>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "56px 1fr",
+              gap: 12,
+              alignItems: "start",
+              marginBottom: 12,
+            }}
+          >
+            <div
+              aria-hidden
+              style={{
+                width: 56,
+                height: 56,
+                borderRadius: 999,
+                display: "grid",
+                placeItems: "center",
+                border: "1px solid rgba(255,196,118,0.24)",
+                background: "rgba(255,196,118,0.08)",
+                fontWeight: 900,
+                letterSpacing: 0.5,
+                boxShadow: canSubmit ? "0 0 0 4px rgba(255,196,118,0.05)" : "none",
+              }}
+            >
+              {initialsFromLabel(actingLabel)}
+            </div>
+
+            <div style={{ minWidth: 0, display: "grid", gap: 4 }}>
+              <div style={{ display: "flex", alignItems: "baseline", gap: 10, flexWrap: "wrap" }}>
+                <div style={{ fontSize: 18, fontWeight: 900 }}>{actingDisplayName}</div>
+                {actingMetaLabel ? (
+                  <div style={{ fontSize: 12, opacity: 0.66 }}>{actingMetaLabel}</div>
+                ) : null}
+              </div>
+
+              <div style={{ fontSize: 13, opacity: 0.82, lineHeight: 1.55 }}>{actingFlavorLine}</div>
+            </div>
+          </div>
+
+          {(actingSkillLabels.length > 0 || actingTraitLabels.length > 0) && (
+            <div
+              style={{
+                borderRadius: 14,
+                border: "1px solid rgba(255,255,255,0.10)",
+                background: "rgba(0,0,0,0.18)",
+                padding: "10px 12px",
+                marginBottom: 12,
+                display: "flex",
+                flexDirection: "column",
+                gap: 8,
+              }}
+            >
+              <div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: 0.5, opacity: 0.64 }}>
+                Active Loadout
+              </div>
+
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                <div style={{ fontSize: 12, opacity: 0.74 }}>Class Skills</div>
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap", minHeight: 22 }}>
+                  {actingSkillLabels.length > 0 ? (
+                    actingSkillLabels.map((skill) => (
+                      <span key={skill.id} style={chipStyle} title={skill.id}>
+                        {skill.label}
+                      </span>
+                    ))
+                  ) : (
+                    <span style={{ fontSize: 12, opacity: 0.6 }}>No class skills</span>
+                  )}
+                </div>
+              </div>
+
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                <div style={{ fontSize: 12, opacity: 0.74 }}>Species Traits</div>
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap", minHeight: 22 }}>
+                  {actingTraitLabels.length > 0 ? (
+                    actingTraitLabels.map((trait) => (
+                      <span key={trait.id} style={traitChipStyle} title={trait.id}>
+                        {trait.label}
+                      </span>
+                    ))
+                  ) : (
+                    <span style={{ fontSize: 12, opacity: 0.6 }}>No species traits</span>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "baseline",
+              gap: 10,
+              flexWrap: "wrap",
+              marginBottom: 10,
+            }}
+          >
             <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-              <div style={{ fontSize: 12, letterSpacing: 0.4, textTransform: "uppercase" }} className="muted">
+              <div style={{ fontSize: 11, letterSpacing: 0.6, textTransform: "uppercase", opacity: 0.64 }}>
                 Intent
               </div>
-              <div style={{ fontSize: 13 }} className="muted">
+              <div style={{ fontSize: 13, opacity: 0.78 }}>
                 Concrete actions work best. Example: “I sprint to the pillar, take cover, then fire at the nearest
                 archer.”
               </div>
             </div>
 
-            <div className="muted" style={{ fontSize: 12, whiteSpace: "nowrap" }}>
-              {combatActive ? "Turn-locked" : "Freeform"} · <strong>{modeLabel}</strong>
+            <div style={{ fontSize: 12, whiteSpace: "nowrap", opacity: 0.72 }}>
+              {combatActive ? "Turn-bound" : "Freeform"} · <strong>{modeLabel}</strong>
             </div>
           </div>
 
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 10, marginBottom: 10 }}>
-            <button
-              type="button"
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
+            <ActionChipButton
+              label="🛡 Guard"
               disabled={!canSubmit}
+              title="Insert a cover + posture intent"
               onClick={() => {
                 if (!canSubmit) return;
                 playSfx(SFX.buttonClick, 0.58);
@@ -690,29 +960,23 @@ export default function ActionSection({
                   appendIntent(playerInput, "I move to cover and take a guarded stance, watching for openings.")
                 );
               }}
-              style={{ opacity: canSubmit ? 1 : 0.6 }}
-              title="Insert a cover + posture intent"
-            >
-              Take Cover
-            </button>
+            />
 
-            <button
-              type="button"
+            <ActionChipButton
+              label="⚔ Strike"
               disabled={!canSubmit}
+              title="Insert an attack intent"
               onClick={() => {
                 if (!canSubmit) return;
                 playSfx(SFX.buttonClick, 0.58);
                 onSetPlayerInput(appendIntent(playerInput, "I attack the nearest threat decisively."));
               }}
-              style={{ opacity: canSubmit ? 1 : 0.6 }}
-              title="Insert an attack intent"
-            >
-              Attack
-            </button>
+            />
 
-            <button
-              type="button"
+            <ActionChipButton
+              label="🏃 Reposition"
               disabled={!canSubmit}
+              title="Insert a reposition intent"
               onClick={() => {
                 if (!canSubmit) return;
                 playSfx(SFX.buttonClick, 0.58);
@@ -720,15 +984,12 @@ export default function ActionSection({
                   appendIntent(playerInput, "I reposition to a better angle and try to draw attention off an ally.")
                 );
               }}
-              style={{ opacity: canSubmit ? 1 : 0.6 }}
-              title="Insert a reposition intent"
-            >
-              Reposition
-            </button>
+            />
 
-            <button
-              type="button"
+            <ActionChipButton
+              label="🤝 Aid Ally"
               disabled={!canSubmit}
+              title="Insert a help/assist intent"
               onClick={() => {
                 if (!canSubmit) return;
                 playSfx(SFX.buttonClick, 0.58);
@@ -736,63 +997,48 @@ export default function ActionSection({
                   appendIntent(playerInput, "I assist an ally—calling out timing and creating an opening for them.")
                 );
               }}
-              style={{ opacity: canSubmit ? 1 : 0.6 }}
-              title="Insert a help/assist intent"
-            >
-              Help Ally
-            </button>
+            />
 
             {specialtyButtons.map((skill) => (
-              <button
+              <ActionChipButton
                 key={skill.id}
-                type="button"
+                label={skill.label}
                 disabled={!canSubmit}
+                title={`Insert ${skill.label} intent`}
+                accent="skill"
                 onClick={() => {
                   if (!canSubmit) return;
                   playSfx(SFX.buttonClick, 0.58);
                   onSetPlayerInput(appendIntent(playerInput, buildSkillIntent(skill.id, skill.label)));
                 }}
-                style={{ opacity: canSubmit ? 1 : 0.6 }}
-                title={`Insert ${skill.label} intent`}
-              >
-                {skill.label}
-              </button>
+              />
             ))}
 
             {speechSupported && (
-              <button
-                type="button"
+              <ActionChipButton
+                label={isListening ? "■ Stop Dictation" : "🎙 Dictate"}
                 disabled={!canSubmit}
-                onClick={toggleListening}
-                style={{
-                  opacity: canSubmit ? 1 : 0.6,
-                  border: isListening ? "1px solid rgba(255,120,120,0.35)" : undefined,
-                  background: isListening ? "rgba(255,120,120,0.10)" : undefined,
-                }}
                 title={isListening ? "Stop microphone dictation" : "Start microphone dictation"}
-              >
-                {isListening ? "Stop Mic" : "🎤 Dictate"}
-              </button>
+                accent="dictate"
+                onClick={toggleListening}
+              />
             )}
 
-            <button
-              type="button"
+            <ActionChipButton
+              label="Clear"
               disabled={!canSubmit}
+              title="Clear intent text"
+              accent="clear"
               onClick={() => {
                 if (!canSubmit) return;
                 playSfx(SFX.buttonClick, 0.54);
                 onSetPlayerInput("");
               }}
-              style={{ opacity: canSubmit ? 0.85 : 0.5 }}
-              title="Clear intent text"
-            >
-              Clear
-            </button>
+            />
           </div>
 
           {(speechSupported || speechError) && (
             <div
-              className="muted"
               style={{
                 marginBottom: 10,
                 fontSize: 12,
@@ -800,6 +1046,7 @@ export default function ActionSection({
                 gap: 10,
                 flexWrap: "wrap",
                 alignItems: "center",
+                opacity: 0.74,
               }}
             >
               {speechSupported ? (
@@ -827,7 +1074,7 @@ export default function ActionSection({
           )}
 
           {!speechSupported && (
-            <div className="muted" style={{ marginBottom: 10, fontSize: 12 }}>
+            <div style={{ marginBottom: 10, fontSize: 12, opacity: 0.7 }}>
               Microphone dictation is not available in this browser.
             </div>
           )}
@@ -840,13 +1087,14 @@ export default function ActionSection({
             disabled={!canSubmit}
             style={{
               width: "100%",
-              minHeight: "160px",
+              minHeight: "168px",
               resize: "vertical",
               boxSizing: "border-box",
               lineHeight: 1.55,
               borderRadius: 14,
               border: "1px solid rgba(255,255,255,0.10)",
               background: canSubmit ? "rgba(0,0,0,0.34)" : "rgba(0,0,0,0.22)",
+              color: "inherit",
               padding: "12px 12px",
               outline: "none",
               opacity: canSubmit ? 1 : 0.86,
@@ -855,7 +1103,7 @@ export default function ActionSection({
 
           <div
             style={{
-              marginTop: 10,
+              marginTop: 12,
               display: "flex",
               gap: 10,
               flexWrap: "wrap",
@@ -864,16 +1112,34 @@ export default function ActionSection({
             }}
           >
             <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-              <button onClick={handleSubmit} disabled={!canSubmit}>
-                Submit Action
+              <button
+                onClick={handleSubmit}
+                disabled={!canSubmit}
+                style={{
+                  padding: "10px 14px",
+                  borderRadius: 12,
+                  border: "1px solid rgba(255,196,118,0.28)",
+                  background: canSubmit
+                    ? "linear-gradient(180deg, rgba(255,201,116,0.98), rgba(218,132,47,0.98))"
+                    : "linear-gradient(180deg, rgba(107,89,69,0.7), rgba(74,55,39,0.74))",
+                  color: canSubmit ? "#2f1606" : "rgba(244,227,201,0.75)",
+                  boxShadow: canSubmit
+                    ? "0 10px 28px rgba(255,145,42,0.16), inset 0 1px 0 rgba(255,244,220,0.72)"
+                    : "none",
+                  fontWeight: 900,
+                  cursor: canSubmit ? "pointer" : "not-allowed",
+                }}
+              >
+                Resolve Action
               </button>
-              <span className="muted" style={{ fontSize: 12 }}>
-                Tip: After you submit, the page jumps to Resolution automatically.
+
+              <span style={{ fontSize: 12, opacity: 0.7 }}>
+                After you resolve, the page advances to Resolution automatically.
               </span>
             </div>
 
             {!canSubmit && combatActive && dmMode !== "human" ? (
-              <span className="muted" style={{ fontSize: 12 }}>
+              <span style={{ fontSize: 12, opacity: 0.72 }}>
                 {isEnemyTurn ? "Enemy turn — watch the theater above." : "Turn locked — match the active player."}
               </span>
             ) : null}
