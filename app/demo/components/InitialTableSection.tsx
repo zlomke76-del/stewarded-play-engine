@@ -31,6 +31,7 @@ const LINE_REVEAL_MS = 1180;
 const START_DELAY_MS = 420;
 const FADE_STAGGER_MS = 120;
 const SEAL_REVEAL_DELAY_MS = 280;
+const EMBER_COUNT = 10;
 
 function playSfx(src: string, volume = 0.68) {
   try {
@@ -49,6 +50,22 @@ function buildNarrationLines(text: string) {
     .split("\n")
     .map((line) => line.replace(/\r/g, "").trimEnd())
     .filter((line) => line.trim().length > 0);
+}
+
+function buildEmbers(count: number) {
+  return Array.from({ length: count }, (_, i) => {
+    const seed = i + 1;
+    return {
+      id: `ember-${seed}`,
+      left: 12 + ((seed * 71) % 76),
+      delay: (seed % 5) * 70,
+      size: 4 + (seed % 4) * 2,
+      duration: 1200 + (seed % 4) * 220,
+      rise: 18 + (seed % 5) * 8,
+      drift: -18 + (seed % 7) * 6,
+      opacity: 0.24 + (seed % 3) * 0.12,
+    };
+  });
 }
 
 export default function InitialTableSection({
@@ -72,11 +89,15 @@ export default function InitialTableSection({
     [tableDraftText]
   );
 
+  const embers = useMemo(() => buildEmbers(EMBER_COUNT), []);
+
   const [revealedCount, setRevealedCount] = useState(0);
   const [isWriting, setIsWriting] = useState(false);
   const [writingStarted, setWritingStarted] = useState(false);
   const [showSignals, setShowSignals] = useState(false);
   const [showWaxSeal, setShowWaxSeal] = useState(false);
+  const [sealPulseActive, setSealPulseActive] = useState(false);
+  const [showEmberBurst, setShowEmberBurst] = useState(false);
 
   const writingComplete =
     narrationLines.length === 0 || revealedCount >= narrationLines.length;
@@ -130,6 +151,25 @@ export default function InitialTableSection({
     }
   }
 
+  function triggerSealMoment() {
+    setShowWaxSeal(true);
+    setSealPulseActive(true);
+    setShowEmberBurst(true);
+
+    window.setTimeout(() => {
+      setSealPulseActive(false);
+    }, 900);
+
+    window.setTimeout(() => {
+      setShowEmberBurst(false);
+    }, 1450);
+
+    if (!sealSfxPlayedRef.current) {
+      sealSfxPlayedRef.current = true;
+      playSfx(SFX.waxSeal, 0.72);
+    }
+  }
+
   useEffect(() => {
     if (dmMode !== "solace-neutral" || tableAccepted || !initialTable) {
       clearAllTimers();
@@ -138,6 +178,8 @@ export default function InitialTableSection({
       setWritingStarted(false);
       setRevealedCount(0);
       setShowWaxSeal(false);
+      setSealPulseActive(false);
+      setShowEmberBurst(false);
       sealSfxPlayedRef.current = false;
       return;
     }
@@ -146,6 +188,8 @@ export default function InitialTableSection({
     setIsWriting(false);
     setWritingStarted(false);
     setShowWaxSeal(false);
+    setSealPulseActive(false);
+    setShowEmberBurst(false);
     nextQuillVariantRef.current = "a";
     sealSfxPlayedRef.current = false;
 
@@ -212,12 +256,7 @@ export default function InitialTableSection({
     if (showWaxSeal) return;
 
     sealTimerRef.current = window.setTimeout(() => {
-      setShowWaxSeal(true);
-
-      if (!sealSfxPlayedRef.current) {
-        sealSfxPlayedRef.current = true;
-        playSfx(SFX.waxSeal, 0.72);
-      }
+      triggerSealMoment();
     }, SEAL_REVEAL_DELAY_MS);
 
     return () => {
@@ -276,6 +315,70 @@ export default function InitialTableSection({
             aria-hidden="true"
             style={{
               position: "absolute",
+              inset: 0,
+              pointerEvents: "none",
+              opacity: sealPulseActive ? 1 : 0,
+              transition: "opacity 260ms ease",
+              background: sealPulseActive
+                ? "radial-gradient(circle at 50% 72%, rgba(0,0,0,0.36) 0%, rgba(0,0,0,0.26) 26%, rgba(0,0,0,0.12) 52%, transparent 76%)"
+                : "transparent",
+            }}
+          />
+
+          <div
+            aria-hidden="true"
+            style={{
+              position: "absolute",
+              inset: 0,
+              pointerEvents: "none",
+              opacity: sealPulseActive ? 1 : 0,
+              transition: "opacity 260ms ease",
+              background: sealPulseActive
+                ? "radial-gradient(circle at 50% 78%, rgba(255,140,52,0.14) 0%, rgba(255,116,26,0.08) 18%, transparent 34%)"
+                : "transparent",
+              filter: "blur(8px)",
+            }}
+          />
+
+          {showEmberBurst && (
+            <div
+              aria-hidden="true"
+              style={{
+                position: "absolute",
+                inset: 0,
+                pointerEvents: "none",
+                overflow: "hidden",
+              }}
+            >
+              {embers.map((ember) => (
+                <div
+                  key={ember.id}
+                  style={{
+                    position: "absolute",
+                    left: `${ember.left}%`,
+                    bottom: 70,
+                    width: ember.size,
+                    height: ember.size,
+                    borderRadius: "999px",
+                    background:
+                      "radial-gradient(circle, rgba(255,236,191,0.98) 0%, rgba(255,170,71,0.92) 36%, rgba(255,101,28,0.55) 70%, rgba(255,101,28,0) 100%)",
+                    boxShadow:
+                      "0 0 10px rgba(255,160,62,0.34), 0 0 18px rgba(255,118,36,0.18)",
+                    opacity: ember.opacity,
+                    animation: `sealEmberRise ${ember.duration}ms ease-out ${ember.delay}ms forwards`,
+                    transform: `translate3d(0, 0, 0)`,
+                    ["--ember-rise" as any]: `-${ember.rise}px`,
+                    ["--ember-drift" as any]: `${ember.drift}px`,
+                  }}
+                />
+              ))}
+            </div>
+          )}
+
+          <div
+            aria-hidden="true"
+            style={{
+              position: "absolute",
               left: 14,
               right: 14,
               top: 10,
@@ -318,6 +421,9 @@ export default function InitialTableSection({
               border: "1px solid rgba(115,75,32,0.34)",
               boxShadow:
                 "inset 0 1px 0 rgba(255,244,220,0.6), inset 0 -12px 24px rgba(102,65,26,0.08)",
+              transition: "filter 260ms ease, transform 260ms ease",
+              filter: sealPulseActive ? "brightness(0.94) saturate(0.92)" : "none",
+              transform: sealPulseActive ? "translateY(1px)" : "translateY(0)",
             }}
           >
             <div
@@ -361,11 +467,7 @@ export default function InitialTableSection({
                   setWritingStarted(true);
                   setIsWriting(false);
                   setRevealedCount(narrationLines.length);
-                  setShowWaxSeal(true);
-                  if (!sealSfxPlayedRef.current) {
-                    sealSfxPlayedRef.current = true;
-                    playSfx(SFX.waxSeal, 0.72);
-                  }
+                  triggerSealMoment();
                 }}
                 style={{
                   borderRadius: 999,
@@ -744,7 +846,8 @@ export default function InitialTableSection({
                   "radial-gradient(circle, rgba(255,162,110,0.35) 0%, rgba(255,110,60,0.16) 38%, rgba(255,90,42,0.04) 68%, transparent 78%)",
                 filter: "blur(10px)",
                 opacity: showWaxSeal ? 1 : 0,
-                transition: "opacity 360ms ease, width 360ms ease, height 360ms ease",
+                transition:
+                  "opacity 360ms ease, width 360ms ease, height 360ms ease",
               }}
             />
 
@@ -861,6 +964,27 @@ export default function InitialTableSection({
             ? "Step below and let the dungeon answer."
             : "The descent awaits the sealing of the chronicle."}
         </div>
+
+        <style jsx>{`
+          @keyframes sealEmberRise {
+            0% {
+              opacity: 0;
+              transform: translate3d(0, 8px, 0) scale(0.55);
+            }
+            15% {
+              opacity: 1;
+            }
+            100% {
+              opacity: 0;
+              transform: translate3d(
+                  var(--ember-drift, 0px),
+                  var(--ember-rise, -28px),
+                  0
+                )
+                scale(1.15);
+            }
+          }
+        `}</style>
       </CardSection>
     );
   }
