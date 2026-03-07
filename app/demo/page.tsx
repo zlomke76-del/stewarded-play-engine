@@ -24,13 +24,15 @@
 //     1) mode selected
 //     2) player count declared
 //     3) Enter pressed
-// - After Accept Table, user must DECLARE PLAYERS (PartySetupSection)
+// - After Accept Table:
+//     user must DECLARE PLAYERS
 // - Pressure/Map/Combat/Action stay locked until PARTY_DECLARED exists
 // - Chapters "Party" represents PARTY_DECLARED (not just party size)
 //
 // Audio update:
 // - Intro music is owned at page level (not hero component level)
-// - Hero "Enter" now triggers /audio/music/chronicles_intro.mp3
+// - Hero "Enter" triggers /audio/music/chronicles_intro.mp3
+// - Intro now loops until Initial Table is accepted
 // - Ambient dungeon music rotates across two exploration tracks
 // - Combat music rotates across two battle tracks
 // - Combat transitions override ambient cleanly, then return to ambient
@@ -91,8 +93,11 @@ import {
 type PartyMember = {
   id: string; // stable per session (ex: "player_1")
   name: string;
+  species?: string;
   className: string;
   portrait: "Male" | "Female";
+  skills?: string[];
+  traits?: string[];
   ac: number;
   hpMax: number;
   hpCurrent: number;
@@ -123,8 +128,11 @@ function defaultParty(count: number): PartyDeclaredPayload {
       return {
         id: `player_${idx}`,
         name: "",
+        species: "Human",
         className: "",
         portrait: "Male",
+        skills: [],
+        traits: [],
         ac: 14,
         hpMax: 12,
         hpCurrent: 12,
@@ -240,10 +248,7 @@ type MusicMode = "none" | "intro" | "ambient" | "combat";
 const AMBIENT_TRACKS = ["/audio/music/dungeon_ambient1.mp3", "/audio/music/dungeon_ambient2.mp3"] as const;
 const COMBAT_TRACKS = ["/audio/music/combat_theme1.mp3", "/audio/music/combat_theme2.mp3"] as const;
 
-function chooseNextTrack(
-  tracks: readonly string[],
-  lastIndexRef: React.MutableRefObject<number>
-): string {
+function chooseNextTrack(tracks: readonly string[], lastIndexRef: React.MutableRefObject<number>): string {
   if (tracks.length <= 1) {
     lastIndexRef.current = 0;
     return tracks[0] ?? "";
@@ -386,7 +391,6 @@ export default function DemoPage() {
   const isEnemyTurn = combatActive && activeCombatantSpec?.kind === "enemy_group";
   const isPlayerTurn = combatActive && activeCombatantSpec?.kind === "player";
 
-  // NEW: a clean label for UI turn anchoring
   const activeTurnLabel = useMemo(() => {
     if (!combatActive || !activeCombatantSpec) return null;
     const name = String((activeCombatantSpec as any)?.name ?? "").trim();
@@ -411,16 +415,14 @@ export default function DemoPage() {
   }, [actingPlayerInjuryStacks]);
 
   // ----------------------------------------------------------
-  // Share canon (fix: define handler used by ModeHeader)
+  // Share canon
   // ----------------------------------------------------------
 
   const shareCanon = () => {
-    // ModeHeader currently has showShare={false}, so this won't fire.
-    // Still: keep it safe and deterministic for when share is enabled.
     try {
       exportCanon(state.events as any);
     } catch {
-      // fail-closed: do nothing
+      // fail-closed
     }
   };
 
@@ -428,13 +430,13 @@ export default function DemoPage() {
   // Audio helpers
   // ----------------------------------------------------------
 
-  function pauseIntroTheme() {
+  function pauseIntroTheme(resetTime = true) {
     const intro = introAudioRef.current;
     if (!intro) return;
 
     try {
       intro.pause();
-      intro.currentTime = 0;
+      if (resetTime) intro.currentTime = 0;
     } catch {
       // fail silently
     }
@@ -455,7 +457,7 @@ export default function DemoPage() {
   }
 
   function stopAllMusic() {
-    pauseIntroTheme();
+    pauseIntroTheme(true);
     pauseBackgroundTheme();
     currentMusicModeRef.current = "none";
   }
@@ -465,7 +467,7 @@ export default function DemoPage() {
     if (!bgm || !src) return;
 
     try {
-      pauseIntroTheme();
+      pauseIntroTheme(true);
 
       const sameSrc = bgm.getAttribute("src") === src;
       bgm.loop = true;
@@ -476,12 +478,11 @@ export default function DemoPage() {
         bgm.load();
       }
 
-      const playPromise = bgm.play();
       currentMusicModeRef.current = mode;
-
+      const playPromise = bgm.play();
       if (playPromise && typeof playPromise.catch === "function") {
         playPromise.catch(() => {
-          // fail silently; audio should never break gameplay flow
+          // fail silently
         });
       }
     } catch {
@@ -499,7 +500,7 @@ export default function DemoPage() {
     startLoopingTrack(src, 0.72, "combat");
   }
 
-  function playIntroTheme() {
+  function playIntroTheme(loop = false) {
     const intro = introAudioRef.current;
     if (!intro) return;
 
@@ -508,13 +509,14 @@ export default function DemoPage() {
 
       intro.pause();
       intro.currentTime = 0;
+      intro.loop = loop;
       intro.volume = 0.72;
       currentMusicModeRef.current = "intro";
 
       const playPromise = intro.play();
       if (playPromise && typeof playPromise.catch === "function") {
         playPromise.catch(() => {
-          // fail silently; browser/user-gesture issues should not break flow
+          // fail silently
         });
       }
     } catch {
@@ -528,12 +530,31 @@ export default function DemoPage() {
     stopAllMusic();
   }, [enteredDungeon]);
 
-  // Combat overrides ambient cleanly. Non-combat falls back to ambient after intro.
+  // Intro loops until table is accepted.
+  // After acceptance, ambient/combat takes over.
+  useEffect(() => {
+    const intro = introAudioRef.current;
+    if (!intro) return;
+
+    intro.loop = enteredDungeon && !tableAccepted;
+  }, [enteredDungeon, tableAccepted]);
+
   useEffect(() => {
     if (!enteredDungeon) return;
 
     const intro = introAudioRef.current;
-    const introIsPlaying = !!intro && !intro.paused && !intro.ended && intro.currentTime > 0;
+    const introIsPlaying = !!intro && !intro.paused && intro.currentTime > 0;
+
+    if (!tableAccepted) {
+      if (currentMusicModeRef.current !== "intro" || !introIsPlaying) {
+        playIntroTheme(true);
+      }
+      return;
+    }
+
+    if (introIsPlaying) {
+      pauseIntroTheme(true);
+    }
 
     if (combatActive) {
       if (currentMusicModeRef.current !== "combat") {
@@ -542,14 +563,10 @@ export default function DemoPage() {
       return;
     }
 
-    if (introIsPlaying && currentMusicModeRef.current === "intro") {
-      return;
-    }
-
     if (currentMusicModeRef.current !== "ambient") {
       startAmbientTheme();
     }
-  }, [enteredDungeon, combatActive]);
+  }, [enteredDungeon, tableAccepted, combatActive]);
 
   // ----------------------------------------------------------
   // Party operations
@@ -579,8 +596,11 @@ export default function DemoPage() {
         members.push({
           id: `player_${i1}`,
           name: "",
+          species: "Human",
           className: "",
           portrait: "Male",
+          skills: [],
+          traits: [],
           ac: 14,
           hpMax: 12,
           hpCurrent: 12,
@@ -636,8 +656,11 @@ export default function DemoPage() {
           return {
             id,
             name: normalizeName(m.name || ""),
+            species: String(m.species || "").trim() || "Human",
             className: normalizeName(m.className || ""),
             portrait: (m as any).portrait === "Female" ? "Female" : "Male",
+            skills: Array.isArray((m as any).skills) ? (m as any).skills : [],
+            traits: Array.isArray((m as any).traits) ? (m as any).traits : [],
             ac: safeInt(m.ac, 14, 1, 40),
             hpMax,
             hpCurrent: Math.min(hpCurrent, hpMax),
@@ -725,7 +748,7 @@ export default function DemoPage() {
   }, [dmMode]);
 
   // ----------------------------------------------------------
-  // Canon append helper (for components)
+  // Canon append helper
   // ----------------------------------------------------------
 
   function appendCanon(type: string, payload: any) {
@@ -977,7 +1000,6 @@ export default function DemoPage() {
     audit: string[];
   }) {
     setState((prev) => {
-      // Enemy-turn outcomes still happen "in a zone"
       const here = deriveCurrentPosition(prev.events as any[], MAP_W, MAP_H);
       const zoneId = zoneIdFromTileXY(here.x, here.y);
 
@@ -985,7 +1007,6 @@ export default function DemoPage() {
       const dc = Number(payload?.dice?.dc ?? 0);
       const success = Number.isFinite(roll) && Number.isFinite(dc) ? roll >= dc : false;
 
-      // Enemy-turn resolutions are effectively contested pressure.
       const kind = "contested" as ReturnType<typeof inferOptionKind>;
 
       const pressureDelta = pressureDeltaFor(kind, success);
@@ -1068,7 +1089,7 @@ export default function DemoPage() {
 
   function enterDungeon() {
     if (!canEnterDungeon) return;
-    playIntroTheme();
+    playIntroTheme(true);
     setEnteredDungeon(true);
     setActiveSection("table");
     queueMicrotask(() => scrollToSection("table"));
@@ -1102,20 +1123,7 @@ export default function DemoPage() {
 
   return (
     <AmbientBackground>
-      <audio
-        ref={introAudioRef}
-        preload="auto"
-        src="/audio/music/chronicles_intro.mp3"
-        style={{ display: "none" }}
-        onEnded={() => {
-          if (!enteredDungeon) return;
-          if (combatActive) {
-            startCombatTheme();
-            return;
-          }
-          startAmbientTheme();
-        }}
-      />
+      <audio ref={introAudioRef} preload="auto" src="/audio/music/chronicles_intro.mp3" style={{ display: "none" }} />
 
       <audio ref={bgmAudioRef} preload="auto" style={{ display: "none" }} />
 
@@ -1167,6 +1175,14 @@ export default function DemoPage() {
                 setTableDraftText={setTableDraftText}
                 onAccept={() => {
                   setTableAccepted(true);
+                  pauseIntroTheme(true);
+
+                  if (combatActive) {
+                    startCombatTheme();
+                  } else {
+                    startAmbientTheme();
+                  }
+
                   setActiveSection("party");
                   queueMicrotask(() => scrollToSection("party"));
                 }}
@@ -1218,8 +1234,11 @@ export default function DemoPage() {
                   partyMembers={partyMembers.map((m, idx) => ({
                     id: String(m.id),
                     name: displayName(m, idx + 1),
+                    species: m.species,
                     className: m.className,
                     portrait: m.portrait ?? "Male",
+                    skills: m.skills ?? [],
+                    traits: m.traits ?? [],
                     ac: m.ac,
                     hpMax: m.hpMax,
                     hpCurrent: m.hpCurrent,
@@ -1257,6 +1276,8 @@ export default function DemoPage() {
                       ? partyMembers.map((m, idx) => ({
                           id: String(m.id),
                           label: `${displayName(m, idx + 1)} (${m.id})`,
+                          skills: m.skills ?? [],
+                          traits: m.traits ?? [],
                         }))
                       : []
                   }
