@@ -28,6 +28,16 @@
 // - Pressure/Map/Combat/Action stay locked until PARTY_DECLARED exists
 // - Chapters "Party" represents PARTY_DECLARED (not just party size)
 //
+// Gameplay focus update:
+// - After PARTY_DECLARED, gameplay no longer drops straight into command input
+// - First-time runtime attention is guided in sequence:
+//     1) Pressure
+//     2) Map
+//     3) Action / command
+// - Pressure owns the stage first
+// - Then the map takes focus
+// - Only then does the command surface become primary
+//
 // Audio update:
 // - Intro music is owned at page level (not hero component level)
 // - Hero "Enter" triggers /audio/music/chronicles_intro.mp3
@@ -119,6 +129,8 @@ type PresentationPhase =
   | "chronicle"
   | "party-declaration"
   | "gameplay";
+
+type GameplayFocusStep = "pressure" | "map" | "action";
 
 const STARTER_CLASS_PLANS: Record<1 | 2 | 3 | 4 | 5 | 6, readonly string[]> = {
   1: ["Warrior"],
@@ -385,6 +397,7 @@ export default function DemoPage() {
   const [enteredDungeon, setEnteredDungeon] = useState(false);
 
   const [activeSection, setActiveSection] = useState<DemoSectionId>("mode");
+  const [gameplayFocusStep, setGameplayFocusStep] = useState<GameplayFocusStep>("pressure");
 
   const [playerInput, setPlayerInput] = useState("");
   const [parsed, setParsed] = useState<any>(null);
@@ -724,6 +737,7 @@ export default function DemoPage() {
     );
 
     if (tableAccepted) {
+      setGameplayFocusStep("pressure");
       setActiveSection("pressure");
       queueMicrotask(() => scrollToSection("pressure"));
     }
@@ -781,6 +795,7 @@ export default function DemoPage() {
     if (dmMode === null) return;
     setTableAccepted(false);
     setEnteredDungeon(false);
+    setGameplayFocusStep("pressure");
   }, [dmMode]);
 
   function appendCanon(type: string, payload: any) {
@@ -821,6 +836,7 @@ export default function DemoPage() {
     setParsed(parsedAction);
     setOptions([...optionSet.options]);
     setSelectedOption(null);
+    setGameplayFocusStep("action");
 
     setActiveSection("resolution");
     queueMicrotask(() => scrollToSection("resolution"));
@@ -831,6 +847,7 @@ export default function DemoPage() {
     if (!options || options.length === 0) return;
 
     setSelectedOption(options[0]);
+    setGameplayFocusStep("action");
     setActiveSection("resolution");
     queueMicrotask(() => scrollToSection("resolution"));
   }, [dmMode, options]);
@@ -1009,6 +1026,7 @@ export default function DemoPage() {
     setParsed(null);
     setOptions(null);
     setSelectedOption(null);
+    setGameplayFocusStep("action");
 
     setActiveSection("action");
     queueMicrotask(() => scrollToSection("action"));
@@ -1069,6 +1087,7 @@ export default function DemoPage() {
       return next;
     });
 
+    setGameplayFocusStep("action");
     setActiveSection("canon");
     queueMicrotask(() => scrollToSection("canon"));
   }
@@ -1114,6 +1133,25 @@ export default function DemoPage() {
   const showCompactHero = presentationPhase !== "onboarding";
   const showGameplay = presentationPhase === "gameplay";
 
+  const allowGameplay = dmMode !== null && tableAccepted && partyCanonicalExists;
+
+  const gameplayAllowsPressure = showGameplay && allowGameplay;
+  const gameplayAllowsMap = gameplayAllowsPressure && (gameplayFocusStep === "map" || gameplayFocusStep === "action");
+  const gameplayAllowsAction = gameplayAllowsPressure && gameplayFocusStep === "action";
+
+  useEffect(() => {
+    if (!showGameplay || !allowGameplay) return;
+    if (gameplayFocusStep === "pressure") {
+      queueMicrotask(() => scrollToSection("pressure"));
+      return;
+    }
+    if (gameplayFocusStep === "map") {
+      queueMicrotask(() => scrollToSection("map"));
+      return;
+    }
+    queueMicrotask(() => scrollToSection("action"));
+  }, [showGameplay, allowGameplay, gameplayFocusStep]);
+
   function enterDungeon() {
     if (!canEnterDungeon) return;
     playIntroTheme(true);
@@ -1123,8 +1161,26 @@ export default function DemoPage() {
   }
 
   function jumpTo(key: any) {
-    setActiveSection(key as DemoSectionId);
-    scrollToSection(key as DemoSectionId);
+    const nextKey = key as DemoSectionId;
+
+    if (showGameplay && allowGameplay) {
+      if (nextKey === "pressure") {
+        setGameplayFocusStep("pressure");
+      } else if (nextKey === "map") {
+        setGameplayFocusStep("map");
+      } else if (
+        nextKey === "combat" ||
+        nextKey === "action" ||
+        nextKey === "resolution" ||
+        nextKey === "canon" ||
+        nextKey === "ledger"
+      ) {
+        setGameplayFocusStep("action");
+      }
+    }
+
+    setActiveSection(nextKey);
+    scrollToSection(nextKey);
   }
 
   const activeEnemyOverlayName =
@@ -1141,8 +1197,6 @@ export default function DemoPage() {
     !!activeEnemyOverlayId;
 
   const resolutionDmMode = useMemo(() => (dmMode === "solace-neutral" ? "solace_neutral" : "human"), [dmMode]);
-
-  const allowGameplay = dmMode !== null && tableAccepted && partyCanonicalExists;
 
   return (
     <AmbientBackground>
@@ -1164,6 +1218,7 @@ export default function DemoPage() {
                   setDmMode(nextMode);
                   setEnteredDungeon(false);
                   setTableAccepted(false);
+                  setGameplayFocusStep("pressure");
                   setActiveSection("mode");
                   setPartyDraft((prev) => prev ?? defaultParty(partySize));
                 }}
@@ -1173,6 +1228,7 @@ export default function DemoPage() {
                   if (dmMode === null) return;
                   setEnteredDungeon(false);
                   setTableAccepted(false);
+                  setGameplayFocusStep("pressure");
                   setPartySize(n);
                 }}
                 onEnter={enterDungeon}
@@ -1197,6 +1253,7 @@ export default function DemoPage() {
                   setDmMode(nextMode);
                   setEnteredDungeon(false);
                   setTableAccepted(false);
+                  setGameplayFocusStep("pressure");
                   setActiveSection("mode");
                   setPartyDraft((prev) => prev ?? defaultParty(partySize));
                 }}
@@ -1206,6 +1263,7 @@ export default function DemoPage() {
                   if (dmMode === null) return;
                   setEnteredDungeon(false);
                   setTableAccepted(false);
+                  setGameplayFocusStep("pressure");
                   setPartySize(n);
                 }}
                 onEnter={enterDungeon}
@@ -1231,6 +1289,7 @@ export default function DemoPage() {
                 setTableDraftText={setTableDraftText}
                 onAccept={() => {
                   setTableAccepted(true);
+                  setGameplayFocusStep("pressure");
                   pauseIntroTheme(true);
 
                   if (combatActive) {
@@ -1264,101 +1323,149 @@ export default function DemoPage() {
 
           {showGameplay && allowGameplay && (
             <>
+              {gameplayFocusStep === "pressure" && (
+                <CardSection title="The Air Tightens">
+                  <div style={{ display: "grid", gap: 10 }}>
+                    <p style={{ margin: 0 }}>
+                      The party has entered the depths. First, read the danger state before making a move.
+                    </p>
+                    <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                      <button
+                        onClick={() => {
+                          setGameplayFocusStep("map");
+                          setActiveSection("map");
+                          queueMicrotask(() => scrollToSection("map"));
+                        }}
+                      >
+                        Survey the Dungeon Map
+                      </button>
+                    </div>
+                  </div>
+                </CardSection>
+              )}
+
               <div id={anchorId("pressure")} style={{ scrollMarginTop: 90 }}>
-                <DungeonPressurePanel turn={outcomesCount} events={state.events} />
+                {gameplayAllowsPressure && <DungeonPressurePanel turn={outcomesCount} events={state.events} />}
               </div>
+
+              {gameplayAllowsMap && gameplayFocusStep === "map" && (
+                <CardSection title="The Path Reveals Itself">
+                  <div style={{ display: "grid", gap: 10 }}>
+                    <p style={{ margin: 0 }}>
+                      Now take in the terrain and position. Once the space is clear, the first command can be given.
+                    </p>
+                    <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                      <button
+                        onClick={() => {
+                          setGameplayFocusStep("action");
+                          setActiveSection("action");
+                          queueMicrotask(() => scrollToSection("action"));
+                        }}
+                      >
+                        Prepare the First Move
+                      </button>
+                    </div>
+                  </div>
+                </CardSection>
+              )}
 
               <div id={anchorId("map")} style={{ scrollMarginTop: 90 }}>
-                <MapSection
-                  events={state.events as any[]}
-                  mapW={MAP_W}
-                  mapH={MAP_H}
-                  activeEnemyGroupName={activeEnemyOverlayName}
-                  playSignal={enemyPlayNonce}
-                />
+                {gameplayAllowsMap && (
+                  <MapSection
+                    events={state.events as any[]}
+                    mapW={MAP_W}
+                    mapH={MAP_H}
+                    activeEnemyGroupName={activeEnemyOverlayName}
+                    playSignal={enemyPlayNonce}
+                  />
+                )}
               </div>
 
-              <div id={anchorId("combat")} style={{ scrollMarginTop: 90 }}>
-                <CombatSection
-                  events={state.events as any[]}
-                  dmMode={dmMode}
-                  onAppendCanon={appendCanon}
-                  partyMembers={partyMembers.map((m, idx) => ({
-                    id: String(m.id),
-                    name: displayName(m, idx + 1),
-                    species: m.species,
-                    className: m.className,
-                    portrait: m.portrait ?? "Male",
-                    skills: m.skills ?? [],
-                    traits: m.traits ?? [],
-                    ac: m.ac,
-                    hpMax: m.hpMax,
-                    hpCurrent: m.hpCurrent,
-                    initiativeMod: m.initiativeMod,
-                  }))}
-                  pressureTier={pressureTier}
-                  allowDevControls={false}
-                  showEnemyResolver={solaceNeutralEnemyTurnEnabled}
-                  activeEnemyGroupName={activeEnemyOverlayName}
-                  activeEnemyGroupId={activeEnemyOverlayId}
-                  playerNames={effectivePlayerNames}
-                  onTelegraph={(info) => {
-                    setEnemyTelegraphHint(info);
-                    setEnemyPlayNonce((n) => n + 1);
-                  }}
-                  onCommitOutcomeOnly={(payload) => handleRecordOutcomeOnly(payload)}
-                  onAdvanceTurn={() => advanceTurn()}
-                  enemyTelegraphHint={enemyTelegraphHint}
-                  derivedCombat={derivedCombat as any}
-                  activeCombatantSpec={activeCombatantSpec}
-                  combatEnded={combatEnded}
-                  isEnemyTurn={isEnemyTurn}
-                  isWrongPlayerForTurn={isWrongPlayerForTurn}
-                  onAdvanceTurnBtn={() => advanceTurn()}
-                  onPassTurnBtn={() => passTurn()}
-                  onEndCombatBtn={() => endCombat()}
-                />
-              </div>
+              {gameplayAllowsAction && (
+                <div id={anchorId("combat")} style={{ scrollMarginTop: 90 }}>
+                  <CombatSection
+                    events={state.events as any[]}
+                    dmMode={dmMode}
+                    onAppendCanon={appendCanon}
+                    partyMembers={partyMembers.map((m, idx) => ({
+                      id: String(m.id),
+                      name: displayName(m, idx + 1),
+                      species: m.species,
+                      className: m.className,
+                      portrait: m.portrait ?? "Male",
+                      skills: m.skills ?? [],
+                      traits: m.traits ?? [],
+                      ac: m.ac,
+                      hpMax: m.hpMax,
+                      hpCurrent: m.hpCurrent,
+                      initiativeMod: m.initiativeMod,
+                    }))}
+                    pressureTier={pressureTier}
+                    allowDevControls={false}
+                    showEnemyResolver={solaceNeutralEnemyTurnEnabled}
+                    activeEnemyGroupName={activeEnemyOverlayName}
+                    activeEnemyGroupId={activeEnemyOverlayId}
+                    playerNames={effectivePlayerNames}
+                    onTelegraph={(info) => {
+                      setEnemyTelegraphHint(info);
+                      setEnemyPlayNonce((n) => n + 1);
+                    }}
+                    onCommitOutcomeOnly={(payload) => handleRecordOutcomeOnly(payload)}
+                    onAdvanceTurn={() => advanceTurn()}
+                    enemyTelegraphHint={enemyTelegraphHint}
+                    derivedCombat={derivedCombat as any}
+                    activeCombatantSpec={activeCombatantSpec}
+                    combatEnded={combatEnded}
+                    isEnemyTurn={isEnemyTurn}
+                    isWrongPlayerForTurn={isWrongPlayerForTurn}
+                    onAdvanceTurnBtn={() => advanceTurn()}
+                    onPassTurnBtn={() => passTurn()}
+                    onEndCombatBtn={() => endCombat()}
+                  />
+                </div>
+              )}
 
-              <div id={anchorId("action")} style={{ scrollMarginTop: 90 }}>
-                <ActionSection
-                  partyMembers={
-                    partyMembers.length
-                      ? partyMembers.map((m, idx) => ({
-                          id: String(m.id),
-                          label: `${displayName(m, idx + 1)} (${m.id})`,
-                          skills: m.skills ?? [],
-                          traits: m.traits ?? [],
-                        }))
-                      : []
-                  }
-                  actingPlayerId={actingPlayerId}
-                  onSetActingPlayerId={(id) => setActingPlayerId(id)}
-                  playerInput={playerInput}
-                  onSetPlayerInput={(v) => setPlayerInput(v)}
-                  canSubmit={canPlayerSubmitIntent}
-                  onSubmit={handlePlayerAction}
-                  combatActive={combatActive}
-                  passDisabled={(dmMode === "solace-neutral" && isEnemyTurn) || isWrongPlayerForTurn}
-                  onPassTurn={passTurn}
-                  dmMode={dmMode}
-                  isEnemyTurn={isEnemyTurn}
-                  isWrongPlayerForTurn={isWrongPlayerForTurn}
-                  activeTurnLabel={activeTurnLabel}
-                  showPartyButtons={dmMode === "human" && !partyLocked && !!partyDraft}
-                  onCommitParty={commitParty}
-                  onRandomNames={randomizePartyNames}
-                  commitDisabled={partyLocked}
-                />
-              </div>
+              {gameplayAllowsAction && (
+                <div id={anchorId("action")} style={{ scrollMarginTop: 90 }}>
+                  <ActionSection
+                    partyMembers={
+                      partyMembers.length
+                        ? partyMembers.map((m, idx) => ({
+                            id: String(m.id),
+                            label: `${displayName(m, idx + 1)} (${m.id})`,
+                            skills: m.skills ?? [],
+                            traits: m.traits ?? [],
+                          }))
+                        : []
+                    }
+                    actingPlayerId={actingPlayerId}
+                    onSetActingPlayerId={(id) => setActingPlayerId(id)}
+                    playerInput={playerInput}
+                    onSetPlayerInput={(v) => setPlayerInput(v)}
+                    canSubmit={canPlayerSubmitIntent}
+                    onSubmit={handlePlayerAction}
+                    combatActive={combatActive}
+                    passDisabled={(dmMode === "solace-neutral" && isEnemyTurn) || isWrongPlayerForTurn}
+                    onPassTurn={passTurn}
+                    dmMode={dmMode}
+                    isEnemyTurn={isEnemyTurn}
+                    isWrongPlayerForTurn={isWrongPlayerForTurn}
+                    activeTurnLabel={activeTurnLabel}
+                    showPartyButtons={dmMode === "human" && !partyLocked && !!partyDraft}
+                    onCommitParty={commitParty}
+                    onRandomNames={randomizePartyNames}
+                    commitDisabled={partyLocked}
+                  />
+                </div>
+              )}
 
-              {parsed && (
+              {gameplayAllowsAction && parsed && (
                 <CardSection title="Parsed Action">
                   <pre>{JSON.stringify(parsed, null, 2)}</pre>
                 </CardSection>
               )}
 
-              {options && dmMode === "human" && (
+              {gameplayAllowsAction && options && dmMode === "human" && (
                 <CardSection title="Options">
                   <ul>
                     {options.map((opt) => (
@@ -1366,6 +1473,7 @@ export default function DemoPage() {
                         <button
                           onClick={() => {
                             setSelectedOption(opt);
+                            setGameplayFocusStep("action");
                             setActiveSection("resolution");
                             queueMicrotask(() => scrollToSection("resolution"));
                           }}
@@ -1378,29 +1486,35 @@ export default function DemoPage() {
                 </CardSection>
               )}
 
-              <div id={anchorId("resolution")} style={{ scrollMarginTop: 90 }}>
-                {selectedOption && (
-                  <ResolutionDraftAdvisoryPanel
-                    role={role}
-                    dmMode={resolutionDmMode}
-                    context={{
-                      optionDescription: selectedOption.description,
-                      optionKind: inferOptionKind(`${playerInput}\n${selectedOption.description}`.trim()),
-                    }}
-                    rollModifier={actingRollModifier}
-                    rollModifierLabel={actingPlayerInjuryStacks > 0 ? `Injury stacks: ${actingPlayerInjuryStacks}` : "Injury"}
-                    onRecord={handleRecord}
-                  />
-                )}
-              </div>
+              {gameplayAllowsAction && (
+                <div id={anchorId("resolution")} style={{ scrollMarginTop: 90 }}>
+                  {selectedOption && (
+                    <ResolutionDraftAdvisoryPanel
+                      role={role}
+                      dmMode={resolutionDmMode}
+                      context={{
+                        optionDescription: selectedOption.description,
+                        optionKind: inferOptionKind(`${playerInput}\n${selectedOption.description}`.trim()),
+                      }}
+                      rollModifier={actingRollModifier}
+                      rollModifierLabel={actingPlayerInjuryStacks > 0 ? `Injury stacks: ${actingPlayerInjuryStacks}` : "Injury"}
+                      onRecord={handleRecord}
+                    />
+                  )}
+                </div>
+              )}
 
-              <NextActionHint state={state} />
+              {gameplayAllowsAction && <NextActionHint state={state} />}
 
-              <div id={anchorId("canon")} style={{ scrollMarginTop: 90 }}>
-                <CanonChronicleSection events={state.events as any[]} />
-              </div>
+              {gameplayAllowsAction && (
+                <div id={anchorId("canon")} style={{ scrollMarginTop: 90 }}>
+                  <CanonChronicleSection events={state.events as any[]} />
+                </div>
+              )}
 
-              <div id={anchorId("ledger")} style={{ height: 1, scrollMarginTop: 90 }} />
+              {gameplayAllowsAction && (
+                <div id={anchorId("ledger")} style={{ height: 1, scrollMarginTop: 90 }} />
+              )}
             </>
           )}
         </StewardedShell>
