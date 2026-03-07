@@ -1517,6 +1517,9 @@ export default function DemoPage() {
                         ? partyMembers.map((m, idx) => ({
                             id: String(m.id),
                             label: `${displayName(m, idx + 1)} (${m.id})`,
+                            species: m.species ?? "Human",
+                            className: m.className || "Warrior",
+                            portrait: m.portrait ?? "Male",
                             skills: m.skills ?? [],
                             traits: m.traits ?? [],
                           }))
