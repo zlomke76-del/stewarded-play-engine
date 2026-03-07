@@ -5,6 +5,11 @@
 // ------------------------------------------------------------
 // Visual-only onboarding hero.
 // Receives all values and callbacks from the page orchestrator.
+//
+// Upgraded:
+// - adds local UI SFX for mode selection, party size, chapter chips,
+//   and the Enter button
+// - keeps music ownership in page/orchestrator
 // ------------------------------------------------------------
 
 import React, { useMemo } from "react";
@@ -24,6 +29,24 @@ type ChapterKey =
 
 type ChipState = "done" | "next" | "locked" | "open";
 
+const SFX = {
+  buttonClick: "/assets/audio/sfx_button_click_01.mp3",
+  uiSuccess: "/assets/audio/sfx_success_01.mp3",
+  uiFailure: "/assets/audio/sfx_failure_01.mp3",
+} as const;
+
+function playSfx(src: string, volume = 0.66) {
+  try {
+    const audio = new Audio(src);
+    audio.volume = volume;
+    void audio.play().catch(() => {
+      // fail silently; onboarding SFX should never block flow
+    });
+  } catch {
+    // fail silently
+  }
+}
+
 function clampInt(n: number, lo: number, hi: number) {
   return Math.max(lo, Math.min(hi, Math.trunc(n)));
 }
@@ -42,19 +65,19 @@ function Chip({
     state === "done"
       ? "rgba(138,180,255,0.12)"
       : state === "next"
-      ? "rgba(255,255,255,0.08)"
-      : state === "open"
-      ? "rgba(255,255,255,0.06)"
-      : "rgba(255,255,255,0.03)";
+        ? "rgba(255,255,255,0.08)"
+        : state === "open"
+          ? "rgba(255,255,255,0.06)"
+          : "rgba(255,255,255,0.03)";
 
   const border =
     state === "done"
       ? "1px solid rgba(138,180,255,0.35)"
       : state === "next"
-      ? "1px solid rgba(255,255,255,0.18)"
-      : state === "open"
-      ? "1px solid rgba(255,255,255,0.12)"
-      : "1px solid rgba(255,255,255,0.08)";
+        ? "1px solid rgba(255,255,255,0.18)"
+        : state === "open"
+          ? "1px solid rgba(255,255,255,0.12)"
+          : "1px solid rgba(255,255,255,0.08)";
 
   const opacity = state === "locked" ? 0.55 : 1;
 
@@ -131,8 +154,6 @@ function TriToggle({
         type="button"
         aria-label="toggle"
         disabled={true}
-        // NOTE: disabled on purpose — this enforces "declare style" intentionally via labels,
-        // while still showing neutral-middle state on arrival.
         style={{
           width: 54,
           height: 28,
@@ -298,7 +319,10 @@ export default function HeroOnboarding({
 
               <TriToggle
                 dmMode={dmMode}
-                onSetDmMode={onSetDmMode}
+                onSetDmMode={(next) => {
+                  playSfx(SFX.buttonClick, 0.62);
+                  onSetDmMode(next);
+                }}
                 leftLabel="Human"
                 rightLabel="Solace"
               />
@@ -329,7 +353,11 @@ export default function HeroOnboarding({
                       key={n}
                       type="button"
                       onClick={() => {
-                        if (dmMode === null) return;
+                        if (dmMode === null || partyLocked) {
+                          playSfx(SFX.uiFailure, 0.52);
+                          return;
+                        }
+                        playSfx(SFX.buttonClick, 0.6);
                         onSetPartySize(n);
                       }}
                       disabled={dmMode === null || partyLocked}
@@ -382,16 +410,86 @@ export default function HeroOnboarding({
               <div style={{ fontWeight: 900, letterSpacing: 0.2 }}>Chapters</div>
 
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                <Chip label="Mode" state={chapterState.mode} onClick={() => onJump("mode")} />
-                <Chip label="Party" state={chapterState.party} onClick={() => onJump("party")} />
-                <Chip label="Table" state={chapterState.table} onClick={() => onJump("table")} />
-                <Chip label="Pressure" state={chapterState.pressure} onClick={() => onJump("pressure")} />
-                <Chip label="Map" state={chapterState.map} onClick={() => onJump("map")} />
-                <Chip label="Combat" state={chapterState.combat} onClick={() => onJump("combat")} />
-                <Chip label="Action" state={chapterState.action} onClick={() => onJump("action")} />
-                <Chip label="Resolution" state={chapterState.resolution} onClick={() => onJump("resolution")} />
-                <Chip label="Canon" state={chapterState.canon} onClick={() => onJump("canon")} />
-                <Chip label="Chronicle" state={chapterState.ledger} onClick={() => onJump("ledger")} />
+                <Chip
+                  label="Mode"
+                  state={chapterState.mode}
+                  onClick={() => {
+                    playSfx(SFX.buttonClick, 0.58);
+                    onJump("mode");
+                  }}
+                />
+                <Chip
+                  label="Party"
+                  state={chapterState.party}
+                  onClick={() => {
+                    playSfx(SFX.buttonClick, 0.58);
+                    onJump("party");
+                  }}
+                />
+                <Chip
+                  label="Table"
+                  state={chapterState.table}
+                  onClick={() => {
+                    playSfx(SFX.buttonClick, 0.58);
+                    onJump("table");
+                  }}
+                />
+                <Chip
+                  label="Pressure"
+                  state={chapterState.pressure}
+                  onClick={() => {
+                    playSfx(SFX.buttonClick, 0.58);
+                    onJump("pressure");
+                  }}
+                />
+                <Chip
+                  label="Map"
+                  state={chapterState.map}
+                  onClick={() => {
+                    playSfx(SFX.buttonClick, 0.58);
+                    onJump("map");
+                  }}
+                />
+                <Chip
+                  label="Combat"
+                  state={chapterState.combat}
+                  onClick={() => {
+                    playSfx(SFX.buttonClick, 0.58);
+                    onJump("combat");
+                  }}
+                />
+                <Chip
+                  label="Action"
+                  state={chapterState.action}
+                  onClick={() => {
+                    playSfx(SFX.buttonClick, 0.58);
+                    onJump("action");
+                  }}
+                />
+                <Chip
+                  label="Resolution"
+                  state={chapterState.resolution}
+                  onClick={() => {
+                    playSfx(SFX.buttonClick, 0.58);
+                    onJump("resolution");
+                  }}
+                />
+                <Chip
+                  label="Canon"
+                  state={chapterState.canon}
+                  onClick={() => {
+                    playSfx(SFX.buttonClick, 0.58);
+                    onJump("canon");
+                  }}
+                />
+                <Chip
+                  label="Chronicle"
+                  state={chapterState.ledger}
+                  onClick={() => {
+                    playSfx(SFX.buttonClick, 0.58);
+                    onJump("ledger");
+                  }}
+                />
               </div>
 
               <div style={{ fontSize: 12, opacity: 0.70 }}>Progress unlocks the deeper chapters.</div>
@@ -481,7 +579,14 @@ export default function HeroOnboarding({
               <div style={{ marginTop: 10, display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
                 <button
                   type="button"
-                  onClick={onEnter}
+                  onClick={() => {
+                    if (!canEnter) {
+                      playSfx(SFX.uiFailure, 0.54);
+                      return;
+                    }
+                    playSfx(SFX.uiSuccess, 0.68);
+                    onEnter();
+                  }}
                   disabled={!canEnter}
                   style={{
                     padding: "10px 14px",
