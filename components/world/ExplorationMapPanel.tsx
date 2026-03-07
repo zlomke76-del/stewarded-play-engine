@@ -61,13 +61,31 @@ function assetForMark(kind: MapMarkKind): { src: string; label: string } | null 
     case "altar":
       return { src: `${ASSET_BASE}/map_altar.png`, label: "Altar" };
     case "cache":
-      // Closest match to "cache" in the provided assets list
       return { src: `${ASSET_BASE}/map_treasure.png`, label: "Cache" };
     case "hazard":
       return { src: `${ASSET_BASE}/map_danger.png`, label: "Hazard" };
     default:
       return null;
   }
+}
+
+function isXY(value: any): value is XY {
+  return value && typeof value.x === "number" && typeof value.y === "number";
+}
+
+function createMark(
+  at: XY,
+  kind: MapMarkKind,
+  e: any,
+  note?: string | null
+): MapMark {
+  return {
+    at: { x: at.x, y: at.y },
+    kind,
+    note: typeof note === "string" && note.trim() ? note.trim() : null,
+    eventId: String(e?.id ?? ""),
+    timestamp: Number(e?.timestamp ?? Date.now()),
+  };
 }
 
 function deriveMapState(events: readonly SessionEvent[], w: number, h: number) {
@@ -104,16 +122,113 @@ function deriveMapState(events: readonly SessionEvent[], w: number, h: number) {
       if (!kind) continue;
 
       const k = keyXY(p.at);
-      marksByTile.set(k, {
-        at: { x: p.at.x, y: p.at.y },
-        kind,
-        note: typeof p.note === "string" ? p.note : null,
-        eventId: String(e.id ?? ""),
-        timestamp: Number(e.timestamp ?? Date.now()),
-      });
-
-      // Mark implies the tile is known (but does not reveal neighbors)
+      marksByTile.set(k, createMark(p.at, kind, e, p.note));
       discovered.add(k);
+      continue;
+    }
+
+    if (e?.type === "DOOR_DISCOVERED" || e?.type === "DOOR_LOCKED") {
+      const p = e?.payload ?? {};
+      const at = p?.at;
+
+      if (!isXY(at) || !withinBounds(at, w, h)) continue;
+
+      const k = keyXY(at);
+      const note =
+        e.type === "DOOR_LOCKED"
+          ? typeof p?.note === "string" && p.note.trim()
+            ? p.note
+            : "locked"
+          : typeof p?.note === "string"
+            ? p.note
+            : null;
+
+      marksByTile.set(k, createMark(at, "door", e, note));
+      discovered.add(k);
+      continue;
+    }
+
+    if (e?.type === "HAZARD_REVEALED") {
+      const p = e?.payload ?? {};
+      const at = p?.at;
+
+      if (!isXY(at) || !withinBounds(at, w, h)) continue;
+
+      const k = keyXY(at);
+      const note =
+        typeof p?.hazardType === "string" && p.hazardType.trim()
+          ? p.hazardType
+          : typeof p?.note === "string"
+            ? p.note
+            : null;
+
+      marksByTile.set(k, createMark(at, "hazard", e, note));
+      discovered.add(k);
+      continue;
+    }
+
+    if (e?.type === "CACHE_REVEALED") {
+      const p = e?.payload ?? {};
+      const at = p?.at;
+
+      if (!isXY(at) || !withinBounds(at, w, h)) continue;
+
+      const k = keyXY(at);
+      const note =
+        typeof p?.cacheType === "string" && p.cacheType.trim()
+          ? p.cacheType
+          : typeof p?.note === "string"
+            ? p.note
+            : null;
+
+      marksByTile.set(k, createMark(at, "cache", e, note));
+      discovered.add(k);
+      continue;
+    }
+
+    if (e?.type === "ALTAR_REVEALED") {
+      const p = e?.payload ?? {};
+      const at = p?.at;
+
+      if (!isXY(at) || !withinBounds(at, w, h)) continue;
+
+      const k = keyXY(at);
+      const note = typeof p?.note === "string" ? p.note : null;
+
+      marksByTile.set(k, createMark(at, "altar", e, note));
+      discovered.add(k);
+      continue;
+    }
+
+    if (e?.type === "STAIRS_REVEALED") {
+      const p = e?.payload ?? {};
+      const at = p?.at;
+
+      if (!isXY(at) || !withinBounds(at, w, h)) continue;
+
+      const k = keyXY(at);
+      const note = typeof p?.note === "string" ? p.note : null;
+
+      marksByTile.set(k, createMark(at, "stairs", e, note));
+      discovered.add(k);
+      continue;
+    }
+
+    if (e?.type === "PATROL_SIGNS_REVEALED") {
+      const p = e?.payload ?? {};
+      const at = p?.at;
+
+      if (!isXY(at) || !withinBounds(at, w, h)) continue;
+
+      const k = keyXY(at);
+      const note =
+        typeof p?.note === "string" && p.note.trim()
+          ? p.note
+          : "patrol signs";
+
+      marksByTile.set(k, createMark(at, "hazard", e, note));
+      discovered.add(k);
+      continue;
     }
   }
 
@@ -177,8 +292,7 @@ function IconImg({
 export default function ExplorationMapPanel({ events, mapW = 13, mapH = 9 }: Props) {
   const derived = useMemo(() => deriveMapState(events, mapW, mapH), [events, mapW, mapH]);
 
-  // B/C feel: tabletop board + fog-of-war tactical
-  const TILE = 26; // physical presence
+  const TILE = 26;
   const GAP = 5;
 
   const playerAsset = assetForPlayer();
@@ -296,7 +410,6 @@ export default function ExplorationMapPanel({ events, mapW = 13, mapH = 9 }: Pro
         )}
       </div>
 
-      {/* Board */}
       <div
         style={{
           display: "inline-block",
@@ -311,7 +424,6 @@ export default function ExplorationMapPanel({ events, mapW = 13, mapH = 9 }: Pro
           maxWidth: "100%",
         }}
       >
-        {/* Grid wrapper: relative so we can add a torchlight + vignette overlay */}
         <div
           style={{
             position: "relative",
@@ -347,7 +459,6 @@ export default function ExplorationMapPanel({ events, mapW = 13, mapH = 9 }: Pro
                 if (mark.note) titleParts.push(`Note: ${mark.note}`);
               }
 
-              // Visual states
               const fogBg = "rgba(0,0,0,0.64)";
               const knownBg = "rgba(255,255,255,0.07)";
               const playerBg = "rgba(138,180,255,0.10)";
@@ -373,12 +484,12 @@ export default function ExplorationMapPanel({ events, mapW = 13, mapH = 9 }: Pro
                     lineHeight: 1,
                     userSelect: "none",
                     overflow: "hidden",
-                    transition: "background 180ms ease, border-color 180ms ease, transform 140ms ease, opacity 180ms ease",
+                    transition:
+                      "background 180ms ease, border-color 180ms ease, transform 140ms ease, opacity 180ms ease",
                     transform: here ? "translateY(-0.5px)" : "none",
                     opacity: seen ? 1 : 0.95,
                   }}
                 >
-                  {/* Subtle tile texture for known tiles */}
                   {seen ? (
                     <span
                       aria-hidden
@@ -393,7 +504,6 @@ export default function ExplorationMapPanel({ events, mapW = 13, mapH = 9 }: Pro
                     />
                   ) : null}
 
-                  {/* Mark icon (under player so player stays readable) */}
                   {seen && markAsset ? (
                     <span
                       style={{
@@ -411,7 +521,6 @@ export default function ExplorationMapPanel({ events, mapW = 13, mapH = 9 }: Pro
                     </span>
                   ) : null}
 
-                  {/* Player token (your uploaded asset) */}
                   {here ? (
                     <span
                       aria-hidden
@@ -437,7 +546,6 @@ export default function ExplorationMapPanel({ events, mapW = 13, mapH = 9 }: Pro
             })}
           </div>
 
-          {/* Torchlight + vignette overlay (purely visual) */}
           <span
             aria-hidden
             style={{
@@ -456,7 +564,6 @@ export default function ExplorationMapPanel({ events, mapW = 13, mapH = 9 }: Pro
             }}
           />
 
-          {/* Subtle top sheen to make it feel like a physical board */}
           <span
             aria-hidden
             style={{
