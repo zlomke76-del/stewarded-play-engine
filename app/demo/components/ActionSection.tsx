@@ -8,22 +8,23 @@
 //
 // Upgraded:
 // - replaces acting-player dropdown with party turn cards
+// - renders real portraits in the turn cards
 // - adds a cinematic active-player header
 // - upgrades quick-action buttons into tactical ability pills
 // - renames Submit Action -> Resolve Action
 // - preserves all existing action / dictation / turn logic
-//
-// Note:
-// - this version uses player labels to render turn cards
-// - true portrait cards would require portrait/class/species props from page-level orchestration
 // ------------------------------------------------------------
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import CardSection from "@/components/layout/CardSection";
+import { getPortraitPath } from "@/lib/portraits/getPortraitPath";
 
 type PartyMemberLite = {
   id: string;
   label: string;
+  species?: string;
+  className?: string;
+  portrait?: "Male" | "Female";
   skills?: string[];
   traits?: string[];
 };
@@ -129,14 +130,6 @@ function extractMetaLabel(label: string) {
   const close = raw.indexOf(")");
   if (open >= 0 && close > open) return raw.slice(open + 1, close).trim();
   return "";
-}
-
-function initialsFromLabel(label: string) {
-  const name = extractDisplayName(label);
-  const words = name.split(/\s+/).filter(Boolean);
-  if (words.length === 0) return "?";
-  if (words.length === 1) return words[0].slice(0, 2).toUpperCase();
-  return `${words[0][0] ?? ""}${words[1][0] ?? ""}`.toUpperCase();
 }
 
 function flavorLineForMember(label: string, skills: string[], traits: string[]) {
@@ -359,6 +352,14 @@ export default function ActionSection({
   const actingFlavorLine = useMemo(() => {
     return flavorLineForMember(actingLabel, actingSkillIds, actingTraitIds);
   }, [actingLabel, actingSkillIds, actingTraitIds]);
+
+  const actingPortraitPath = useMemo(() => {
+    return getPortraitPath(
+      actingMember?.species ?? "Human",
+      actingMember?.className ?? "Warrior",
+      actingMember?.portrait ?? "Male"
+    );
+  }, [actingMember]);
 
   const specialtyButtons = useMemo(() => {
     return actingSkillLabels.slice(0, 3);
@@ -722,7 +723,11 @@ export default function ActionSection({
                 const lockedByTurn = actingCardsLocked;
                 const displayName = extractDisplayName(member.label);
                 const meta = extractMetaLabel(member.label);
-                const initials = initialsFromLabel(member.label);
+                const portraitPath = getPortraitPath(
+                  member.species ?? "Human",
+                  member.className ?? "Warrior",
+                  member.portrait ?? "Male"
+                );
 
                 return (
                   <button
@@ -741,7 +746,7 @@ export default function ActionSection({
                     }
                     style={{
                       textAlign: "left",
-                      padding: "10px 10px",
+                      padding: "10px",
                       borderRadius: 14,
                       border: active
                         ? "1px solid rgba(255,196,118,0.34)"
@@ -753,7 +758,7 @@ export default function ActionSection({
                       opacity: lockedByTurn ? 0.7 : 1,
                       cursor: lockedByTurn ? "not-allowed" : "pointer",
                       display: "grid",
-                      gridTemplateColumns: "40px 1fr",
+                      gridTemplateColumns: "44px 1fr",
                       gap: 10,
                       alignItems: "center",
                       boxShadow: active ? "0 10px 24px rgba(0,0,0,0.18)" : "none",
@@ -761,25 +766,33 @@ export default function ActionSection({
                     }}
                   >
                     <div
-                      aria-hidden
                       style={{
-                        width: 40,
-                        height: 40,
-                        borderRadius: 999,
-                        display: "grid",
-                        placeItems: "center",
-                        fontWeight: 900,
-                        fontSize: 13,
-                        letterSpacing: 0.4,
+                        width: 44,
+                        height: 44,
+                        borderRadius: 10,
+                        overflow: "hidden",
                         border: active
-                          ? "1px solid rgba(255,196,118,0.30)"
+                          ? "1px solid rgba(255,196,118,0.28)"
                           : "1px solid rgba(255,255,255,0.10)",
-                        background: active
-                          ? "rgba(255,196,118,0.12)"
-                          : "rgba(255,255,255,0.06)",
+                        background: "rgba(255,255,255,0.04)",
+                        boxShadow: active ? "0 0 0 3px rgba(255,196,118,0.06)" : "none",
                       }}
                     >
-                      {initials}
+                      <img
+                        src={portraitPath}
+                        alt={`${displayName} portrait`}
+                        style={{
+                          width: "100%",
+                          height: "100%",
+                          objectFit: "cover",
+                          display: "block",
+                        }}
+                        onError={(e) => {
+                          const img = e.currentTarget;
+                          img.onerror = null;
+                          img.src = getPortraitPath("Human", "Warrior", member.portrait ?? "Male");
+                        }}
+                      />
                     </div>
 
                     <div style={{ minWidth: 0, display: "grid", gap: 2 }}>
@@ -838,28 +851,38 @@ export default function ActionSection({
           <div
             style={{
               display: "grid",
-              gridTemplateColumns: "56px 1fr",
+              gridTemplateColumns: "64px 1fr",
               gap: 12,
               alignItems: "start",
               marginBottom: 12,
             }}
           >
             <div
-              aria-hidden
               style={{
-                width: 56,
-                height: 56,
-                borderRadius: 999,
-                display: "grid",
-                placeItems: "center",
+                width: 64,
+                height: 64,
+                borderRadius: 14,
+                overflow: "hidden",
                 border: "1px solid rgba(255,196,118,0.24)",
                 background: "rgba(255,196,118,0.08)",
-                fontWeight: 900,
-                letterSpacing: 0.5,
                 boxShadow: canSubmit ? "0 0 0 4px rgba(255,196,118,0.05)" : "none",
               }}
             >
-              {initialsFromLabel(actingLabel)}
+              <img
+                src={actingPortraitPath}
+                alt={`${actingDisplayName} portrait`}
+                style={{
+                  width: "100%",
+                  height: "100%",
+                  objectFit: "cover",
+                  display: "block",
+                }}
+                onError={(e) => {
+                  const img = e.currentTarget;
+                  img.onerror = null;
+                  img.src = getPortraitPath("Human", "Warrior", actingMember?.portrait ?? "Male");
+                }}
+              />
             </div>
 
             <div style={{ minWidth: 0, display: "grid", gap: 4 }}>
