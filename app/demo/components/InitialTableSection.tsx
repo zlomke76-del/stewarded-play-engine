@@ -16,6 +16,25 @@ type Props = {
 
 const ACCEPT_LABEL = "Begin the Descent";
 
+const SFX = {
+  buttonClick: "/assets/audio/sfx_button_click_01.mp3",
+  uiSuccess: "/assets/audio/sfx_success_01.mp3",
+  uiFailure: "/assets/audio/sfx_failure_01.mp3",
+  stoneDoor: "/assets/audio/sfx_stone_door_01.mp3",
+} as const;
+
+function playSfx(src: string, volume = 0.68) {
+  try {
+    const audio = new Audio(src);
+    audio.volume = volume;
+    void audio.play().catch(() => {
+      // fail silently; UI audio should never block flow
+    });
+  } catch {
+    // fail silently
+  }
+}
+
 export default function InitialTableSection({
   dmMode,
   initialTable,
@@ -76,7 +95,15 @@ export default function InitialTableSection({
         </details>
 
         <div style={{ marginTop: 10 }}>
-          <button onClick={onAccept}>{ACCEPT_LABEL}</button>
+          <button
+            onClick={() => {
+              playSfx(SFX.uiSuccess, 0.72);
+              playSfx(SFX.stoneDoor, 0.56);
+              onAccept();
+            }}
+          >
+            {ACCEPT_LABEL}
+          </button>
         </div>
       </CardSection>
     );
@@ -97,7 +124,15 @@ export default function InitialTableSection({
       />
 
       <details style={{ marginTop: 12 }} open>
-        <summary className="muted">Show underlying table signals</summary>
+        <summary
+          className="muted"
+          onClick={() => {
+            playSfx(SFX.buttonClick, 0.54);
+          }}
+          style={{ cursor: "pointer" }}
+        >
+          Show underlying table signals
+        </summary>
         <div style={{ marginTop: 10 }}>
           <p>{initialTable.openingFrame}</p>
           <p className="muted">Traits: {initialTable.locationTraits.join(", ")}</p>
@@ -114,7 +149,15 @@ export default function InitialTableSection({
       </details>
 
       <div style={{ marginTop: 10 }}>
-        <button onClick={onAccept}>{ACCEPT_LABEL}</button>
+        <button
+          onClick={() => {
+            playSfx(SFX.uiSuccess, 0.72);
+            playSfx(SFX.stoneDoor, 0.56);
+            onAccept();
+          }}
+        >
+          {ACCEPT_LABEL}
+        </button>
       </div>
     </CardSection>
   );
