@@ -36,6 +36,11 @@
 // - The command window no longer steals immediate attention
 // - The player first reads danger, then space, then acts
 //
+// Theme polish update:
+// - Stage-transition controls are no longer generic utility buttons
+// - Pressure → Map and Map → Action now use ritual prompt rows
+// - Prompts are styled as in-world chapter transitions, not app buttons
+//
 // Audio update:
 // - Intro music is owned at page level (not hero component level)
 // - Hero "Enter" triggers /audio/music/chronicles_intro.mp3
@@ -369,6 +374,99 @@ function chooseNextTrack(tracks: readonly string[], lastIndexRef: React.MutableR
 
   lastIndexRef.current = nextIndex;
   return tracks[nextIndex];
+}
+
+function RitualPromptRow(props: {
+  title: string;
+  body: string;
+  actionLabel: string;
+  hint?: string;
+  onActivate: () => void;
+}) {
+  const { title, body, actionLabel, hint, onActivate } = props;
+
+  return (
+    <CardSection title={title}>
+      <div style={{ display: "grid", gap: 12 }}>
+        <p style={{ margin: 0, lineHeight: 1.65, opacity: 0.9 }}>{body}</p>
+
+        <button
+          type="button"
+          onClick={onActivate}
+          style={{
+            width: "100%",
+            textAlign: "left",
+            padding: "14px 16px",
+            borderRadius: 14,
+            border: "1px solid rgba(214, 188, 120, 0.22)",
+            background:
+              "linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.02))",
+            boxShadow:
+              "inset 0 1px 0 rgba(255,255,255,0.05), 0 10px 28px rgba(0,0,0,0.22)",
+            cursor: "pointer",
+            transition:
+              "border-color 160ms ease, background 160ms ease, transform 160ms ease, box-shadow 160ms ease",
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.borderColor = "rgba(214, 188, 120, 0.38)";
+            e.currentTarget.style.background =
+              "linear-gradient(180deg, rgba(255,255,255,0.07), rgba(255,255,255,0.03))";
+            e.currentTarget.style.transform = "translateY(-1px)";
+            e.currentTarget.style.boxShadow =
+              "inset 0 1px 0 rgba(255,255,255,0.07), 0 14px 34px rgba(0,0,0,0.28)";
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.borderColor = "rgba(214, 188, 120, 0.22)";
+            e.currentTarget.style.background =
+              "linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.02))";
+            e.currentTarget.style.transform = "translateY(0)";
+            e.currentTarget.style.boxShadow =
+              "inset 0 1px 0 rgba(255,255,255,0.05), 0 10px 28px rgba(0,0,0,0.22)";
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16 }}>
+            <div style={{ display: "grid", gap: 4 }}>
+              <span
+                style={{
+                  fontSize: 13,
+                  letterSpacing: 0.8,
+                  textTransform: "uppercase",
+                  opacity: 0.62,
+                }}
+              >
+                Chapter Transition
+              </span>
+              <span
+                style={{
+                  fontSize: 16,
+                  fontWeight: 700,
+                  lineHeight: 1.25,
+                  color: "rgba(245,236,216,0.96)",
+                }}
+              >
+                {actionLabel}
+              </span>
+            </div>
+
+            <span
+              aria-hidden
+              style={{
+                fontSize: 20,
+                opacity: 0.62,
+                transform: "translateX(0)",
+              }}
+            >
+              →
+            </span>
+          </div>
+        </button>
+
+        {hint ? (
+          <div style={{ fontSize: 12, opacity: 0.68, lineHeight: 1.5 }}>{hint}</div>
+        ) : null}
+      </div>
+    </CardSection>
+  );
 }
 
 export default function DemoPage() {
@@ -740,8 +838,6 @@ export default function DemoPage() {
       queueMicrotask(() => scrollToSection("pressure"));
     }
   }
-
-  const currentPos = useMemo(() => deriveCurrentPosition(state.events as any[], MAP_W, MAP_H), [state.events]);
 
   const [explorationDraft, setExplorationDraft] = useState<ExplorationDraft>({
     enableMove: false,
@@ -1326,37 +1422,17 @@ export default function DemoPage() {
           {showGameplay && allowGameplay && (
             <>
               {gameplayFocusStep === "pressure" && (
-                <CardSection title="The Air Tightens">
-                  <div style={{ display: "grid", gap: 10 }}>
-                    <p style={{ margin: 0 }}>
-                      The party has crossed the threshold. Read the danger state first, then survey the ground before
-                      issuing the first command.
-                    </p>
-
-                    <div
-                      style={{
-                        display: "flex",
-                        gap: 10,
-                        flexWrap: "wrap",
-                        alignItems: "center",
-                      }}
-                    >
-                      <button
-                        onClick={() => {
-                          setGameplayFocusStep("map");
-                          setActiveSection("map");
-                          queueMicrotask(() => scrollToSection("map"));
-                        }}
-                      >
-                        Survey the Dungeon Map
-                      </button>
-
-                      <span style={{ fontSize: 12, opacity: 0.72 }}>
-                        Pressure first. Space second. Action third.
-                      </span>
-                    </div>
-                  </div>
-                </CardSection>
+                <RitualPromptRow
+                  title="The Air Tightens"
+                  body="The party has crossed the threshold. Read the danger state first, then survey the ground before issuing the first command."
+                  actionLabel="Survey the dungeon map"
+                  hint="Pressure first. Space second. Action third."
+                  onActivate={() => {
+                    setGameplayFocusStep("map");
+                    setActiveSection("map");
+                    queueMicrotask(() => scrollToSection("map"));
+                  }}
+                />
               )}
 
               <div id={anchorId("pressure")} style={{ scrollMarginTop: 90 }}>
@@ -1364,37 +1440,17 @@ export default function DemoPage() {
               </div>
 
               {gameplayFocusStep === "map" && (
-                <CardSection title="The Path Reveals Itself">
-                  <div style={{ display: "grid", gap: 10 }}>
-                    <p style={{ margin: 0 }}>
-                      The dungeon has shape now. Read the terrain, your position, and remembered marks before choosing
-                      how the party moves.
-                    </p>
-
-                    <div
-                      style={{
-                        display: "flex",
-                        gap: 10,
-                        flexWrap: "wrap",
-                        alignItems: "center",
-                      }}
-                    >
-                      <button
-                        onClick={() => {
-                          setGameplayFocusStep("action");
-                          setActiveSection("action");
-                          queueMicrotask(() => scrollToSection("action"));
-                        }}
-                      >
-                        Prepare the First Move
-                      </button>
-
-                      <span style={{ fontSize: 12, opacity: 0.72 }}>
-                        Once space is clear, command can take the stage.
-                      </span>
-                    </div>
-                  </div>
-                </CardSection>
+                <RitualPromptRow
+                  title="The Path Reveals Itself"
+                  body="The dungeon has shape now. Read the terrain, your position, and remembered marks before choosing how the party moves."
+                  actionLabel="Let the first move take shape"
+                  hint="Once the space is clear, command can take the stage."
+                  onActivate={() => {
+                    setGameplayFocusStep("action");
+                    setActiveSection("action");
+                    queueMicrotask(() => scrollToSection("action"));
+                  }}
+                />
               )}
 
               <div id={anchorId("map")} style={{ scrollMarginTop: 90 }}>
