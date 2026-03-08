@@ -59,6 +59,10 @@
 //   enemy presence, and lock / cache / relic signals
 // - Passes encounterContext into CombatSection so CombatSetupPanel can bias
 //   rosters toward meaningful, finite encounters
+//
+// Movement correction update:
+// - Failed movement resolution no longer commits PLAYER_MOVED
+// - Reveal / mark can still occur without movement when appropriate
 // ------------------------------------------------------------
 
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -79,6 +83,7 @@ import CardSection from "@/components/layout/CardSection";
 import { deriveCombatState, findLatestCombatId, nextTurnPointer } from "@/lib/combat/CombatState";
 import { resolvePartyLoadout } from "@/lib/skills/loadoutResolver";
 import { deriveDiscoveryEvents } from "@/lib/world/ExplorationDiscovery";
+import type { EnemyEncounterTheme } from "@/lib/game/EnemyDatabase";
 
 import AmbientBackground from "./components/AmbientBackground";
 import InitialTableSection from "./components/InitialTableSection";
@@ -142,19 +147,9 @@ type PresentationPhase =
 
 type GameplayFocusStep = "pressure" | "map" | "action";
 
-type EncounterTheme =
-  | "corridor"
-  | "crypt"
-  | "ritual"
-  | "arcane"
-  | "wild"
-  | "warband"
-  | "vault"
-  | null;
-
 type CombatEncounterContext = {
   zoneId?: string | null;
-  zoneTheme?: EncounterTheme;
+  zoneTheme?: EnemyEncounterTheme | null;
   objective?: string | null;
   lockState?: string | null;
   rewardHint?: string | null;
@@ -432,7 +427,7 @@ function inferEncounterTheme(args: {
   playerInput: string;
   selectedOptionDescription: string;
   marks: Array<{ kind: MapMarkKind; note: string | null }>;
-}): EncounterTheme {
+}): EnemyEncounterTheme | null {
   const text = [
     args.activeEnemyName ?? "",
     args.playerInput,
@@ -502,7 +497,7 @@ function inferRewardHint(args: {
   return null;
 }
 
-function defaultKeyEnemyForTheme(theme: EncounterTheme): string | null {
+function defaultKeyEnemyForTheme(theme: EnemyEncounterTheme | null): string | null {
   switch (theme) {
     case "corridor":
       return "Bandit Captain";
@@ -523,7 +518,7 @@ function defaultKeyEnemyForTheme(theme: EncounterTheme): string | null {
   }
 }
 
-function defaultRelicEnemyForTheme(theme: EncounterTheme): string | null {
+function defaultRelicEnemyForTheme(theme: EnemyEncounterTheme | null): string | null {
   switch (theme) {
     case "crypt":
       return "Wraith";
@@ -544,7 +539,7 @@ function defaultRelicEnemyForTheme(theme: EncounterTheme): string | null {
   }
 }
 
-function defaultCacheGuardEnemyForTheme(theme: EncounterTheme): string | null {
+function defaultCacheGuardEnemyForTheme(theme: EnemyEncounterTheme | null): string | null {
   switch (theme) {
     case "corridor":
       return "Bandit Archer";
@@ -566,7 +561,7 @@ function defaultCacheGuardEnemyForTheme(theme: EncounterTheme): string | null {
 }
 
 function inferObjective(args: {
-  theme: EncounterTheme;
+  theme: EnemyEncounterTheme | null;
   lockState: string | null;
   rewardHint: string | null;
 }) {
@@ -1233,13 +1228,19 @@ export default function DemoPage() {
     advanceTurn();
   }
 
-  function commitExplorationBundle(nextState: SessionState) {
+  function commitExplorationBundle(
+    nextState: SessionState,
+    args?: {
+      allowMove?: boolean;
+    }
+  ) {
     const d = explorationDraft;
+    const allowMove = args?.allowMove !== false;
     let next = nextState;
 
     const here = deriveCurrentPosition(next.events as any[], MAP_W, MAP_H);
     const to = d.enableMove && d.direction !== "none" ? stepFrom(here, d.direction) : null;
-    const canMove = to ? withinBounds(to, MAP_W, MAP_H) : false;
+    const canMove = allowMove && to ? withinBounds(to, MAP_W, MAP_H) : false;
 
     let movedTo: { x: number; y: number } | null = null;
     let revealedTiles: Array<{ x: number; y: number }> = [];
@@ -1357,14 +1358,13 @@ export default function DemoPage() {
 
       const d = explorationDraft;
       const to = d.enableMove && d.direction !== "none" ? stepFrom(here, d.direction) : null;
-      const canMove = to ? withinBounds(to, MAP_W, MAP_H) : false;
+      const success = Number.isFinite(Number(payload?.dice?.roll)) && Number.isFinite(Number(payload?.dice?.dc))
+        ? Number(payload.dice.roll) >= Number(payload.dice.dc)
+        : false;
+      const canMove = success && to ? withinBounds(to, MAP_W, MAP_H) : false;
 
       const posForZone = d.enableMove && canMove && to ? to : here;
       const zoneId = zoneIdFromTileXY(posForZone.x, posForZone.y);
-
-      const roll = Number(payload?.dice?.roll ?? 0);
-      const dc = Number(payload?.dice?.dc ?? 0);
-      const success = Number.isFinite(roll) && Number.isFinite(dc) ? roll >= dc : false;
 
       const pressureDelta = pressureDeltaFor(kind, success);
       const awarenessDelta = awarenessDeltaFor(kind, success);
@@ -1405,7 +1405,10 @@ export default function DemoPage() {
         payload: { zoneId, delta: clamp01to100(awarenessDelta) } as any,
       });
 
-      next = commitExplorationBundle(next);
+      next = commitExplorationBundle(next, {
+        allowMove: success,
+      });
+
       return next;
     });
 
@@ -1907,7 +1910,7 @@ export default function DemoPage() {
                     }))}
                     pressureTier={pressureTier}
                     allowDevControls={false}
-                    encounterContext={combatEncounterContext as any}
+                    encounterContext={combatEncounterContext}
                     showEnemyResolver={solaceNeutralEnemyTurnEnabled}
                     activeEnemyGroupName={activeEnemyOverlayName}
                     activeEnemyGroupId={activeEnemyOverlayId}
