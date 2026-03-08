@@ -17,6 +17,8 @@
 //   a READ-ONLY, deterministic layer derived from canon events.
 // - Environmental Memory now derives from discovery + pressure + patrol +
 //   outcome signals instead of only narrow OUTCOME.world fields.
+// - Adds advisory zone naming so player-facing location language feels more
+//   atmospheric while preserving the mechanical zone id.
 // ------------------------------------------------------------
 
 import React, { useMemo } from "react";
@@ -270,6 +272,101 @@ function recommendLocation(parsedCommand?: any): { label: string; reason: string
 }
 
 // ------------------------------------------------------------
+// Advisory zone naming
+// ------------------------------------------------------------
+
+function deriveZoneTitle(args: {
+  events: readonly SessionEvent[];
+  currentZoneId: ZoneId;
+  currentPressure: number;
+  currentAwareness: number;
+}): string {
+  const { events, currentZoneId, currentPressure, currentAwareness } = args;
+
+  let hasDoor = false;
+  let hasLock = false;
+  let hasHazard = false;
+  let hasCache = false;
+  let hasAltar = false;
+  let hasStairs = false;
+  let hasPatrol = false;
+  let hasCombat = false;
+
+  for (const e of events as any[]) {
+    const zoneId =
+      safeStr(e?.payload?.zoneId) ??
+      tileToZoneIdFromPayload(e?.payload) ??
+      (e?.type === "PLAYER_MOVED"
+        ? (() => {
+            const x = safeNum(e?.payload?.to?.x);
+            const y = safeNum(e?.payload?.to?.y);
+            return x !== null && y !== null ? zoneFromTileXY(x, y, ZONE_SIZE_TILES) : null;
+          })()
+        : null);
+
+    if (zoneId !== currentZoneId) continue;
+
+    switch (e?.type) {
+      case "DOOR_DISCOVERED":
+        hasDoor = true;
+        break;
+      case "DOOR_LOCKED":
+        hasLock = true;
+        break;
+      case "HAZARD_REVEALED":
+        hasHazard = true;
+        break;
+      case "CACHE_REVEALED":
+        hasCache = true;
+        break;
+      case "ALTAR_REVEALED":
+        hasAltar = true;
+        break;
+      case "STAIRS_REVEALED":
+        hasStairs = true;
+        break;
+      case "PATROL_SIGNS_REVEALED":
+        hasPatrol = true;
+        break;
+      case "COMBAT_STARTED":
+      case "COMBAT_ENDED":
+        hasCombat = true;
+        break;
+      case "OUTCOME": {
+        const world = e?.payload?.world;
+        if (!world) break;
+        const outcomeZoneId =
+          safeStr(world?.zoneId) ??
+          tileToZoneIdFromPayload(world) ??
+          tileToZoneIdFromPayload(world?.at);
+        if (outcomeZoneId !== currentZoneId) break;
+        if (world?.lock) hasLock = true;
+        if (world?.trap) hasHazard = true;
+        break;
+      }
+      default:
+        break;
+    }
+  }
+
+  if (hasAltar && hasStairs) return "Shrine Descent";
+  if (hasAltar) return "Shrine Approach";
+  if (hasStairs) return "Descending Passage";
+  if (hasCache) return "Forgotten Cache";
+  if (hasLock) return "The Locked Passage";
+  if (hasHazard && hasCombat) return "Blooded Corridor";
+  if (hasHazard) return "Danger Corridor";
+  if (hasPatrol && currentAwareness >= 45) return "Hunting Hall";
+  if (hasPatrol) return "Watch Corridor";
+  if (hasDoor) return "Stone Doorway";
+  if (hasCombat) return "Clash Site";
+  if (currentPressure >= 70) return "Crisis Hall";
+  if (currentAwareness >= 75) return "Alarmed Passage";
+  if (currentPressure >= 40 || currentAwareness >= 45) return "Uneasy Hall";
+  return "Silent Hall";
+}
+
+// ------------------------------------------------------------
 // Environmental Memory derivation
 // ------------------------------------------------------------
 
@@ -356,7 +453,7 @@ function deriveEnvironmentalMemory(args: {
           pushUnique(
             nearbySignals,
             `door-discovered-${zoneId}`,
-            `A possible passage lies ${relativeDirection(currentZoneId, zoneId)}.`
+            `A newly found passage opens ${relativeDirection(currentZoneId, zoneId)}.`
           );
         }
         recentEventLines.push("A hidden or obscured doorway was discovered.");
@@ -372,7 +469,7 @@ function deriveEnvironmentalMemory(args: {
           pushUnique(
             nearbySignals,
             `door-locked-${zoneId}`,
-            `A locked route blocks movement ${relativeDirection(currentZoneId, zoneId)}.`
+            `A locked route seals the way ${relativeDirection(currentZoneId, zoneId)}.`
           );
         }
         recentEventLines.push("Iron locks were found securing a door.");
@@ -892,10 +989,22 @@ export default function DungeonPressurePanel({ turn, currentRoomId, events, pars
 
   const nearbyTier = tierForPressure(nearbyMaxPressure);
 
+  const zoneTitle = useMemo(
+    () =>
+      deriveZoneTitle({
+        events,
+        currentZoneId: zoneId,
+        currentPressure,
+        currentAwareness,
+      }),
+    [events, zoneId, currentPressure, currentAwareness]
+  );
+
   const location = useMemo(() => {
     if (currentRoomId) {
       return {
-        label: currentRoomId,
+        title: currentRoomId,
+        subtitle: `Zone ${zoneId}`,
         canonical: true,
         reason: "Confirmed by recorded canon.",
       };
@@ -903,15 +1012,21 @@ export default function DungeonPressurePanel({ turn, currentRoomId, events, pars
 
     if (playerPos) {
       return {
-        label: `Zone ${zoneId}`,
+        title: zoneTitle,
+        subtitle: `Zone ${zoneId}`,
         canonical: false,
-        reason: "Derived from player movement (advisory label).",
+        reason: "Derived from player movement and local dungeon signals.",
       };
     }
 
     const rec = recommendLocation(parsedCommand);
-    return { label: rec.label, canonical: false, reason: rec.reason };
-  }, [currentRoomId, parsedCommand, playerPos, zoneId]);
+    return {
+      title: rec.label,
+      subtitle: `Zone ${zoneId}`,
+      canonical: false,
+      reason: rec.reason,
+    };
+  }, [currentRoomId, parsedCommand, playerPos, zoneId, zoneTitle]);
 
   const environmentalMemory = useMemo(
     () =>
@@ -919,7 +1034,7 @@ export default function DungeonPressurePanel({ turn, currentRoomId, events, pars
         events,
         currentZoneId: zoneId,
         adjacentZoneIds: adjacent,
-        currentRoomId: location.canonical ? location.label : undefined,
+        currentRoomId: location.canonical ? location.title : undefined,
         currentPressure,
         currentAwareness,
         nearbyMaxPressure,
@@ -980,37 +1095,32 @@ export default function DungeonPressurePanel({ turn, currentRoomId, events, pars
 
         <div style={{ display: "grid", gap: 12 }}>
           <div>
-            <div style={{ fontWeight: 800 }}>
-              📍 Location: <span style={{ opacity: 0.95 }}>{location.label}</span>
+            <div style={{ fontWeight: 800, fontSize: 15 }}>
+              📍 {location.title}
             </div>
-            {!location.canonical ? (
-              <div style={{ fontSize: 12, opacity: 0.72, marginTop: 4 }}>
-                Recommended — not yet confirmed. <br />
-                Reason: {location.reason}
-              </div>
-            ) : (
-              <div style={{ fontSize: 12, opacity: 0.72, marginTop: 4 }}>{location.reason}</div>
-            )}
+
+            <div style={{ fontSize: 12, opacity: 0.72, marginTop: 4 }}>
+              {location.subtitle}
+            </div>
+
+            <div style={{ fontSize: 12, opacity: 0.72, marginTop: 4 }}>{location.reason}</div>
+
             {playerPos ? (
               <div style={{ fontSize: 12, opacity: 0.65, marginTop: 4 }}>
-                Tile: ({playerPos.x}, {playerPos.y}) · ZoneId: {zoneId} · ZoneSize: {ZONE_SIZE_TILES}
+                Tile: ({playerPos.x}, {playerPos.y})
               </div>
-            ) : (
-              <div style={{ fontSize: 12, opacity: 0.65, marginTop: 4 }}>
-                ZoneId: {zoneId} · ZoneSize: {ZONE_SIZE_TILES}
-              </div>
-            )}
+            ) : null}
           </div>
 
           <MeterBar
             value={currentAwareness}
-            label={`Zone Awareness — ${awarenessStatus.label}`}
+            label={`Enemy Attention — ${awarenessStatus.label}`}
             sublabel={awarenessStatus.nextHint}
           />
 
           <MeterBar
             value={nearbyMaxPressure}
-            label={`Nearby Heat — ${nearbyTier.tier}`}
+            label={`Tension Nearby — ${nearbyTier.tier}`}
             sublabel={`Max adjacent zone pressure: ${Math.round(nearbyMaxPressure)} (derived)`}
           />
 
