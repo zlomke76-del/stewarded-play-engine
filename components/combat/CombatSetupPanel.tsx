@@ -17,6 +17,7 @@ import {
 import {
   ENEMY_LIST,
   EnemyDefinition,
+  EnemyEncounterTheme,
   getEnemyDefinitionByName,
 } from "@/lib/game/EnemyDatabase";
 
@@ -31,6 +32,17 @@ type PartyMemberLite = {
   initiativeMod: number;
 };
 
+type CombatEncounterContext = {
+  zoneId?: string | null;
+  zoneTheme?: EnemyEncounterTheme | null;
+  objective?: string | null;
+  lockState?: string | null;
+  rewardHint?: string | null;
+  keyEnemyName?: string | null;
+  relicEnemyName?: string | null;
+  cacheGuardEnemyName?: string | null;
+};
+
 type Props = {
   events: readonly any[];
   onAppendCanon: (type: string, payload: any) => void;
@@ -40,6 +52,9 @@ type Props = {
   partyMembers: PartyMemberLite[];
   pressureTier: any; // intentionally permissive to avoid type coupling across folders
   allowDevControls: boolean;
+
+  // optional ecology-aware encounter context
+  encounterContext?: CombatEncounterContext | null;
 };
 
 type PartyRoleInfo = {
@@ -215,6 +230,13 @@ function prettyFaction(v: string) {
   return prettyRole(v);
 }
 
+function prettyTheme(v?: string | null) {
+  if (!v) return "Unknown";
+  return String(v)
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (m) => m.toUpperCase());
+}
+
 function buildEnemyRoleFactionLabel(enemy: EnemyDefinition) {
   const roleLabel = prettyRole(enemy.role);
   const factionLabel = prettyFaction(enemy.faction);
@@ -359,6 +381,14 @@ function filterByBehavior(items: EnemyDefinition[], predicate: (enemy: EnemyDefi
   return items.filter(predicate);
 }
 
+function filterByEncounterTheme(items: EnemyDefinition[], zoneTheme?: EnemyEncounterTheme | null): EnemyDefinition[] {
+  if (!zoneTheme) return [];
+  return items.filter((enemy) => {
+    const themes = enemy.ecology?.preferredThemes;
+    return Array.isArray(themes) && themes.includes(zoneTheme);
+  });
+}
+
 function getAdaptiveCandidates(band: PressureBand, partyRoleInfo: PartyRoleInfo): EnemyDefinition[] {
   const base = getBasePoolForPressure(band);
 
@@ -402,7 +432,8 @@ function buildRecommendedEnemyRoster(
   pressureTier: any,
   partySize: number,
   seed: string,
-  partyRoleInfo: PartyRoleInfo
+  partyRoleInfo: PartyRoleInfo,
+  zoneTheme?: EnemyEncounterTheme | null
 ): EnemyDefinition[] {
   const n = clampInt(partySize, 0, 6);
   if (n <= 0) return [];
@@ -410,10 +441,16 @@ function buildRecommendedEnemyRoster(
   const band = pressureBandFromTier(pressureTier);
   const basePool = getBasePoolForPressure(band);
   const adaptivePool = getAdaptiveCandidates(band, partyRoleInfo);
+  const themedPool = dedupeEnemies([
+    ...filterByEncounterTheme(adaptivePool, zoneTheme),
+    ...filterByEncounterTheme(basePool, zoneTheme),
+  ]);
+
+  const primaryPool = themedPool.length > 0 ? themedPool : adaptivePool;
 
   const pickedAdaptive = pickUniqueDeterministic(
-    adaptivePool,
-    Math.min(n, adaptivePool.length),
+    primaryPool,
+    Math.min(n, primaryPool.length),
     `${seed}::adaptive`
   );
   if (pickedAdaptive.length >= n) {
@@ -421,7 +458,7 @@ function buildRecommendedEnemyRoster(
   }
 
   const remainingNeeded = n - pickedAdaptive.length;
-  const remainingBase = basePool.filter((e) => !pickedAdaptive.some((x) => x.id === e.id));
+  const remainingBase = adaptivePool.filter((e) => !pickedAdaptive.some((x) => x.id === e.id));
 
   const uniqueFill = pickUniqueDeterministic(
     remainingBase,
@@ -433,7 +470,7 @@ function buildRecommendedEnemyRoster(
   }
 
   const stillNeeded = n - pickedAdaptive.length - uniqueFill.length;
-  const repeatPool = basePool.length > 0 ? basePool : adaptivePool;
+  const repeatPool = primaryPool.length > 0 ? primaryPool : basePool.length > 0 ? basePool : adaptivePool;
   const repeatFill = repeatDeterministic(repeatPool, stillNeeded, `${seed}::base_repeat`);
 
   return [...pickedAdaptive, ...uniqueFill, ...repeatFill].slice(0, n);
@@ -466,19 +503,59 @@ function buildEnemyCardLabel(enemy: EnemyDefinition, all: EnemyDefinition[]) {
   return `${enemy.name} #${idx}`;
 }
 
+function chipStyle(tone: "neutral" | "info" | "warn" | "accent" = "neutral"): React.CSSProperties {
+  if (tone === "info") {
+    return {
+      border: "1px solid rgba(138,180,255,0.22)",
+      background: "rgba(138,180,255,0.08)",
+    };
+  }
+
+  if (tone === "warn") {
+    return {
+      border: "1px solid rgba(255,200,140,0.22)",
+      background: "rgba(255,200,140,0.08)",
+    };
+  }
+
+  if (tone === "accent") {
+    return {
+      border: "1px solid rgba(180,220,160,0.22)",
+      background: "rgba(180,220,160,0.08)",
+    };
+  }
+
+  return {
+    border: "1px solid rgba(255,255,255,0.10)",
+    background: "rgba(255,255,255,0.04)",
+  };
+}
+
+function enemyMatchesName(enemy: EnemyDefinition, name?: string | null) {
+  if (!name) return false;
+  return normalizeName(enemy.name).toLowerCase() === normalizeName(name).toLowerCase();
+}
+
 function EnemyCard({
   enemy,
   label,
   initMod,
   stateLabel,
+  isKeybearer,
+  isRelicBearer,
+  isCacheGuard,
 }: {
   enemy: EnemyDefinition;
   label: string;
   initMod: number;
   stateLabel: string;
+  isKeybearer?: boolean;
+  isRelicBearer?: boolean;
+  isCacheGuard?: boolean;
 }) {
   const src = getEnemyPortraitSrc(enemy);
   const roleFactionLabel = buildEnemyRoleFactionLabel(enemy);
+  const dutyLabel = enemy.ecology?.duty ? prettyRole(enemy.ecology.duty) : null;
 
   return (
     <div
@@ -519,7 +596,7 @@ function EnemyCard({
         />
       </div>
 
-      <div style={{ minWidth: 0 }}>
+      <div style={{ minWidth: 0, flex: 1 }}>
         <div style={{ display: "flex", alignItems: "baseline", gap: 10 }}>
           <strong style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{label}</strong>
         </div>
@@ -531,6 +608,74 @@ function EnemyCard({
         <div className="muted" style={{ fontSize: 12, marginTop: 2 }}>
           HP {enemy.defenses.hp}/{enemy.defenses.hp} · AC {enemy.defenses.ac} · {stateLabel}
         </div>
+
+        {(dutyLabel || isKeybearer || isRelicBearer || isCacheGuard) && (
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 8 }}>
+            {dutyLabel ? (
+              <span
+                style={{
+                  ...chipStyle("neutral"),
+                  display: "inline-flex",
+                  alignItems: "center",
+                  padding: "4px 7px",
+                  borderRadius: 999,
+                  fontSize: 10,
+                  lineHeight: 1,
+                }}
+              >
+                {dutyLabel}
+              </span>
+            ) : null}
+
+            {isKeybearer ? (
+              <span
+                style={{
+                  ...chipStyle("warn"),
+                  display: "inline-flex",
+                  alignItems: "center",
+                  padding: "4px 7px",
+                  borderRadius: 999,
+                  fontSize: 10,
+                  lineHeight: 1,
+                }}
+              >
+                Keybearer
+              </span>
+            ) : null}
+
+            {isRelicBearer ? (
+              <span
+                style={{
+                  ...chipStyle("accent"),
+                  display: "inline-flex",
+                  alignItems: "center",
+                  padding: "4px 7px",
+                  borderRadius: 999,
+                  fontSize: 10,
+                  lineHeight: 1,
+                }}
+              >
+                Relic Bearer
+              </span>
+            ) : null}
+
+            {isCacheGuard ? (
+              <span
+                style={{
+                  ...chipStyle("info"),
+                  display: "inline-flex",
+                  alignItems: "center",
+                  padding: "4px 7px",
+                  borderRadius: 999,
+                  fontSize: 10,
+                  lineHeight: 1,
+                }}
+              >
+                Guards Cache
+              </span>
+            ) : null}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -543,6 +688,7 @@ export default function CombatSetupPanel({
   partyMembers,
   pressureTier,
   allowDevControls,
+  encounterContext = null,
 }: Props) {
   const locked = useMemo(() => computeCombatLocked(events), [events]);
 
@@ -561,16 +707,23 @@ export default function CombatSetupPanel({
 
   const pressureSeed = useMemo(() => {
     const outcomes = (events as any[]).filter((e) => e?.type === "OUTCOME").length;
-    return `pressure=${String(pressureTier ?? "unknown")}::outcomes=${outcomes}::party=${partySize}`;
-  }, [events, partySize, pressureTier]);
+    const zoneTheme = encounterContext?.zoneTheme ?? "none";
+    return `pressure=${String(pressureTier ?? "unknown")}::outcomes=${outcomes}::party=${partySize}::theme=${zoneTheme}`;
+  }, [events, partySize, pressureTier, encounterContext?.zoneTheme]);
 
   const [selectedEnemies, setSelectedEnemies] = useState<EnemyDefinition[]>(() =>
-    buildRecommendedEnemyRoster("low", 2, "initial", {
-      healers: 0,
-      casters: 0,
-      frontliners: 0,
-      stealthy: 0,
-    })
+    buildRecommendedEnemyRoster(
+      "low",
+      2,
+      "initial",
+      {
+        healers: 0,
+        casters: 0,
+        frontliners: 0,
+        stealthy: 0,
+      },
+      null
+    )
   );
 
   const [enemySelectName, setEnemySelectName] = useState<string>(() => ENEMY_LIBRARY[0]?.name ?? "Bandit Archer");
@@ -590,13 +743,19 @@ export default function CombatSetupPanel({
     if (isHuman && !allowDevControls) return;
 
     const desired = clampInt(partySize, 0, 6);
-    const roster = buildRecommendedEnemyRoster(pressureTier, desired, pressureSeed, partyRoleInfo);
+    const roster = buildRecommendedEnemyRoster(
+      pressureTier,
+      desired,
+      pressureSeed,
+      partyRoleInfo,
+      encounterContext?.zoneTheme ?? null
+    );
 
     setSelectedEnemies((prev) => {
       if (isHuman && allowDevControls) return prev;
       return roster;
     });
-  }, [partySize, pressureTier, pressureSeed, partyRoleInfo, isHuman, allowDevControls]);
+  }, [partySize, pressureTier, pressureSeed, partyRoleInfo, isHuman, allowDevControls, encounterContext?.zoneTheme]);
 
   function addEnemyByName(name: string) {
     if (!canEdit) return;
@@ -642,7 +801,13 @@ export default function CombatSetupPanel({
     const ensuredEnemies =
       selectedEnemies.length > 0
         ? selectedEnemies.slice(0, desiredCount)
-        : buildRecommendedEnemyRoster(pressureTier, desiredCount, pressureSeed, partyRoleInfo);
+        : buildRecommendedEnemyRoster(
+            pressureTier,
+            desiredCount,
+            pressureSeed,
+            partyRoleInfo,
+            encounterContext?.zoneTheme ?? null
+          );
 
     const combatId = crypto.randomUUID();
     const seed = crypto.randomUUID();
@@ -709,8 +874,19 @@ export default function CombatSetupPanel({
       label: buildEnemyCardLabel(enemy, all),
       initMod: Math.trunc(Number(initModEnemies ?? 0)),
       stateLabel,
+      isKeybearer: enemyMatchesName(enemy, encounterContext?.keyEnemyName),
+      isRelicBearer: enemyMatchesName(enemy, encounterContext?.relicEnemyName),
+      isCacheGuard: enemyMatchesName(enemy, encounterContext?.cacheGuardEnemyName),
     }));
-  }, [selectedEnemies, initModEnemies, locked, partySize]);
+  }, [
+    selectedEnemies,
+    initModEnemies,
+    locked,
+    partySize,
+    encounterContext?.keyEnemyName,
+    encounterContext?.relicEnemyName,
+    encounterContext?.cacheGuardEnemyName,
+  ]);
 
   const rosterInfo = useMemo(() => {
     const band = pressureBandFromTier(pressureTier);
@@ -718,7 +894,8 @@ export default function CombatSetupPanel({
       pressureTier,
       clampInt(partySize, 0, 6),
       pressureSeed,
-      partyRoleInfo
+      partyRoleInfo,
+      encounterContext?.zoneTheme ?? null
     );
 
     const factionCounts = new Map<string, number>();
@@ -735,7 +912,23 @@ export default function CombatSetupPanel({
       factionSummary,
       recommendedCount: recommended.length,
     };
-  }, [partySize, pressureTier, pressureSeed, partyRoleInfo]);
+  }, [partySize, pressureTier, pressureSeed, partyRoleInfo, encounterContext?.zoneTheme]);
+
+  const encounterSummary = useMemo(() => {
+    const zoneTheme = encounterContext?.zoneTheme ? prettyTheme(encounterContext.zoneTheme) : null;
+    const objective = normalizeName(encounterContext?.objective ?? "");
+    const lockState = normalizeName(encounterContext?.lockState ?? "");
+    const rewardHint = normalizeName(encounterContext?.rewardHint ?? "");
+    const zoneId = normalizeName(encounterContext?.zoneId ?? "");
+
+    return {
+      zoneTheme,
+      objective,
+      lockState,
+      rewardHint,
+      zoneId,
+    };
+  }, [encounterContext]);
 
   return (
     <CardSection title="Combat (Deterministic, Database-Backed Enemies)">
@@ -748,6 +941,34 @@ export default function CombatSetupPanel({
       <p className="muted" style={{ marginTop: 10 }}>
         Players roll individually. Enemies roll once per enemy. Turn order is derived from events.
       </p>
+
+      {(encounterSummary.zoneTheme || encounterSummary.objective || encounterSummary.lockState || encounterSummary.rewardHint) && (
+        <div
+          style={{
+            marginTop: 12,
+            padding: 12,
+            borderRadius: 14,
+            border: "1px solid rgba(255,255,255,0.10)",
+            background: "linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.03))",
+            boxShadow: "inset 0 1px 0 rgba(255,255,255,0.04)",
+            display: "grid",
+            gap: 8,
+          }}
+        >
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+            {encounterSummary.zoneTheme ? <Pill tone="info">Zone Theme: {encounterSummary.zoneTheme}</Pill> : null}
+            {encounterSummary.zoneId ? <Pill>Zone {encounterSummary.zoneId}</Pill> : null}
+            {encounterSummary.lockState ? <Pill tone="warn">Lock State: {encounterSummary.lockState}</Pill> : null}
+            {encounterSummary.rewardHint ? <Pill>Reward Signal: {encounterSummary.rewardHint}</Pill> : null}
+          </div>
+
+          {encounterSummary.objective ? (
+            <div style={{ fontSize: 13, lineHeight: 1.6, opacity: 0.92 }}>
+              <strong>Objective:</strong> {encounterSummary.objective}
+            </div>
+          ) : null}
+        </div>
+      )}
 
       <div
         style={{
@@ -856,6 +1077,12 @@ export default function CombatSetupPanel({
 
           <div className="muted" style={{ fontSize: 12 }}>
             Recommended pool: {rosterInfo.factionSummary || "—"}
+            {encounterSummary.zoneTheme ? (
+              <>
+                {" "}
+                · Theme bias: <strong>{encounterSummary.zoneTheme}</strong>
+              </>
+            ) : null}
           </div>
 
           <div className="muted" style={{ fontSize: 12 }}>
@@ -884,6 +1111,9 @@ export default function CombatSetupPanel({
                   label={c.label}
                   initMod={c.initMod}
                   stateLabel={c.stateLabel}
+                  isKeybearer={c.isKeybearer}
+                  isRelicBearer={c.isRelicBearer}
+                  isCacheGuard={c.isCacheGuard}
                 />
               ))}
             </div>
