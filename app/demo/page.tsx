@@ -1292,6 +1292,53 @@ export default function DemoPage() {
   const gameplayAllowsMap = gameplayAllowsPressure && (gameplayFocusStep === "map" || gameplayFocusStep === "action");
   const gameplayAllowsAction = gameplayAllowsPressure && gameplayFocusStep === "action";
 
+  const currentPosition = useMemo(
+    () => deriveCurrentPosition(state.events as any[], MAP_W, MAP_H),
+    [state.events]
+  );
+
+  const resolutionMovement = useMemo(() => {
+    if (!selectedOption) return null;
+
+    const intentText = `${playerInput}\n${selectedOption.description}`.trim();
+    const inferredDirection = explorationDraft.enableMove && explorationDraft.direction !== "none"
+      ? explorationDraft.direction
+      : inferDirection(intentText) ?? "none";
+
+    const from = currentPosition;
+    const stepped =
+      inferredDirection && inferredDirection !== "none"
+        ? stepFrom(from, inferredDirection)
+        : null;
+
+    const to =
+      stepped && withinBounds(stepped, MAP_W, MAP_H)
+        ? stepped
+        : stepped
+          ? from
+          : undefined;
+
+    return {
+      from,
+      to,
+      direction: inferredDirection,
+    };
+  }, [selectedOption, playerInput, explorationDraft, currentPosition]);
+
+  const resolutionCombat = useMemo(() => {
+    if (!combatActive) return null;
+
+    return {
+      activeEnemyGroupName:
+        activeEnemyOverlayName ||
+        enemyTelegraphHint?.enemyName ||
+        String(activeCombatantSpec?.name ?? "") ||
+        null,
+      isEnemyTurn: !!isEnemyTurn,
+      attackStyleHint: enemyTelegraphHint?.attackStyleHint ?? "unknown",
+    } as const;
+  }, [combatActive, activeEnemyOverlayName, enemyTelegraphHint, activeCombatantSpec, isEnemyTurn]);
+
   useEffect(() => {
     if (!showGameplay || !allowGameplay) return;
 
@@ -1622,76 +1669,31 @@ export default function DemoPage() {
                 </CardSection>
               )}
 
-{gameplayAllowsAction && (
-  <div id={anchorId("resolution")} style={{ scrollMarginTop: 90 }}>
-    {selectedOption && (
-      <section
-        className="card"
-        style={{
-          borderLeft: "4px solid rgba(255,255,255,0.18)",
-          background: "rgba(17,17,17,0.92)",
-          padding: 16,
-          borderRadius: 16,
-        }}
-      >
-        <h3 style={{ marginBottom: 10 }}>Adjudication</h3>
+              {gameplayAllowsAction && (
+                <div id={anchorId("resolution")} style={{ scrollMarginTop: 90 }}>
+                  {selectedOption && (
+                    <ResolutionDraftAdvisoryPanel
+                      context={{
+                        optionDescription: selectedOption.description,
+                        optionKind: inferOptionKind(`${playerInput}\n${selectedOption.description}`.trim()),
+                      }}
+                      role={role}
+                      dmMode={resolutionDmMode}
+                      setupText={playerInput}
+                      movement={resolutionMovement}
+                      combat={resolutionCombat}
+                      rollModifier={actingRollModifier}
+                      rollModifierLabel={
+                        actingPlayerInjuryStacks > 0
+                          ? `Injury stacks: ${actingPlayerInjuryStacks}`
+                          : null
+                      }
+                      onRecord={handleRecord}
+                    />
+                  )}
+                </div>
+              )}
 
-        <div style={{ display: "grid", gap: 10 }}>
-          <div>
-            <strong>Selected option:</strong> {selectedOption.description}
-          </div>
-
-          <div>
-            <strong>Difficulty tone:</strong>{" "}
-            {inferOptionKind(`${playerInput}\n${selectedOption.description}`.trim())}
-          </div>
-
-          <div>
-            <strong>Roll modifier:</strong> {actingRollModifier >= 0 ? "+" : ""}
-            {actingRollModifier}
-            {actingPlayerInjuryStacks > 0
-              ? ` · Injury stacks: ${actingPlayerInjuryStacks}`
-              : ""}
-          </div>
-
-          <button onClick={() => {
-            const kind = inferOptionKind(`${playerInput}\n${selectedOption.description}`.trim());
-            const dc =
-              kind === "safe" ? 6 :
-              kind === "environmental" ? 8 :
-              kind === "risky" ? 10 :
-              14;
-
-            const rawRoll = Math.ceil(Math.random() * 20);
-            const effectiveRoll = rawRoll + actingRollModifier;
-
-            handleRecord({
-              description:
-                effectiveRoll >= dc
-                  ? `The attempt succeeds: ${selectedOption.description}`
-                  : `The attempt falters: ${selectedOption.description}`,
-              dice: {
-                mode: "d20",
-                roll: effectiveRoll,
-                dc,
-                source: "solace",
-              },
-              audit: [
-                "Temporary demo fallback recorder",
-                `Raw roll: ${rawRoll}`,
-                `Modifier: ${actingRollModifier >= 0 ? "+" : ""}${actingRollModifier}`,
-                `Effective roll: ${effectiveRoll}`,
-                `Resolved against DC ${dc}`,
-              ],
-            });
-          }}>
-            Roll Fate and Record Outcome
-          </button>
-        </div>
-      </section>
-    )}
-  </div>
-)}
               {gameplayAllowsAction && <NextActionHint state={state} />}
 
               {gameplayAllowsAction && (
