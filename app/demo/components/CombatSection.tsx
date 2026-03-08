@@ -1,38 +1,25 @@
-// app/demo/components/CombatSection.tsx
 "use client";
 
 // ------------------------------------------------------------
 // CombatSection.tsx
 // ------------------------------------------------------------
 // Visual wrapper for combat setup, optional enemy-turn resolver,
-// and derived turn order panel.
+// encounter stakes, enemy roster state, and derived turn order.
 //
-// Update (damage v1):
-// - Derive player HP for display from canon events:
-//     COMBATANT_HP_INITIALIZED (optional baseline)
-//     COMBATANT_DAMAGED
-//     COMBATANT_HEALED (optional future-proof)
-//     COMBATANT_DOWNED
-// - When EnemyTurnResolver commits an outcome, CombatSection (arbiter-side)
-//   also commits COMBATANT_DAMAGED (+ COMBATANT_DOWNED if HP <= 0),
-//   using a deterministic damage heuristic (D&D-ish, simplified).
+// Upgrades in this pass:
+// - Derive BOTH player HP and enemy HP from canon events
+// - Surface enemy defeat state so victory is visible
+// - Show encounter stakes / reward signal context in combat
+// - Keep enemy damage application on Solace enemy turns
+// - Add event-sourced enemy roster cards with defeated markers
+// - Improve turn-order readability around defeated combatants
 //
-// Update (turn-tied visuals):
-// - Highlight the ACTIVE turn owner (player) using activeCombatantSpec.id
-// - Optionally highlight enemy telegraph target (soft)
-//
-// Update (loadout-aware visuals):
-// - Species-aware portrait loading via getPortraitPath()
-// - Optional class skill + species trait chips on player cards
-//
-// Update (SFX wiring):
-// - combat controls play local UI / combat sounds
-// - enemy outcome commits trigger hit / death sounds
-// - telegraph updates trigger a subtle enemy cue
-//
-// Update (encounter ecology pass):
-// - Accepts encounterContext from demo page
-// - Forwards encounterContext into CombatSetupPanel
+// Notes:
+// - This file does NOT author player-hit canon by itself.
+//   It makes enemy defeat / state visible once COMBATANT_DAMAGED
+//   and COMBATANT_DOWNED are being written.
+// - The next file to tighten after this is CombatState if you want
+//   defeated enemies removed from initiative order entirely.
 // ------------------------------------------------------------
 
 import React, { useEffect, useMemo, useRef } from "react";
@@ -43,7 +30,10 @@ import { formatCombatantLabel } from "@/lib/combat/CombatState";
 import { getPortraitPath } from "@/lib/portraits/getPortraitPath";
 import { getSkillDefinition } from "@/lib/skills/skillDefinitions";
 import { getSpeciesTraitDefinition } from "@/lib/skills/speciesTraitMap";
-import type { EnemyEncounterTheme } from "@/lib/game/EnemyDatabase";
+import {
+  getEnemyDefinitionByName,
+  type EnemyEncounterTheme,
+} from "@/lib/game/EnemyDatabase";
 
 type PartyMemberLite = {
   id: string;
@@ -148,6 +138,10 @@ function normalizeSpeciesValue(v?: string) {
   return String(v ?? "").trim();
 }
 
+function normalizeName(v?: string | null) {
+  return String(v ?? "").replace(/\s+/g, " ").trim();
+}
+
 function getResolvedSpecies(member: PartyMemberLite) {
   const species = normalizeSpeciesValue(member.species);
   return species || "Human";
@@ -204,10 +198,37 @@ function clampInt(n: unknown, lo: number, hi: number) {
   return Math.max(lo, Math.min(hi, x));
 }
 
+function titleCase(v: string) {
+  return String(v ?? "")
+    .replace(/[_-]+/g, " ")
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
 type HpState = {
   hpMax: number;
   hpCurrent: number;
   downed: boolean;
+};
+
+type EnemyRosterCard = {
+  combatantId: string;
+  enemyName: string;
+  label: string;
+  hpMax: number;
+  hpCurrent: number;
+  ac: number;
+  defeated: boolean;
+  initiativeMod: number;
+  portraitSrc: string;
+  factionLabel: string;
+  roleLabel: string;
+  isActive: boolean;
+  isKeybearer: boolean;
+  isRelicBearer: boolean;
+  isCacheGuard: boolean;
 };
 
 function derivePlayerHpFromCanon(args: {
@@ -263,7 +284,7 @@ function derivePlayerHpFromCanon(args: {
       const cur = base[targetId] ?? { hpMax: 12, hpCurrent: 0, downed: true };
       const max = Math.max(1, Number(cur.hpMax) || 1);
       const nextCur = Math.min(max, (Number(cur.hpCurrent) || 0) + amount);
-      base[targetId] = { ...cur, hpCurrent: nextCur, downed: nextCur <= 0 ? true : false };
+      base[targetId] = { ...cur, hpCurrent: nextCur, downed: nextCur <= 0 };
     }
 
     if (t === "COMBATANT_DOWNED") {
@@ -271,6 +292,94 @@ function derivePlayerHpFromCanon(args: {
       if (!id) continue;
       const cur = base[id] ?? { hpMax: 12, hpCurrent: 0, downed: true };
       base[id] = { ...cur, hpCurrent: Math.max(0, Number(cur.hpCurrent) || 0), downed: true };
+    }
+  }
+
+  return base;
+}
+
+function deriveEnemyHpFromCanon(args: {
+  events: readonly any[];
+  combatId: string | null;
+  derivedCombat: DerivedCombatLite | null;
+}): Record<string, HpState> {
+  const { events, combatId, derivedCombat } = args;
+  const base: Record<string, HpState> = {};
+
+  if (!combatId || !derivedCombat) return base;
+
+  for (const participant of derivedCombat.participants ?? []) {
+    if (String(participant?.kind ?? "") !== "enemy_group") continue;
+
+    const combatantId = String(participant?.id ?? "").trim();
+    const enemyName = String(participant?.name ?? "").trim();
+    if (!combatantId) continue;
+
+    const def = getEnemyDefinitionByName(enemyName);
+    const hpMax = Math.max(1, Number(def?.defenses?.hp ?? 12) || 12);
+
+    base[combatantId] = {
+      hpMax,
+      hpCurrent: hpMax,
+      downed: false,
+    };
+  }
+
+  for (const e of events) {
+    if (e?.type !== "COMBATANT_HP_INITIALIZED") continue;
+    const p = e?.payload ?? {};
+    if (String(p.combatId ?? "") !== String(combatId)) continue;
+
+    const id = String(p.combatantId ?? "");
+    if (!id || !base[id]) continue;
+
+    const hpMax = Math.max(1, Number(p.hpMax) || base[id].hpMax);
+    const hpCur = clampInt(p.hpCurrent, 0, hpMax);
+
+    base[id] = { hpMax, hpCurrent: hpCur, downed: hpCur <= 0 };
+  }
+
+  for (const e of events) {
+    const t = e?.type;
+    const p = e?.payload ?? {};
+    if (String(p.combatId ?? "") !== String(combatId)) continue;
+
+    if (t === "COMBATANT_DAMAGED") {
+      const targetId = String(p.targetCombatantId ?? "");
+      const amount = Math.max(0, Math.trunc(Number(p.amount ?? 0)));
+      if (!targetId || amount <= 0 || !base[targetId]) continue;
+
+      const cur = base[targetId];
+      const nextCur = Math.max(0, cur.hpCurrent - amount);
+      base[targetId] = {
+        ...cur,
+        hpCurrent: nextCur,
+        downed: cur.downed || nextCur <= 0,
+      };
+    }
+
+    if (t === "COMBATANT_HEALED") {
+      const targetId = String(p.targetCombatantId ?? "");
+      const amount = Math.max(0, Math.trunc(Number(p.amount ?? 0)));
+      if (!targetId || amount <= 0 || !base[targetId]) continue;
+
+      const cur = base[targetId];
+      const nextCur = Math.min(cur.hpMax, cur.hpCurrent + amount);
+      base[targetId] = {
+        ...cur,
+        hpCurrent: nextCur,
+        downed: nextCur <= 0,
+      };
+    }
+
+    if (t === "COMBATANT_DOWNED") {
+      const id = String(p.combatantId ?? "");
+      if (!id || !base[id]) continue;
+      base[id] = {
+        ...base[id],
+        hpCurrent: Math.max(0, base[id].hpCurrent),
+        downed: true,
+      };
     }
   }
 
@@ -299,6 +408,45 @@ function computeDeterministicDamage(args: {
   const raw = base + bonus;
 
   return clampInt(raw, 1, 12);
+}
+
+function enemyPortraitSrc(enemyName: string) {
+  const def = getEnemyDefinitionByName(enemyName);
+  if (def?.portraitKey) return `/assets/V2/Enemy/${def.portraitKey}.png`;
+  return "/assets/V2/Enemy/Enemy_Bandit_Warrior.png";
+}
+
+function enemyMatchesName(enemyName: string, value?: string | null) {
+  if (!value) return false;
+  return normalizeName(enemyName).toLowerCase() === normalizeName(value).toLowerCase();
+}
+
+function chipStyle(tone: "neutral" | "info" | "warn" | "accent" = "neutral"): React.CSSProperties {
+  if (tone === "info") {
+    return {
+      border: "1px solid rgba(138,180,255,0.22)",
+      background: "rgba(138,180,255,0.08)",
+    };
+  }
+
+  if (tone === "warn") {
+    return {
+      border: "1px solid rgba(255,200,140,0.22)",
+      background: "rgba(255,200,140,0.08)",
+    };
+  }
+
+  if (tone === "accent") {
+    return {
+      border: "1px solid rgba(180,220,160,0.22)",
+      background: "rgba(180,220,160,0.08)",
+    };
+  }
+
+  return {
+    border: "1px solid rgba(255,255,255,0.10)",
+    background: "rgba(255,255,255,0.04)",
+  };
 }
 
 export default function CombatSection({
@@ -332,6 +480,11 @@ export default function CombatSection({
   const playerHpById = useMemo(
     () => derivePlayerHpFromCanon({ events, combatId, partyMembers }),
     [events, combatId, partyMembers]
+  );
+
+  const enemyHpById = useMemo(
+    () => deriveEnemyHpFromCanon({ events, combatId, derivedCombat }),
+    [events, combatId, derivedCombat]
   );
 
   const partyMembersForDisplay = useMemo(() => {
@@ -393,6 +546,65 @@ export default function CombatSection({
     background: "rgba(120,180,255,0.10)",
     border: "1px solid rgba(120,180,255,0.22)",
   };
+
+  const enemyRoster = useMemo<EnemyRosterCard[]>(() => {
+    if (!derivedCombat) return [];
+
+    const duplicatesByName: Record<string, number> = {};
+    const totalsByName: Record<string, number> = {};
+
+    for (const p of derivedCombat.participants ?? []) {
+      if (String(p?.kind ?? "") !== "enemy_group") continue;
+      const name = normalizeName(String(p?.name ?? ""));
+      if (!name) continue;
+      totalsByName[name] = (totalsByName[name] ?? 0) + 1;
+    }
+
+    const cards: EnemyRosterCard[] = [];
+
+    for (const p of derivedCombat.participants ?? []) {
+      if (String(p?.kind ?? "") !== "enemy_group") continue;
+
+      const combatantId = String(p?.id ?? "").trim();
+      const enemyName = normalizeName(String(p?.name ?? "").trim()) || "Enemy";
+      const def = getEnemyDefinitionByName(enemyName);
+      const hp = enemyHpById[combatantId];
+      const ac = Math.max(1, Number(def?.defenses?.ac ?? 10) || 10);
+      const initMod = Math.trunc(Number(p?.initiativeMod ?? 0));
+
+      duplicatesByName[enemyName] = (duplicatesByName[enemyName] ?? 0) + 1;
+      const idx = duplicatesByName[enemyName];
+      const total = totalsByName[enemyName] ?? 1;
+      const label = total > 1 ? `${enemyName} #${idx}` : enemyName;
+
+      cards.push({
+        combatantId,
+        enemyName,
+        label,
+        hpMax: hp?.hpMax ?? Math.max(1, Number(def?.defenses?.hp ?? 12) || 12),
+        hpCurrent: hp?.hpCurrent ?? Math.max(1, Number(def?.defenses?.hp ?? 12) || 12),
+        ac,
+        defeated: hp?.downed ?? false,
+        initiativeMod: initMod,
+        portraitSrc: enemyPortraitSrc(enemyName),
+        factionLabel: titleCase(String(def?.faction ?? "unknown")),
+        roleLabel: titleCase(String(def?.role ?? "enemy")),
+        isActive: String(derivedCombat.activeCombatantId ?? "") === combatantId,
+        isKeybearer: enemyMatchesName(enemyName, encounterContext?.keyEnemyName),
+        isRelicBearer: enemyMatchesName(enemyName, encounterContext?.relicEnemyName),
+        isCacheGuard: enemyMatchesName(enemyName, encounterContext?.cacheGuardEnemyName),
+      });
+    }
+
+    return cards;
+  }, [derivedCombat, enemyHpById, encounterContext]);
+
+  const enemyCounts = useMemo(() => {
+    const total = enemyRoster.length;
+    const defeated = enemyRoster.filter((e) => e.defeated).length;
+    const living = Math.max(0, total - defeated);
+    return { total, defeated, living };
+  }, [enemyRoster]);
 
   function chooseTargetCombatantId(): string | null {
     const hintedName = enemyTelegraphHint?.targetName ? nameKey(enemyTelegraphHint.targetName) : "";
@@ -469,6 +681,89 @@ export default function CombatSection({
 
   return (
     <>
+      {(encounterContext?.objective ||
+        encounterContext?.rewardHint ||
+        encounterContext?.zoneTheme ||
+        encounterContext?.lockState) && (
+        <CardSection title="Encounter Stakes">
+          <div style={{ display: "grid", gap: 10 }}>
+            <div
+              style={{
+                display: "flex",
+                gap: 8,
+                flexWrap: "wrap",
+              }}
+            >
+              {encounterContext?.zoneTheme ? (
+                <span
+                  style={{
+                    ...chipStyle("info"),
+                    display: "inline-flex",
+                    alignItems: "center",
+                    padding: "6px 10px",
+                    borderRadius: 999,
+                    fontSize: 12,
+                    lineHeight: 1,
+                  }}
+                >
+                  Theme: {titleCase(String(encounterContext.zoneTheme))}
+                </span>
+              ) : null}
+
+              {encounterContext?.lockState ? (
+                <span
+                  style={{
+                    ...chipStyle("warn"),
+                    display: "inline-flex",
+                    alignItems: "center",
+                    padding: "6px 10px",
+                    borderRadius: 999,
+                    fontSize: 12,
+                    lineHeight: 1,
+                  }}
+                >
+                  Lock: {encounterContext.lockState}
+                </span>
+              ) : null}
+
+              {encounterContext?.rewardHint ? (
+                <span
+                  style={{
+                    ...chipStyle("accent"),
+                    display: "inline-flex",
+                    alignItems: "center",
+                    padding: "6px 10px",
+                    borderRadius: 999,
+                    fontSize: 12,
+                    lineHeight: 1,
+                  }}
+                >
+                  Reward: {encounterContext.rewardHint}
+                </span>
+              ) : null}
+            </div>
+
+            {encounterContext?.objective ? (
+              <div style={{ fontSize: 13, lineHeight: 1.65, opacity: 0.9 }}>
+                <strong>Objective:</strong> {encounterContext.objective}
+              </div>
+            ) : null}
+
+            {enemyRoster.length > 0 && (
+              <div className="muted" style={{ fontSize: 12, lineHeight: 1.5 }}>
+                Enemies remaining: <strong>{enemyCounts.living}</strong> / {enemyCounts.total}
+                {enemyCounts.defeated > 0 ? (
+                  <>
+                    {" "}
+                    · Defeated: <strong>{enemyCounts.defeated}</strong>
+                  </>
+                ) : null}
+              </div>
+            )}
+          </div>
+        </CardSection>
+      )}
+
       {partyMembersForDisplay.length > 0 && (
         <CardSection title="Players (session truth)">
           <div
@@ -763,6 +1058,224 @@ export default function CombatSection({
         encounterContext={encounterContext}
       />
 
+      {enemyRoster.length > 0 && (
+        <CardSection title="Enemy Roster">
+          <div style={{ display: "grid", gap: 10 }}>
+            <div className="muted" style={{ fontSize: 12, lineHeight: 1.5 }}>
+              Enemies are now shown as event-sourced combatants. When one is reduced to 0 HP and downed, that victory is
+              preserved here instead of feeling like the roster silently refreshed.
+            </div>
+
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
+                gap: 10,
+              }}
+            >
+              {enemyRoster.map((enemy) => {
+                const pct = hpPercent(enemy.hpCurrent, enemy.hpMax);
+                const border = enemy.defeated
+                  ? "1px solid rgba(255,120,120,0.28)"
+                  : enemy.isActive
+                    ? "1px solid rgba(138,180,255,0.55)"
+                    : "1px solid rgba(255,255,255,0.10)";
+                const background = enemy.defeated
+                  ? "rgba(255,120,120,0.06)"
+                  : enemy.isActive
+                    ? "rgba(138,180,255,0.08)"
+                    : "rgba(255,255,255,0.04)";
+
+                return (
+                  <div
+                    key={enemy.combatantId}
+                    style={{
+                      position: "relative",
+                      display: "flex",
+                      gap: 12,
+                      alignItems: "flex-start",
+                      padding: "12px",
+                      borderRadius: 14,
+                      border,
+                      background,
+                      opacity: enemy.defeated ? 0.72 : 1,
+                    }}
+                  >
+                    {enemy.isActive && !enemy.defeated && (
+                      <div
+                        style={{
+                          position: "absolute",
+                          top: 10,
+                          left: 10,
+                          padding: "4px 8px",
+                          borderRadius: 999,
+                          border: "1px solid rgba(138,180,255,0.55)",
+                          background: "rgba(138,180,255,0.12)",
+                          fontSize: 11,
+                          letterSpacing: 0.5,
+                          textTransform: "uppercase",
+                        }}
+                      >
+                        Active
+                      </div>
+                    )}
+
+                    {enemy.defeated && (
+                      <div
+                        style={{
+                          position: "absolute",
+                          top: 10,
+                          right: 10,
+                          padding: "4px 8px",
+                          borderRadius: 999,
+                          border: "1px solid rgba(255,120,120,0.35)",
+                          background: "rgba(255,120,120,0.10)",
+                          fontSize: 11,
+                          letterSpacing: 0.5,
+                          textTransform: "uppercase",
+                        }}
+                      >
+                        Defeated
+                      </div>
+                    )}
+
+                    <div
+                      style={{
+                        width: 64,
+                        height: 64,
+                        borderRadius: 14,
+                        overflow: "hidden",
+                        border: "1px solid rgba(255,255,255,0.14)",
+                        background: "rgba(0,0,0,0.24)",
+                        flexShrink: 0,
+                        marginTop: enemy.isActive && !enemy.defeated ? 24 : 0,
+                      }}
+                    >
+                      <img
+                        src={enemy.portraitSrc}
+                        alt={enemy.enemyName}
+                        width={64}
+                        height={64}
+                        style={{ width: 64, height: 64, objectFit: "cover", display: "block" }}
+                        onError={(e) => {
+                          const el = e.currentTarget;
+                          el.onerror = null;
+                          el.src = "/assets/V2/Enemy/Enemy_Bandit_Warrior.png";
+                        }}
+                      />
+                    </div>
+
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "baseline" }}>
+                        <strong style={{ fontSize: 15 }}>{enemy.label}</strong>
+                        <span className="muted" style={{ fontSize: 12 }}>
+                          AC {enemy.ac} · init {enemy.initiativeMod >= 0 ? `+${enemy.initiativeMod}` : enemy.initiativeMod}
+                        </span>
+                      </div>
+
+                      <div className="muted" style={{ marginTop: 4, fontSize: 12 }}>
+                        {enemy.roleLabel} · {enemy.factionLabel}
+                      </div>
+
+                      <div style={{ marginTop: 8 }}>
+                        <div
+                          style={{
+                            height: 7,
+                            borderRadius: 999,
+                            background: "rgba(0,0,0,0.36)",
+                            border: "1px solid rgba(255,255,255,0.10)",
+                            overflow: "hidden",
+                          }}
+                          aria-label={`Enemy HP ${fmtHp(enemy.hpCurrent, enemy.hpMax)}`}
+                        >
+                          <div
+                            style={{
+                              height: "100%",
+                              width: `${Math.round(pct * 100)}%`,
+                              background: enemy.defeated ? "rgba(255,120,120,0.65)" : "rgba(255,196,118,0.58)",
+                              boxShadow: enemy.defeated ? "none" : "0 0 12px rgba(255,196,118,0.18)",
+                            }}
+                          />
+                        </div>
+
+                        <div
+                          className="muted"
+                          style={{
+                            marginTop: 6,
+                            fontSize: 12,
+                            display: "flex",
+                            justifyContent: "space-between",
+                            gap: 10,
+                            flexWrap: "wrap",
+                          }}
+                        >
+                          <span>
+                            HP <strong>{fmtHp(enemy.hpCurrent, enemy.hpMax)}</strong>
+                          </span>
+                          <span>id: {enemy.combatantId}</span>
+                        </div>
+                      </div>
+
+                      {(enemy.isKeybearer || enemy.isRelicBearer || enemy.isCacheGuard) && (
+                        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 8 }}>
+                          {enemy.isKeybearer ? (
+                            <span
+                              style={{
+                                ...chipStyle("warn"),
+                                display: "inline-flex",
+                                alignItems: "center",
+                                padding: "5px 8px",
+                                borderRadius: 999,
+                                fontSize: 10,
+                                lineHeight: 1,
+                              }}
+                            >
+                              Keybearer
+                            </span>
+                          ) : null}
+
+                          {enemy.isRelicBearer ? (
+                            <span
+                              style={{
+                                ...chipStyle("accent"),
+                                display: "inline-flex",
+                                alignItems: "center",
+                                padding: "5px 8px",
+                                borderRadius: 999,
+                                fontSize: 10,
+                                lineHeight: 1,
+                              }}
+                            >
+                              Relic Bearer
+                            </span>
+                          ) : null}
+
+                          {enemy.isCacheGuard ? (
+                            <span
+                              style={{
+                                ...chipStyle("info"),
+                                display: "inline-flex",
+                                alignItems: "center",
+                                padding: "5px 8px",
+                                borderRadius: 999,
+                                fontSize: 10,
+                                lineHeight: 1,
+                              }}
+                            >
+                              Guards Cache
+                            </span>
+                          ) : null}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </CardSection>
+      )}
+
       {showEnemyResolver && (
         <CardSection title="Enemy Turn Resolution (Solace-neutral)">
           <EnemyTurnResolverPanel
@@ -809,6 +1322,12 @@ export default function CombatSection({
               const spec = derivedCombat.participants.find((p: any) => p.id === id) ?? null;
               const roll = derivedCombat.initiative.find((r: any) => r.combatantId === id) ?? null;
               const active = derivedCombat.activeCombatantId === id;
+              const isEnemy = String(spec?.kind ?? "") === "enemy_group";
+              const isPlayer = String(spec?.kind ?? "") === "player";
+
+              const enemyHp = isEnemy ? enemyHpById[String(id)] : null;
+              const playerHp = isPlayer ? playerHpById[String(id)] : null;
+              const defeated = Boolean(enemyHp?.downed || playerHp?.downed);
 
               return (
                 <div
@@ -816,19 +1335,29 @@ export default function CombatSection({
                   style={{
                     padding: "10px 12px",
                     borderRadius: 8,
-                    border: active ? "1px solid rgba(138,180,255,0.55)" : "1px solid rgba(255,255,255,0.10)",
-                    background: active ? "rgba(138,180,255,0.10)" : "rgba(255,255,255,0.04)",
+                    border: defeated
+                      ? "1px solid rgba(255,120,120,0.28)"
+                      : active
+                        ? "1px solid rgba(138,180,255,0.55)"
+                        : "1px solid rgba(255,255,255,0.10)",
+                    background: defeated
+                      ? "rgba(255,120,120,0.06)"
+                      : active
+                        ? "rgba(138,180,255,0.10)"
+                        : "rgba(255,255,255,0.04)",
                     display: "flex",
                     justifyContent: "space-between",
                     alignItems: "center",
                     gap: 10,
+                    opacity: defeated ? 0.68 : 1,
                   }}
                 >
                   <div>
                     <strong>
                       {idx + 1}. {spec ? formatCombatantLabel(spec) : id}
                     </strong>
-                    {active && <span className="muted">{"  "}← active</span>}
+                    {active && !defeated && <span className="muted">{"  "}← active</span>}
+                    {defeated && <span className="muted">{"  "}· defeated</span>}
                   </div>
                   <div className="muted">
                     {roll ? `Init ${roll.total} (d20 ${roll.natural} + ${roll.modifier})` : "Init —"}
