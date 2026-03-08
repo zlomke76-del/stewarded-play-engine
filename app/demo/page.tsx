@@ -1298,8 +1298,8 @@ export default function DemoPage() {
   );
 
   const resolutionMovement = useMemo<{
-    from?: XY | null;
-    to?: XY | null;
+    from?: { x: number; y: number } | null;
+    to?: { x: number; y: number } | null;
     direction?: "north" | "south" | "east" | "west" | "none" | null;
   } | null>(() => {
     if (!selectedOption) return null;
@@ -1331,7 +1331,7 @@ export default function DemoPage() {
       direction: inferredDirection,
     };
   }, [selectedOption, playerInput, explorationDraft, currentPosition]);
-
+  
   const resolutionCombat = useMemo(() => {
     if (!combatActive) return null;
 
