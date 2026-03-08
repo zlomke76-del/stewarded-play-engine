@@ -19,9 +19,12 @@
 //   outcome signals instead of only narrow OUTCOME.world fields.
 // - Adds advisory zone naming so player-facing location language feels more
 //   atmospheric while preserving the mechanical zone id.
+// - Adds a tactical recommendation layer that interprets current zone state
+//   into a single advisory read without automating play.
+// - Adds low-rumble SFX on meaningful danger escalation.
 // ------------------------------------------------------------
 
-import React, { useMemo } from "react";
+import React, { useEffect, useMemo, useRef } from "react";
 import { deriveDungeonEvolution } from "@/lib/world/DungeonEvolution";
 
 // ------------------------------------------------------------
@@ -56,6 +59,7 @@ type ZoneId = string;
 type XY = { x: number; y: number };
 
 const ZONE_SIZE_TILES = 4;
+const DANGER_RUMBLE_SRC = "/assets/audio/sfx_low_rumble_01.mp3";
 
 function clamp(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n));
@@ -141,6 +145,18 @@ function tileToZoneIdFromPayload(payload: any): ZoneId | null {
   return zoneFromTileXY(x, y, ZONE_SIZE_TILES);
 }
 
+function playDangerRumble(volume = 0.42) {
+  try {
+    const audio = new Audio(DANGER_RUMBLE_SRC);
+    audio.volume = volume;
+    void audio.play().catch(() => {
+      // fail silently
+    });
+  } catch {
+    // fail silently
+  }
+}
+
 function tierForPressure(p: number): {
   tier: "Quiet" | "Uneasy" | "Alert" | "Hunting" | "Active Threat" | "Crisis";
   rangeLabel: string;
@@ -154,6 +170,25 @@ function tierForPressure(p: number): {
   return { tier: "Crisis", rangeLabel: "91–100" };
 }
 
+function pressureTierRank(tier: ReturnType<typeof tierForPressure>["tier"]): number {
+  switch (tier) {
+    case "Quiet":
+      return 0;
+    case "Uneasy":
+      return 1;
+    case "Alert":
+      return 2;
+    case "Hunting":
+      return 3;
+    case "Active Threat":
+      return 4;
+    case "Crisis":
+      return 5;
+    default:
+      return 0;
+  }
+}
+
 function statusForAwareness(a: number): {
   label: "Calm" | "Whispers" | "Search" | "Reinforcements" | "Alarm";
   nextHint: string;
@@ -164,6 +199,23 @@ function statusForAwareness(a: number): {
   if (x < 75) return { label: "Search", nextHint: "Patrols begin probing the area." };
   if (x < 100) return { label: "Reinforcements", nextHint: "A response is likely if disturbances continue." };
   return { label: "Alarm", nextHint: "The dungeon responds." };
+}
+
+function awarenessRank(label: ReturnType<typeof statusForAwareness>["label"]): number {
+  switch (label) {
+    case "Calm":
+      return 0;
+    case "Whispers":
+      return 1;
+    case "Search":
+      return 2;
+    case "Reinforcements":
+      return 3;
+    case "Alarm":
+      return 4;
+    default:
+      return 0;
+  }
 }
 
 // ------------------------------------------------------------
@@ -188,8 +240,8 @@ function derivePlayerPosition(events: readonly SessionEvent[]): XY | null {
 // ------------------------------------------------------------
 
 type ZonePressureState = {
-  byZone: Map<ZoneId, number>; // 0..100
-  estimated: boolean; // true if we had to estimate (no canonical pressure events)
+  byZone: Map<ZoneId, number>;
+  estimated: boolean;
 };
 
 function deriveZonePressure(events: readonly SessionEvent[]): ZonePressureState {
@@ -211,8 +263,8 @@ function deriveZonePressure(events: readonly SessionEvent[]): ZonePressureState 
 }
 
 type ZoneAwarenessState = {
-  byZone: Map<ZoneId, number>; // 0..100
-  estimated: boolean; // true if we had to estimate (no canonical awareness events)
+  byZone: Map<ZoneId, number>;
+  estimated: boolean;
 };
 
 function deriveZoneAwareness(events: readonly SessionEvent[], pressure: ZonePressureState): ZoneAwarenessState {
@@ -378,6 +430,20 @@ type MemorySection = {
 
 type EnvironmentalMemory = {
   sections: MemorySection[];
+  counts: {
+    threats: number;
+    obstacles: number;
+    opportunities: number;
+    nearbySignals: number;
+    recentChanges: number;
+  };
+  flags: {
+    hasLockedPath: boolean;
+    hasHazard: boolean;
+    hasOpportunity: boolean;
+    hasPatrolRisk: boolean;
+    hasRecentShift: boolean;
+  };
 };
 
 function pushUnique(map: Map<string, string>, key: string, value: string) {
@@ -751,35 +817,153 @@ function deriveEnvironmentalMemory(args: {
     pushUnique(recentChanges, `recent-${line}`, line);
   }
 
+  const threatItems = Array.from(localThreats.values());
+  const obstacleItems = Array.from(localObstacles.values());
+  const opportunityItems = Array.from(localOpportunities.values());
+  const nearbyItems = Array.from(nearbySignals.values());
+  const recentItems = Array.from(recentChanges.values());
+
   const sections: MemorySection[] = [
     {
       title: "Threats",
-      items: Array.from(localThreats.values()),
+      items: threatItems,
       emptyLabel: "No immediate local threats have been clearly established.",
     },
     {
       title: "Obstacles",
-      items: Array.from(localObstacles.values()),
+      items: obstacleItems,
       emptyLabel: "No persistent local obstacles are known.",
     },
     {
       title: "Opportunities",
-      items: Array.from(localOpportunities.values()),
+      items: opportunityItems,
       emptyLabel: "No clear opportunities have been revealed here yet.",
     },
     {
       title: "Nearby Signals",
-      items: Array.from(nearbySignals.values()),
+      items: nearbyItems,
       emptyLabel: "No significant nearby signals are known.",
     },
     {
       title: "Recent Changes",
-      items: Array.from(recentChanges.values()),
+      items: recentItems,
       emptyLabel: "No notable recent changes have been recorded.",
     },
   ];
 
-  return { sections };
+  return {
+    sections,
+    counts: {
+      threats: threatItems.length,
+      obstacles: obstacleItems.length,
+      opportunities: opportunityItems.length,
+      nearbySignals: nearbyItems.length,
+      recentChanges: recentItems.length,
+    },
+    flags: {
+      hasLockedPath: obstacleItems.some((x) => /locked|barrier|sealed|door/i.test(x)),
+      hasHazard: threatItems.some((x) => /hazard|trap|unsafe|danger/i.test(x)),
+      hasOpportunity: opportunityItems.length > 0,
+      hasPatrolRisk: threatItems.some((x) => /enemy movement|awareness|alarm|probing/i.test(x)) || nearbyItems.some((x) => /patrol|pressure|tension/i.test(x)),
+      hasRecentShift: recentItems.length > 0,
+    },
+  };
+}
+
+// ------------------------------------------------------------
+// Tactical recommendation
+// ------------------------------------------------------------
+
+type TacticalRecommendation = {
+  priority: "opportunity" | "warning" | "blocker" | "guidance";
+  headline: string;
+  reason: string;
+};
+
+function deriveTacticalRecommendation(args: {
+  currentPressure: number;
+  currentAwareness: number;
+  nearbyMaxPressure: number;
+  memory: EnvironmentalMemory;
+  zoneTitle: string;
+  evolution: { apex: string; condition: string; signals: string[] };
+}): TacticalRecommendation {
+  const { currentPressure, currentAwareness, nearbyMaxPressure, memory, zoneTitle, evolution } = args;
+
+  const highPressure = currentPressure >= 70;
+  const highAwareness = currentAwareness >= 75;
+  const midAwareness = currentAwareness >= 45;
+  const nearbyHot = nearbyMaxPressure >= 60;
+
+  if (memory.flags.hasLockedPath && (midAwareness || nearbyHot)) {
+    return {
+      priority: "blocker",
+      headline: "Progress is constrained by a locked route.",
+      reason: `A known path in ${zoneTitle} remains sealed, and nearby pressure suggests delaying could invite a stronger response.`,
+    };
+  }
+
+  if (memory.flags.hasHazard && highPressure) {
+    return {
+      priority: "warning",
+      headline: "This zone is becoming dangerous to linger in.",
+      reason: `A known hazard is active in ${zoneTitle}, and the current pressure level suggests the dungeon is already pushing back.`,
+    };
+  }
+
+  if (highAwareness) {
+    return {
+      priority: "warning",
+      headline: "Enemy attention is close to open alarm.",
+      reason: `The area is no longer quiet. Further noise or failed actions in ${zoneTitle} are likely to draw a sharper response.`,
+    };
+  }
+
+  if (memory.flags.hasOpportunity && !highPressure && currentAwareness < 50) {
+    return {
+      priority: "opportunity",
+      headline: "This is a strong moment to exploit a known opportunity.",
+      reason: `Something useful has already been identified in ${zoneTitle}, and enemy attention has not yet fully hardened around it.`,
+    };
+  }
+
+  if (memory.flags.hasPatrolRisk && currentAwareness < 75) {
+    return {
+      priority: "warning",
+      headline: "Patrol activity makes caution more valuable than speed.",
+      reason: `Signs of movement or rising tension suggest the dungeon is shifting around this zone, even if it has not yet reached full alarm.`,
+    };
+  }
+
+  if (nearbyHot) {
+    return {
+      priority: "guidance",
+      headline: "A neighboring zone is carrying the greater tension.",
+      reason: `Pressure nearby is higher than it is here, which may shape the safest route or the next point of escalation.`,
+    };
+  }
+
+  if (evolution.condition === "Dire" || evolution.condition === "Hostile") {
+    return {
+      priority: "guidance",
+      headline: "The dungeon's broader condition is worsening.",
+      reason: `Even if ${zoneTitle} is momentarily stable, the surrounding system feels more hostile and may not stay quiet for long.`,
+    };
+  }
+
+  if (memory.flags.hasRecentShift) {
+    return {
+      priority: "guidance",
+      headline: "Recent changes matter more than the stillness suggests.",
+      reason: `This zone has shifted recently, so the last few discoveries or disturbances should guide the next move more than habit should.`,
+    };
+  }
+
+  return {
+    priority: "guidance",
+    headline: "The best move is to stay deliberate.",
+    reason: `${zoneTitle} is not yet forcing an immediate answer, but the dungeon remains reactive to careless noise, delay, and pressure.`,
+  };
 }
 
 // ------------------------------------------------------------
@@ -793,7 +977,7 @@ function RingGauge({
   footnote,
   pulse,
 }: {
-  value: number; // 0..100
+  value: number;
   title: string;
   subtitle?: string;
   footnote?: string;
@@ -808,8 +992,8 @@ function RingGauge({
     pulse === "heartbeat"
       ? "rg-heartbeat 1.25s ease-in-out infinite"
       : pulse === "breathe"
-      ? "rg-breathe 2.4s ease-in-out infinite"
-      : undefined;
+        ? "rg-breathe 2.4s ease-in-out infinite"
+        : undefined;
 
   return (
     <div style={{ display: "grid", placeItems: "center", gap: 8 }}>
@@ -870,7 +1054,7 @@ function RingGauge({
           }
           100% {
             stroke: rgba(220, 220, 255, 0.72);
-            filter: drop-shadow(0 0 0px rgba(220, 220, 255, 0));
+            filter: drop-shadow(0 0 0px rgba(240, 240, 255, 0));
           }
         }
 
@@ -1053,6 +1237,88 @@ export default function DungeonPressurePanel({ turn, currentRoomId, events, pars
     });
   }, [events, zoneId, adjacent]);
 
+  const tacticalRecommendation = useMemo(
+    () =>
+      deriveTacticalRecommendation({
+        currentPressure,
+        currentAwareness,
+        nearbyMaxPressure,
+        memory: environmentalMemory,
+        zoneTitle: location.title,
+        evolution,
+      }),
+    [currentPressure, currentAwareness, nearbyMaxPressure, environmentalMemory, location.title, evolution]
+  );
+
+  const tacticalAccent: React.CSSProperties =
+    tacticalRecommendation.priority === "blocker"
+      ? {
+          border: "1px solid rgba(255,196,118,0.20)",
+          background: "linear-gradient(180deg, rgba(255,196,118,0.10), rgba(255,255,255,0.03))",
+        }
+      : tacticalRecommendation.priority === "warning"
+        ? {
+            border: "1px solid rgba(220,120,120,0.18)",
+            background: "linear-gradient(180deg, rgba(220,120,120,0.10), rgba(255,255,255,0.03))",
+          }
+        : tacticalRecommendation.priority === "opportunity"
+          ? {
+              border: "1px solid rgba(120,190,140,0.18)",
+              background: "linear-gradient(180deg, rgba(120,190,140,0.10), rgba(255,255,255,0.03))",
+            }
+          : {
+              border: "1px solid rgba(120,170,255,0.18)",
+              background: "linear-gradient(180deg, rgba(120,170,255,0.08), rgba(255,255,255,0.03))",
+            };
+
+  const hasMountedRef = useRef(false);
+  const lastDangerSnapshotRef = useRef<{
+    pressureTierRank: number;
+    awarenessRank: number;
+    nearbyTierRank: number;
+    tacticalPriority: TacticalRecommendation["priority"];
+    evolutionCondition: string;
+  } | null>(null);
+
+  useEffect(() => {
+    const currentSnapshot = {
+      pressureTierRank: pressureTierRank(tier.tier),
+      awarenessRank: awarenessRank(awarenessStatus.label),
+      nearbyTierRank: pressureTierRank(nearbyTier.tier),
+      tacticalPriority: tacticalRecommendation.priority,
+      evolutionCondition: evolution.condition,
+    };
+
+    if (!hasMountedRef.current) {
+      hasMountedRef.current = true;
+      lastDangerSnapshotRef.current = currentSnapshot;
+      return;
+    }
+
+    const prev = lastDangerSnapshotRef.current;
+    lastDangerSnapshotRef.current = currentSnapshot;
+    if (!prev) return;
+
+    const pressureEscalated = currentSnapshot.pressureTierRank > prev.pressureTierRank;
+    const awarenessEscalated = currentSnapshot.awarenessRank > prev.awarenessRank;
+    const nearbyEscalated = currentSnapshot.nearbyTierRank > prev.nearbyTierRank;
+
+    const tacticalEscalated =
+      (prev.tacticalPriority === "guidance" &&
+        (currentSnapshot.tacticalPriority === "warning" || currentSnapshot.tacticalPriority === "blocker")) ||
+      (prev.tacticalPriority === "opportunity" &&
+        (currentSnapshot.tacticalPriority === "warning" || currentSnapshot.tacticalPriority === "blocker")) ||
+      (prev.tacticalPriority === "warning" && currentSnapshot.tacticalPriority === "blocker");
+
+    const evolutionEscalated =
+      prev.evolutionCondition !== currentSnapshot.evolutionCondition &&
+      (currentSnapshot.evolutionCondition === "Hostile" || currentSnapshot.evolutionCondition === "Dire");
+
+    if (pressureEscalated || awarenessEscalated || nearbyEscalated || tacticalEscalated || evolutionEscalated) {
+      playDangerRumble();
+    }
+  }, [tier.tier, awarenessStatus.label, nearbyTier.tier, tacticalRecommendation.priority, evolution.condition]);
+
   const advisoryNotes = useMemo(() => {
     const notes: string[] = [];
 
@@ -1110,6 +1376,22 @@ export default function DungeonPressurePanel({ turn, currentRoomId, events, pars
                 Tile: ({playerPos.x}, {playerPos.y})
               </div>
             ) : null}
+          </div>
+
+          <div
+            style={{
+              ...tacticalAccent,
+              padding: 12,
+              borderRadius: 12,
+              display: "grid",
+              gap: 6,
+            }}
+          >
+            <div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: 0.6, opacity: 0.66 }}>
+              Tactical Read
+            </div>
+            <div style={{ fontWeight: 900, fontSize: 14 }}>{tacticalRecommendation.headline}</div>
+            <div style={{ fontSize: 12, opacity: 0.82, lineHeight: 1.55 }}>{tacticalRecommendation.reason}</div>
           </div>
 
           <MeterBar
