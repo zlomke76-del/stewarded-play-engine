@@ -113,6 +113,43 @@ export type EnemyBehaviorProfile = {
   usesControlEarly?: boolean;
 };
 
+export type EnemyEncounterDuty =
+  | "patrol"
+  | "guard"
+  | "captain"
+  | "warden"
+  | "hunter"
+  | "shrine_keeper"
+  | "cache_guard"
+  | "scavenger"
+  | "lurker"
+  | "enforcer"
+  | "artillery"
+  | "sentinel"
+  | "raider"
+  | "executioner"
+  | "ritualist";
+
+export type EnemyEncounterTheme =
+  | "watch"
+  | "shrine"
+  | "storage"
+  | "ruin"
+  | "crypt"
+  | "forge"
+  | "wild"
+  | "ancient";
+
+export type EnemyEcologyProfile = {
+  preferredThemes?: EnemyEncounterTheme[];
+  duty?: EnemyEncounterDuty;
+  canCarryKey?: boolean;
+  canCarryRelic?: boolean;
+  canGuardCache?: boolean;
+  canGuardShrine?: boolean;
+  notes?: string[];
+};
+
 export type EnemyArchetypeKey =
   | "Bandit Archer"
   | "Bandit Warrior"
@@ -167,6 +204,7 @@ export type EnemyDefinition = {
 
   lootTags?: string[];
   tags?: string[];
+  ecology?: EnemyEcologyProfile;
 };
 
 export type EnemyDefinitionMap = Record<string, EnemyDefinition>;
@@ -235,6 +273,12 @@ export const ENEMY_DATABASE: EnemyDefinitionMap = {
     },
     lootTags: ["arrows", "light_armor"],
     tags: ["humanoid", "ranged"],
+    ecology: {
+      preferredThemes: ["watch", "ruin", "storage"],
+      duty: "artillery",
+      canGuardCache: true,
+      notes: ["Often deployed behind tougher frontline bodies."],
+    },
   }),
 
   bandit_warrior: makeEnemy({
@@ -284,6 +328,12 @@ export const ENEMY_DATABASE: EnemyDefinitionMap = {
     },
     lootTags: ["shield", "weapon"],
     tags: ["humanoid", "frontline"],
+    ecology: {
+      preferredThemes: ["watch", "storage", "ruin"],
+      duty: "guard",
+      canGuardCache: true,
+      notes: ["Reliable generic guard body for low-pressure rooms."],
+    },
   }),
 
   bandit_rogue: makeEnemy({
@@ -334,6 +384,13 @@ export const ENEMY_DATABASE: EnemyDefinitionMap = {
     },
     lootTags: ["dagger", "pouch"],
     tags: ["humanoid", "stealth"],
+    ecology: {
+      preferredThemes: ["watch", "ruin", "storage"],
+      duty: "lurker",
+      canCarryKey: true,
+      canGuardCache: true,
+      notes: ["Useful as a flanker or hidden keeper of small valuables."],
+    },
   }),
 
   bandit_captain: makeEnemy({
@@ -383,6 +440,14 @@ export const ENEMY_DATABASE: EnemyDefinitionMap = {
     },
     lootTags: ["coin", "officer_blade"],
     tags: ["humanoid", "leader"],
+    ecology: {
+      preferredThemes: ["watch", "ruin", "storage"],
+      duty: "captain",
+      canCarryKey: true,
+      canCarryRelic: false,
+      canGuardCache: true,
+      notes: ["Strong candidate for keybearer or route authority."],
+    },
   }),
 
   goblin_skirmisher: makeEnemy({
@@ -432,6 +497,13 @@ export const ENEMY_DATABASE: EnemyDefinitionMap = {
     },
     lootTags: ["scrap", "poison_vial"],
     tags: ["goblinoid", "mobile"],
+    ecology: {
+      preferredThemes: ["watch", "ruin", "wild"],
+      duty: "patrol",
+      canCarryKey: false,
+      canGuardCache: false,
+      notes: ["Often used as scouts or harassment patrols."],
+    },
   }),
 
   goblin_archer: makeEnemy({
@@ -472,6 +544,12 @@ export const ENEMY_DATABASE: EnemyDefinitionMap = {
     },
     lootTags: ["arrows"],
     tags: ["goblinoid", "ranged"],
+    ecology: {
+      preferredThemes: ["watch", "ruin", "wild"],
+      duty: "artillery",
+      canGuardCache: false,
+      notes: ["Common ranged support in perimeter defense."],
+    },
   }),
 
   hobgoblin_soldier: makeEnemy({
@@ -520,6 +598,13 @@ export const ENEMY_DATABASE: EnemyDefinitionMap = {
     },
     lootTags: ["spear", "shield"],
     tags: ["goblinoid", "disciplined"],
+    ecology: {
+      preferredThemes: ["watch", "ruin", "forge"],
+      duty: "guard",
+      canCarryKey: true,
+      canGuardCache: true,
+      notes: ["Disciplined keeper of choke points and defended routes."],
+    },
   }),
 
   orc_raider: makeEnemy({
@@ -569,6 +654,13 @@ export const ENEMY_DATABASE: EnemyDefinitionMap = {
     },
     lootTags: ["greataxe", "hide"],
     tags: ["orc", "frontline"],
+    ecology: {
+      preferredThemes: ["ruin", "storage", "wild"],
+      duty: "raider",
+      canCarryKey: true,
+      canGuardCache: true,
+      notes: ["A force-first enemy suited to plundered spaces."],
+    },
   }),
 
   orc_warlord: makeEnemy({
@@ -618,6 +710,14 @@ export const ENEMY_DATABASE: EnemyDefinitionMap = {
     },
     lootTags: ["boss_weapon", "trophy"],
     tags: ["orc", "boss"],
+    ecology: {
+      preferredThemes: ["ruin", "watch", "wild"],
+      duty: "captain",
+      canCarryKey: true,
+      canCarryRelic: true,
+      canGuardCache: true,
+      notes: ["High-value encounter anchor for raider-controlled zones."],
+    },
   }),
 
   skeleton_warrior: makeEnemy({
@@ -658,6 +758,13 @@ export const ENEMY_DATABASE: EnemyDefinitionMap = {
     },
     lootTags: ["bones", "rusted_weapon"],
     tags: ["undead"],
+    ecology: {
+      preferredThemes: ["crypt", "ruin", "ancient"],
+      duty: "guard",
+      canGuardCache: true,
+      canGuardShrine: true,
+      notes: ["Basic deathless guardian for tomb routes and preserved chambers."],
+    },
   }),
 
   skeleton_archer: makeEnemy({
@@ -699,6 +806,12 @@ export const ENEMY_DATABASE: EnemyDefinitionMap = {
     },
     lootTags: ["bone_fragments"],
     tags: ["undead", "ranged"],
+    ecology: {
+      preferredThemes: ["crypt", "ruin", "ancient"],
+      duty: "sentinel",
+      canGuardShrine: true,
+      notes: ["Ranged deathless sentinel often placed behind melee bones."],
+    },
   }),
 
   zombie: makeEnemy({
@@ -746,6 +859,12 @@ export const ENEMY_DATABASE: EnemyDefinitionMap = {
     },
     lootTags: ["rot", "grave_goods"],
     tags: ["undead", "slow"],
+    ecology: {
+      preferredThemes: ["crypt", "ruin", "storage"],
+      duty: "lurker",
+      canGuardCache: false,
+      notes: ["Ambient dead pressure more than intentional military defense."],
+    },
   }),
 
   ghoul: makeEnemy({
@@ -787,6 +906,12 @@ export const ENEMY_DATABASE: EnemyDefinitionMap = {
     },
     lootTags: ["bone_trinket"],
     tags: ["undead", "predator"],
+    ecology: {
+      preferredThemes: ["crypt", "ruin", "wild"],
+      duty: "hunter",
+      canCarryKey: false,
+      notes: ["Predatory flanker rather than disciplined guardian."],
+    },
   }),
 
   wraith: makeEnemy({
@@ -838,6 +963,13 @@ export const ENEMY_DATABASE: EnemyDefinitionMap = {
     },
     lootTags: ["ectoplasm"],
     tags: ["undead", "spectral"],
+    ecology: {
+      preferredThemes: ["crypt", "ancient", "shrine"],
+      duty: "warden",
+      canCarryRelic: true,
+      canGuardShrine: true,
+      notes: ["Strong fit for cursed relic and shrine-defense encounters."],
+    },
   }),
 
   cultist_acolyte: makeEnemy({
@@ -887,6 +1019,13 @@ export const ENEMY_DATABASE: EnemyDefinitionMap = {
     },
     lootTags: ["ritual_dust"],
     tags: ["cult", "magic"],
+    ecology: {
+      preferredThemes: ["shrine", "ancient", "ruin"],
+      duty: "ritualist",
+      canCarryRelic: true,
+      canGuardShrine: true,
+      notes: ["Common ritual presence in lesser shrine encounters."],
+    },
   }),
 
   cult_assassin: makeEnemy({
@@ -927,6 +1066,13 @@ export const ENEMY_DATABASE: EnemyDefinitionMap = {
     },
     lootTags: ["poison", "black_veil"],
     tags: ["cult", "stealth"],
+    ecology: {
+      preferredThemes: ["shrine", "ancient", "ruin"],
+      duty: "lurker",
+      canCarryRelic: true,
+      canCarryKey: true,
+      notes: ["Ideal hidden protector of relic chambers or sealed rites."],
+    },
   }),
 
   cult_knight: makeEnemy({
@@ -975,6 +1121,14 @@ export const ENEMY_DATABASE: EnemyDefinitionMap = {
     },
     lootTags: ["dark_plate"],
     tags: ["cult", "armored"],
+    ecology: {
+      preferredThemes: ["shrine", "ancient", "forge"],
+      duty: "guard",
+      canCarryKey: true,
+      canGuardShrine: true,
+      canGuardCache: true,
+      notes: ["Armored shrine and relic line-holder."],
+    },
   }),
 
   cult_priest: makeEnemy({
@@ -1024,6 +1178,13 @@ export const ENEMY_DATABASE: EnemyDefinitionMap = {
     },
     lootTags: ["ritual_focus"],
     tags: ["cult", "support"],
+    ecology: {
+      preferredThemes: ["shrine", "ancient"],
+      duty: "shrine_keeper",
+      canCarryRelic: true,
+      canGuardShrine: true,
+      notes: ["Prime relic-bearer or rite-anchor in shrine encounters."],
+    },
   }),
 
   arcane_drone: makeEnemy({
@@ -1065,6 +1226,13 @@ export const ENEMY_DATABASE: EnemyDefinitionMap = {
     },
     lootTags: ["arcane_core"],
     tags: ["construct", "ranged"],
+    ecology: {
+      preferredThemes: ["forge", "watch", "ancient"],
+      duty: "sentinel",
+      canGuardCache: true,
+      canGuardShrine: true,
+      notes: ["Fixed defensive machine presence around protected nodes."],
+    },
   }),
 
   arcane_sentinel: makeEnemy({
@@ -1115,6 +1283,14 @@ export const ENEMY_DATABASE: EnemyDefinitionMap = {
     },
     lootTags: ["sentinel_lens"],
     tags: ["construct", "elite"],
+    ecology: {
+      preferredThemes: ["forge", "watch", "ancient", "shrine"],
+      duty: "warden",
+      canCarryKey: true,
+      canGuardCache: true,
+      canGuardShrine: true,
+      notes: ["High-discipline synthetic guard suitable for important routes."],
+    },
   }),
 
   stone_golem: makeEnemy({
@@ -1155,6 +1331,13 @@ export const ENEMY_DATABASE: EnemyDefinitionMap = {
     },
     lootTags: ["runestone"],
     tags: ["construct", "tank"],
+    ecology: {
+      preferredThemes: ["forge", "ancient", "shrine"],
+      duty: "warden",
+      canGuardShrine: true,
+      canGuardCache: true,
+      notes: ["Heavy immovable defender for major thresholds."],
+    },
   }),
 
   iron_guardian: makeEnemy({
@@ -1196,6 +1379,15 @@ export const ENEMY_DATABASE: EnemyDefinitionMap = {
     },
     lootTags: ["guardian_core", "iron_relic"],
     tags: ["construct", "boss"],
+    ecology: {
+      preferredThemes: ["forge", "ancient", "watch"],
+      duty: "warden",
+      canCarryKey: true,
+      canCarryRelic: true,
+      canGuardCache: true,
+      canGuardShrine: true,
+      notes: ["Major lock-and-relic guardian for extreme encounters."],
+    },
   }),
 
   wolf: makeEnemy({
@@ -1243,6 +1435,11 @@ export const ENEMY_DATABASE: EnemyDefinitionMap = {
     },
     lootTags: ["pelt"],
     tags: ["beast", "fast"],
+    ecology: {
+      preferredThemes: ["wild", "ruin", "storage"],
+      duty: "hunter",
+      notes: ["Natural pressure creature more than deliberate sentry."],
+    },
   }),
 
   dire_wolf: makeEnemy({
@@ -1281,6 +1478,11 @@ export const ENEMY_DATABASE: EnemyDefinitionMap = {
     },
     lootTags: ["dire_pelt"],
     tags: ["beast", "elite"],
+    ecology: {
+      preferredThemes: ["wild", "ruin"],
+      duty: "hunter",
+      notes: ["Predator encounter anchor for feral routes."],
+    },
   }),
 
   giant_spider: makeEnemy({
@@ -1331,6 +1533,12 @@ export const ENEMY_DATABASE: EnemyDefinitionMap = {
     },
     lootTags: ["silk", "venom"],
     tags: ["beast", "poison"],
+    ecology: {
+      preferredThemes: ["storage", "ruin", "wild"],
+      duty: "lurker",
+      canGuardCache: true,
+      notes: ["Excellent trap predator for neglected chambers and supply rooms."],
+    },
   }),
 
   hellhound: makeEnemy({
@@ -1373,6 +1581,12 @@ export const ENEMY_DATABASE: EnemyDefinitionMap = {
     },
     lootTags: ["ember_fang"],
     tags: ["infernal", "fire"],
+    ecology: {
+      preferredThemes: ["forge", "ancient", "wild"],
+      duty: "hunter",
+      canGuardShrine: true,
+      notes: ["Infernal pursuit creature suited to hot or cursed routes."],
+    },
   }),
 
   ancient_warden: makeEnemy({
@@ -1423,6 +1637,15 @@ export const ENEMY_DATABASE: EnemyDefinitionMap = {
     },
     lootTags: ["warden_sigil", "ancient_key"],
     tags: ["ancient", "boss"],
+    ecology: {
+      preferredThemes: ["ancient", "shrine", "forge"],
+      duty: "warden",
+      canCarryKey: true,
+      canCarryRelic: true,
+      canGuardShrine: true,
+      canGuardCache: true,
+      notes: ["Ideal apex defender for sealed passages and old authority relics."],
+    },
   }),
 
   void_horror: makeEnemy({
@@ -1473,6 +1696,13 @@ export const ENEMY_DATABASE: EnemyDefinitionMap = {
     },
     lootTags: ["void_shard"],
     tags: ["ancient", "aberrant", "boss"],
+    ecology: {
+      preferredThemes: ["ancient", "crypt", "shrine"],
+      duty: "warden",
+      canCarryRelic: true,
+      canGuardShrine: true,
+      notes: ["Apex aberrant encounter around forbidden relic or catastrophic seal spaces."],
+    },
   }),
 };
 
@@ -1502,6 +1732,50 @@ export function getEnemiesByTier(tier: EnemyTier): EnemyDefinition[] {
 export function getEnemiesForGroupLabel(groupLabel: string): EnemyDefinition[] {
   const key = String(groupLabel ?? "").trim().toLowerCase();
   return ENEMY_LIST.filter((e) => String(e.groupLabel ?? "").toLowerCase() === key);
+}
+
+export function getEnemiesByEncounterTheme(theme: EnemyEncounterTheme): EnemyDefinition[] {
+  return ENEMY_LIST.filter((e) => Array.isArray(e.ecology?.preferredThemes) && e.ecology!.preferredThemes!.includes(theme));
+}
+
+export function getEnemiesByEncounterDuty(duty: EnemyEncounterDuty): EnemyDefinition[] {
+  return ENEMY_LIST.filter((e) => e.ecology?.duty === duty);
+}
+
+export function getKeyCarrierCandidatesForTheme(theme: EnemyEncounterTheme): EnemyDefinition[] {
+  return ENEMY_LIST.filter(
+    (e) =>
+      e.ecology?.canCarryKey === true &&
+      Array.isArray(e.ecology?.preferredThemes) &&
+      e.ecology!.preferredThemes!.includes(theme)
+  );
+}
+
+export function getRelicCarrierCandidatesForTheme(theme: EnemyEncounterTheme): EnemyDefinition[] {
+  return ENEMY_LIST.filter(
+    (e) =>
+      e.ecology?.canCarryRelic === true &&
+      Array.isArray(e.ecology?.preferredThemes) &&
+      e.ecology!.preferredThemes!.includes(theme)
+  );
+}
+
+export function getCacheGuardCandidatesForTheme(theme: EnemyEncounterTheme): EnemyDefinition[] {
+  return ENEMY_LIST.filter(
+    (e) =>
+      e.ecology?.canGuardCache === true &&
+      Array.isArray(e.ecology?.preferredThemes) &&
+      e.ecology!.preferredThemes!.includes(theme)
+  );
+}
+
+export function getShrineGuardCandidatesForTheme(theme: EnemyEncounterTheme): EnemyDefinition[] {
+  return ENEMY_LIST.filter(
+    (e) =>
+      e.ecology?.canGuardShrine === true &&
+      Array.isArray(e.ecology?.preferredThemes) &&
+      e.ecology!.preferredThemes!.includes(theme)
+  );
 }
 
 export function getStarterDungeonEnemies(): EnemyDefinition[] {
