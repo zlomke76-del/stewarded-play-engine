@@ -108,11 +108,6 @@ function randInt(minIncl: number, maxIncl: number) {
   return minIncl + (buf[0] % span);
 }
 
-function pick<T>(arr: T[]): T | null {
-  if (!arr.length) return null;
-  return arr[randInt(0, arr.length - 1)];
-}
-
 function hash32(s: string): number {
   let h = 2166136261;
   for (let i = 0; i < s.length; i++) {
@@ -342,7 +337,6 @@ function chooseTargetName(args: {
   const rewardHint = String(encounterContext?.rewardHint ?? "").toLowerCase();
   const seedBase = `${enemyId ?? enemy?.id ?? enemyName}::${encounterContext?.zoneId ?? "zone"}::target`;
 
-  // If a specific enemy is clearly guarding a key / relic / cache, make the target feel deliberate.
   if (
     normalizeKey(encounterContext?.keyEnemyName) === normalizeKey(enemyName) ||
     normalizeKey(encounterContext?.relicEnemyName) === normalizeKey(enemyName) ||
@@ -355,7 +349,6 @@ function chooseTargetName(args: {
     };
   }
 
-  // Backline pressure enemies skew toward later party positions.
   if (behavior?.prefersBackline || role === "archer" || role === "caster" || role === "assassin") {
     const backline = candidates.slice(Math.max(0, candidates.length - 2));
     const idx = hash32(`${seedBase}::backline`) % backline.length;
@@ -365,7 +358,6 @@ function chooseTargetName(args: {
     };
   }
 
-  // Beasts / brutes often crash the front.
   if (role === "brute" || role === "soldier" || role === "beast" || role === "construct") {
     const frontline = candidates.slice(0, Math.min(2, candidates.length));
     const idx = hash32(`${seedBase}::frontline`) % frontline.length;
@@ -375,7 +367,6 @@ function chooseTargetName(args: {
     };
   }
 
-  // Objective-sensitive pressure if players are near rewards / doors.
   if (
     objective.includes("key") ||
     objective.includes("relic") ||
@@ -407,15 +398,14 @@ function chooseActionForEnemy(args: {
 }): { chosenSkillId: string | null; chosenAction: EnemyAction | null } {
   const { enemy, enemyName, enemyId, targetName, encounterContext } = args;
 
-  const skillIds = Array.isArray(enemy?.skillIds) ? enemy!.skillIds : [];
-  const actions = Array.isArray(enemy?.actions) ? enemy!.actions : [];
+  const skillIds = Array.isArray(enemy?.skillIds) ? enemy.skillIds : [];
+  const actions = Array.isArray(enemy?.actions) ? enemy.actions : [];
   const objective = String(encounterContext?.objective ?? "").toLowerCase();
   const zoneTheme = String(encounterContext?.zoneTheme ?? "").toLowerCase();
   const seedBase = `${enemyId ?? enemy?.id ?? enemyName}::${targetName}::${encounterContext?.zoneId ?? "zone"}`;
 
   let actionPool = actions.slice();
 
-  // Encourage control/support when guarding meaningful objectives.
   if (
     objective.includes("key") ||
     objective.includes("locked") ||
@@ -426,7 +416,6 @@ function chooseActionForEnemy(args: {
     if (biased.length > 0) actionPool = [...biased, ...actions];
   }
 
-  // Ritual / shrine / sanctum style zones lean spell/control.
   if (
     zoneTheme.includes("shrine") ||
     zoneTheme.includes("ritual") ||
@@ -665,8 +654,18 @@ export default function EnemyTurnResolverPanel({
     timers.current.push(id);
   }
 
+  function clearQueuedTimers() {
+    timers.current.forEach((t) => window.clearTimeout(t));
+    timers.current = [];
+  }
+
   function begin() {
     if (!enabled || !enemyName) return;
+
+    clearQueuedTimers();
+    rollRef.current = null;
+    setRoll(null);
+    setReveal("");
 
     const action = resolveEnemyAction({
       enemy: enemyDef,
@@ -718,11 +717,12 @@ export default function EnemyTurnResolverPanel({
         encounterContext,
       });
 
-    const r = rollRef.current ?? roll ?? 0;
+    const resolvedRoll = rollRef.current ?? roll ?? 0;
+    const resolvedDc = action.dc;
 
     const payload: OutcomePayload = {
       description: `Enemy turn — ${enemyName} against ${action.targetName}. ${reveal || "Outcome pending."}`,
-      dice: { mode: "d20", roll: r, dc, source: "solace" },
+      dice: { mode: "d20", roll: resolvedRoll, dc: resolvedDc, source: "solace" },
       audit: [
         `enemy_group=${String(activeEnemyGroupName ?? "")}`,
         `enemy_group_id=${String(activeEnemyGroupId ?? "")}`,
@@ -745,8 +745,8 @@ export default function EnemyTurnResolverPanel({
         `encounter_lock_state=${String(encounterContext?.lockState ?? "")}`,
         `encounter_reward_hint=${String(encounterContext?.rewardHint ?? "")}`,
         `intent="${declared}"`,
-        `dc=${dc}`,
-        `roll=${r}`,
+        `dc=${resolvedDc}`,
+        `roll=${resolvedRoll}`,
         `note=V5 database-aware resolver with encounter bias`,
       ],
       damage: {
@@ -822,7 +822,7 @@ export default function EnemyTurnResolverPanel({
             {enemyName ? (
               <>
                 {" "}
-                · DC <strong>{dc}</strong>
+                · DC <strong>{resolvedAction?.dc ?? dc}</strong>
                 {resolvedAction ? (
                   <>
                     {" "}
@@ -897,7 +897,7 @@ export default function EnemyTurnResolverPanel({
             <div className="muted">
               {step === "declared" && "…you hear movement in the dark."}
               {step === "telegraph" && "…something draws a bead on you."}
-              {step === "rolled" && `Roll: ${roll ?? "—"} vs DC ${dc}`}
+              {step === "rolled" && `Roll: ${roll ?? "—"} vs DC ${resolvedAction?.dc ?? dc}`}
               {step === "revealed" && reveal}
             </div>
           </div>
@@ -905,7 +905,7 @@ export default function EnemyTurnResolverPanel({
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
             <button
               onClick={begin}
-              disabled={!enemyName || step === "telegraph" || step === "rolled" || step === "revealed"}
+              disabled={!enemyName || step === "telegraph" || step === "rolled"}
             >
               Replay Enemy Turn
             </button>
