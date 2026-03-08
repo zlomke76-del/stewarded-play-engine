@@ -53,6 +53,12 @@
 // - Starter parties now generate with curated class/species/portrait variety
 // - Defaults are balanced and visually diverse instead of blank / all-Human
 // - Names remain blank so players can still author identity intentionally
+//
+// Ecology / encounter-context update:
+// - Derives lightweight encounter context from current zone, marks, intent,
+//   enemy presence, and lock / cache / relic signals
+// - Passes encounterContext into CombatSection so CombatSetupPanel can bias
+//   rosters toward meaningful, finite encounters
 // ------------------------------------------------------------
 
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -135,6 +141,31 @@ type PresentationPhase =
   | "gameplay";
 
 type GameplayFocusStep = "pressure" | "map" | "action";
+
+type EncounterTheme =
+  | "corridor"
+  | "crypt"
+  | "ritual"
+  | "arcane"
+  | "wild"
+  | "warband"
+  | "vault"
+  | null;
+
+type CombatEncounterContext = {
+  zoneId?: string | null;
+  zoneTheme?: EncounterTheme;
+  objective?: string | null;
+  lockState?: string | null;
+  rewardHint?: string | null;
+  keyEnemyName?: string | null;
+  relicEnemyName?: string | null;
+  cacheGuardEnemyName?: string | null;
+};
+
+type MapMarkKind = "door" | "stairs" | "altar" | "cache" | "hazard";
+
+type XY = { x: number; y: number };
 
 const STARTER_CLASS_PLANS: Record<1 | 2 | 3 | 4 | 5 | 6, readonly string[]> = {
   1: ["Warrior"],
@@ -355,6 +386,224 @@ function awarenessDeltaFor(kind: ReturnType<typeof inferOptionKind>, success: bo
   const byKind = kind === "contested" ? 8 : kind === "risky" ? 5 : kind === "environmental" ? 2 : 1;
   const byResult = success ? 1 : 10;
   return base + byKind + byResult;
+}
+
+function includesAny(text: string, needles: string[]) {
+  const t = String(text || "").toLowerCase();
+  return needles.some((n) => t.includes(n));
+}
+
+function deriveMapMarksForZone(events: readonly any[], zoneId: string) {
+  const marks: Array<{
+    at: XY;
+    kind: MapMarkKind;
+    note: string | null;
+    zoneId: string;
+    timestamp: number;
+  }> = [];
+
+  for (const e of events) {
+    if (e?.type !== "MAP_MARKED") continue;
+    const p = e?.payload ?? {};
+    const x = Number(p?.at?.x);
+    const y = Number(p?.at?.y);
+    if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
+
+    const zid = zoneIdFromTileXY(x, y);
+    if (zid !== zoneId) continue;
+
+    const kind = String(p?.kind ?? "").trim() as MapMarkKind;
+    if (!kind) continue;
+
+    marks.push({
+      at: { x, y },
+      kind,
+      note: String(p?.note ?? "").trim() || null,
+      zoneId: zid,
+      timestamp: Number(e?.timestamp ?? 0),
+    });
+  }
+
+  return marks.sort((a, b) => b.timestamp - a.timestamp);
+}
+
+function inferEncounterTheme(args: {
+  activeEnemyName: string | null;
+  playerInput: string;
+  selectedOptionDescription: string;
+  marks: Array<{ kind: MapMarkKind; note: string | null }>;
+}): EncounterTheme {
+  const text = [
+    args.activeEnemyName ?? "",
+    args.playerInput,
+    args.selectedOptionDescription,
+    ...args.marks.map((m) => `${m.kind} ${m.note ?? ""}`),
+  ]
+    .join(" ")
+    .toLowerCase();
+
+  if (includesAny(text, ["wraith", "skeleton", "zombie", "ghoul", "crypt", "grave", "tomb", "bone"])) {
+    return "crypt";
+  }
+
+  if (includesAny(text, ["cult", "priest", "altar", "ritual", "hex", "acolyte", "unholy"])) {
+    return "ritual";
+  }
+
+  if (includesAny(text, ["arcane", "construct", "sentinel", "golem", "drone", "vault", "relic"])) {
+    return "arcane";
+  }
+
+  if (includesAny(text, ["wolf", "dire wolf", "spider", "web", "beast", "hellhound"])) {
+    return "wild";
+  }
+
+  if (includesAny(text, ["orc", "warlord", "raider", "warband", "hobgoblin"])) {
+    return "warband";
+  }
+
+  if (includesAny(text, ["cache", "sealed", "locked", "key", "treasure", "chest"])) {
+    return "vault";
+  }
+
+  if (includesAny(text, ["bandit", "goblin", "door", "corridor", "hall"])) {
+    return "corridor";
+  }
+
+  return null;
+}
+
+function inferLockState(args: {
+  playerInput: string;
+  selectedOptionDescription: string;
+  marks: Array<{ kind: MapMarkKind; note: string | null }>;
+}) {
+  const noteText = args.marks.map((m) => `${m.kind} ${m.note ?? ""}`).join(" ").toLowerCase();
+  const text = `${args.playerInput} ${args.selectedOptionDescription} ${noteText}`.toLowerCase();
+
+  if (includesAny(text, ["locked", "sealed", "barred"])) return "locked";
+  if (includesAny(text, ["open", "breached", "unlocked"])) return "open";
+  if (args.marks.some((m) => m.kind === "door")) return "door-present";
+  return null;
+}
+
+function inferRewardHint(args: {
+  marks: Array<{ kind: MapMarkKind; note: string | null }>;
+  playerInput: string;
+  selectedOptionDescription: string;
+}) {
+  const noteText = args.marks.map((m) => `${m.kind} ${m.note ?? ""}`).join(" ").toLowerCase();
+  const text = `${args.playerInput} ${args.selectedOptionDescription} ${noteText}`.toLowerCase();
+
+  if (includesAny(text, ["cache", "supplies", "coin", "stash"])) return "cache";
+  if (includesAny(text, ["chest", "treasure", "loot"])) return "treasure";
+  if (includesAny(text, ["key"])) return "key";
+  if (includesAny(text, ["relic", "altar", "artifact"])) return "relic";
+  return null;
+}
+
+function defaultKeyEnemyForTheme(theme: EncounterTheme): string | null {
+  switch (theme) {
+    case "corridor":
+      return "Bandit Captain";
+    case "crypt":
+      return "Hobgoblin Soldier";
+    case "ritual":
+      return "Cult Priest";
+    case "arcane":
+      return "Arcane Sentinel";
+    case "wild":
+      return "Goblin Skirmisher";
+    case "warband":
+      return "Orc Warlord";
+    case "vault":
+      return "Ancient Warden";
+    default:
+      return null;
+  }
+}
+
+function defaultRelicEnemyForTheme(theme: EncounterTheme): string | null {
+  switch (theme) {
+    case "crypt":
+      return "Wraith";
+    case "ritual":
+      return "Cult Priest";
+    case "arcane":
+      return "Iron Guardian";
+    case "wild":
+      return "Hellhound";
+    case "warband":
+      return "Orc Warlord";
+    case "vault":
+      return "Ancient Warden";
+    case "corridor":
+      return "Bandit Captain";
+    default:
+      return null;
+  }
+}
+
+function defaultCacheGuardEnemyForTheme(theme: EncounterTheme): string | null {
+  switch (theme) {
+    case "corridor":
+      return "Bandit Archer";
+    case "crypt":
+      return "Skeleton Warrior";
+    case "ritual":
+      return "Cultist Acolyte";
+    case "arcane":
+      return "Arcane Drone";
+    case "wild":
+      return "Giant Spider";
+    case "warband":
+      return "Orc Raider";
+    case "vault":
+      return "Stone Golem";
+    default:
+      return null;
+  }
+}
+
+function inferObjective(args: {
+  theme: EncounterTheme;
+  lockState: string | null;
+  rewardHint: string | null;
+}) {
+  if (args.lockState === "locked") {
+    return "Secure the keyholder and break access deeper into the zone.";
+  }
+
+  if (args.rewardHint === "cache") {
+    return "Break resistance around the cache and secure the supplies.";
+  }
+
+  if (args.rewardHint === "treasure") {
+    return "Clear the chamber and claim the chest before the zone escalates.";
+  }
+
+  if (args.rewardHint === "relic") {
+    return "Defeat the bearer and secure the relic bound to this chamber.";
+  }
+
+  switch (args.theme) {
+    case "ritual":
+      return "Disrupt the ritual cell before they reinforce the chamber.";
+    case "arcane":
+      return "Disable the sentries controlling the zone.";
+    case "crypt":
+      return "Push through the dead and stabilize the burial corridor.";
+    case "wild":
+      return "Clear the predators holding this route.";
+    case "warband":
+      return "Break the warband's line before pressure spikes.";
+    case "vault":
+      return "Crack the defenders guarding the zone's valuable hold.";
+    case "corridor":
+      return "Seize control of the corridor and advance.";
+    default:
+      return null;
+  }
 }
 
 type MusicMode = "none" | "intro" | "ambient" | "combat";
@@ -1297,6 +1546,16 @@ export default function DemoPage() {
     [state.events]
   );
 
+  const currentZoneId = useMemo(
+    () => zoneIdFromTileXY(currentPosition.x, currentPosition.y),
+    [currentPosition]
+  );
+
+  const currentZoneMarks = useMemo(
+    () => deriveMapMarksForZone(state.events as any[], currentZoneId),
+    [state.events, currentZoneId]
+  );
+
   const resolutionMovement = useMemo<{
     from?: { x: number; y: number } | null;
     to?: { x: number; y: number } | null;
@@ -1331,7 +1590,7 @@ export default function DemoPage() {
       direction: inferredDirection,
     };
   }, [selectedOption, playerInput, explorationDraft, currentPosition]);
-  
+
   const resolutionCombat = useMemo(() => {
     if (!combatActive) return null;
 
@@ -1345,6 +1604,68 @@ export default function DemoPage() {
       attackStyleHint: enemyTelegraphHint?.attackStyleHint ?? "unknown",
     } as const;
   }, [combatActive, activeEnemyOverlayName, enemyTelegraphHint, activeCombatantSpec, isEnemyTurn]);
+
+  const combatEncounterContext = useMemo<CombatEncounterContext>(() => {
+    const marksLite = currentZoneMarks.map((m) => ({ kind: m.kind, note: m.note }));
+    const selectedOptionDescription = selectedOption?.description ?? "";
+    const theme = inferEncounterTheme({
+      activeEnemyName: activeEnemyOverlayName ?? activeEnemyOverlayId,
+      playerInput,
+      selectedOptionDescription,
+      marks: marksLite,
+    });
+
+    const lockState = inferLockState({
+      playerInput,
+      selectedOptionDescription,
+      marks: marksLite,
+    });
+
+    const rewardHint = inferRewardHint({
+      marks: marksLite,
+      playerInput,
+      selectedOptionDescription,
+    });
+
+    const objective = inferObjective({
+      theme,
+      lockState,
+      rewardHint,
+    });
+
+    const keyEnemyName =
+      lockState === "locked" || rewardHint === "key"
+        ? defaultKeyEnemyForTheme(theme)
+        : null;
+
+    const relicEnemyName =
+      rewardHint === "relic" || theme === "vault" || theme === "arcane"
+        ? defaultRelicEnemyForTheme(theme)
+        : null;
+
+    const cacheGuardEnemyName =
+      rewardHint === "cache" || rewardHint === "treasure"
+        ? defaultCacheGuardEnemyForTheme(theme)
+        : null;
+
+    return {
+      zoneId: currentZoneId,
+      zoneTheme: theme,
+      objective,
+      lockState,
+      rewardHint,
+      keyEnemyName,
+      relicEnemyName,
+      cacheGuardEnemyName,
+    };
+  }, [
+    currentZoneId,
+    currentZoneMarks,
+    selectedOption?.description,
+    playerInput,
+    activeEnemyOverlayName,
+    activeEnemyOverlayId,
+  ]);
 
   useEffect(() => {
     if (!showGameplay || !allowGameplay) return;
@@ -1586,6 +1907,7 @@ export default function DemoPage() {
                     }))}
                     pressureTier={pressureTier}
                     allowDevControls={false}
+                    encounterContext={combatEncounterContext as any}
                     showEnemyResolver={solaceNeutralEnemyTurnEnabled}
                     activeEnemyGroupName={activeEnemyOverlayName}
                     activeEnemyGroupId={activeEnemyOverlayId}
