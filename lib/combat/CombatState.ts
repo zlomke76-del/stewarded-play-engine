@@ -9,10 +9,19 @@
 // - Turn order is DERIVED (never stored as mutable state)
 // - All mutations are represented as append-only events
 //
+// Upgrades in this pass:
+// - COMBAT_ENDED is now part of derivation
+// - Defeated / downed combatants are removed from active turn order
+// - Turn pointer is normalized against surviving combatants
+// - Initiative remains fully inspectable, but order reflects living actors
+//
 // Notes:
 // - This module is PURE (no side effects)
 // - UI can use helpers to generate payloads,
 //   but canon is committed by recording events.
+// - We treat COMBATANT_DOWNED as the canonical “out of fight” signal.
+//   COMBATANT_DAMAGED alone does not remove a combatant unless a matching
+//   COMBATANT_DOWNED event exists.
 //
 // ------------------------------------------------------------
 
@@ -49,10 +58,15 @@ export type TurnAdvancedPayload = {
   index: number; // 0-based position in derived initiative order
 };
 
+export type CombatEndedPayload = {
+  combatId: CombatId;
+};
+
 export type CombatEvent =
   | { type: "COMBAT_STARTED"; payload: CombatStartedPayload }
   | { type: "INITIATIVE_ROLLED"; payload: InitiativeRolledPayload }
-  | { type: "TURN_ADVANCED"; payload: TurnAdvancedPayload };
+  | { type: "TURN_ADVANCED"; payload: TurnAdvancedPayload }
+  | { type: "COMBAT_ENDED"; payload: CombatEndedPayload };
 
 export type DerivedInitiativeEntry = {
   combatantId: CombatantId;
@@ -61,6 +75,7 @@ export type DerivedInitiativeEntry = {
   natural: number;
   modifier: number;
   total: number;
+  defeated: boolean;
 };
 
 export type DerivedCombatState = {
@@ -70,12 +85,17 @@ export type DerivedCombatState = {
 
   // initiative
   initiative: DerivedInitiativeEntry[];
-  order: CombatantId[]; // sorted combatants
+  order: CombatantId[]; // sorted surviving combatants only
+  fullOrder: CombatantId[]; // sorted all combatants, including defeated
+  defeatedCombatantIds: CombatantId[];
 
   // turn pointer (derived from last TURN_ADVANCED or defaults)
   round: number;
   index: number;
   activeCombatantId: CombatantId | null;
+
+  // combat lifecycle
+  ended: boolean;
 };
 
 function clampInt(n: number, min: number, max: number) {
@@ -140,7 +160,70 @@ function asCombatEvent(e: GenericSessionEvent): CombatEvent | null {
     return { type: "TURN_ADVANCED", payload: p };
   }
 
+  if (e.type === "COMBAT_ENDED") {
+    const p = e.payload as unknown as CombatEndedPayload;
+    if (!p?.combatId) return null;
+    return { type: "COMBAT_ENDED", payload: p };
+  }
+
   return null;
+}
+
+function isCombatantDowned(
+  combatId: CombatId,
+  combatantId: CombatantId,
+  sessionEvents: readonly GenericSessionEvent[]
+): boolean {
+  let downed = false;
+
+  for (const e of sessionEvents) {
+    const type = String(e?.type ?? "");
+    const payload = (e?.payload ?? {}) as Record<string, unknown>;
+
+    if (String(payload?.combatId ?? "") !== String(combatId)) continue;
+
+    if (type === "COMBATANT_DOWNED") {
+      if (String(payload?.combatantId ?? "") === String(combatantId)) {
+        downed = true;
+      }
+      continue;
+    }
+
+    if (type === "COMBATANT_REVIVED") {
+      if (String(payload?.combatantId ?? "") === String(combatantId)) {
+        downed = false;
+      }
+      continue;
+    }
+
+    if (type === "COMBATANT_RESTORED") {
+      if (String(payload?.combatantId ?? "") === String(combatantId)) {
+        downed = false;
+      }
+      continue;
+    }
+
+    if (type === "COMBATANT_HEALED") {
+      if (String(payload?.targetCombatantId ?? "") === String(combatantId)) {
+        const amount = Number(payload?.amount ?? 0);
+        if (Number.isFinite(amount) && amount > 0) {
+          downed = false;
+        }
+      }
+      continue;
+    }
+  }
+
+  return downed;
+}
+
+function compareInitiative(
+  a: DerivedInitiativeEntry & { _nameKey: string },
+  b: DerivedInitiativeEntry & { _nameKey: string }
+) {
+  if (b.total !== a.total) return b.total - a.total;
+  if (b.natural !== a.natural) return b.natural - a.natural;
+  return a._nameKey.localeCompare(b._nameKey);
 }
 
 // ------------------------------------------------------------
@@ -179,6 +262,15 @@ export function deriveCombatState(
 
   if (!started) return null;
 
+  let ended = false;
+  for (const e of sessionEvents) {
+    const ce = asCombatEvent(e as GenericSessionEvent);
+    if (!ce) continue;
+    if (ce.type === "COMBAT_ENDED" && ce.payload.combatId === combatId) {
+      ended = true;
+    }
+  }
+
   // Gather initiative rolls
   const initById = new Map<CombatantId, InitiativeRolledPayload>();
 
@@ -192,10 +284,17 @@ export function deriveCombatState(
     initById.set(ce.payload.combatantId, ce.payload);
   }
 
+  const defeatedSet = new Set<CombatantId>(
+    started.participants
+      .filter((p) => isCombatantDowned(combatId, p.id, sessionEvents))
+      .map((p) => p.id)
+  );
+
   const initiative: DerivedInitiativeEntry[] = started.participants
     .map((c) => {
       const r = initById.get(c.id);
       if (!r) return null;
+
       return {
         combatantId: c.id,
         name: c.name,
@@ -203,19 +302,20 @@ export function deriveCombatState(
         natural: clampInt(r.natural, 1, 20),
         modifier: Math.trunc(r.modifier ?? 0),
         total: Math.trunc(r.total ?? 0),
+        defeated: defeatedSet.has(c.id),
       } as DerivedInitiativeEntry;
     })
     .filter(Boolean) as DerivedInitiativeEntry[];
 
-  // Derive order:
+  // Derive full order:
   // - If not all participants have initiative yet, keep participant order stable.
   // - If all have rolls, sort by total desc, tie-breaker by natural desc,
   //   then by name for stability.
   const allRolled = started.participants.every((p) => initById.has(p.id));
 
-  let order: CombatantId[];
+  let fullOrder: CombatantId[];
   if (!allRolled) {
-    order = started.participants.map((p) => p.id);
+    fullOrder = started.participants.map((p) => p.id);
   } else {
     const entries: Array<DerivedInitiativeEntry & { _nameKey: string }> =
       started.participants.map((p) => {
@@ -227,18 +327,16 @@ export function deriveCombatState(
           natural: clampInt(r.natural, 1, 20),
           modifier: Math.trunc(r.modifier ?? 0),
           total: Math.trunc(r.total ?? 0),
+          defeated: defeatedSet.has(p.id),
           _nameKey: (p.name ?? "").toLowerCase(),
         };
       });
 
-    entries.sort((a, b) => {
-      if (b.total !== a.total) return b.total - a.total;
-      if (b.natural !== a.natural) return b.natural - a.natural;
-      return a._nameKey.localeCompare(b._nameKey);
-    });
-
-    order = entries.map((e) => e.combatantId);
+    entries.sort(compareInitiative);
+    fullOrder = entries.map((e) => e.combatantId);
   }
+
+  const order = fullOrder.filter((id) => !defeatedSet.has(id));
 
   // Turn pointer from last TURN_ADVANCED
   let round = 1;
@@ -254,21 +352,25 @@ export function deriveCombatState(
     index = clampInt(ce.payload.index, 0, 10_000);
   }
 
-  if (order.length === 0) {
+  if (ended || order.length === 0) {
     return {
       combatId,
       seed: started.seed,
       participants: started.participants,
       initiative,
       order,
+      fullOrder,
+      defeatedCombatantIds: Array.from(defeatedSet),
       round,
-      index,
+      index: 0,
       activeCombatantId: null,
+      ended,
     };
   }
 
-  // If index exceeds order (e.g., order changed), clamp
-  const safeIndex = clampInt(index, 0, order.length - 1);
+  // If living order changed because somebody died, normalize index.
+  // We preserve intent by wrapping within surviving combatants.
+  const safeIndex = ((index % order.length) + order.length) % order.length;
   const activeCombatantId = order[safeIndex] ?? null;
 
   return {
@@ -277,9 +379,12 @@ export function deriveCombatState(
     participants: started.participants,
     initiative,
     order,
+    fullOrder,
+    defeatedCombatantIds: Array.from(defeatedSet),
     round,
     index: safeIndex,
     activeCombatantId,
+    ended,
   };
 }
 
@@ -317,7 +422,7 @@ export function generateDeterministicInitiativeRolls(
 export function nextTurnPointer(derived: DerivedCombatState): TurnAdvancedPayload {
   const n = derived.order.length;
   if (n <= 0) {
-    return { combatId: derived.combatId, round: derived.round, index: derived.index };
+    return { combatId: derived.combatId, round: derived.round, index: 0 };
   }
 
   const nextIndex = derived.index + 1;
