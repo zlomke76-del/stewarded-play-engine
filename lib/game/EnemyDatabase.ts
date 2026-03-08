@@ -138,7 +138,12 @@ export type EnemyEncounterTheme =
   | "crypt"
   | "forge"
   | "wild"
-  | "ancient";
+  | "ancient"
+  | "corridor"
+  | "ritual"
+  | "arcane"
+  | "warband"
+  | "vault";
 
 export type EnemyEcologyProfile = {
   preferredThemes?: EnemyEncounterTheme[];
@@ -274,7 +279,7 @@ export const ENEMY_DATABASE: EnemyDefinitionMap = {
     lootTags: ["arrows", "light_armor"],
     tags: ["humanoid", "ranged"],
     ecology: {
-      preferredThemes: ["watch", "ruin", "storage"],
+      preferredThemes: ["watch", "corridor", "ruin", "storage", "vault"],
       duty: "artillery",
       canGuardCache: true,
       notes: ["Often deployed behind tougher frontline bodies."],
@@ -329,7 +334,7 @@ export const ENEMY_DATABASE: EnemyDefinitionMap = {
     lootTags: ["shield", "weapon"],
     tags: ["humanoid", "frontline"],
     ecology: {
-      preferredThemes: ["watch", "storage", "ruin"],
+      preferredThemes: ["watch", "corridor", "storage", "ruin", "vault"],
       duty: "guard",
       canGuardCache: true,
       notes: ["Reliable generic guard body for low-pressure rooms."],
@@ -385,7 +390,7 @@ export const ENEMY_DATABASE: EnemyDefinitionMap = {
     lootTags: ["dagger", "pouch"],
     tags: ["humanoid", "stealth"],
     ecology: {
-      preferredThemes: ["watch", "ruin", "storage"],
+      preferredThemes: ["watch", "corridor", "ruin", "storage", "vault"],
       duty: "lurker",
       canCarryKey: true,
       canGuardCache: true,
@@ -441,7 +446,7 @@ export const ENEMY_DATABASE: EnemyDefinitionMap = {
     lootTags: ["coin", "officer_blade"],
     tags: ["humanoid", "leader"],
     ecology: {
-      preferredThemes: ["watch", "ruin", "storage"],
+      preferredThemes: ["watch", "corridor", "ruin", "storage", "vault"],
       duty: "captain",
       canCarryKey: true,
       canCarryRelic: false,
@@ -498,7 +503,7 @@ export const ENEMY_DATABASE: EnemyDefinitionMap = {
     lootTags: ["scrap", "poison_vial"],
     tags: ["goblinoid", "mobile"],
     ecology: {
-      preferredThemes: ["watch", "ruin", "wild"],
+      preferredThemes: ["watch", "corridor", "ruin", "wild", "warband"],
       duty: "patrol",
       canCarryKey: false,
       canGuardCache: false,
@@ -545,7 +550,7 @@ export const ENEMY_DATABASE: EnemyDefinitionMap = {
     lootTags: ["arrows"],
     tags: ["goblinoid", "ranged"],
     ecology: {
-      preferredThemes: ["watch", "ruin", "wild"],
+      preferredThemes: ["watch", "corridor", "ruin", "wild", "warband"],
       duty: "artillery",
       canGuardCache: false,
       notes: ["Common ranged support in perimeter defense."],
@@ -599,7 +604,7 @@ export const ENEMY_DATABASE: EnemyDefinitionMap = {
     lootTags: ["spear", "shield"],
     tags: ["goblinoid", "disciplined"],
     ecology: {
-      preferredThemes: ["watch", "ruin", "forge"],
+      preferredThemes: ["watch", "corridor", "ruin", "forge", "warband"],
       duty: "guard",
       canCarryKey: true,
       canGuardCache: true,
@@ -655,7 +660,7 @@ export const ENEMY_DATABASE: EnemyDefinitionMap = {
     lootTags: ["greataxe", "hide"],
     tags: ["orc", "frontline"],
     ecology: {
-      preferredThemes: ["ruin", "storage", "wild"],
+      preferredThemes: ["ruin", "storage", "wild", "warband", "corridor"],
       duty: "raider",
       canCarryKey: true,
       canGuardCache: true,
@@ -711,7 +716,7 @@ export const ENEMY_DATABASE: EnemyDefinitionMap = {
     lootTags: ["boss_weapon", "trophy"],
     tags: ["orc", "boss"],
     ecology: {
-      preferredThemes: ["ruin", "watch", "wild"],
+      preferredThemes: ["ruin", "watch", "wild", "warband", "vault"],
       duty: "captain",
       canCarryKey: true,
       canCarryRelic: true,
@@ -759,7 +764,7 @@ export const ENEMY_DATABASE: EnemyDefinitionMap = {
     lootTags: ["bones", "rusted_weapon"],
     tags: ["undead"],
     ecology: {
-      preferredThemes: ["crypt", "ruin", "ancient"],
+      preferredThemes: ["crypt", "ruin", "ancient", "corridor", "vault"],
       duty: "guard",
       canGuardCache: true,
       canGuardShrine: true,
@@ -807,7 +812,7 @@ export const ENEMY_DATABASE: EnemyDefinitionMap = {
     lootTags: ["bone_fragments"],
     tags: ["undead", "ranged"],
     ecology: {
-      preferredThemes: ["crypt", "ruin", "ancient"],
+      preferredThemes: ["crypt", "ruin", "ancient", "corridor", "vault"],
       duty: "sentinel",
       canGuardShrine: true,
       notes: ["Ranged deathless sentinel often placed behind melee bones."],
@@ -860,7 +865,7 @@ export const ENEMY_DATABASE: EnemyDefinitionMap = {
     lootTags: ["rot", "grave_goods"],
     tags: ["undead", "slow"],
     ecology: {
-      preferredThemes: ["crypt", "ruin", "storage"],
+      preferredThemes: ["crypt", "ruin", "storage", "corridor"],
       duty: "lurker",
       canGuardCache: false,
       notes: ["Ambient dead pressure more than intentional military defense."],
@@ -907,7 +912,7 @@ export const ENEMY_DATABASE: EnemyDefinitionMap = {
     lootTags: ["bone_trinket"],
     tags: ["undead", "predator"],
     ecology: {
-      preferredThemes: ["crypt", "ruin", "wild"],
+      preferredThemes: ["crypt", "ruin", "wild", "corridor"],
       duty: "hunter",
       canCarryKey: false,
       notes: ["Predatory flanker rather than disciplined guardian."],
@@ -964,7 +969,7 @@ export const ENEMY_DATABASE: EnemyDefinitionMap = {
     lootTags: ["ectoplasm"],
     tags: ["undead", "spectral"],
     ecology: {
-      preferredThemes: ["crypt", "ancient", "shrine"],
+      preferredThemes: ["crypt", "ancient", "shrine", "ritual", "vault"],
       duty: "warden",
       canCarryRelic: true,
       canGuardShrine: true,
@@ -1020,7 +1025,7 @@ export const ENEMY_DATABASE: EnemyDefinitionMap = {
     lootTags: ["ritual_dust"],
     tags: ["cult", "magic"],
     ecology: {
-      preferredThemes: ["shrine", "ancient", "ruin"],
+      preferredThemes: ["shrine", "ritual", "ancient", "ruin", "vault"],
       duty: "ritualist",
       canCarryRelic: true,
       canGuardShrine: true,
@@ -1067,7 +1072,7 @@ export const ENEMY_DATABASE: EnemyDefinitionMap = {
     lootTags: ["poison", "black_veil"],
     tags: ["cult", "stealth"],
     ecology: {
-      preferredThemes: ["shrine", "ancient", "ruin"],
+      preferredThemes: ["shrine", "ritual", "ancient", "ruin", "vault"],
       duty: "lurker",
       canCarryRelic: true,
       canCarryKey: true,
@@ -1122,7 +1127,7 @@ export const ENEMY_DATABASE: EnemyDefinitionMap = {
     lootTags: ["dark_plate"],
     tags: ["cult", "armored"],
     ecology: {
-      preferredThemes: ["shrine", "ancient", "forge"],
+      preferredThemes: ["shrine", "ritual", "ancient", "forge", "vault"],
       duty: "guard",
       canCarryKey: true,
       canGuardShrine: true,
@@ -1179,7 +1184,7 @@ export const ENEMY_DATABASE: EnemyDefinitionMap = {
     lootTags: ["ritual_focus"],
     tags: ["cult", "support"],
     ecology: {
-      preferredThemes: ["shrine", "ancient"],
+      preferredThemes: ["shrine", "ritual", "ancient", "vault"],
       duty: "shrine_keeper",
       canCarryRelic: true,
       canGuardShrine: true,
@@ -1227,7 +1232,7 @@ export const ENEMY_DATABASE: EnemyDefinitionMap = {
     lootTags: ["arcane_core"],
     tags: ["construct", "ranged"],
     ecology: {
-      preferredThemes: ["forge", "watch", "ancient"],
+      preferredThemes: ["forge", "arcane", "watch", "ancient", "vault"],
       duty: "sentinel",
       canGuardCache: true,
       canGuardShrine: true,
@@ -1284,7 +1289,7 @@ export const ENEMY_DATABASE: EnemyDefinitionMap = {
     lootTags: ["sentinel_lens"],
     tags: ["construct", "elite"],
     ecology: {
-      preferredThemes: ["forge", "watch", "ancient", "shrine"],
+      preferredThemes: ["forge", "arcane", "watch", "ancient", "shrine", "vault"],
       duty: "warden",
       canCarryKey: true,
       canGuardCache: true,
@@ -1332,7 +1337,7 @@ export const ENEMY_DATABASE: EnemyDefinitionMap = {
     lootTags: ["runestone"],
     tags: ["construct", "tank"],
     ecology: {
-      preferredThemes: ["forge", "ancient", "shrine"],
+      preferredThemes: ["forge", "arcane", "ancient", "shrine", "vault"],
       duty: "warden",
       canGuardShrine: true,
       canGuardCache: true,
@@ -1380,7 +1385,7 @@ export const ENEMY_DATABASE: EnemyDefinitionMap = {
     lootTags: ["guardian_core", "iron_relic"],
     tags: ["construct", "boss"],
     ecology: {
-      preferredThemes: ["forge", "ancient", "watch"],
+      preferredThemes: ["forge", "arcane", "ancient", "watch", "vault"],
       duty: "warden",
       canCarryKey: true,
       canCarryRelic: true,
@@ -1436,7 +1441,7 @@ export const ENEMY_DATABASE: EnemyDefinitionMap = {
     lootTags: ["pelt"],
     tags: ["beast", "fast"],
     ecology: {
-      preferredThemes: ["wild", "ruin", "storage"],
+      preferredThemes: ["wild", "ruin", "storage", "corridor"],
       duty: "hunter",
       notes: ["Natural pressure creature more than deliberate sentry."],
     },
@@ -1479,7 +1484,7 @@ export const ENEMY_DATABASE: EnemyDefinitionMap = {
     lootTags: ["dire_pelt"],
     tags: ["beast", "elite"],
     ecology: {
-      preferredThemes: ["wild", "ruin"],
+      preferredThemes: ["wild", "ruin", "corridor"],
       duty: "hunter",
       notes: ["Predator encounter anchor for feral routes."],
     },
@@ -1534,7 +1539,7 @@ export const ENEMY_DATABASE: EnemyDefinitionMap = {
     lootTags: ["silk", "venom"],
     tags: ["beast", "poison"],
     ecology: {
-      preferredThemes: ["storage", "ruin", "wild"],
+      preferredThemes: ["storage", "ruin", "wild", "vault", "corridor"],
       duty: "lurker",
       canGuardCache: true,
       notes: ["Excellent trap predator for neglected chambers and supply rooms."],
@@ -1582,7 +1587,7 @@ export const ENEMY_DATABASE: EnemyDefinitionMap = {
     lootTags: ["ember_fang"],
     tags: ["infernal", "fire"],
     ecology: {
-      preferredThemes: ["forge", "ancient", "wild"],
+      preferredThemes: ["forge", "ritual", "ancient", "wild"],
       duty: "hunter",
       canGuardShrine: true,
       notes: ["Infernal pursuit creature suited to hot or cursed routes."],
@@ -1638,7 +1643,7 @@ export const ENEMY_DATABASE: EnemyDefinitionMap = {
     lootTags: ["warden_sigil", "ancient_key"],
     tags: ["ancient", "boss"],
     ecology: {
-      preferredThemes: ["ancient", "shrine", "forge"],
+      preferredThemes: ["ancient", "shrine", "forge", "vault", "arcane"],
       duty: "warden",
       canCarryKey: true,
       canCarryRelic: true,
@@ -1697,7 +1702,7 @@ export const ENEMY_DATABASE: EnemyDefinitionMap = {
     lootTags: ["void_shard"],
     tags: ["ancient", "aberrant", "boss"],
     ecology: {
-      preferredThemes: ["ancient", "crypt", "shrine"],
+      preferredThemes: ["ancient", "crypt", "shrine", "ritual", "vault"],
       duty: "warden",
       canCarryRelic: true,
       canGuardShrine: true,
@@ -1735,7 +1740,9 @@ export function getEnemiesForGroupLabel(groupLabel: string): EnemyDefinition[] {
 }
 
 export function getEnemiesByEncounterTheme(theme: EnemyEncounterTheme): EnemyDefinition[] {
-  return ENEMY_LIST.filter((e) => Array.isArray(e.ecology?.preferredThemes) && e.ecology!.preferredThemes!.includes(theme));
+  return ENEMY_LIST.filter(
+    (e) => Array.isArray(e.ecology?.preferredThemes) && e.ecology!.preferredThemes!.includes(theme)
+  );
 }
 
 export function getEnemiesByEncounterDuty(duty: EnemyEncounterDuty): EnemyDefinition[] {
