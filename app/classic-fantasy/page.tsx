@@ -10,6 +10,10 @@
 // - Dice decide fate
 // - Arbiter records canon
 // - Dungeon pressure is visible but NEVER acts
+//
+// Build-pass hotfix:
+// - Removes dependency on incompatible ResolutionDraftAdvisoryPanel props
+// - Uses a local, minimal outcome recorder so the route compiles cleanly
 // ------------------------------------------------------------
 
 import { useMemo, useState, useEffect } from "react";
@@ -23,9 +27,7 @@ import { parseAction } from "@/lib/parser/ActionParser";
 import { generateOptions, Option } from "@/lib/options/OptionGenerator";
 import { exportCanon } from "@/lib/export/exportCanon";
 
-import ResolutionDraftAdvisoryPanel from "@/components/resolution/ResolutionDraftAdvisoryPanel";
 import NextActionHint from "@/components/NextActionHint";
-
 import WorldLedgerPanelLegacy from "@/components/world/WorldLedgerPanel.legacy";
 import DungeonPressurePanel from "@/components/world/DungeonPressurePanel";
 
@@ -81,6 +83,21 @@ function prettyRoomName(roomId?: string) {
   if (!roomId) return "Unknown";
   if (roomId.startsWith("room-")) return "Stone Hallway";
   return roomId;
+}
+
+function difficultyFor(kind?: OptionKind): number {
+  switch (kind) {
+    case "safe":
+      return 6;
+    case "environmental":
+      return 8;
+    case "risky":
+      return 10;
+    case "contested":
+      return 14;
+    default:
+      return 10;
+  }
 }
 
 // ------------------------------------------------------------
@@ -139,6 +156,13 @@ export default function ClassicFantasyPage() {
   const [selectedOption, setSelectedOption] =
     useState<Option | null>(null);
 
+  // local build-safe resolution state
+  const [draftNarration, setDraftNarration] =
+    useState("");
+  const [rolledValue, setRolledValue] = useState<
+    number | null
+  >(null);
+
   // ----------------------------------------------------------
   // Current location
   // ----------------------------------------------------------
@@ -166,6 +190,19 @@ export default function ClassicFantasyPage() {
     [state.events]
   );
 
+  const selectedKind = useMemo<OptionKind | undefined>(
+    () =>
+      selectedOption
+        ? inferOptionKind(selectedOption.description)
+        : undefined,
+    [selectedOption]
+  );
+
+  const selectedDc = useMemo(
+    () => difficultyFor(selectedKind),
+    [selectedKind]
+  );
+
   // ----------------------------------------------------------
   // Player command
   // ----------------------------------------------------------
@@ -182,6 +219,8 @@ export default function ClassicFantasyPage() {
     setParsed(parsedAction);
     setOptions([...optionSet.options]);
     setSelectedOption(null);
+    setDraftNarration("");
+    setRolledValue(null);
   }
 
   // ----------------------------------------------------------
@@ -193,20 +232,36 @@ export default function ClassicFantasyPage() {
     setSelectedOption(options[0]);
   }, [options]);
 
+  useEffect(() => {
+    if (!selectedOption) return;
+    setDraftNarration(
+      `Solace frames the attempt: ${selectedOption.description}`
+    );
+    setRolledValue(null);
+  }, [selectedOption]);
+
   // ----------------------------------------------------------
-  // Arbiter records canon
+  // Local build-safe roll + record
   // ----------------------------------------------------------
 
-  function handleRecord(payload: {
-    description: string;
-    dice: {
-      mode: string;
-      roll: number;
-      dc: number;
-      source: "manual" | "solace";
-    };
-    audit: string[];
-  }) {
+  function handleRoll() {
+    const r = Math.ceil(Math.random() * 20);
+    setRolledValue(r);
+
+    if (!selectedOption) return;
+
+    const success = r >= selectedDc;
+    setDraftNarration(
+      success
+        ? `The attempt succeeds: ${selectedOption.description}`
+        : `The attempt falters: ${selectedOption.description}`
+    );
+  }
+
+  function handleRecord() {
+    if (!selectedOption) return;
+
+    const roll = rolledValue ?? 10;
     const nextTurn = turn + 1;
     setTurn(nextTurn);
 
@@ -217,9 +272,21 @@ export default function ClassicFantasyPage() {
         actor: "arbiter",
         type: "OUTCOME",
         payload: {
-          description: payload.description,
-          dice: payload.dice,
-          audit: payload.audit,
+          description:
+            draftNarration.trim() ||
+            selectedOption.description,
+          dice: {
+            mode: "d20",
+            roll,
+            dc: selectedDc,
+            source: "solace" as const,
+          },
+          audit: [
+            "Classic Fantasy fallback recorder",
+            `Selected option: ${selectedOption.description}`,
+            `Inferred kind: ${selectedKind ?? "safe"}`,
+            `Roll: ${roll} vs DC ${selectedDc}`,
+          ],
           world: {
             roomId: currentRoomId,
             turn: nextTurn,
@@ -302,15 +369,57 @@ export default function ClassicFantasyPage() {
       )}
 
       {selectedOption && (
-        <ResolutionDraftAdvisoryPanel
-          context={{
-            optionDescription: selectedOption.description,
-            optionKind: inferOptionKind(
-              selectedOption.description
-            ),
-          }}
-          onRecord={handleRecord}
-        />
+        <CardSection title="Resolution">
+          <div
+            style={{
+              display: "grid",
+              gap: 12,
+            }}
+          >
+            <div>
+              <strong>Selected Option:</strong>{" "}
+              {selectedOption.description}
+            </div>
+
+            <div>
+              <strong>Inferred Kind:</strong>{" "}
+              {selectedKind ?? "safe"} ·{" "}
+              <strong>DC:</strong> {selectedDc}
+            </div>
+
+            <div>
+              <strong>Roll:</strong>{" "}
+              {rolledValue ?? "—"}
+            </div>
+
+            <div
+              style={{
+                display: "flex",
+                gap: 8,
+                flexWrap: "wrap",
+              }}
+            >
+              <button onClick={handleRoll}>
+                Roll d20
+              </button>
+              <button onClick={handleRecord}>
+                Record Outcome
+              </button>
+            </div>
+
+            <div>
+              <strong>Narration Draft</strong>
+            </div>
+
+            <textarea
+              rows={5}
+              value={draftNarration}
+              onChange={(e) =>
+                setDraftNarration(e.target.value)
+              }
+            />
+          </div>
+        </CardSection>
       )}
 
       <NextActionHint state={state} />
