@@ -1,4 +1,3 @@
-// components/combat/CombatSetupPanel.tsx
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
@@ -708,8 +707,10 @@ export default function CombatSetupPanel({
   const pressureSeed = useMemo(() => {
     const outcomes = (events as any[]).filter((e) => e?.type === "OUTCOME").length;
     const zoneTheme = encounterContext?.zoneTheme ?? "none";
-    return `pressure=${String(pressureTier ?? "unknown")}::outcomes=${outcomes}::party=${partySize}::theme=${zoneTheme}`;
-  }, [events, partySize, pressureTier, encounterContext?.zoneTheme]);
+    const objective = normalizeName(encounterContext?.objective ?? "") || "none";
+    const rewardHint = normalizeName(encounterContext?.rewardHint ?? "") || "none";
+    return `pressure=${String(pressureTier ?? "unknown")}::outcomes=${outcomes}::party=${partySize}::theme=${zoneTheme}::objective=${objective}::reward=${rewardHint}`;
+  }, [events, partySize, pressureTier, encounterContext?.zoneTheme, encounterContext?.objective, encounterContext?.rewardHint]);
 
   const [selectedEnemies, setSelectedEnemies] = useState<EnemyDefinition[]>(() =>
     buildRecommendedEnemyRoster(
@@ -842,8 +843,13 @@ export default function CombatSetupPanel({
     const started: CombatStartedPayload = { combatId, seed, participants };
     const initRolls = generateDeterministicInitiativeRolls(started);
 
-    onAppendCanon("COMBAT_STARTED", started);
+    onAppendCanon("COMBAT_STARTED", {
+      ...started,
+      encounterContext: encounterContext ?? null,
+    });
+
     for (const r of initRolls) onAppendCanon("INITIATIVE_ROLLED", r);
+
     onAppendCanon("TURN_ADVANCED", { combatId, round: 1, index: 0 });
   }
 
