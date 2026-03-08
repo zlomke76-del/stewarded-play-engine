@@ -29,6 +29,10 @@
 // - combat controls play local UI / combat sounds
 // - enemy outcome commits trigger hit / death sounds
 // - telegraph updates trigger a subtle enemy cue
+//
+// Update (encounter ecology pass):
+// - Accepts encounterContext from demo page
+// - Forwards encounterContext into CombatSetupPanel
 // ------------------------------------------------------------
 
 import React, { useEffect, useMemo, useRef } from "react";
@@ -39,6 +43,7 @@ import { formatCombatantLabel } from "@/lib/combat/CombatState";
 import { getPortraitPath } from "@/lib/portraits/getPortraitPath";
 import { getSkillDefinition } from "@/lib/skills/skillDefinitions";
 import { getSpeciesTraitDefinition } from "@/lib/skills/speciesTraitMap";
+import type { EnemyEncounterTheme } from "@/lib/game/EnemyDatabase";
 
 type PartyMemberLite = {
   id: string;
@@ -69,6 +74,17 @@ type DerivedCombatLite = {
   initiative: any[];
 };
 
+type CombatEncounterContext = {
+  zoneId?: string | null;
+  zoneTheme?: EnemyEncounterTheme | null;
+  objective?: string | null;
+  lockState?: string | null;
+  rewardHint?: string | null;
+  keyEnemyName?: string | null;
+  relicEnemyName?: string | null;
+  cacheGuardEnemyName?: string | null;
+};
+
 type Props = {
   events: any[];
   dmMode: "human" | "solace-neutral" | null;
@@ -78,6 +94,9 @@ type Props = {
   partyMembers: PartyMemberLite[];
   pressureTier: "low" | "medium" | "high";
   allowDevControls: boolean;
+
+  // ecology-aware encounter context
+  encounterContext?: CombatEncounterContext | null;
 
   // Enemy turn resolver
   showEnemyResolver: boolean;
@@ -289,6 +308,7 @@ export default function CombatSection({
   partyMembers,
   pressureTier,
   allowDevControls,
+  encounterContext = null,
   showEnemyResolver,
   activeEnemyGroupName,
   activeEnemyGroupId,
@@ -740,6 +760,7 @@ export default function CombatSection({
         partyMembers={partyMembers as any}
         pressureTier={pressureTier as any}
         allowDevControls={allowDevControls}
+        encounterContext={encounterContext}
       />
 
       {showEnemyResolver && (
