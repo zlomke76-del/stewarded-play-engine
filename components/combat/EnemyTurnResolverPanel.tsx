@@ -2,21 +2,22 @@
 
 // components/combat/EnemyTurnResolverPanel.tsx
 // ------------------------------------------------------------
-// EnemyTurnResolverPanel (V4)
+// EnemyTurnResolverPanel (V5)
 // ------------------------------------------------------------
 // In Solace Neutral Facilitator mode, enemies are driven by Solace.
 // This panel:
 // - resolves the active enemy from EnemyDatabase first
-// - chooses an enemy action using database skillIds when available
-// - falls back to action profile + role/faction when needed
-// - plays suspense steps (declare → telegraph → roll → reveal → commit)
+// - chooses an enemy action using database actions/skillIds
+// - biases enemy intent using encounter context when available
+// - plays suspense steps (declare -> telegraph -> roll -> reveal -> commit)
 // - does NOT write canon directly; it calls parent callbacks
 //
 // Upgrade:
 // - uses EnemyDatabase as the primary truth source
 // - deterministic portrait loading from portraitKey when present
-// - deterministic skill choice per enemy/target pair
+// - deterministic skill/action choice per enemy/target/context pair
 // - richer attack hint + damage typing
+// - encounter-aware target/action bias
 // - backward-compatible with existing combat flow
 // ------------------------------------------------------------
 
@@ -26,6 +27,7 @@ import { getSkillDefinition } from "@/lib/skills/skillDefinitions";
 import {
   EnemyAction,
   EnemyDefinition,
+  EnemyEncounterTheme,
   getEnemyDefinitionByName,
   getEnemiesForGroupLabel,
 } from "@/lib/game/EnemyDatabase";
@@ -63,11 +65,23 @@ type TelegraphInfo = {
   attackStyleHint: "volley" | "beam" | "charge" | "unknown";
 };
 
+type EncounterContext = {
+  zoneId?: string | null;
+  zoneTheme?: EnemyEncounterTheme | null;
+  objective?: string | null;
+  lockState?: string | null;
+  rewardHint?: string | null;
+  keyEnemyName?: string | null;
+  relicEnemyName?: string | null;
+  cacheGuardEnemyName?: string | null;
+};
+
 type Props = {
   enabled: boolean;
   activeEnemyGroupName: string | null;
   activeEnemyGroupId: string | null;
   playerNames: string[];
+  encounterContext?: EncounterContext | null;
   onTelegraph: (info: TelegraphInfo) => void;
   onCommitOutcome: (payload: OutcomePayload) => void;
   onAdvanceTurn: () => void;
@@ -83,6 +97,8 @@ type ResolvedEnemyAction = {
   damage: { count: number; sides: number; bonus: number; kind: DamageKind };
   declared: string;
   actionLabel?: string | null;
+  targetName: string;
+  targetReason: string;
 };
 
 function randInt(minIncl: number, maxIncl: number) {
@@ -306,13 +322,158 @@ function damageProfileForEnemy(
   }
 }
 
+function chooseTargetName(args: {
+  enemy: EnemyDefinition | null;
+  enemyName: string;
+  enemyId: string | null;
+  playerNames: string[];
+  encounterContext?: EncounterContext | null;
+}): { targetName: string; reason: string } {
+  const { enemy, enemyName, enemyId, playerNames, encounterContext } = args;
+  const candidates = playerNames.filter((x) => String(x || "").trim().length > 0);
+
+  if (candidates.length === 0) {
+    return { targetName: "the party", reason: "no_named_players" };
+  }
+
+  const role = String(enemy?.role ?? "").toLowerCase();
+  const behavior = enemy?.behavior;
+  const objective = String(encounterContext?.objective ?? "").toLowerCase();
+  const rewardHint = String(encounterContext?.rewardHint ?? "").toLowerCase();
+  const seedBase = `${enemyId ?? enemy?.id ?? enemyName}::${encounterContext?.zoneId ?? "zone"}::target`;
+
+  // If a specific enemy is clearly guarding a key / relic / cache, make the target feel deliberate.
+  if (
+    normalizeKey(encounterContext?.keyEnemyName) === normalizeKey(enemyName) ||
+    normalizeKey(encounterContext?.relicEnemyName) === normalizeKey(enemyName) ||
+    normalizeKey(encounterContext?.cacheGuardEnemyName) === normalizeKey(enemyName)
+  ) {
+    const idx = hash32(`${seedBase}::guardian`) % candidates.length;
+    return {
+      targetName: candidates[idx] ?? candidates[0],
+      reason: "guardian_pressure",
+    };
+  }
+
+  // Backline pressure enemies skew toward later party positions.
+  if (behavior?.prefersBackline || role === "archer" || role === "caster" || role === "assassin") {
+    const backline = candidates.slice(Math.max(0, candidates.length - 2));
+    const idx = hash32(`${seedBase}::backline`) % backline.length;
+    return {
+      targetName: backline[idx] ?? candidates[candidates.length - 1] ?? candidates[0],
+      reason: "backline_preference",
+    };
+  }
+
+  // Beasts / brutes often crash the front.
+  if (role === "brute" || role === "soldier" || role === "beast" || role === "construct") {
+    const frontline = candidates.slice(0, Math.min(2, candidates.length));
+    const idx = hash32(`${seedBase}::frontline`) % frontline.length;
+    return {
+      targetName: frontline[idx] ?? candidates[0],
+      reason: "frontline_pressure",
+    };
+  }
+
+  // Objective-sensitive pressure if players are near rewards / doors.
+  if (
+    objective.includes("key") ||
+    objective.includes("relic") ||
+    objective.includes("cache") ||
+    rewardHint.includes("key") ||
+    rewardHint.includes("relic") ||
+    rewardHint.includes("coin")
+  ) {
+    const idx = hash32(`${seedBase}::objective`) % candidates.length;
+    return {
+      targetName: candidates[idx] ?? candidates[0],
+      reason: "objective_pressure",
+    };
+  }
+
+  const idx = hash32(`${seedBase}::default`) % candidates.length;
+  return {
+    targetName: candidates[idx] ?? candidates[0],
+    reason: "default_weighted",
+  };
+}
+
+function chooseActionForEnemy(args: {
+  enemy: EnemyDefinition | null;
+  enemyName: string;
+  enemyId: string | null;
+  targetName: string;
+  encounterContext?: EncounterContext | null;
+}): { chosenSkillId: string | null; chosenAction: EnemyAction | null } {
+  const { enemy, enemyName, enemyId, targetName, encounterContext } = args;
+
+  const skillIds = Array.isArray(enemy?.skillIds) ? enemy!.skillIds : [];
+  const actions = Array.isArray(enemy?.actions) ? enemy!.actions : [];
+  const objective = String(encounterContext?.objective ?? "").toLowerCase();
+  const zoneTheme = String(encounterContext?.zoneTheme ?? "").toLowerCase();
+  const seedBase = `${enemyId ?? enemy?.id ?? enemyName}::${targetName}::${encounterContext?.zoneId ?? "zone"}`;
+
+  let actionPool = actions.slice();
+
+  // Encourage control/support when guarding meaningful objectives.
+  if (
+    objective.includes("key") ||
+    objective.includes("locked") ||
+    objective.includes("relic") ||
+    objective.includes("cache")
+  ) {
+    const biased = actions.filter((a) => a.kind === "control" || a.kind === "support");
+    if (biased.length > 0) actionPool = [...biased, ...actions];
+  }
+
+  // Ritual / shrine / sanctum style zones lean spell/control.
+  if (
+    zoneTheme.includes("shrine") ||
+    zoneTheme.includes("ritual") ||
+    zoneTheme.includes("sanctum") ||
+    zoneTheme.includes("altar")
+  ) {
+    const biased = actions.filter((a) => a.kind === "spell" || a.kind === "control");
+    if (biased.length > 0) actionPool = [...biased, ...actions];
+  }
+
+  let chosenAction: EnemyAction | null = null;
+  if (actionPool.length > 0) {
+    const idx = hash32(`${seedBase}::action`) % actionPool.length;
+    chosenAction = actionPool[idx] ?? null;
+  }
+
+  let chosenSkillId: string | null = null;
+  if (skillIds.length > 0) {
+    const idx = hash32(`${seedBase}::skill`) % skillIds.length;
+    chosenSkillId = skillIds[idx] ?? null;
+  }
+
+  return { chosenSkillId, chosenAction };
+}
+
 function buildEnemyIntent(
   enemyName: string,
   targetName: string,
   skillId?: string | null,
   skillLabel?: string,
-  actionLabel?: string | null
+  actionLabel?: string | null,
+  encounterContext?: EncounterContext | null
 ) {
+  const objective = String(encounterContext?.objective ?? "").toLowerCase();
+
+  if (objective.includes("key")) {
+    return `The ${enemyName} move to keep ${targetName} away from the key and strike with ${actionLabel || skillLabel || "violent force"}.`;
+  }
+
+  if (objective.includes("relic")) {
+    return `The ${enemyName} defend the relic’s space and lash out at ${targetName} with ${actionLabel || skillLabel || "a sudden attack"}.`;
+  }
+
+  if (objective.includes("cache") || objective.includes("coin")) {
+    return `The ${enemyName} close around the cache and try to drive ${targetName} off with ${actionLabel || skillLabel || "a punishing blow"}.`;
+  }
+
   switch (skillId) {
     case "bandit_volley":
       return `The ${enemyName} unleash ${skillLabel ?? "Bandit Volley"} at ${targetName}, saturating the lane with arrows.`;
@@ -394,35 +555,44 @@ function outcomeText(enemyName: string, targetName: string, roll: number, dc: nu
     : `The attack misses — ${targetName} holds their ground.`;
 }
 
-function resolveEnemyAction(
-  enemy: EnemyDefinition | null,
-  enemyName: string,
-  enemyId: string | null,
-  targetName: string
-): ResolvedEnemyAction {
-  const skillIds = Array.isArray(enemy?.skillIds) ? enemy!.skillIds : [];
-  const actions = Array.isArray(enemy?.actions) ? enemy!.actions : [];
+function resolveEnemyAction(args: {
+  enemy: EnemyDefinition | null;
+  enemyName: string;
+  enemyId: string | null;
+  playerNames: string[];
+  encounterContext?: EncounterContext | null;
+}): ResolvedEnemyAction {
+  const { enemy, enemyName, enemyId, playerNames, encounterContext } = args;
 
-  let chosenSkillId: string | null = null;
-  if (skillIds.length > 0) {
-    const seed = `${enemyId ?? enemy?.id ?? enemyName}::${targetName}::skills`;
-    const idx = hash32(seed) % skillIds.length;
-    chosenSkillId = skillIds[idx] ?? null;
-  }
+  const target = chooseTargetName({
+    enemy,
+    enemyName,
+    enemyId,
+    playerNames,
+    encounterContext,
+  });
 
-  let chosenAction: EnemyAction | null = null;
-  if (actions.length > 0) {
-    const seed = `${enemyId ?? enemy?.id ?? enemyName}::${targetName}::actions`;
-    const idx = hash32(seed) % actions.length;
-    chosenAction = actions[idx] ?? null;
-  }
+  const { chosenSkillId, chosenAction } = chooseActionForEnemy({
+    enemy,
+    enemyName,
+    enemyId,
+    targetName: target.targetName,
+    encounterContext,
+  });
 
   const def = chosenSkillId ? getSkillDefinition(chosenSkillId) : null;
   const skillLabel = def?.label ?? (chosenSkillId ? toTitle(chosenSkillId) : chosenAction?.label ?? "Attack");
   const attackHint = attackHintFor(enemyName, chosenSkillId, chosenAction?.kind);
   const dc = defaultDCFromRole(enemy, chosenSkillId, chosenAction);
   const damage = damageProfileForEnemy(enemy, chosenSkillId, chosenAction);
-  const declared = buildEnemyIntent(enemyName, targetName, chosenSkillId, skillLabel, chosenAction?.label ?? null);
+  const declared = buildEnemyIntent(
+    enemyName,
+    target.targetName,
+    chosenSkillId,
+    skillLabel,
+    chosenAction?.label ?? null,
+    encounterContext
+  );
 
   return {
     skillId: chosenSkillId,
@@ -434,6 +604,8 @@ function resolveEnemyAction(
     damage,
     declared,
     actionLabel: chosenAction?.label ?? null,
+    targetName: target.targetName,
+    targetReason: target.reason,
   };
 }
 
@@ -442,6 +614,7 @@ export default function EnemyTurnResolverPanel({
   activeEnemyGroupName,
   activeEnemyGroupId,
   playerNames,
+  encounterContext = null,
   onTelegraph,
   onCommitOutcome,
   onAdvanceTurn,
@@ -463,11 +636,6 @@ export default function EnemyTurnResolverPanel({
     return activeEnemyGroupName ?? null;
   }, [enemyDef, activeEnemyGroupName]);
 
-  const targetName = useMemo(() => {
-    const candidates = playerNames.filter((x) => String(x || "").trim().length > 0);
-    return pick(candidates) ?? "the party";
-  }, [playerNames]);
-
   const portraitSrc = useMemo(() => {
     return getEnemyPortraitPathFromDefinition(enemyDef, enemyName);
   }, [enemyDef, enemyName]);
@@ -483,7 +651,7 @@ export default function EnemyTurnResolverPanel({
 
     timers.current.forEach((t) => window.clearTimeout(t));
     timers.current = [];
-  }, [enabled, activeEnemyGroupId, activeEnemyGroupName, enemyDef]);
+  }, [enabled, activeEnemyGroupId, activeEnemyGroupName, enemyDef, encounterContext?.zoneId]);
 
   useEffect(() => {
     return () => {
@@ -500,7 +668,14 @@ export default function EnemyTurnResolverPanel({
   function begin() {
     if (!enabled || !enemyName) return;
 
-    const action = resolveEnemyAction(enemyDef, enemyName, activeEnemyGroupId, targetName);
+    const action = resolveEnemyAction({
+      enemy: enemyDef,
+      enemyName,
+      enemyId: activeEnemyGroupId,
+      playerNames,
+      encounterContext,
+    });
+
     setResolvedAction(action);
     setDeclared(action.declared);
     setDC(action.dc);
@@ -510,7 +685,7 @@ export default function EnemyTurnResolverPanel({
       setStep("telegraph");
       onTelegraph({
         enemyName,
-        targetName,
+        targetName: action.targetName,
         attackStyleHint: action.attackHint,
       });
     });
@@ -524,7 +699,7 @@ export default function EnemyTurnResolverPanel({
 
     queue(1750, () => {
       const r = rollRef.current ?? randInt(1, 20);
-      const text = outcomeText(enemyName, targetName, r, action.dc, action);
+      const text = outcomeText(enemyName, action.targetName, r, action.dc, action);
       setReveal(text);
       setStep("revealed");
     });
@@ -533,11 +708,20 @@ export default function EnemyTurnResolverPanel({
   function commit() {
     if (!enabled || !enemyName) return;
 
+    const action =
+      resolvedAction ??
+      resolveEnemyAction({
+        enemy: enemyDef,
+        enemyName,
+        enemyId: activeEnemyGroupId,
+        playerNames,
+        encounterContext,
+      });
+
     const r = rollRef.current ?? roll ?? 0;
-    const action = resolvedAction ?? resolveEnemyAction(enemyDef, enemyName, activeEnemyGroupId, targetName);
 
     const payload: OutcomePayload = {
-      description: `Enemy turn — ${enemyName}. ${reveal || "Outcome pending."}`,
+      description: `Enemy turn — ${enemyName} against ${action.targetName}. ${reveal || "Outcome pending."}`,
       dice: { mode: "d20", roll: r, dc, source: "solace" },
       audit: [
         `enemy_group=${String(activeEnemyGroupName ?? "")}`,
@@ -553,10 +737,17 @@ export default function EnemyTurnResolverPanel({
         `enemy_skill_id=${String(action.skillId ?? "none")}`,
         `enemy_skill_label="${action.skillLabel}"`,
         `enemy_action_label="${String(action.actionLabel ?? "")}"`,
+        `target_name="${action.targetName}"`,
+        `target_reason=${action.targetReason}`,
+        `encounter_zone_id=${String(encounterContext?.zoneId ?? "")}`,
+        `encounter_zone_theme=${String(encounterContext?.zoneTheme ?? "")}`,
+        `encounter_objective=${String(encounterContext?.objective ?? "")}`,
+        `encounter_lock_state=${String(encounterContext?.lockState ?? "")}`,
+        `encounter_reward_hint=${String(encounterContext?.rewardHint ?? "")}`,
         `intent="${declared}"`,
         `dc=${dc}`,
         `roll=${r}`,
-        `note=V4 database-aware resolver`,
+        `note=V5 database-aware resolver with encounter bias`,
       ],
       damage: {
         roll: {
@@ -631,11 +822,12 @@ export default function EnemyTurnResolverPanel({
             {enemyName ? (
               <>
                 {" "}
-                · Target: <strong>{targetName}</strong> · DC <strong>{dc}</strong>
+                · DC <strong>{dc}</strong>
                 {resolvedAction ? (
                   <>
                     {" "}
-                    · Move: <strong>{resolvedAction.skillLabel}</strong>
+                    · Target: <strong>{resolvedAction.targetName}</strong> · Move{" "}
+                    <strong>{resolvedAction.skillLabel}</strong>
                   </>
                 ) : null}
               </>
@@ -648,6 +840,24 @@ export default function EnemyTurnResolverPanel({
               <strong>{enemyDef.pressureBand}</strong> · Faction <strong>{enemyDef.faction}</strong>
             </div>
           )}
+
+          {encounterContext?.zoneTheme || encounterContext?.objective || encounterContext?.rewardHint ? (
+            <div className="muted" style={{ fontSize: 12, marginBottom: 6, lineHeight: 1.5 }}>
+              Zone: <strong>{String(encounterContext?.zoneTheme ?? "unknown")}</strong>
+              {encounterContext?.objective ? (
+                <>
+                  {" "}
+                  · Objective: <strong>{encounterContext.objective}</strong>
+                </>
+              ) : null}
+              {encounterContext?.rewardHint ? (
+                <>
+                  {" "}
+                  · Reward: <strong>{encounterContext.rewardHint}</strong>
+                </>
+              ) : null}
+            </div>
+          ) : null}
 
           {resolvedAction && (
             <div className="muted" style={{ fontSize: 12, lineHeight: 1.5 }}>
@@ -706,8 +916,9 @@ export default function EnemyTurnResolverPanel({
           </div>
 
           <div className="muted" style={{ fontSize: 11, opacity: 0.85 }}>
-            V4: enemy behavior now resolves from EnemyDatabase first, then skill mappings and action profiles. This is
-            the right foundation for cooldowns, target weighting, and encounter-specific enemy logic.
+            V5: enemy behavior now resolves from EnemyDatabase first, then encounter context, then skill mappings and
+            action profiles. This is the right foundation for cooldowns, target weighting, treasure guardians, key
+            carriers, and boss logic.
           </div>
         </div>
       )}
