@@ -123,8 +123,6 @@ function buildEpilogue(events: readonly any[]): string | null {
 // ------------------------------------------------------------
 
 export default function ClassicFantasyPage() {
-  const role: "arbiter" = "arbiter";
-
   const [state, setState] = useState<SessionState>(
     createSession(
       "classic-fantasy-session",
@@ -196,7 +194,7 @@ export default function ClassicFantasyPage() {
   }, [options]);
 
   // ----------------------------------------------------------
-  // Arbiter records canon (UPDATED SIGNATURE)
+  // Arbiter records canon
   // ----------------------------------------------------------
 
   function handleRecord(payload: {
@@ -238,7 +236,7 @@ export default function ClassicFantasyPage() {
 
   function handleShare() {
     const canon = exportCanon(state.events);
-    navigator.clipboard.writeText(canon);
+    void navigator.clipboard.writeText(canon);
     alert("Canon copied to clipboard.");
   }
 
@@ -306,10 +304,9 @@ export default function ClassicFantasyPage() {
       {selectedOption && (
         <ResolutionDraftAdvisoryPanel
           context={{
-    optionDescription: selectedOption.description,
-    optionKind: selectedOption.kind,
-  }}
-  onRecord={...}
+            optionDescription: selectedOption.description,
+            optionKind: inferOptionKind(
+              selectedOption.description
             ),
           }}
           onRecord={handleRecord}
