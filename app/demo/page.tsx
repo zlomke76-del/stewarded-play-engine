@@ -1623,22 +1623,25 @@ export default function DemoPage() {
               )}
 
               {gameplayAllowsAction && (
-                <div id={anchorId("resolution")} style={{ scrollMarginTop: 90 }}>
-                  {selectedOption && (
-                    <ResolutionDraftAdvisoryPanel
-                      role={role}
-                      dmMode={resolutionDmMode}
-                      context={{
-                        optionDescription: selectedOption.description,
-                        optionKind: inferOptionKind(`${playerInput}\n${selectedOption.description}`.trim()),
-                      }}
-                      rollModifier={actingRollModifier}
-                      rollModifierLabel={actingPlayerInjuryStacks > 0 ? `Injury stacks: ${actingPlayerInjuryStacks}` : "Injury"}
-                      onRecord={handleRecord}
-                    />
-                  )}
-                </div>
-              )}
+  <div id={anchorId("resolution")} style={{ scrollMarginTop: 90 }}>
+    {selectedOption && (
+      <ResolutionDraftAdvisoryPanel
+        dmMode={resolutionDmMode}
+        context={{
+          optionDescription: selectedOption.description,
+          optionKind: inferOptionKind(`${playerInput}\n${selectedOption.description}`.trim()),
+        }}
+        rollModifier={actingRollModifier}
+        rollModifierLabel={
+          actingPlayerInjuryStacks > 0
+            ? `Injury stacks: ${actingPlayerInjuryStacks}`
+            : "Injury"
+        }
+        onRecord={handleRecord}
+      />
+    )}
+  </div>
+)}
 
               {gameplayAllowsAction && <NextActionHint state={state} />}
 
