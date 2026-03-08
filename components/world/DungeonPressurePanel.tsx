@@ -1310,9 +1310,11 @@ export default function DungeonPressurePanel({ turn, currentRoomId, events, pars
         (currentSnapshot.tacticalPriority === "warning" || currentSnapshot.tacticalPriority === "blocker")) ||
       (prev.tacticalPriority === "warning" && currentSnapshot.tacticalPriority === "blocker");
 
-    const evolutionEscalated =
-      prev.evolutionCondition !== currentSnapshot.evolutionCondition &&
-      (currentSnapshot.evolutionCondition === "Hostile" || currentSnapshot.evolutionCondition === "Dire");
+const evolutionConditionLabel = String(currentSnapshot.evolutionCondition);
+
+const evolutionEscalated =
+  prev.evolutionCondition !== currentSnapshot.evolutionCondition &&
+  (evolutionConditionLabel === "Hostile" || evolutionConditionLabel === "Dire");
 
     if (pressureEscalated || awarenessEscalated || nearbyEscalated || tacticalEscalated || evolutionEscalated) {
       playDangerRumble();
