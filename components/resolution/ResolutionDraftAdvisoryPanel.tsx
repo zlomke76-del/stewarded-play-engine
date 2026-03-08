@@ -20,6 +20,12 @@
 // - roll / land / record SFX
 // - Solace Neutral mode is digital-roll only
 // - Human mode retains physical-roll acceptance path
+//
+// Ritual staging upgrade:
+// - clear phase progression: intent -> weighing -> result -> narration -> commit
+// - stronger result language
+// - moment-of-truth card
+// - consequence banner before record
 // ------------------------------------------------------------
 
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -146,6 +152,98 @@ function toneForMargin(margin: number) {
   return "failure";
 }
 
+function titleCase(input: string) {
+  return input
+    .split(/[\s_-]+/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
+function optionKindLabel(kind?: ResolutionContext["optionKind"]) {
+  return kind ? titleCase(kind) : "Standard";
+}
+
+function toneHeadline(tone: ReturnType<typeof toneForMargin>) {
+  switch (tone) {
+    case "decisive-success":
+      return "The moment breaks decisively in your favor.";
+    case "success":
+      return "The attempt succeeds.";
+    case "hard-failure":
+      return "The dungeon pushes back hard.";
+    case "failure":
+      return "The effort strains against resistance.";
+    default:
+      return "Fate has not yet spoken.";
+  }
+}
+
+function toneSubline(tone: ReturnType<typeof toneForMargin>, margin: number | null) {
+  if (margin === null) return "A roll is required before consequence can be recorded.";
+
+  switch (tone) {
+    case "decisive-success":
+      return `The action clears the threshold with force (${margin >= 0 ? "+" : ""}${margin}).`;
+    case "success":
+      return `The action clears the threshold (${margin >= 0 ? "+" : ""}${margin}).`;
+    case "hard-failure":
+      return `The attempt falls well short (${margin >= 0 ? "+" : ""}${margin}).`;
+    case "failure":
+      return `The attempt misses narrowly (${margin >= 0 ? "+" : ""}${margin}).`;
+    default:
+      return "Outcome pending.";
+  }
+}
+
+function ritualPhaseLabel(args: {
+  rawRoll: number | null;
+  isRolling: boolean;
+  draftText: string;
+}) {
+  const { rawRoll, isRolling, draftText } = args;
+  if (isRolling) return "Fate is weighing the moment";
+  if (rawRoll === null) return "Intent awaits adjudication";
+  if (!draftText.trim()) return "Consequence is taking shape";
+  return "Outcome stands ready for canon";
+}
+
+function ritualPhaseSteps(args: {
+  rawRoll: number | null;
+  isRolling: boolean;
+  hasNarration: boolean;
+}) {
+  const { rawRoll, isRolling, hasNarration } = args;
+
+  return [
+    {
+      label: "Intent Declared",
+      state: "done" as const,
+    },
+    {
+      label: "Fate Weighs",
+      state: isRolling ? ("active" as const) : rawRoll !== null ? ("done" as const) : ("pending" as const),
+    },
+    {
+      label: "Result Lands",
+      state: rawRoll !== null && !isRolling ? ("done" as const) : ("pending" as const),
+    },
+    {
+      label: "Narration Forms",
+      state:
+        rawRoll !== null && hasNarration
+          ? ("done" as const)
+          : rawRoll !== null
+            ? ("active" as const)
+            : ("pending" as const),
+    },
+    {
+      label: "Canon Ready",
+      state: rawRoll !== null && hasNarration ? ("active" as const) : ("pending" as const),
+    },
+  ];
+}
+
 /* ------------------------------------------------------------ */
 
 const SFX = {
@@ -178,7 +276,6 @@ export default function ResolutionDraftAdvisoryPanel({
   const rollIntervalRef = useRef<number | null>(null);
   const rollTimeoutRef = useRef<number | null>(null);
 
-  // Draft narration (editable in human DM mode; read-only in Solace Neutral mode)
   const [draftText, setDraftText] = useState("");
 
   // Reset on new intent
@@ -274,8 +371,6 @@ export default function ResolutionDraftAdvisoryPanel({
 
   /* ----------------------------------------------------------
      Creative narration (NON-AUTHORITATIVE flavor)
-     - Human DM: keep shorter + editable
-     - Solace Neutral: deeper + grounded + read-only
   ---------------------------------------------------------- */
 
   const generatedNarration = useMemo(() => {
@@ -423,6 +518,17 @@ export default function ResolutionDraftAdvisoryPanel({
                 background: "rgba(255,255,255,0.04)",
               };
 
+  const momentHeadline = margin === null ? "Awaiting roll" : toneHeadline(resultTone);
+  const momentSubline = toneSubline(resultTone, margin);
+  const hasNarration = draftText.trim().length > 0 || generatedNarration.trim().length > 0;
+  const phaseSteps = ritualPhaseSteps({ rawRoll, isRolling, hasNarration });
+  const phaseLabel = ritualPhaseLabel({ rawRoll, isRolling, draftText });
+
+  const commitSummary =
+    rawRoll === null || effectiveRoll === null
+      ? "A result is required before the outcome can be recorded."
+      : `${effectiveRoll >= dc ? "Success" : "Failure"} will be recorded as canon using ${manualRoll ? "the accepted physical roll" : "the digital roll"}.`;
+
   return (
     <section
       style={{
@@ -441,6 +547,64 @@ export default function ResolutionDraftAdvisoryPanel({
           </div>
           <div style={{ fontSize: 13, opacity: 0.76, lineHeight: 1.6 }}>
             Fate now weighs the intent against the danger of the moment.
+          </div>
+        </div>
+
+        <div
+          style={{
+            padding: "12px 14px",
+            borderRadius: 14,
+            border: "1px solid rgba(255,255,255,0.10)",
+            background: "linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.03))",
+            display: "grid",
+            gap: 10,
+          }}
+        >
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+            <div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: 0.7, opacity: 0.62 }}>
+              Ritual Progress
+            </div>
+            <div style={{ fontSize: 12, opacity: 0.78 }}>{phaseLabel}</div>
+          </div>
+
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(5, minmax(0, 1fr))",
+              gap: 8,
+            }}
+          >
+            {phaseSteps.map((step) => {
+              const isDone = step.state === "done";
+              const isActive = step.state === "active";
+
+              return (
+                <div
+                  key={step.label}
+                  style={{
+                    padding: "10px 10px",
+                    borderRadius: 12,
+                    border: isActive
+                      ? "1px solid rgba(255,196,118,0.24)"
+                      : "1px solid rgba(255,255,255,0.08)",
+                    background: isDone
+                      ? "rgba(120,170,255,0.08)"
+                      : isActive
+                        ? "rgba(255,196,118,0.08)"
+                        : "rgba(255,255,255,0.03)",
+                    minHeight: 56,
+                    display: "grid",
+                    alignContent: "center",
+                    gap: 4,
+                  }}
+                >
+                  <div style={{ fontSize: 10, opacity: 0.62, textTransform: "uppercase", letterSpacing: 0.5 }}>
+                    {isDone ? "Done" : isActive ? "Now" : "Pending"}
+                  </div>
+                  <div style={{ fontSize: 12, fontWeight: 800, lineHeight: 1.35 }}>{step.label}</div>
+                </div>
+              );
+            })}
           </div>
         </div>
 
@@ -482,9 +646,26 @@ export default function ResolutionDraftAdvisoryPanel({
             </div>
             <div style={{ marginTop: 8, fontSize: 28, fontWeight: 900 }}>DC {dc}</div>
             <div style={{ marginTop: 4, fontSize: 12, opacity: 0.7 }}>
-              {context.optionKind ? `Tone: ${context.optionKind}` : "Standard challenge"}
+              Tone: {optionKindLabel(context.optionKind)}
             </div>
           </div>
+        </div>
+
+        <div
+          style={{
+            padding: "14px 16px",
+            borderRadius: 16,
+            border: "1px solid rgba(255,255,255,0.10)",
+            background: "linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.03))",
+            display: "grid",
+            gap: 8,
+          }}
+        >
+          <div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: 0.6, opacity: 0.62 }}>
+            Moment of Truth
+          </div>
+          <div style={{ fontSize: 20, fontWeight: 900, lineHeight: 1.25 }}>{momentHeadline}</div>
+          <div style={{ fontSize: 13, opacity: 0.8, lineHeight: 1.55 }}>{momentSubline}</div>
         </div>
 
         <div
@@ -709,6 +890,27 @@ export default function ResolutionDraftAdvisoryPanel({
             </div>
           </div>
         </div>
+
+        {rawRoll !== null && (
+          <div
+            style={{
+              padding: "12px 14px",
+              borderRadius: 14,
+              border: "1px solid rgba(255,255,255,0.10)",
+              background: "linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.03))",
+              display: "grid",
+              gap: 6,
+            }}
+          >
+            <div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: 0.6, opacity: 0.62 }}>
+              Consequence Standing
+            </div>
+            <div style={{ fontSize: 14, fontWeight: 800 }}>{commitSummary}</div>
+            <div style={{ fontSize: 12, opacity: 0.76 }}>
+              The Arbiter may review the narration, then commit the moment into canon.
+            </div>
+          </div>
+        )}
 
         {rawRoll !== null && (
           <>
