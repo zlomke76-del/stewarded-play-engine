@@ -6,9 +6,10 @@
 // Event-sourced fog-of-war visualization.
 // - Derives position + discovered tiles + marks purely from events
 // - NO controls here (movement/reveal/mark are drafted+committed via resolution)
+// - Soft discovery chime plays only when canon discovery expands after mount
 // ------------------------------------------------------------
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import type { SessionEvent } from "@/lib/session/SessionState";
 import CardSection from "@/components/layout/CardSection";
 
@@ -47,6 +48,7 @@ function withinBounds(p: XY, w: number, h: number) {
 ------------------------------------------------------------ */
 
 const ASSET_BASE = "/assets/v1";
+const DISCOVERY_CHIME_SRC = "/assets/audio/sfx_soft_chime_01.mp3";
 
 function assetForPlayer(): { src: string; label: string } {
   return { src: `${ASSET_BASE}/player_rogue.png`, label: "Player" };
@@ -86,6 +88,18 @@ function createMark(
     eventId: String(e?.id ?? ""),
     timestamp: Number(e?.timestamp ?? Date.now()),
   };
+}
+
+function playDiscoveryChime(volume = 0.38) {
+  try {
+    const audio = new Audio(DISCOVERY_CHIME_SRC);
+    audio.volume = volume;
+    void audio.play().catch(() => {
+      // fail silently
+    });
+  } catch {
+    // fail silently
+  }
 }
 
 function deriveMapState(events: readonly SessionEvent[], w: number, h: number) {
@@ -291,6 +305,42 @@ function IconImg({
 
 export default function ExplorationMapPanel({ events, mapW = 13, mapH = 9 }: Props) {
   const derived = useMemo(() => deriveMapState(events, mapW, mapH), [events, mapW, mapH]);
+
+  const hasMountedRef = useRef(false);
+  const lastSnapshotRef = useRef<{
+    discoveredCount: number;
+    markCount: number;
+    lastEventId: string | null;
+  } | null>(null);
+
+  useEffect(() => {
+    const lastEventId =
+      events.length > 0 ? String((events[events.length - 1] as any)?.id ?? "") : null;
+
+    const currentSnapshot = {
+      discoveredCount: derived.discovered.size,
+      markCount: derived.marks.length,
+      lastEventId,
+    };
+
+    if (!hasMountedRef.current) {
+      hasMountedRef.current = true;
+      lastSnapshotRef.current = currentSnapshot;
+      return;
+    }
+
+    const prev = lastSnapshotRef.current;
+    lastSnapshotRef.current = currentSnapshot;
+    if (!prev) return;
+
+    const discoveredIncreased = currentSnapshot.discoveredCount > prev.discoveredCount;
+    const marksIncreased = currentSnapshot.markCount > prev.markCount;
+    const eventChanged = currentSnapshot.lastEventId !== prev.lastEventId;
+
+    if (eventChanged && (discoveredIncreased || marksIncreased)) {
+      playDiscoveryChime();
+    }
+  }, [events, derived.discovered.size, derived.marks.length]);
 
   const TILE = 26;
   const GAP = 5;
