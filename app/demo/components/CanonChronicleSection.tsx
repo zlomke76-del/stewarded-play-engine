@@ -11,6 +11,8 @@
 // - skips initial mount so historical events do not trigger audio
 // - preserves optional raw event inspection behind disclosure
 // - keeps World Ledger below the chronicle
+// - chronicle and ledger are now height-bounded with internal scroll
+//   so canon growth does not keep stretching the full page
 // ------------------------------------------------------------
 
 import React, { useEffect, useMemo, useRef } from "react";
@@ -331,80 +333,100 @@ export default function CanonChronicleSection({ events }: Props) {
             The chronicle records what has truly entered canon. This view favors readable consequence over raw system payloads.
           </div>
 
-          {chronicleEntries.length === 0 ? (
-            <div
-              style={{
-                padding: "14px 16px",
-                borderRadius: 14,
-                border: "1px solid rgba(255,255,255,0.08)",
-                background: "rgba(255,255,255,0.04)",
-                fontSize: 13,
-                opacity: 0.76,
-              }}
-            >
-              No canon has been recorded yet.
-            </div>
-          ) : (
-            chronicleEntries.map(({ event, summary, timeLabel }, idx) => (
-              <article
-                key={String(event?.id ?? `chronicle_${idx}`)}
+          <div
+            style={{
+              maxHeight: 560,
+              overflowY: "auto",
+              paddingRight: 6,
+              display: "grid",
+              gap: 12,
+              scrollbarWidth: "thin",
+            }}
+          >
+            {chronicleEntries.length === 0 ? (
+              <div
                 style={{
-                  ...toneStyles(summary.tone),
-                  borderRadius: 16,
                   padding: "14px 16px",
-                  boxShadow: "inset 0 1px 0 rgba(255,255,255,0.03)",
+                  borderRadius: 14,
+                  border: "1px solid rgba(255,255,255,0.08)",
+                  background: "rgba(255,255,255,0.04)",
+                  fontSize: 13,
+                  opacity: 0.76,
                 }}
               >
-                <div
+                No canon has been recorded yet.
+              </div>
+            ) : (
+              chronicleEntries.map(({ event, summary, timeLabel }, idx) => (
+                <article
+                  key={String(event?.id ?? `chronicle_${idx}`)}
                   style={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    gap: 12,
-                    alignItems: "baseline",
-                    flexWrap: "wrap",
-                    marginBottom: 8,
+                    ...toneStyles(summary.tone),
+                    borderRadius: 16,
+                    padding: "14px 16px",
+                    boxShadow: "inset 0 1px 0 rgba(255,255,255,0.03)",
                   }}
                 >
-                  <div style={{ fontSize: 16, fontWeight: 900 }}>{summary.title}</div>
-                  {timeLabel ? <div style={{ fontSize: 12, opacity: 0.62 }}>{timeLabel}</div> : null}
-                </div>
-
-                <div style={{ display: "grid", gap: 6 }}>
-                  {summary.body.map((line, lineIdx) => (
-                    <div key={lineIdx} style={{ fontSize: 13, lineHeight: 1.6, opacity: 0.9 }}>
-                      {line}
-                    </div>
-                  ))}
-                </div>
-
-                <details style={{ marginTop: 10 }}>
-                  <summary style={{ cursor: "pointer", fontSize: 12, opacity: 0.62 }}>
-                    Show raw canon entry
-                  </summary>
-                  <pre
+                  <div
                     style={{
-                      marginTop: 10,
-                      padding: 12,
-                      borderRadius: 12,
-                      overflowX: "auto",
-                      fontSize: 11,
-                      lineHeight: 1.5,
-                      border: "1px solid rgba(255,255,255,0.08)",
-                      background: "rgba(0,0,0,0.22)",
-                      whiteSpace: "pre-wrap",
-                      wordBreak: "break-word",
+                      display: "flex",
+                      justifyContent: "space-between",
+                      gap: 12,
+                      alignItems: "baseline",
+                      flexWrap: "wrap",
+                      marginBottom: 8,
                     }}
                   >
-                    {JSON.stringify(event, null, 2)}
-                  </pre>
-                </details>
-              </article>
-            ))
-          )}
+                    <div style={{ fontSize: 16, fontWeight: 900 }}>{summary.title}</div>
+                    {timeLabel ? <div style={{ fontSize: 12, opacity: 0.62 }}>{timeLabel}</div> : null}
+                  </div>
+
+                  <div style={{ display: "grid", gap: 6 }}>
+                    {summary.body.map((line, lineIdx) => (
+                      <div key={lineIdx} style={{ fontSize: 13, lineHeight: 1.6, opacity: 0.9 }}>
+                        {line}
+                      </div>
+                    ))}
+                  </div>
+
+                  <details style={{ marginTop: 10 }}>
+                    <summary style={{ cursor: "pointer", fontSize: 12, opacity: 0.62 }}>
+                      Show raw canon entry
+                    </summary>
+                    <pre
+                      style={{
+                        marginTop: 10,
+                        padding: 12,
+                        borderRadius: 12,
+                        overflowX: "auto",
+                        fontSize: 11,
+                        lineHeight: 1.5,
+                        border: "1px solid rgba(255,255,255,0.08)",
+                        background: "rgba(0,0,0,0.22)",
+                        whiteSpace: "pre-wrap",
+                        wordBreak: "break-word",
+                      }}
+                    >
+                      {JSON.stringify(event, null, 2)}
+                    </pre>
+                  </details>
+                </article>
+              ))
+            )}
+          </div>
         </div>
       </CardSection>
 
-      <WorldLedgerPanelLegacy events={events as any} />
+      <div
+        style={{
+          maxHeight: 420,
+          overflowY: "auto",
+          paddingRight: 6,
+          scrollbarWidth: "thin",
+        }}
+      >
+        <WorldLedgerPanelLegacy events={events as any} />
+      </div>
     </>
   );
 }
