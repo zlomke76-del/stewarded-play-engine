@@ -44,6 +44,7 @@ export type ResolutionContext = {
 };
 
 type DMMode = "human" | "solace_neutral";
+type ResultTone = ReturnType<typeof toneForMargin> | "pending";
 
 type XY = { x: number; y: number };
 
@@ -164,7 +165,7 @@ function optionKindLabel(kind?: ResolutionContext["optionKind"]) {
   return kind ? titleCase(kind) : "Standard";
 }
 
-function toneHeadline(tone: ReturnType<typeof toneForMargin>) {
+function toneHeadline(tone: ResultTone) {
   switch (tone) {
     case "decisive-success":
       return "The moment breaks decisively in your favor.";
@@ -174,12 +175,13 @@ function toneHeadline(tone: ReturnType<typeof toneForMargin>) {
       return "The dungeon pushes back hard.";
     case "failure":
       return "The effort strains against resistance.";
+    case "pending":
     default:
       return "Fate has not yet spoken.";
   }
 }
 
-function toneSubline(tone: ReturnType<typeof toneForMargin>, margin: number | null) {
+function toneSubline(tone: ResultTone, margin: number | null) {
   if (margin === null) return "A roll is required before consequence can be recorded.";
 
   switch (tone) {
@@ -191,6 +193,7 @@ function toneSubline(tone: ReturnType<typeof toneForMargin>, margin: number | nu
       return `The attempt falls well short (${margin >= 0 ? "+" : ""}${margin}).`;
     case "failure":
       return `The attempt misses narrowly (${margin >= 0 ? "+" : ""}${margin}).`;
+    case "pending":
     default:
       return "Outcome pending.";
   }
@@ -247,7 +250,7 @@ function ritualPhaseSteps(args: {
 /* ------------------------------------------------------------ */
 
 const SFX = {
-  diceRoll: "/assets/audio/sfx_button_click_01.mp3",
+  diceRoll: "/assets/audio/sfx_dice_roll.mp3",
   diceLand: "/assets/audio/sfx_success_01.mp3",
   recordOutcome: "/assets/audio/sfx_arbiter_cannon_record_01.mp3",
 } as const;
@@ -489,8 +492,7 @@ export default function ResolutionDraftAdvisoryPanel({
     rawRoll !== null &&
     (!!setupText || !!movement?.from || !!movement?.to || !!combat?.activeEnemyGroupName);
 
-  const resultTone =
-    margin === null ? "pending" : toneForMargin(margin);
+  const resultTone: ResultTone = margin === null ? "pending" : toneForMargin(margin);
 
   const resultToneStyle: React.CSSProperties =
     resultTone === "decisive-success"
@@ -518,7 +520,7 @@ export default function ResolutionDraftAdvisoryPanel({
                 background: "rgba(255,255,255,0.04)",
               };
 
-  const momentHeadline = margin === null ? "Awaiting roll" : toneHeadline(resultTone);
+  const momentHeadline = toneHeadline(resultTone);
   const momentSubline = toneSubline(resultTone, margin);
   const hasNarration = draftText.trim().length > 0 || generatedNarration.trim().length > 0;
   const phaseSteps = ritualPhaseSteps({ rawRoll, isRolling, hasNarration });
