@@ -295,11 +295,12 @@ export default function WorldLedgerPanelLegacy({ events }: Props) {
 
           <div
             style={{
-              maxHeight: 360,
+              maxHeight: 340,
               overflowY: "auto",
               paddingRight: 6,
               display: "grid",
               gap: 10,
+              scrollbarWidth: "thin",
             }}
           >
             {outcomes.map((e, idx) => {
