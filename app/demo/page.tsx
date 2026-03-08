@@ -1297,17 +1297,24 @@ export default function DemoPage() {
     [state.events]
   );
 
-  const resolutionMovement = useMemo(() => {
+  const resolutionMovement = useMemo<{
+    from?: XY | null;
+    to?: XY | null;
+    direction?: "north" | "south" | "east" | "west" | "none" | null;
+  } | null>(() => {
     if (!selectedOption) return null;
 
     const intentText = `${playerInput}\n${selectedOption.description}`.trim();
-    const inferredDirection = explorationDraft.enableMove && explorationDraft.direction !== "none"
-      ? explorationDraft.direction
-      : inferDirection(intentText) ?? "none";
+
+    const inferredDirection: "north" | "south" | "east" | "west" | "none" =
+      explorationDraft.enableMove && explorationDraft.direction !== "none"
+        ? explorationDraft.direction
+        : inferDirection(intentText) ?? "none";
 
     const from = currentPosition;
+
     const stepped =
-      inferredDirection && inferredDirection !== "none"
+      inferredDirection !== "none"
         ? stepFrom(from, inferredDirection)
         : null;
 
@@ -1316,7 +1323,7 @@ export default function DemoPage() {
         ? stepped
         : stepped
           ? from
-          : undefined;
+          : null;
 
     return {
       from,
