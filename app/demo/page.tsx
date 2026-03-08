@@ -1622,27 +1622,76 @@ export default function DemoPage() {
                 </CardSection>
               )}
 
-              {gameplayAllowsAction && (
+{gameplayAllowsAction && (
   <div id={anchorId("resolution")} style={{ scrollMarginTop: 90 }}>
     {selectedOption && (
-      <ResolutionDraftAdvisoryPanel
-        dmMode={resolutionDmMode}
-        context={{
-          optionDescription: selectedOption.description,
-          optionKind: inferOptionKind(`${playerInput}\n${selectedOption.description}`.trim()),
+      <section
+        className="card"
+        style={{
+          borderLeft: "4px solid rgba(255,255,255,0.18)",
+          background: "rgba(17,17,17,0.92)",
+          padding: 16,
+          borderRadius: 16,
         }}
-        rollModifier={actingRollModifier}
-        rollModifierLabel={
-          actingPlayerInjuryStacks > 0
-            ? `Injury stacks: ${actingPlayerInjuryStacks}`
-            : "Injury"
-        }
-        onRecord={handleRecord}
-      />
+      >
+        <h3 style={{ marginBottom: 10 }}>Adjudication</h3>
+
+        <div style={{ display: "grid", gap: 10 }}>
+          <div>
+            <strong>Selected option:</strong> {selectedOption.description}
+          </div>
+
+          <div>
+            <strong>Difficulty tone:</strong>{" "}
+            {inferOptionKind(`${playerInput}\n${selectedOption.description}`.trim())}
+          </div>
+
+          <div>
+            <strong>Roll modifier:</strong> {actingRollModifier >= 0 ? "+" : ""}
+            {actingRollModifier}
+            {actingPlayerInjuryStacks > 0
+              ? ` · Injury stacks: ${actingPlayerInjuryStacks}`
+              : ""}
+          </div>
+
+          <button onClick={() => {
+            const kind = inferOptionKind(`${playerInput}\n${selectedOption.description}`.trim());
+            const dc =
+              kind === "safe" ? 6 :
+              kind === "environmental" ? 8 :
+              kind === "risky" ? 10 :
+              14;
+
+            const rawRoll = Math.ceil(Math.random() * 20);
+            const effectiveRoll = rawRoll + actingRollModifier;
+
+            handleRecord({
+              description:
+                effectiveRoll >= dc
+                  ? `The attempt succeeds: ${selectedOption.description}`
+                  : `The attempt falters: ${selectedOption.description}`,
+              dice: {
+                mode: "d20",
+                roll: effectiveRoll,
+                dc,
+                source: "solace",
+              },
+              audit: [
+                "Temporary demo fallback recorder",
+                `Raw roll: ${rawRoll}`,
+                `Modifier: ${actingRollModifier >= 0 ? "+" : ""}${actingRollModifier}`,
+                `Effective roll: ${effectiveRoll}`,
+                `Resolved against DC ${dc}`,
+              ],
+            });
+          }}>
+            Roll Fate and Record Outcome
+          </button>
+        </div>
+      </section>
     )}
   </div>
 )}
-
               {gameplayAllowsAction && <NextActionHint state={state} />}
 
               {gameplayAllowsAction && (
