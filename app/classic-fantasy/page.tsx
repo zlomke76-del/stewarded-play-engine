@@ -305,12 +305,11 @@ export default function ClassicFantasyPage() {
 
       {selectedOption && (
         <ResolutionDraftAdvisoryPanel
-          role={role}
           context={{
-            optionDescription:
-              selectedOption.description,
-            optionKind: inferOptionKind(
-              selectedOption.description
+    optionDescription: selectedOption.description,
+    optionKind: selectedOption.kind,
+  }}
+  onRecord={...}
             ),
           }}
           onRecord={handleRecord}
