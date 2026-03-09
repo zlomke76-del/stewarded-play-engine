@@ -1,68 +1,27 @@
 "use client";
 
 // ------------------------------------------------------------
-// Demo Page — Stewarded Play (Full Governed Flow)
+// Demo Page — Echoes of Fate (Room/Floor Dungeon Spine)
 // ------------------------------------------------------------
 //
 // Orchestrator only.
 // UI sections are composed here.
 //
-// Recent focus upgrades implemented in this file:
-// - New top-of-page onboarding: "Echoes of Fate" + consequence hook
-// - Play Style: Human vs Solace as a toggle (no heavy explanation up front)
-// - Party Size selection up-front + simple party visual (⚔ icons)
-// - "Enter the Dungeon" as the singular primary CTA into the next section
-// - Chapters grid simplified early (progressive disclosure)
-// - Canonical escalation events emitted on OUTCOME:
-//     ZONE_PRESSURE_CHANGED + ZONE_AWARENESS_CHANGED
-//   (DungeonPressurePanel now updates deterministically)
-// - OptionKind inference uses combined intent + option text (fixes "everything safe")
+// This version replaces the tile-crawl exploration spine with a
+// room + connection + floor model.
 //
-// Updated flow requirement (this change):
-// - Initial Table stays hidden until:
-//     1) mode selected
-//     2) player count declared
-//     3) Enter pressed
-// - After Accept Table:
-//     user must DECLARE PLAYERS
-// - Pressure/Map/Combat/Action stay locked until PARTY_DECLARED exists
-// - Chapters "Party" represents PARTY_DECLARED (not just party size)
+// Key changes:
+// - deterministic dungeon generation via lib/dungeon/DungeonGenerator
+// - canonical location is floorId + roomId (not x/y tile position)
+// - exploration commits ROOM_* / DOOR_* / FLOOR_* events
+// - pressure / awareness now commit LOCATION_* events
+// - combat encounter context is derived from current room ecology
 //
-// Gameplay focus update:
-// - After PARTY_DECLARED, gameplay is staged:
-//     1) Pressure focus
-//     2) Map focus
-//     3) Action focus
-// - The command window no longer steals immediate attention
-// - The player first reads danger, then space, then acts
-//
-// Theme polish update:
-// - Stage-transition controls are no longer generic utility buttons
-// - Pressure → Map and Map → Action now use ritual prompt rows
-// - Prompts are styled as in-world chapter transitions, not app buttons
-//
-// Audio update:
-// - Intro music is owned at page level (not hero component level)
-// - Hero "Enter" triggers /audio/music/chronicles_intro.mp3
-// - Intro now loops until Initial Table is accepted
-// - Ambient dungeon music rotates across two exploration tracks
-// - Combat music rotates across two battle tracks
-// - Combat transitions override ambient cleanly, then return to ambient
-//
-// Party defaults update:
-// - Starter parties now generate with curated class/species/portrait variety
-// - Defaults are balanced and visually diverse instead of blank / all-Human
-// - Names remain blank so players can still author identity intentionally
-//
-// Ecology / encounter-context update:
-// - Derives lightweight encounter context from current zone, marks, intent,
-//   enemy presence, and lock / cache / relic signals
-// - Passes encounterContext into CombatSection so CombatSetupPanel can bias
-//   rosters toward meaningful, finite encounters
-//
-// Movement correction update:
-// - Failed movement resolution no longer commits PLAYER_MOVED
-// - Reveal / mark can still occur without movement when appropriate
+// Notes:
+// - SessionState remains unchanged and append-only
+// - Resolution / combat remain governed by recorded canon
+// - Visual map / pressure panels can be upgraded next to fully render
+//   the room graph; this page already uses the new dungeon runtime
 // ------------------------------------------------------------
 
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -74,7 +33,6 @@ import { exportCanon } from "@/lib/export/exportCanon";
 
 import ResolutionDraftAdvisoryPanel from "@/components/resolution/ResolutionDraftAdvisoryPanel";
 import NextActionHint from "@/components/NextActionHint";
-import DungeonPressurePanel from "@/components/world/DungeonPressurePanel";
 
 import StewardedShell from "@/components/layout/StewardedShell";
 import ModeHeader from "@/components/layout/ModeHeader";
@@ -82,20 +40,17 @@ import CardSection from "@/components/layout/CardSection";
 
 import { deriveCombatState, findLatestCombatId, nextTurnPointer } from "@/lib/combat/CombatState";
 import { resolvePartyLoadout } from "@/lib/skills/loadoutResolver";
-import { deriveDiscoveryEvents } from "@/lib/world/ExplorationDiscovery";
-import type { EnemyEncounterTheme } from "@/lib/game/EnemyDatabase";
 
 import AmbientBackground from "./components/AmbientBackground";
 import InitialTableSection from "./components/InitialTableSection";
 
 import HeroOnboarding from "./components/HeroOnboarding";
 import PartySetupSection from "./components/PartySetupSection";
-import MapSection from "./components/MapSection";
 import ActionSection from "./components/ActionSection";
 import CombatSection from "./components/CombatSection";
 import CanonChronicleSection from "./components/CanonChronicleSection";
 
-import { DMMode, DemoSectionId, DiceMode, RollSource, InitialTable, ExplorationDraft } from "./demoTypes";
+import { DMMode, DemoSectionId, DiceMode, RollSource, InitialTable } from "./demoTypes";
 
 import {
   anchorId,
@@ -106,15 +61,25 @@ import {
   generateInitialTable,
   renderInitialTableNarration,
   inferOptionKind,
-  withinBounds,
-  deriveCurrentPosition,
-  revealRadius,
-  inferDirection,
-  stepFrom,
-  textSuggestsDoor,
-  textSuggestsLocked,
   isCombatEndedForId,
 } from "./demoUtils";
+
+import { generateDungeon } from "@/lib/dungeon/DungeonGenerator";
+import {
+  deriveCurrentDungeonLocation,
+  deriveOpenedDoorIds,
+  deriveReachableConnections,
+  deriveUnlockedDoorIds,
+  inferNeighborRoomIds,
+  resolveTraversal,
+  buildTraversalNarrativeContext,
+  buildRoomExitPayload,
+} from "@/lib/dungeon/DungeonNavigation";
+import { deriveExplorationDiscoveryDrafts } from "@/lib/dungeon/ExplorationDiscovery";
+import { deriveDungeonEvolution } from "@/lib/dungeon/DungeonEvolution";
+import type { DungeonConnection, DungeonDefinition, DungeonRoom } from "@/lib/dungeon/FloorState";
+import type { RoomFeatureKind } from "@/lib/dungeon/RoomTypes";
+import type { EnemyEncounterTheme } from "@/lib/game/EnemyDatabase";
 
 // ------------------------------------------------------------
 // Party (Session-level truth)
@@ -158,9 +123,10 @@ type CombatEncounterContext = {
   cacheGuardEnemyName?: string | null;
 };
 
-type MapMarkKind = "door" | "stairs" | "altar" | "cache" | "hazard";
-
-type XY = { x: number; y: number };
+type RoomFeatureLite = {
+  kind: RoomFeatureKind;
+  note: string | null;
+};
 
 const STARTER_CLASS_PLANS: Record<1 | 2 | 3 | 4 | 5 | 6, readonly string[]> = {
   1: ["Warrior"],
@@ -353,253 +319,178 @@ function deriveInjuryStacksForPlayer(events: readonly any[], playerId: string): 
 }
 
 // ------------------------------------------------------------
-// Zone derivation helpers
+// Dungeon helpers
 // ------------------------------------------------------------
 
-const ZONE_SIZE_TILES = 4;
-
-function zoneIdFromTileXY(x: number, y: number) {
-  const zx = Math.floor(x / ZONE_SIZE_TILES);
-  const zy = Math.floor(y / ZONE_SIZE_TILES);
-  return `${zx},${zy}`;
+function appendEventToState(
+  prev: SessionState,
+  type: string,
+  payload: any
+): SessionState {
+  return recordEvent(prev, {
+    id: crypto.randomUUID(),
+    timestamp: Date.now(),
+    actor: "arbiter",
+    type,
+    payload,
+  });
 }
 
-function clamp01to100(n: number) {
-  const x = Math.round(n);
-  return Math.max(0, Math.min(100, x));
+function hasDungeonInitialized(events: readonly any[]) {
+  return events.some((e) => e?.type === "DUNGEON_INITIALIZED");
 }
 
-function pressureDeltaFor(kind: ReturnType<typeof inferOptionKind>, success: boolean) {
-  const base = 1;
-  const byKind = kind === "contested" ? 4 : kind === "risky" ? 3 : kind === "environmental" ? 2 : 1;
-  const byResult = success ? 1 : 6;
-  return base + byKind + byResult;
+function deriveCurrentRoom(events: readonly any[], dungeon: DungeonDefinition): DungeonRoom | null {
+  const location = deriveCurrentDungeonLocation(dungeon, events);
+  const floor = dungeon.floors.find((f) => f.id === location.floorId) ?? null;
+  if (!floor) return null;
+  return floor.rooms.find((r) => r.id === location.roomId) ?? null;
 }
 
-function awarenessDeltaFor(kind: ReturnType<typeof inferOptionKind>, success: boolean) {
-  const base = 0;
-  const byKind = kind === "contested" ? 8 : kind === "risky" ? 5 : kind === "environmental" ? 2 : 1;
-  const byResult = success ? 1 : 10;
-  return base + byKind + byResult;
-}
+function inferConnectionChoiceFromText(
+  room: DungeonRoom | null,
+  connections: DungeonConnection[],
+  dungeon: DungeonDefinition,
+  floorId: string,
+  text: string
+): DungeonConnection | null {
+  if (!room || connections.length === 0) return null;
 
-function includesAny(text: string, needles: string[]) {
   const t = String(text || "").toLowerCase();
-  return needles.some((n) => t.includes(n));
+
+  const scored = connections.map((connection) => {
+    const floor = dungeon.floors.find((f) => f.id === floorId) ?? null;
+    const targetRoomId =
+      connection.fromRoomId === room.id ? connection.toRoomId : connection.fromRoomId;
+    const targetRoom =
+      floor?.rooms.find((r) => r.id === targetRoomId) ?? null;
+
+    let score = 0;
+
+    if (/stairs|descend|down|deeper|lower/i.test(t) && connection.type === "stairs") score += 50;
+    if (/up|ascend|retreat/i.test(t) && connection.type === "stairs" && connection.note === "up") score += 50;
+    if (/door|open|push|threshold|archway|gate|enter/i.test(t) && (connection.type === "door" || connection.type === "locked_door")) score += 35;
+    if (/locked|barred|sealed|key|unlock|force/i.test(t) && connection.type === "locked_door") score += 40;
+    if (/secret|hidden/i.test(t) && connection.type === "secret") score += 40;
+    if (connection.type === "corridor") score += 10;
+
+    if (targetRoom) {
+      const label = `${targetRoom.label} ${targetRoom.roomType}`.toLowerCase();
+      if (label.includes("shrine") && /shrine|altar|ritual|pray/i.test(t)) score += 45;
+      if (label.includes("crypt") && /crypt|bone|grave|dead/i.test(t)) score += 45;
+      if (label.includes("armory") && /armory|weapon|gear|supplies/i.test(t)) score += 40;
+      if (label.includes("storage") && /cache|storage|supplies|loot/i.test(t)) score += 40;
+      if (label.includes("relic") && /relic|vault|artifact|treasure/i.test(t)) score += 48;
+      if (label.includes("boss") && /boss|leader|captain|warlord|priest/i.test(t)) score += 48;
+      if (label.includes("beast") && /beast|den|nest|predator/i.test(t)) score += 40;
+      if (label.includes("arcane") && /arcane|construct|sentinel|magic/i.test(t)) score += 40;
+    }
+
+    return { connection, score };
+  });
+
+  scored.sort((a, b) => b.score - a.score);
+  return scored[0]?.connection ?? connections[0] ?? null;
 }
 
-function deriveMapMarksForZone(events: readonly any[], zoneId: string) {
-  const marks: Array<{
-    at: XY;
-    kind: MapMarkKind;
-    note: string | null;
-    zoneId: string;
-    timestamp: number;
-  }> = [];
-
-  for (const e of events) {
-    if (e?.type !== "MAP_MARKED") continue;
-    const p = e?.payload ?? {};
-    const x = Number(p?.at?.x);
-    const y = Number(p?.at?.y);
-    if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
-
-    const zid = zoneIdFromTileXY(x, y);
-    if (zid !== zoneId) continue;
-
-    const kind = String(p?.kind ?? "").trim() as MapMarkKind;
-    if (!kind) continue;
-
-    marks.push({
-      at: { x, y },
-      kind,
-      note: String(p?.note ?? "").trim() || null,
-      zoneId: zid,
-      timestamp: Number(e?.timestamp ?? 0),
-    });
-  }
-
-  return marks.sort((a, b) => b.timestamp - a.timestamp);
-}
-
-function inferEncounterTheme(args: {
-  activeEnemyName: string | null;
-  playerInput: string;
-  selectedOptionDescription: string;
-  marks: Array<{ kind: MapMarkKind; note: string | null }>;
-}): EnemyEncounterTheme | null {
-  const text = [
-    args.activeEnemyName ?? "",
-    args.playerInput,
-    args.selectedOptionDescription,
-    ...args.marks.map((m) => `${m.kind} ${m.note ?? ""}`),
-  ]
-    .join(" ")
-    .toLowerCase();
-
-  if (includesAny(text, ["wraith", "skeleton", "zombie", "ghoul", "crypt", "grave", "tomb", "bone"])) {
-    return "crypt";
-  }
-
-  if (includesAny(text, ["cult", "priest", "altar", "ritual", "hex", "acolyte", "unholy"])) {
-    return "ritual";
-  }
-
-  if (includesAny(text, ["arcane", "construct", "sentinel", "golem", "drone", "vault", "relic"])) {
-    return "arcane";
-  }
-
-  if (includesAny(text, ["wolf", "dire wolf", "spider", "web", "beast", "hellhound"])) {
-    return "wild";
-  }
-
-  if (includesAny(text, ["orc", "warlord", "raider", "warband", "hobgoblin"])) {
-    return "warband";
-  }
-
-  if (includesAny(text, ["cache", "sealed", "locked", "key", "treasure", "chest"])) {
-    return "vault";
-  }
-
-  if (includesAny(text, ["bandit", "goblin", "door", "corridor", "hall"])) {
-    return "corridor";
-  }
-
-  return null;
+function currentRoomFeatureLite(room: DungeonRoom | null): RoomFeatureLite[] {
+  if (!room) return [];
+  return room.features.map((f) => ({
+    kind: f.kind,
+    note: f.note ?? null,
+  }));
 }
 
 function inferLockState(args: {
+  room: DungeonRoom | null;
+  reachableConnections: DungeonConnection[];
   playerInput: string;
   selectedOptionDescription: string;
-  marks: Array<{ kind: MapMarkKind; note: string | null }>;
 }) {
-  const noteText = args.marks.map((m) => `${m.kind} ${m.note ?? ""}`).join(" ").toLowerCase();
-  const text = `${args.playerInput} ${args.selectedOptionDescription} ${noteText}`.toLowerCase();
+  const text = `${args.playerInput} ${args.selectedOptionDescription}`.toLowerCase();
 
-  if (includesAny(text, ["locked", "sealed", "barred"])) return "locked";
-  if (includesAny(text, ["open", "breached", "unlocked"])) return "open";
-  if (args.marks.some((m) => m.kind === "door")) return "door-present";
+  if (args.reachableConnections.some((c) => c.type === "locked_door" || c.locked)) {
+    return "locked";
+  }
+
+  if (/open|breached|unlocked/i.test(text)) return "open";
+  if (/door|threshold|gate|sealed/i.test(text)) return "door-present";
+
+  if (args.room?.features.some((f) => f.kind === "locked_door")) return "locked";
+  if (args.room?.features.some((f) => f.kind === "door")) return "door-present";
+
   return null;
 }
 
 function inferRewardHint(args: {
-  marks: Array<{ kind: MapMarkKind; note: string | null }>;
+  room: DungeonRoom | null;
   playerInput: string;
   selectedOptionDescription: string;
 }) {
-  const noteText = args.marks.map((m) => `${m.kind} ${m.note ?? ""}`).join(" ").toLowerCase();
-  const text = `${args.playerInput} ${args.selectedOptionDescription} ${noteText}`.toLowerCase();
+  const roomLoot = args.room?.lootHint ?? null;
+  if (roomLoot === "supplies") return "cache";
+  if (roomLoot === "treasure") return "treasure";
+  if (roomLoot === "relic") return "relic";
 
-  if (includesAny(text, ["cache", "supplies", "coin", "stash"])) return "cache";
-  if (includesAny(text, ["chest", "treasure", "loot"])) return "treasure";
-  if (includesAny(text, ["key"])) return "key";
-  if (includesAny(text, ["relic", "altar", "artifact"])) return "relic";
+  const text = `${args.playerInput} ${args.selectedOptionDescription}`.toLowerCase();
+  if (/cache|supplies|stash|provisions/i.test(text)) return "cache";
+  if (/treasure|chest|loot|coin/i.test(text)) return "treasure";
+  if (/key/i.test(text)) return "key";
+  if (/relic|artifact|altar/i.test(text)) return "relic";
+
   return null;
 }
 
-function defaultKeyEnemyForTheme(theme: EnemyEncounterTheme | null): string | null {
-  switch (theme) {
-    case "corridor":
-      return "Bandit Captain";
-    case "crypt":
-      return "Hobgoblin Soldier";
-    case "ritual":
-      return "Cult Priest";
-    case "arcane":
-      return "Arcane Sentinel";
-    case "wild":
-      return "Goblin Skirmisher";
-    case "warband":
-      return "Orc Warlord";
-    case "vault":
-      return "Ancient Warden";
-    default:
-      return null;
-  }
-}
-
-function defaultRelicEnemyForTheme(theme: EnemyEncounterTheme | null): string | null {
-  switch (theme) {
-    case "crypt":
-      return "Wraith";
-    case "ritual":
-      return "Cult Priest";
-    case "arcane":
-      return "Iron Guardian";
-    case "wild":
-      return "Hellhound";
-    case "warband":
-      return "Orc Warlord";
-    case "vault":
-      return "Ancient Warden";
-    case "corridor":
-      return "Bandit Captain";
-    default:
-      return null;
-  }
-}
-
-function defaultCacheGuardEnemyForTheme(theme: EnemyEncounterTheme | null): string | null {
-  switch (theme) {
-    case "corridor":
-      return "Bandit Archer";
-    case "crypt":
-      return "Skeleton Warrior";
-    case "ritual":
-      return "Cultist Acolyte";
-    case "arcane":
-      return "Arcane Drone";
-    case "wild":
-      return "Giant Spider";
-    case "warband":
-      return "Orc Raider";
-    case "vault":
-      return "Stone Golem";
-    default:
-      return null;
-  }
-}
-
 function inferObjective(args: {
-  theme: EnemyEncounterTheme | null;
+  room: DungeonRoom | null;
   lockState: string | null;
   rewardHint: string | null;
 }) {
   if (args.lockState === "locked") {
-    return "Secure the keyholder and break access deeper into the zone.";
+    return "Break access deeper into the dungeon by clearing or opening the sealed route.";
   }
 
   if (args.rewardHint === "cache") {
-    return "Break resistance around the cache and secure the supplies.";
+    return "Secure the supplies before pressure hardens around the room.";
   }
 
   if (args.rewardHint === "treasure") {
-    return "Clear the chamber and claim the chest before the zone escalates.";
+    return "Clear the chamber and claim the treasure before the dungeon reacts.";
   }
 
   if (args.rewardHint === "relic") {
-    return "Defeat the bearer and secure the relic bound to this chamber.";
+    return "Seize the relic and survive the room's answer to that theft.";
   }
 
-  switch (args.theme) {
-    case "ritual":
-      return "Disrupt the ritual cell before they reinforce the chamber.";
-    case "arcane":
-      return "Disable the sentries controlling the zone.";
+  switch (args.room?.roomType) {
+    case "guard_post":
+      return "Break control of the route and move deeper.";
+    case "shrine":
+    case "ritual_chamber":
+      return "Disrupt the sacred geometry before it stabilizes.";
     case "crypt":
-      return "Push through the dead and stabilize the burial corridor.";
-    case "wild":
-      return "Clear the predators holding this route.";
-    case "warband":
-      return "Break the warband's line before pressure spikes.";
-    case "vault":
-      return "Crack the defenders guarding the zone's valuable hold.";
-    case "corridor":
-      return "Seize control of the corridor and advance.";
+    case "bone_pit":
+      return "Push through the dead and secure the passage.";
+    case "beast_den":
+      return "Clear the predators holding the route.";
+    case "arcane_hall":
+    case "sentinel_hall":
+      return "Disable the chamber's controlled defenses.";
+    case "relic_vault":
+      return "Crack the guardians of the vault.";
+    case "boss_chamber":
+      return "Survive the apex encounter and take the room.";
     default:
       return null;
   }
 }
+
+function summarizeRoomTitle(room: DungeonRoom | null) {
+  if (!room) return "Unknown Chamber";
+  return `${room.label}`;
+}
+
+// ------------------------------------------------------------
 
 type MusicMode = "none" | "intro" | "ambient" | "combat";
 
@@ -720,9 +611,6 @@ export default function DemoPage() {
   const [state, setState] = useState<SessionState>(createSession("demo-session", "demo"));
   const [dmMode, setDmMode] = useState<DMMode | null>(null);
 
-  const MAP_W = 13;
-  const MAP_H = 9;
-
   const HERO_IMAGE_SRC = "/Hero_dungeon.png";
   const [heroImageOk, setHeroImageOk] = useState(true);
 
@@ -764,6 +652,16 @@ export default function DemoPage() {
 
   const partyCanonical = useMemo(() => deriveLatestParty(state.events as any[]) ?? null, [state.events]);
   const [partyDraft, setPartyDraft] = useState<PartyDeclaredPayload | null>(null);
+
+  const dungeon = useMemo(
+    () =>
+      generateDungeon({
+        dungeonId: "echoes_demo_dungeon",
+        seed: `${state.sessionId}:room-graph-v1`,
+        floorCount: 3,
+      }),
+    [state.sessionId]
+  );
 
   useEffect(() => {
     if (dmMode === null) return;
@@ -1068,13 +966,7 @@ export default function DemoPage() {
     };
 
     setState((prev) =>
-      recordEvent(prev, {
-        id: crypto.randomUUID(),
-        timestamp: Date.now(),
-        actor: "arbiter",
-        type: "PARTY_DECLARED",
-        payload: cleaned as any,
-      })
+      appendEventToState(prev, "PARTY_DECLARED", cleaned as any)
     );
 
     if (tableAccepted) {
@@ -1083,37 +975,6 @@ export default function DemoPage() {
       queueMicrotask(() => scrollToSection("pressure"));
     }
   }
-
-  const [explorationDraft, setExplorationDraft] = useState<ExplorationDraft>({
-    enableMove: false,
-    direction: "none",
-    enableReveal: true,
-    revealRadius: 1,
-    enableMark: false,
-    markKind: "door",
-    markNote: "",
-  });
-
-  useEffect(() => {
-    if (!selectedOption) return;
-
-    const intentText = `${playerInput}\n${selectedOption.description}`.trim();
-    const dir = inferDirection(intentText);
-    const door = textSuggestsDoor(intentText);
-    const locked = textSuggestsLocked(intentText);
-
-    setExplorationDraft((prev) => ({
-      ...prev,
-      enableMove: !!dir,
-      direction: dir ?? "none",
-      enableReveal: true,
-      revealRadius: 1,
-      enableMark: door,
-      markKind: "door",
-      markNote: door ? (locked ? "locked" : prev.markNote || "") : prev.markNote,
-    }));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedOption?.id]);
 
   useEffect(() => {
     if (initialTable) return;
@@ -1138,15 +999,7 @@ export default function DemoPage() {
   }, [dmMode]);
 
   function appendCanon(type: string, payload: any) {
-    setState((prev) =>
-      recordEvent(prev, {
-        id: crypto.randomUUID(),
-        timestamp: Date.now(),
-        actor: "arbiter",
-        type,
-        payload,
-      })
-    );
+    setState((prev) => appendEventToState(prev, type, payload));
   }
 
   const pressureTier = useMemo(() => inferPressureTier(outcomesCount), [outcomesCount]);
@@ -1196,13 +1049,7 @@ export default function DemoPage() {
     const payload = nextTurnPointer(derivedCombat);
 
     setState((prev) =>
-      recordEvent(prev, {
-        id: crypto.randomUUID(),
-        timestamp: Date.now(),
-        actor: "arbiter",
-        type: "TURN_ADVANCED",
-        payload: payload as any,
-      })
+      appendEventToState(prev, "TURN_ADVANCED", payload as any)
     );
   }
 
@@ -1211,13 +1058,7 @@ export default function DemoPage() {
     if (combatEnded) return;
 
     setState((prev) =>
-      recordEvent(prev, {
-        id: crypto.randomUUID(),
-        timestamp: Date.now(),
-        actor: "arbiter",
-        type: "COMBAT_ENDED",
-        payload: { combatId: derivedCombat.combatId } as any,
-      })
+      appendEventToState(prev, "COMBAT_ENDED", { combatId: derivedCombat.combatId } as any)
     );
   }
 
@@ -1228,120 +1069,215 @@ export default function DemoPage() {
     advanceTurn();
   }
 
-  function commitExplorationBundle(
-    nextState: SessionState,
-    args?: {
-      allowMove?: boolean;
-    }
-  ) {
-    const d = explorationDraft;
-    const allowMove = args?.allowMove !== false;
-    let next = nextState;
+  const location = useMemo(
+    () => deriveCurrentDungeonLocation(dungeon, state.events as any[]),
+    [dungeon, state.events]
+  );
 
-    const here = deriveCurrentPosition(next.events as any[], MAP_W, MAP_H);
-    const to = d.enableMove && d.direction !== "none" ? stepFrom(here, d.direction) : null;
-    const canMove = allowMove && to ? withinBounds(to, MAP_W, MAP_H) : false;
+  const currentFloor = useMemo(
+    () => dungeon.floors.find((f) => f.id === location.floorId) ?? dungeon.floors[0],
+    [dungeon, location.floorId]
+  );
 
-    let movedTo: { x: number; y: number } | null = null;
-    let revealedTiles: Array<{ x: number; y: number }> = [];
+  const currentRoom = useMemo(
+    () => currentFloor.rooms.find((r) => r.id === location.roomId) ?? currentFloor.rooms[0],
+    [currentFloor, location.roomId]
+  );
 
-    if (d.enableMove && canMove && to) {
-      movedTo = to;
+  const reachableConnections = useMemo(
+    () => deriveReachableConnections(dungeon, location),
+    [dungeon, location]
+  );
 
-      next = recordEvent(next, {
-        id: crypto.randomUUID(),
-        timestamp: Date.now(),
-        actor: "arbiter",
-        type: "PLAYER_MOVED",
-        payload: { from: here, to } as any,
+  const nearbyRoomIds = useMemo(
+    () => inferNeighborRoomIds(dungeon, location),
+    [dungeon, location]
+  );
+
+  const openedDoorIds = useMemo(
+    () => deriveOpenedDoorIds(state.events as any[]),
+    [state.events]
+  );
+
+  const unlockedDoorIds = useMemo(
+    () => deriveUnlockedDoorIds(state.events as any[]),
+    [state.events]
+  );
+
+  const dungeonEvolution = useMemo(
+    () =>
+      deriveDungeonEvolution({
+        events: state.events as any[],
+        floorId: location.floorId,
+        roomId: location.roomId,
+        nearbyRoomIds,
+      }),
+    [state.events, location.floorId, location.roomId, nearbyRoomIds]
+  );
+
+  const currentFeatures = useMemo(() => currentRoomFeatureLite(currentRoom), [currentRoom]);
+
+  useEffect(() => {
+    if (!tableAccepted || !partyCanonical) return;
+    if (hasDungeonInitialized(state.events as any[])) return;
+
+    setState((prev) => {
+      let next = prev;
+
+      next = appendEventToState(next, "DUNGEON_INITIALIZED", {
+        dungeonId: dungeon.dungeonId,
+        seed: dungeon.seed,
+        floorIds: dungeon.floors.map((f) => f.id),
+        startFloorId: dungeon.startFloorId,
+        startRoomId: dungeon.startRoomId,
       });
 
-      if (d.enableReveal && d.revealRadius > 0) {
-        revealedTiles = revealRadius(to, d.revealRadius, MAP_W, MAP_H);
-
-        next = recordEvent(next, {
-          id: crypto.randomUUID(),
-          timestamp: Date.now(),
-          actor: "arbiter",
-          type: "MAP_REVEALED",
-          payload: { tiles: revealedTiles } as any,
+      for (const floor of dungeon.floors) {
+        next = appendEventToState(next, "FLOOR_INITIALIZED", {
+          dungeonId: dungeon.dungeonId,
+          floorId: floor.id,
+          floorIndex: floor.floorIndex,
+          theme: floor.theme,
+          startRoomId: floor.startRoomId,
         });
       }
 
-      if (d.enableMark) {
-        const note = d.markNote.trim() ? d.markNote.trim() : null;
-        next = recordEvent(next, {
-          id: crypto.randomUUID(),
-          timestamp: Date.now(),
-          actor: "arbiter",
-          type: "MAP_MARKED",
-          payload: { at: to, kind: d.markKind, note } as any,
-        });
-      }
-
-      const discoveryDrafts = deriveDiscoveryEvents({
+      const drafts = deriveExplorationDiscoveryDrafts({
+        dungeon,
         events: next.events as any[],
-        movedTo,
-        revealedTiles,
-        mapW: MAP_W,
-        mapH: MAP_H,
+        floorId: dungeon.startFloorId,
+        roomId: dungeon.startRoomId,
+        enteredViaConnectionId: null,
+        enteredFromRoomId: null,
       });
 
-      for (const draft of discoveryDrafts) {
-        next = recordEvent(next, {
-          id: crypto.randomUUID(),
-          timestamp: Date.now(),
-          actor: "arbiter",
-          type: draft.type,
-          payload: draft.payload as any,
-        });
+      for (const draft of drafts) {
+        next = appendEventToState(next, draft.type, draft.payload as any);
       }
 
       return next;
-    }
-
-    if (d.enableReveal && d.revealRadius > 0) {
-      revealedTiles = revealRadius(here, d.revealRadius, MAP_W, MAP_H);
-
-      next = recordEvent(next, {
-        id: crypto.randomUUID(),
-        timestamp: Date.now(),
-        actor: "arbiter",
-        type: "MAP_REVEALED",
-        payload: { tiles: revealedTiles } as any,
-      });
-    }
-
-    if (d.enableMark) {
-      const note = d.markNote.trim() ? d.markNote.trim() : null;
-      next = recordEvent(next, {
-        id: crypto.randomUUID(),
-        timestamp: Date.now(),
-        actor: "arbiter",
-        type: "MAP_MARKED",
-        payload: { at: here, kind: d.markKind, note } as any,
-      });
-    }
-
-    const discoveryDrafts = deriveDiscoveryEvents({
-      events: next.events as any[],
-      movedTo: null,
-      revealedTiles,
-      mapW: MAP_W,
-      mapH: MAP_H,
     });
+  }, [tableAccepted, partyCanonical, state.events, dungeon]);
 
-    for (const draft of discoveryDrafts) {
-      next = recordEvent(next, {
-        id: crypto.randomUUID(),
-        timestamp: Date.now(),
-        actor: "arbiter",
-        type: draft.type,
-        payload: draft.payload as any,
+  function commitDungeonTraversalBundle(args: {
+    success: boolean;
+    selectedText: string;
+  }) {
+    const combinedText = args.selectedText;
+    const chosenConnection = inferConnectionChoiceFromText(
+      currentRoom,
+      reachableConnections,
+      dungeon,
+      location.floorId,
+      combinedText
+    );
+
+    setState((prev) => {
+      let next = prev;
+
+      if (!chosenConnection) {
+        const discoveryDrafts = deriveExplorationDiscoveryDrafts({
+          dungeon,
+          events: next.events as any[],
+          floorId: location.floorId,
+          roomId: location.roomId,
+          enteredViaConnectionId: null,
+          enteredFromRoomId: null,
+        });
+
+        for (const draft of discoveryDrafts) {
+          next = appendEventToState(next, draft.type, draft.payload as any);
+        }
+
+        return next;
+      }
+
+      const resolved = resolveTraversal(dungeon, {
+        floorId: location.floorId,
+        roomId: location.roomId,
+        connectionId: chosenConnection.id,
+        openedDoorIds,
+        unlockedDoorIds,
       });
-    }
 
-    return next;
+      if (!args.success || !resolved.ok) {
+        const discoveryDrafts = deriveExplorationDiscoveryDrafts({
+          dungeon,
+          events: next.events as any[],
+          floorId: location.floorId,
+          roomId: location.roomId,
+          enteredViaConnectionId: null,
+          enteredFromRoomId: null,
+        });
+
+        for (const draft of discoveryDrafts) {
+          next = appendEventToState(next, draft.type, draft.payload as any);
+        }
+
+        return next;
+      }
+
+      next = appendEventToState(next, "ROOM_EXITED", buildRoomExitPayload({
+        floorId: location.floorId,
+        roomId: location.roomId,
+        toRoomId: resolved.toRoom.id,
+        viaConnectionId: resolved.connection.id,
+      }));
+
+      if (resolved.connection.doorId && resolved.connection.type === "locked_door") {
+        if (!unlockedDoorIds.includes(resolved.connection.doorId)) {
+          next = appendEventToState(next, "DOOR_UNLOCKED", {
+            floorId: location.floorId,
+            roomId: location.roomId,
+            doorId: resolved.connection.doorId,
+            connectionId: resolved.connection.id,
+            method: "force",
+          });
+        }
+      }
+
+      if (resolved.connection.doorId) {
+        next = appendEventToState(next, "DOOR_OPENED", {
+          floorId: location.floorId,
+          roomId: location.roomId,
+          doorId: resolved.connection.doorId,
+          connectionId: resolved.connection.id,
+          revealedRoomId: resolved.toRoom.id,
+        });
+      }
+
+      if (resolved.usedStairs && resolved.floorChanged) {
+        next = appendEventToState(next, "PLAYER_USED_STAIRS", {
+          fromFloorId: location.floorId,
+          fromRoomId: location.roomId,
+          toFloorId: resolved.nextFloorId,
+          toRoomId: resolved.toRoom.id,
+          direction: resolved.connection.note === "up" ? "up" : "down",
+        });
+
+        next = appendEventToState(next, "FLOOR_CHANGED", {
+          fromFloorId: location.floorId,
+          toFloorId: resolved.nextFloorId,
+          fromRoomId: location.roomId,
+          toRoomId: resolved.toRoom.id,
+        });
+      }
+
+      const discoveryDrafts = deriveExplorationDiscoveryDrafts({
+        dungeon,
+        events: next.events as any[],
+        floorId: resolved.nextFloorId,
+        roomId: resolved.toRoom.id,
+        enteredViaConnectionId: resolved.connection.id,
+        enteredFromRoomId: location.roomId,
+      });
+
+      for (const draft of discoveryDrafts) {
+        next = appendEventToState(next, draft.type, draft.payload as any);
+      }
+
+      return next;
+    });
   }
 
   function handleRecord(payload: {
@@ -1354,20 +1290,11 @@ export default function DemoPage() {
     const kind = inferOptionKind(combinedText.length ? combinedText : selectedText);
 
     setState((prev) => {
-      const here = deriveCurrentPosition(prev.events as any[], MAP_W, MAP_H);
-
-      const d = explorationDraft;
-      const to = d.enableMove && d.direction !== "none" ? stepFrom(here, d.direction) : null;
-      const success = Number.isFinite(Number(payload?.dice?.roll)) && Number.isFinite(Number(payload?.dice?.dc))
-        ? Number(payload.dice.roll) >= Number(payload.dice.dc)
-        : false;
-      const canMove = success && to ? withinBounds(to, MAP_W, MAP_H) : false;
-
-      const posForZone = d.enableMove && canMove && to ? to : here;
-      const zoneId = zoneIdFromTileXY(posForZone.x, posForZone.y);
-
-      const pressureDelta = pressureDeltaFor(kind, success);
-      const awarenessDelta = awarenessDeltaFor(kind, success);
+      const success =
+        Number.isFinite(Number(payload?.dice?.roll)) &&
+        Number.isFinite(Number(payload?.dice?.dc))
+          ? Number(payload.dice.roll) >= Number(payload.dice.dc)
+          : false;
 
       const enrichedOutcome = {
         ...payload,
@@ -1376,40 +1303,48 @@ export default function DemoPage() {
           optionKind: kind,
           optionDescription: selectedText,
           intent: playerInput,
-          zoneId,
+          floorId: location.floorId,
+          roomId: location.roomId,
           success,
         },
       };
 
-      let next = recordEvent(prev, {
-        id: crypto.randomUUID(),
-        timestamp: Date.now(),
-        actor: "arbiter",
-        type: "OUTCOME",
-        payload: enrichedOutcome as any,
+      let next = appendEventToState(prev, "OUTCOME", enrichedOutcome as any);
+
+      const pressureDelta =
+        kind === "contested" ? (success ? 5 : 11) :
+        kind === "risky" ? (success ? 4 : 9) :
+        kind === "environmental" ? (success ? 3 : 7) :
+        success ? 2 : 5;
+
+      const awarenessDelta =
+        kind === "contested" ? (success ? 7 : 14) :
+        kind === "risky" ? (success ? 5 : 11) :
+        kind === "environmental" ? (success ? 2 : 6) :
+        success ? 1 : 4;
+
+      next = appendEventToState(next, "LOCATION_PRESSURE_CHANGED", {
+        floorId: location.floorId,
+        roomId: location.roomId,
+        delta: pressureDelta,
       });
 
-      next = recordEvent(next, {
-        id: crypto.randomUUID(),
-        timestamp: Date.now(),
-        actor: "arbiter",
-        type: "ZONE_PRESSURE_CHANGED",
-        payload: { zoneId, delta: clamp01to100(pressureDelta) } as any,
-      });
-
-      next = recordEvent(next, {
-        id: crypto.randomUUID(),
-        timestamp: Date.now(),
-        actor: "arbiter",
-        type: "ZONE_AWARENESS_CHANGED",
-        payload: { zoneId, delta: clamp01to100(awarenessDelta) } as any,
-      });
-
-      next = commitExplorationBundle(next, {
-        allowMove: success,
+      next = appendEventToState(next, "LOCATION_AWARENESS_CHANGED", {
+        floorId: location.floorId,
+        roomId: location.roomId,
+        delta: awarenessDelta,
       });
 
       return next;
+    });
+
+    commitDungeonTraversalBundle({
+      success:
+        Number.isFinite(Number(payload?.dice?.roll)) &&
+        Number.isFinite(Number(payload?.dice?.dc))
+          ? Number(payload.dice.roll) >= Number(payload.dice.dc)
+          : false,
+      selectedText: combinedText,
     });
 
     setPlayerInput("");
@@ -1428,50 +1363,33 @@ export default function DemoPage() {
     audit: string[];
   }) {
     setState((prev) => {
-      const here = deriveCurrentPosition(prev.events as any[], MAP_W, MAP_H);
-      const zoneId = zoneIdFromTileXY(here.x, here.y);
-
       const roll = Number(payload?.dice?.roll ?? 0);
       const dc = Number(payload?.dice?.dc ?? 0);
       const success = Number.isFinite(roll) && Number.isFinite(dc) ? roll >= dc : false;
-
-      const kind = "contested" as ReturnType<typeof inferOptionKind>;
-
-      const pressureDelta = pressureDeltaFor(kind, success);
-      const awarenessDelta = awarenessDeltaFor(kind, success);
 
       const enrichedOutcome = {
         ...payload,
         meta: {
           ...(payload as any)?.meta,
-          optionKind: kind,
-          zoneId,
+          optionKind: "contested",
+          floorId: location.floorId,
+          roomId: location.roomId,
           success,
         },
       };
 
-      let next = recordEvent(prev, {
-        id: crypto.randomUUID(),
-        timestamp: Date.now(),
-        actor: "arbiter",
-        type: "OUTCOME",
-        payload: enrichedOutcome as any,
+      let next = appendEventToState(prev, "OUTCOME", enrichedOutcome as any);
+
+      next = appendEventToState(next, "LOCATION_PRESSURE_CHANGED", {
+        floorId: location.floorId,
+        roomId: location.roomId,
+        delta: success ? 5 : 11,
       });
 
-      next = recordEvent(next, {
-        id: crypto.randomUUID(),
-        timestamp: Date.now(),
-        actor: "arbiter",
-        type: "ZONE_PRESSURE_CHANGED",
-        payload: { zoneId, delta: clamp01to100(pressureDelta) } as any,
-      });
-
-      next = recordEvent(next, {
-        id: crypto.randomUUID(),
-        timestamp: Date.now(),
-        actor: "arbiter",
-        type: "ZONE_AWARENESS_CHANGED",
-        payload: { zoneId, delta: clamp01to100(awarenessDelta) } as any,
+      next = appendEventToState(next, "LOCATION_AWARENESS_CHANGED", {
+        floorId: location.floorId,
+        roomId: location.roomId,
+        delta: success ? 7 : 14,
       });
 
       return next;
@@ -1544,55 +1462,49 @@ export default function DemoPage() {
   const gameplayAllowsMap = gameplayAllowsPressure && (gameplayFocusStep === "map" || gameplayFocusStep === "action");
   const gameplayAllowsAction = gameplayAllowsPressure && gameplayFocusStep === "action";
 
-  const currentPosition = useMemo(
-    () => deriveCurrentPosition(state.events as any[], MAP_W, MAP_H),
-    [state.events]
-  );
+  const currentRoomTitle = useMemo(() => summarizeRoomTitle(currentRoom), [currentRoom]);
 
-  const currentZoneId = useMemo(
-    () => zoneIdFromTileXY(currentPosition.x, currentPosition.y),
-    [currentPosition]
-  );
+  const roomNarrative = useMemo(() => {
+    const lines: string[] = [];
+    lines.push(`${currentRoomTitle} — ${currentFloor.label}`);
+    if (currentRoom.storyHint) lines.push(currentRoom.storyHint);
+    if (currentFeatures.length > 0) {
+      lines.push(`Known features: ${currentFeatures.map((f) => f.kind.replaceAll("_", " ")).join(", ")}.`);
+    }
+    if (dungeonEvolution.signals.length > 0) {
+      lines.push(dungeonEvolution.signals[0]);
+    }
+    return lines.join(" ");
+  }, [currentRoomTitle, currentFloor.label, currentRoom, currentFeatures, dungeonEvolution.signals]);
 
-  const currentZoneMarks = useMemo(
-    () => deriveMapMarksForZone(state.events as any[], currentZoneId),
-    [state.events, currentZoneId]
-  );
+  const roomConnectionsView = useMemo(() => {
+    return reachableConnections.map((connection) => {
+      const targetRoomId =
+        connection.fromRoomId === currentRoom.id ? connection.toRoomId : connection.fromRoomId;
+      const targetRoom =
+        currentFloor.rooms.find((r) => r.id === targetRoomId) ??
+        dungeon.floors.flatMap((f) => f.rooms).find((r) => r.id === targetRoomId) ??
+        null;
+
+      return {
+        id: connection.id,
+        type: connection.type,
+        targetRoomId,
+        targetLabel: targetRoom?.label ?? targetRoomId,
+        targetType: targetRoom?.roomType ?? "unknown",
+        locked: connection.locked === true || connection.type === "locked_door",
+        note: connection.note ?? null,
+      };
+    });
+  }, [reachableConnections, currentRoom.id, currentFloor.rooms, dungeon.floors]);
 
   const resolutionMovement = useMemo<{
     from?: { x: number; y: number } | null;
     to?: { x: number; y: number } | null;
     direction?: "north" | "south" | "east" | "west" | "none" | null;
   } | null>(() => {
-    if (!selectedOption) return null;
-
-    const intentText = `${playerInput}\n${selectedOption.description}`.trim();
-
-    const inferredDirection: "north" | "south" | "east" | "west" | "none" =
-      explorationDraft.enableMove && explorationDraft.direction !== "none"
-        ? explorationDraft.direction
-        : inferDirection(intentText) ?? "none";
-
-    const from = currentPosition;
-
-    const stepped =
-      inferredDirection !== "none"
-        ? stepFrom(from, inferredDirection)
-        : null;
-
-    const to =
-      stepped && withinBounds(stepped, MAP_W, MAP_H)
-        ? stepped
-        : stepped
-          ? from
-          : null;
-
-    return {
-      from,
-      to,
-      direction: inferredDirection,
-    };
-  }, [selectedOption, playerInput, explorationDraft, currentPosition]);
+    return null;
+  }, []);
 
   const resolutionCombat = useMemo(() => {
     if (!combatActive) return null;
@@ -1609,65 +1521,46 @@ export default function DemoPage() {
   }, [combatActive, activeEnemyOverlayName, enemyTelegraphHint, activeCombatantSpec, isEnemyTurn]);
 
   const combatEncounterContext = useMemo<CombatEncounterContext>(() => {
-    const marksLite = currentZoneMarks.map((m) => ({ kind: m.kind, note: m.note }));
-    const selectedOptionDescription = selectedOption?.description ?? "";
-    const theme = inferEncounterTheme({
-      activeEnemyName: activeEnemyOverlayName ?? activeEnemyOverlayId,
-      playerInput,
-      selectedOptionDescription,
-      marks: marksLite,
-    });
-
+    const roomTheme = currentRoom?.encounterSeed?.theme ?? null;
     const lockState = inferLockState({
+      room: currentRoom,
+      reachableConnections,
       playerInput,
-      selectedOptionDescription,
-      marks: marksLite,
+      selectedOptionDescription: selectedOption?.description ?? "",
     });
 
     const rewardHint = inferRewardHint({
-      marks: marksLite,
+      room: currentRoom,
       playerInput,
-      selectedOptionDescription,
+      selectedOptionDescription: selectedOption?.description ?? "",
     });
 
     const objective = inferObjective({
-      theme,
+      room: currentRoom,
       lockState,
       rewardHint,
     });
 
-    const keyEnemyName =
-      lockState === "locked" || rewardHint === "key"
-        ? defaultKeyEnemyForTheme(theme)
-        : null;
-
-    const relicEnemyName =
-      rewardHint === "relic" || theme === "vault" || theme === "arcane"
-        ? defaultRelicEnemyForTheme(theme)
-        : null;
-
-    const cacheGuardEnemyName =
-      rewardHint === "cache" || rewardHint === "treasure"
-        ? defaultCacheGuardEnemyForTheme(theme)
-        : null;
+    const enemyNames = currentRoom?.encounterSeed?.enemyNames ?? [];
+    const firstEnemy = enemyNames[0] ?? null;
 
     return {
-      zoneId: currentZoneId,
-      zoneTheme: theme,
+      zoneId: `${location.floorId}:${location.roomId}`,
+      zoneTheme: roomTheme,
       objective,
       lockState,
       rewardHint,
-      keyEnemyName,
-      relicEnemyName,
-      cacheGuardEnemyName,
+      keyEnemyName: currentRoom?.encounterSeed?.canCarryKey ? firstEnemy : null,
+      relicEnemyName: currentRoom?.encounterSeed?.canCarryRelic ? firstEnemy : null,
+      cacheGuardEnemyName: currentRoom?.encounterSeed?.canGuardCache ? firstEnemy : null,
     };
   }, [
-    currentZoneId,
-    currentZoneMarks,
-    selectedOption?.description,
+    currentRoom,
+    reachableConnections,
     playerInput,
-    activeEnemyOverlayName,
-    activeEnemyOverlayId,
+    selectedOption?.description,
+    location.floorId,
+    location.roomId,
   ]);
 
   useEffect(() => {
@@ -1848,9 +1741,9 @@ export default function DemoPage() {
               {gameplayFocusStep === "pressure" && (
                 <RitualPromptRow
                   title="The Air Tightens"
-                  body="The party has crossed the threshold. Read the danger state first, then survey the ground before issuing the first command."
-                  actionLabel="Survey the dungeon map"
-                  hint="Pressure first. Space second. Action third."
+                  body="The party has crossed the threshold. Read the danger state first, then survey the place itself before issuing the first command."
+                  actionLabel="Survey the chamber graph"
+                  hint="Danger first. Space second. Action third."
                   onActivate={() => {
                     setGameplayFocusStep("map");
                     setActiveSection("map");
@@ -1860,15 +1753,68 @@ export default function DemoPage() {
               )}
 
               <div id={anchorId("pressure")} style={{ scrollMarginTop: 90 }}>
-                {gameplayAllowsPressure && <DungeonPressurePanel turn={outcomesCount} events={state.events} />}
+                {gameplayAllowsPressure && (
+                  <CardSection title="Dungeon State (Room/Floor Advisory)">
+                    <div style={{ display: "grid", gap: 14 }}>
+                      <div style={{ display: "grid", gap: 4 }}>
+                        <div style={{ fontSize: 18, fontWeight: 900 }}>
+                          {currentRoomTitle}
+                        </div>
+                        <div className="muted" style={{ fontSize: 13 }}>
+                          {currentFloor.label} · {location.floorId} / {location.roomId}
+                        </div>
+                      </div>
+
+                      <div
+                        style={{
+                          padding: 12,
+                          borderRadius: 12,
+                          border: "1px solid rgba(255,255,255,0.10)",
+                          background: "rgba(255,255,255,0.04)",
+                        }}
+                      >
+                        <div style={{ fontWeight: 800, marginBottom: 6 }}>
+                          Condition: {dungeonEvolution.condition} · Apex: {dungeonEvolution.apex}
+                        </div>
+                        <div style={{ fontSize: 12, opacity: 0.8, lineHeight: 1.6 }}>
+                          Room pressure {dungeonEvolution.debug.roomPressure} · Room awareness {dungeonEvolution.debug.roomAwareness} · Nearby pressure {dungeonEvolution.debug.nearbyPressureMax}
+                        </div>
+                      </div>
+
+                      {dungeonEvolution.signals.length > 0 && (
+                        <div
+                          style={{
+                            padding: 12,
+                            borderRadius: 12,
+                            border: "1px solid rgba(255,255,255,0.10)",
+                            background: "rgba(255,255,255,0.03)",
+                          }}
+                        >
+                          <div style={{ fontWeight: 800, marginBottom: 8 }}>Signals</div>
+                          <ul style={{ margin: 0, paddingLeft: 18 }}>
+                            {dungeonEvolution.signals.map((signal, idx) => (
+                              <li key={idx} style={{ marginBottom: 5, lineHeight: 1.5 }}>
+                                {signal}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+
+                      <div className="muted" style={{ fontSize: 12 }}>
+                        Advisory only — canon remains governed by recorded events.
+                      </div>
+                    </div>
+                  </CardSection>
+                )}
               </div>
 
               {gameplayFocusStep === "map" && (
                 <RitualPromptRow
-                  title="The Path Reveals Itself"
-                  body="The dungeon has shape now. Read the terrain, your position, and remembered marks before choosing how the party moves."
+                  title="The Place Resolves"
+                  body="The dungeon is no longer a field of tiles. It is a set of places, routes, and thresholds. Read the room and its exits before acting."
                   actionLabel="Let the first move take shape"
-                  hint="Once the space is clear, command can take the stage."
+                  hint="Rooms create decisions. Doors create tension. Stairs create commitment."
                   onActivate={() => {
                     setGameplayFocusStep("action");
                     setActiveSection("action");
@@ -1879,13 +1825,75 @@ export default function DemoPage() {
 
               <div id={anchorId("map")} style={{ scrollMarginTop: 90 }}>
                 {gameplayAllowsMap && (
-                  <MapSection
-                    events={state.events as any[]}
-                    mapW={MAP_W}
-                    mapH={MAP_H}
-                    activeEnemyGroupName={activeEnemyOverlayName}
-                    playSignal={enemyPlayNonce}
-                  />
+                  <CardSection title="Dungeon Topology (Room Graph View)">
+                    <div style={{ display: "grid", gap: 16 }}>
+                      <div
+                        style={{
+                          padding: 14,
+                          borderRadius: 14,
+                          border: "1px solid rgba(255,255,255,0.10)",
+                          background: "rgba(255,255,255,0.04)",
+                        }}
+                      >
+                        <div style={{ fontSize: 16, fontWeight: 900 }}>{currentRoomTitle}</div>
+                        <div className="muted" style={{ marginTop: 6, lineHeight: 1.6 }}>
+                          {roomNarrative}
+                        </div>
+                      </div>
+
+                      <div style={{ display: "grid", gap: 10 }}>
+                        <div style={{ fontWeight: 800 }}>Exits & Routes</div>
+                        {roomConnectionsView.length === 0 ? (
+                          <div className="muted">No routes are currently available from this room.</div>
+                        ) : (
+                          roomConnectionsView.map((route) => (
+                            <div
+                              key={route.id}
+                              style={{
+                                padding: 12,
+                                borderRadius: 12,
+                                border: "1px solid rgba(255,255,255,0.08)",
+                                background: "rgba(255,255,255,0.03)",
+                              }}
+                            >
+                              <div style={{ fontWeight: 800 }}>
+                                {route.targetLabel}
+                              </div>
+                              <div className="muted" style={{ marginTop: 4, fontSize: 12 }}>
+                                {route.type.replaceAll("_", " ")} · {route.targetType.replaceAll("_", " ")}
+                                {route.locked ? " · locked" : ""}
+                                {route.note ? ` · ${route.note}` : ""}
+                              </div>
+                            </div>
+                          ))
+                        )}
+                      </div>
+
+                      <div style={{ display: "grid", gap: 10 }}>
+                        <div style={{ fontWeight: 800 }}>Known Features</div>
+                        {currentFeatures.length === 0 ? (
+                          <div className="muted">No special room features have been revealed yet.</div>
+                        ) : (
+                          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                            {currentFeatures.map((feature, idx) => (
+                              <span
+                                key={`${feature.kind}-${idx}`}
+                                style={{
+                                  padding: "8px 10px",
+                                  borderRadius: 999,
+                                  border: "1px solid rgba(255,255,255,0.10)",
+                                  background: "rgba(255,255,255,0.04)",
+                                  fontSize: 12,
+                                }}
+                              >
+                                {feature.kind.replaceAll("_", " ")}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </CardSection>
                 )}
               </div>
 
@@ -2011,7 +2019,7 @@ export default function DemoPage() {
                       }}
                       role={role}
                       dmMode={resolutionDmMode}
-                      setupText={playerInput}
+                      setupText={`${playerInput}\n\nCurrent Room: ${currentRoomTitle}`}
                       movement={resolutionMovement}
                       combat={resolutionCombat}
                       rollModifier={actingRollModifier}
