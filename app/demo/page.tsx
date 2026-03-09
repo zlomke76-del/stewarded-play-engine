@@ -72,7 +72,6 @@ import {
   deriveUnlockedDoorIds,
   inferNeighborRoomIds,
   resolveTraversal,
-  buildTraversalNarrativeContext,
   buildRoomExitPayload,
 } from "@/lib/dungeon/DungeonNavigation";
 import { deriveExplorationDiscoveryDrafts } from "@/lib/dungeon/ExplorationDiscovery";
@@ -338,13 +337,6 @@ function appendEventToState(
 
 function hasDungeonInitialized(events: readonly any[]) {
   return events.some((e) => e?.type === "DUNGEON_INITIALIZED");
-}
-
-function deriveCurrentRoom(events: readonly any[], dungeon: DungeonDefinition): DungeonRoom | null {
-  const location = deriveCurrentDungeonLocation(dungeon, events);
-  const floor = dungeon.floors.find((f) => f.id === location.floorId) ?? null;
-  if (!floor) return null;
-  return floor.rooms.find((r) => r.id === location.roomId) ?? null;
 }
 
 function inferConnectionChoiceFromText(
@@ -634,8 +626,6 @@ export default function DemoPage() {
   const [selectedOption, setSelectedOption] = useState<Option | null>(null);
 
   const [actingPlayerId, setActingPlayerId] = useState<string>("player_1");
-
-  const [enemyPlayNonce, setEnemyPlayNonce] = useState(0);
 
   const [enemyTelegraphHint, setEnemyTelegraphHint] = useState<{
     enemyName: string;
@@ -1925,7 +1915,6 @@ export default function DemoPage() {
                     playerNames={effectivePlayerNames}
                     onTelegraph={(info) => {
                       setEnemyTelegraphHint(info);
-                      setEnemyPlayNonce((n) => n + 1);
                     }}
                     onCommitOutcomeOnly={(payload) => handleRecordOutcomeOnly(payload)}
                     onAdvanceTurn={() => advanceTurn()}
