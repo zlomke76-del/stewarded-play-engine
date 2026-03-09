@@ -77,6 +77,10 @@ import {
 import { deriveExplorationDiscoveryDrafts } from "@/lib/dungeon/ExplorationDiscovery";
 import { deriveDungeonEvolution } from "@/lib/dungeon/DungeonEvolution";
 import {
+  resolveRoomImage,
+  resolveTransitionImage,
+} from "@/lib/dungeon/DungeonVisualResolver";
+import {
   describeRoomEntry,
   describeRoomExits,
   describeRoomFeatures,
@@ -1253,14 +1257,46 @@ export default function DemoPage() {
   const currentFeatures = useMemo(() => currentRoomFeatureLite(currentRoom), [currentRoom]);
   const narrationFeatures = useMemo(() => toNarrationFeatures(currentFeatures), [currentFeatures]);
 
+  const currentRoomTitle = useMemo(() => summarizeRoomTitle(currentRoom), [currentRoom]);
+
+  const roomImage = useMemo(() => {
+    return resolveRoomImage({
+      dungeonSeed: dungeon.seed,
+      floorTheme: currentFloor.theme,
+      room: currentRoom,
+    });
+  }, [dungeon.seed, currentFloor.theme, currentRoom]);
+
   const roomConnectionsView = useMemo(() => {
+    const allRooms = dungeon.floors.flatMap((f) => f.rooms);
+
     return reachableConnections.map((connection) => {
       const targetRoomId =
         connection.fromRoomId === currentRoom.id ? connection.toRoomId : connection.fromRoomId;
+
+      const targetFloor =
+        dungeon.floors.find((floor) =>
+          floor.rooms.some((room) => room.id === targetRoomId)
+        ) ?? null;
+
       const targetRoom =
         currentFloor.rooms.find((r) => r.id === targetRoomId) ??
-        dungeon.floors.flatMap((f) => f.rooms).find((r) => r.id === targetRoomId) ??
+        allRooms.find((r) => r.id === targetRoomId) ??
         null;
+
+      const previewImage =
+        connection.type === "stairs"
+          ? resolveTransitionImage({
+              dungeonSeed: dungeon.seed,
+              fromFloorTheme: currentFloor.theme,
+              toFloorTheme: targetFloor?.theme ?? currentFloor.theme,
+              direction: connection.note === "up" ? "up" : "down",
+            })
+          : resolveRoomImage({
+              dungeonSeed: dungeon.seed,
+              floorTheme: targetFloor?.theme ?? currentFloor.theme,
+              room: targetRoom,
+            });
 
       return {
         id: connection.id,
@@ -1270,9 +1306,10 @@ export default function DemoPage() {
         targetType: targetRoom?.roomType ?? "unknown",
         locked: connection.locked === true || connection.type === "locked_door",
         note: connection.note ?? null,
+        previewImage,
       };
     });
-  }, [reachableConnections, currentRoom.id, currentFloor.rooms, dungeon.floors]);
+  }, [reachableConnections, currentRoom.id, currentFloor.rooms, currentFloor.theme, dungeon.floors, dungeon.seed]);
 
   const narrationExits = useMemo(
     () =>
@@ -1629,8 +1666,6 @@ export default function DemoPage() {
   const gameplayAllowsPressure = showGameplay && allowGameplay;
   const gameplayAllowsMap = gameplayAllowsPressure && (gameplayFocusStep === "map" || gameplayFocusStep === "action");
   const gameplayAllowsAction = gameplayAllowsPressure && gameplayFocusStep === "action";
-
-  const currentRoomTitle = useMemo(() => summarizeRoomTitle(currentRoom), [currentRoom]);
 
   const roomNarrative = useMemo(() => {
     return describeRoomEntry({
@@ -2060,9 +2095,26 @@ export default function DemoPage() {
                           borderRadius: 14,
                           border: "1px solid rgba(255,255,255,0.10)",
                           background: "rgba(255,255,255,0.04)",
+                          display: "grid",
+                          gap: 12,
                         }}
                       >
+                        {roomImage ? (
+                          <img
+                            src={roomImage}
+                            alt={currentRoomTitle}
+                            style={{
+                              width: "100%",
+                              maxHeight: 320,
+                              objectFit: "cover",
+                              borderRadius: 12,
+                              display: "block",
+                            }}
+                          />
+                        ) : null}
+
                         <div style={{ fontSize: 16, fontWeight: 900 }}>{currentRoomTitle}</div>
+
                         <div className="muted" style={{ marginTop: 8, lineHeight: 1.7, whiteSpace: "pre-line" }}>
                           {roomNarrative}
                         </div>
@@ -2125,11 +2177,28 @@ export default function DemoPage() {
                                   borderRadius: 12,
                                   border: "1px solid rgba(255,255,255,0.08)",
                                   background: "rgba(255,255,255,0.03)",
+                                  display: "grid",
+                                  gap: 10,
                                 }}
                               >
+                                {route.previewImage ? (
+                                  <img
+                                    src={route.previewImage}
+                                    alt={route.targetLabel}
+                                    style={{
+                                      width: "100%",
+                                      maxHeight: 140,
+                                      objectFit: "cover",
+                                      borderRadius: 10,
+                                      display: "block",
+                                    }}
+                                  />
+                                ) : null}
+
                                 <div style={{ fontWeight: 800 }}>
                                   {route.targetLabel}
                                 </div>
+
                                 <div className="muted" style={{ marginTop: 4, fontSize: 12 }}>
                                   {route.type.replaceAll("_", " ")} · {route.targetType.replaceAll("_", " ")}
                                   {route.locked ? " · locked" : ""}
