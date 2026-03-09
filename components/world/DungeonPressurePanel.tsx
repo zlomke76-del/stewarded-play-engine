@@ -7,21 +7,17 @@
 // NO authority, NO mutation, NO automation.
 //
 // Purpose:
-// - Make zone pressure + awareness visible (D&D-friendly)
-// - Show nearby heat (adjacent zones)
+// - Make zone pressure + awareness visible
+// - Show nearby heat
 // - Recommend (never assert) current location/zone
 // - Preserve Arbiter authority
 //
 // Upgrade:
-// - Integrates DungeonEvolution (dragon/apex pacing + dungeon condition) as
-//   a READ-ONLY, deterministic layer derived from canon events.
-// - Environmental Memory now derives from discovery + pressure + patrol +
-//   outcome signals instead of only narrow OUTCOME.world fields.
-// - Adds advisory zone naming so player-facing location language feels more
-//   atmospheric while preserving the mechanical zone id.
-// - Adds a tactical recommendation layer that interprets current zone state
-//   into a single advisory read without automating play.
-// - Adds low-rumble SFX on meaningful danger escalation.
+// - Integrates DungeonEvolution as a READ-ONLY deterministic layer
+// - Environmental Memory derives from discovery + pressure + patrol +
+//   outcome signals
+// - Adds tactical recommendation layer
+// - Adds low-rumble SFX on meaningful danger escalation
 // ------------------------------------------------------------
 
 import React, { useEffect, useMemo, useRef } from "react";
@@ -39,14 +35,8 @@ type SessionEvent = {
 
 type Props = {
   turn: number;
-
-  // Canonical room (if your canon has it). This panel will respect it as a label,
-  // but zone mechanics are derived independently from movement/map.
   currentRoomId?: string;
-
   events: readonly SessionEvent[];
-
-  // Optional, advisory-only
   parsedCommand?: any;
 };
 
@@ -73,6 +63,20 @@ function safeStr(x: any): string | null {
   return typeof x === "string" && x.trim() ? x.trim() : null;
 }
 
+function titleCase(input: string) {
+  return String(input)
+    .split(/[_\s-]+/g)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
+function prettyRoomLabel(roomId?: string) {
+  const raw = safeStr(roomId);
+  if (!raw) return null;
+  return titleCase(raw);
+}
+
 function parseZoneId(zoneId: string): ZoneCoord | null {
   const m = /^(\-?\d+),(\-?\d+)$/.exec(zoneId.trim());
   if (!m) return null;
@@ -97,10 +101,10 @@ function adjacentZones(zoneId: ZoneId): ZoneId[] {
   if (!c) return [];
   const { zx, zy } = c;
   return [
-    makeZoneId(zx, zy - 1), // N
-    makeZoneId(zx, zy + 1), // S
-    makeZoneId(zx - 1, zy), // W
-    makeZoneId(zx + 1, zy), // E
+    makeZoneId(zx, zy - 1),
+    makeZoneId(zx, zy + 1),
+    makeZoneId(zx - 1, zy),
+    makeZoneId(zx + 1, zy),
   ];
 }
 
@@ -149,9 +153,7 @@ function playDangerRumble(volume = 0.42) {
   try {
     const audio = new Audio(DANGER_RUMBLE_SRC);
     audio.volume = volume;
-    void audio.play().catch(() => {
-      // fail silently
-    });
+    void audio.play().catch(() => {});
   } catch {
     // fail silently
   }
@@ -236,7 +238,7 @@ function derivePlayerPosition(events: readonly SessionEvent[]): XY | null {
 }
 
 // ------------------------------------------------------------
-// Pressure + awareness derivation (preferred: canonical events)
+// Pressure + awareness derivation
 // ------------------------------------------------------------
 
 type ZonePressureState = {
@@ -304,7 +306,7 @@ function deriveZoneAwareness(events: readonly SessionEvent[], pressure: ZonePres
 }
 
 // ------------------------------------------------------------
-// Advisory location inference (only used if no movement & no canon)
+// Advisory location inference
 // ------------------------------------------------------------
 
 function recommendLocation(parsedCommand?: any): { label: string; reason: string } {
@@ -864,7 +866,9 @@ function deriveEnvironmentalMemory(args: {
       hasLockedPath: obstacleItems.some((x) => /locked|barrier|sealed|door/i.test(x)),
       hasHazard: threatItems.some((x) => /hazard|trap|unsafe|danger/i.test(x)),
       hasOpportunity: opportunityItems.length > 0,
-      hasPatrolRisk: threatItems.some((x) => /enemy movement|awareness|alarm|probing/i.test(x)) || nearbyItems.some((x) => /patrol|pressure|tension/i.test(x)),
+      hasPatrolRisk:
+        threatItems.some((x) => /enemy movement|awareness|alarm|probing/i.test(x)) ||
+        nearbyItems.some((x) => /patrol|pressure|tension/i.test(x)),
       hasRecentShift: recentItems.length > 0,
     },
   };
@@ -943,7 +947,7 @@ function deriveTacticalRecommendation(args: {
     };
   }
 
-  if (evolution.condition === "Dire" || evolution.condition === "Hostile") {
+  if (evolution.condition === "Warped" || evolution.condition === "Unstable") {
     return {
       priority: "guidance",
       headline: "The dungeon's broader condition is worsening.",
@@ -1187,7 +1191,7 @@ export default function DungeonPressurePanel({ turn, currentRoomId, events, pars
   const location = useMemo(() => {
     if (currentRoomId) {
       return {
-        title: currentRoomId,
+        title: prettyRoomLabel(currentRoomId) ?? currentRoomId,
         subtitle: `Zone ${zoneId}`,
         canonical: true,
         reason: "Confirmed by recorded canon.",
@@ -1310,11 +1314,9 @@ export default function DungeonPressurePanel({ turn, currentRoomId, events, pars
         (currentSnapshot.tacticalPriority === "warning" || currentSnapshot.tacticalPriority === "blocker")) ||
       (prev.tacticalPriority === "warning" && currentSnapshot.tacticalPriority === "blocker");
 
-const evolutionConditionLabel = String(currentSnapshot.evolutionCondition);
-
-const evolutionEscalated =
-  prev.evolutionCondition !== currentSnapshot.evolutionCondition &&
-  (evolutionConditionLabel === "Hostile" || evolutionConditionLabel === "Dire");
+    const evolutionEscalated =
+      prev.evolutionCondition !== currentSnapshot.evolutionCondition &&
+      (currentSnapshot.evolutionCondition === "Unstable" || currentSnapshot.evolutionCondition === "Warped");
 
     if (pressureEscalated || awarenessEscalated || nearbyEscalated || tacticalEscalated || evolutionEscalated) {
       playDangerRumble();
