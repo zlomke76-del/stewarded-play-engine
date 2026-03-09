@@ -3,31 +3,18 @@
 // ------------------------------------------------------------
 // ExplorationMapPanel (READ-ONLY)
 // ------------------------------------------------------------
-// Event-sourced fog-of-war visualization.
-// - Derives position + discovered tiles + marks purely from events
-// - NO controls here (movement/reveal/mark are drafted+committed via resolution)
-// - Soft discovery chime plays only when canon discovery expands after mount
+// Room/Floor canon map renderer for Echoes of Fate.
+// - Derives discovered rooms, connections, doors, features, and current room
+//   purely from canon events
+// - NO controls here
+// - Soft discovery chime plays only when discovery expands after mount
+//
+// This replaces the old tile-grid visualization with a room graph view.
 // ------------------------------------------------------------
 
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, type CSSProperties, type ReactNode } from "react";
 import type { SessionEvent } from "@/lib/session/SessionState";
 import CardSection from "@/components/layout/CardSection";
-
-type XY = { x: number; y: number };
-
-export type MapMarkKind = "door" | "stairs" | "altar" | "cache" | "hazard";
-
-type PlayerMovedPayload = { from: XY; to: XY };
-type MapRevealedPayload = { tiles: XY[] };
-type MapMarkedPayload = { at: XY; kind: MapMarkKind; note?: string | null };
-
-type MapMark = {
-  at: XY;
-  kind: MapMarkKind;
-  note?: string | null;
-  eventId: string;
-  timestamp: number;
-};
 
 type Props = {
   events: readonly SessionEvent[];
@@ -35,59 +22,148 @@ type Props = {
   mapH?: number;
 };
 
-function keyXY(p: XY) {
-  return `${p.x},${p.y}`;
-}
+type RoomGraphRoom = {
+  floorId: string;
+  roomId: string;
+  roomType: string | null;
+  revealedAt: number;
+  enteredAt: number | null;
+};
 
-function withinBounds(p: XY, w: number, h: number) {
-  return p.x >= 0 && p.y >= 0 && p.x < w && p.y < h;
-}
+type RoomGraphConnection = {
+  connectionId: string;
+  floorId: string;
+  fromRoomId: string;
+  toRoomId: string;
+  connectionType: string;
+  discoveredAt: number;
+};
 
-/* ------------------------------------------------------------
-   Asset routing (your uploads live in /public/assets/v1/*)
------------------------------------------------------------- */
+type DoorState = {
+  doorId: string;
+  floorId: string;
+  roomId: string;
+  connectionId: string | null;
+  locked: boolean;
+  opened: boolean;
+  note: string | null;
+};
+
+type RoomFeature = {
+  floorId: string;
+  roomId: string;
+  featureKind: string;
+  note: string | null;
+  timestamp: number;
+};
+
+type DerivedGraphState = {
+  currentFloorId: string | null;
+  currentRoomId: string | null;
+  floorsInOrder: string[];
+  currentFloorRooms: RoomGraphRoom[];
+  currentFloorConnections: RoomGraphConnection[];
+  roomFeaturesByRoom: Map<string, RoomFeature[]>;
+  doorByConnectionId: Map<string, DoorState>;
+  discoveredRoomCount: number;
+  discoveredConnectionCount: number;
+  discoveredFeatureCount: number;
+};
+
+type PositionedRoom = RoomGraphRoom & {
+  x: number;
+  y: number;
+};
 
 const ASSET_BASE = "/assets/v1";
 const DISCOVERY_CHIME_SRC = "/assets/audio/sfx_soft_chime_01.mp3";
 
-function assetForPlayer(): { src: string; label: string } {
-  return { src: `${ASSET_BASE}/player_rogue.png`, label: "Player" };
+const NODE_W = 170;
+const NODE_H = 76;
+const COL_GAP = 84;
+const ROW_GAP = 34;
+const PAD_X = 28;
+const PAD_Y = 24;
+
+function roomKey(floorId: string, roomId: string) {
+  return `${floorId}::${roomId}`;
 }
 
-function assetForMark(kind: MapMarkKind): { src: string; label: string } | null {
+function clamp(n: number, lo: number, hi: number) {
+  return Math.max(lo, Math.min(hi, n));
+}
+
+function safeStr(x: unknown): string | null {
+  return typeof x === "string" && x.trim() ? x.trim() : null;
+}
+
+function safeNum(x: unknown): number | null {
+  return typeof x === "number" && Number.isFinite(x) ? x : null;
+}
+
+function titleCase(input: string) {
+  return input
+    .split(/[_\s-]+/g)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
+function labelForFloor(floorId: string) {
+  const m = /floor[_-]?(\d+)/i.exec(floorId);
+  if (m) return `Floor ${m[1]}`;
+  return titleCase(floorId);
+}
+
+function labelForRoom(roomId: string, roomType?: string | null) {
+  if (roomType && roomType.trim()) {
+    const nice = titleCase(roomType);
+    if (nice.toLowerCase() !== "room") return nice;
+  }
+
+  const tail = roomId
+    .split(/[_-]+/)
+    .filter(Boolean)
+    .slice(-2)
+    .join(" ");
+
+  return tail ? titleCase(tail) : titleCase(roomId);
+}
+
+function labelForConnectionType(kind: string) {
   switch (kind) {
+    case "corridor":
+      return "Corridor";
     case "door":
-      return { src: `${ASSET_BASE}/map_door.png`, label: "Door" };
+      return "Door";
+    case "locked_door":
+      return "Locked Door";
     case "stairs":
-      return { src: `${ASSET_BASE}/map_stairs.png`, label: "Stairs" };
-    case "altar":
-      return { src: `${ASSET_BASE}/map_altar.png`, label: "Altar" };
-    case "cache":
-      return { src: `${ASSET_BASE}/map_treasure.png`, label: "Cache" };
-    case "hazard":
-      return { src: `${ASSET_BASE}/map_danger.png`, label: "Hazard" };
+      return "Stairs";
+    case "secret":
+      return "Secret";
     default:
-      return null;
+      return titleCase(kind);
   }
 }
 
-function isXY(value: any): value is XY {
-  return value && typeof value.x === "number" && typeof value.y === "number";
+function iconForFeature(kind: string): string {
+  const k = kind.toLowerCase();
+
+  if (k.includes("stairs")) return "⇩";
+  if (k.includes("altar") || k.includes("shrine")) return "★";
+  if (k.includes("cache") || k.includes("treasure") || k.includes("vault") || k.includes("relic")) return "💰";
+  if (k.includes("hazard") || k.includes("trap")) return "⚠";
+  if (k.includes("boss")) return "☠";
+  if (k.includes("door")) return "🔒";
+  if (k.includes("enemy") || k.includes("guard") || k.includes("beast")) return "⚔";
+  if (k.includes("ritual")) return "✦";
+
+  return "•";
 }
 
-function createMark(
-  at: XY,
-  kind: MapMarkKind,
-  e: any,
-  note?: string | null
-): MapMark {
-  return {
-    at: { x: at.x, y: at.y },
-    kind,
-    note: typeof note === "string" && note.trim() ? note.trim() : null,
-    eventId: String(e?.id ?? ""),
-    timestamp: Number(e?.timestamp ?? Date.now()),
-  };
+function assetForPlayer(): { src: string; label: string } {
+  return { src: `${ASSET_BASE}/player_rogue.png`, label: "Player" };
 }
 
 function playDiscoveryChime(volume = 0.38) {
@@ -102,155 +178,329 @@ function playDiscoveryChime(volume = 0.38) {
   }
 }
 
-function deriveMapState(events: readonly SessionEvent[], w: number, h: number) {
-  // Deterministic start: middle of the grid
-  let position: XY = { x: Math.floor(w / 2), y: Math.floor(h / 2) };
-  const discovered = new Set<string>();
-  const marksByTile = new Map<string, MapMark>();
+function deriveGraphState(events: readonly SessionEvent[]): DerivedGraphState {
+  const rooms = new Map<string, RoomGraphRoom>();
+  const connections = new Map<string, RoomGraphConnection>();
+  const doorByConnectionId = new Map<string, DoorState>();
+  const roomFeaturesByRoom = new Map<string, RoomFeature[]>();
+  const floorOrder = new Map<string, number>();
 
-  discovered.add(keyXY(position));
+  let currentFloorId: string | null = null;
+  let currentRoomId: string | null = null;
 
-  for (const e of events as any[]) {
-    if (e?.type === "PLAYER_MOVED") {
-      const p = e.payload as PlayerMovedPayload;
-      if (p?.to && withinBounds(p.to, w, h)) {
-        position = { x: p.to.x, y: p.to.y };
-        discovered.add(keyXY(position));
+  for (const e of events as Array<SessionEvent & { payload?: Record<string, unknown> }>) {
+    const p = e?.payload ?? {};
+    const ts = safeNum(e?.timestamp) ?? Date.now();
+
+    if (e?.type === "FLOOR_INITIALIZED") {
+      const floorId = safeStr(p.floorId);
+      const floorIndex = safeNum(p.floorIndex);
+      if (floorId) {
+        floorOrder.set(floorId, floorIndex ?? floorOrder.size);
       }
+      continue;
     }
 
-    if (e?.type === "MAP_REVEALED") {
-      const p = e.payload as MapRevealedPayload;
-      const tiles = Array.isArray(p?.tiles) ? p.tiles : [];
-      for (const t of tiles) {
-        if (t && withinBounds(t, w, h)) discovered.add(keyXY(t));
+    if (e?.type === "FLOOR_CHANGED") {
+      const floorId = safeStr(p.toFloorId) ?? safeStr(p.floorId);
+      const roomId = safeStr(p.toRoomId) ?? safeStr(p.roomId);
+
+      if (floorId) currentFloorId = floorId;
+      if (roomId) currentRoomId = roomId;
+      continue;
+    }
+
+    if (e?.type === "ROOM_REVEALED") {
+      const floorId = safeStr(p.floorId);
+      const roomId = safeStr(p.roomId);
+      const roomType = safeStr(p.roomType);
+
+      if (!floorId || !roomId) continue;
+
+      const key = roomKey(floorId, roomId);
+      const prev = rooms.get(key);
+
+      rooms.set(key, {
+        floorId,
+        roomId,
+        roomType: roomType ?? prev?.roomType ?? null,
+        revealedAt: prev ? Math.min(prev.revealedAt, ts) : ts,
+        enteredAt: prev?.enteredAt ?? null,
+      });
+
+      if (!floorOrder.has(floorId)) floorOrder.set(floorId, floorOrder.size);
+      continue;
+    }
+
+    if (e?.type === "ROOM_ENTERED") {
+      const floorId = safeStr(p.floorId);
+      const roomId = safeStr(p.roomId);
+      const roomType = safeStr(p.roomType);
+
+      if (!floorId || !roomId) continue;
+
+      const key = roomKey(floorId, roomId);
+      const prev = rooms.get(key);
+
+      rooms.set(key, {
+        floorId,
+        roomId,
+        roomType: roomType ?? prev?.roomType ?? null,
+        revealedAt: prev?.revealedAt ?? ts,
+        enteredAt: ts,
+      });
+
+      currentFloorId = floorId;
+      currentRoomId = roomId;
+
+      if (!floorOrder.has(floorId)) floorOrder.set(floorId, floorOrder.size);
+      continue;
+    }
+
+    if (e?.type === "ROOM_CONNECTION_DISCOVERED") {
+      const floorId = safeStr(p.floorId);
+      const fromRoomId = safeStr(p.fromRoomId);
+      const toRoomId = safeStr(p.toRoomId);
+      const connectionId = safeStr(p.connectionId);
+      const connectionType = safeStr(p.connectionType) ?? "corridor";
+
+      if (!floorId || !fromRoomId || !toRoomId || !connectionId) continue;
+
+      connections.set(connectionId, {
+        connectionId,
+        floorId,
+        fromRoomId,
+        toRoomId,
+        connectionType,
+        discoveredAt: ts,
+      });
+
+      if (!floorOrder.has(floorId)) floorOrder.set(floorId, floorOrder.size);
+      continue;
+    }
+
+    if (e?.type === "DOOR_DISCOVERED") {
+      const floorId = safeStr(p.floorId);
+      const roomId = safeStr(p.roomId);
+      const connectionId = safeStr(p.connectionId);
+      const doorId = safeStr(p.doorId);
+
+      if (!floorId || !roomId || !doorId) continue;
+
+      if (connectionId) {
+        const prev = doorByConnectionId.get(connectionId);
+        doorByConnectionId.set(connectionId, {
+          doorId,
+          floorId,
+          roomId,
+          connectionId,
+          locked: Boolean(p.locked) || prev?.locked === true,
+          opened: prev?.opened === true,
+          note: safeStr(p.note) ?? prev?.note ?? null,
+        });
       }
-    }
-
-    if (e?.type === "MAP_MARKED") {
-      const p = e.payload as MapMarkedPayload;
-      if (!p?.at || typeof p.at.x !== "number" || typeof p.at.y !== "number") continue;
-      if (!withinBounds(p.at, w, h)) continue;
-
-      const kind = p.kind as MapMarkKind;
-      if (!kind) continue;
-
-      const k = keyXY(p.at);
-      marksByTile.set(k, createMark(p.at, kind, e, p.note));
-      discovered.add(k);
       continue;
     }
 
-    if (e?.type === "DOOR_DISCOVERED" || e?.type === "DOOR_LOCKED") {
-      const p = e?.payload ?? {};
-      const at = p?.at;
+    if (e?.type === "DOOR_UNLOCKED" || e?.type === "DOOR_OPENED") {
+      const connectionId = safeStr(p.connectionId);
+      if (!connectionId) continue;
 
-      if (!isXY(at) || !withinBounds(at, w, h)) continue;
+      const prev = doorByConnectionId.get(connectionId);
+      if (!prev) continue;
 
-      const k = keyXY(at);
-      const note =
-        e.type === "DOOR_LOCKED"
-          ? typeof p?.note === "string" && p.note.trim()
-            ? p.note
-            : "locked"
-          : typeof p?.note === "string"
-            ? p.note
-            : null;
-
-      marksByTile.set(k, createMark(at, "door", e, note));
-      discovered.add(k);
+      doorByConnectionId.set(connectionId, {
+        ...prev,
+        locked: e.type === "DOOR_UNLOCKED" ? false : prev.locked,
+        opened: e.type === "DOOR_OPENED" ? true : prev.opened,
+      });
       continue;
     }
 
-    if (e?.type === "HAZARD_REVEALED") {
-      const p = e?.payload ?? {};
-      const at = p?.at;
+    if (e?.type === "ROOM_FEATURE_REVEALED") {
+      const floorId = safeStr(p.floorId);
+      const roomId = safeStr(p.roomId);
+      const featureKind = safeStr(p.featureKind);
 
-      if (!isXY(at) || !withinBounds(at, w, h)) continue;
+      if (!floorId || !roomId || !featureKind) continue;
 
-      const k = keyXY(at);
-      const note =
-        typeof p?.hazardType === "string" && p.hazardType.trim()
-          ? p.hazardType
-          : typeof p?.note === "string"
-            ? p.note
-            : null;
-
-      marksByTile.set(k, createMark(at, "hazard", e, note));
-      discovered.add(k);
+      const key = roomKey(floorId, roomId);
+      const arr = roomFeaturesByRoom.get(key) ?? [];
+      if (!arr.some((f) => f.featureKind === featureKind)) {
+        arr.push({
+          floorId,
+          roomId,
+          featureKind,
+          note: safeStr(p.note) ?? null,
+          timestamp: ts,
+        });
+        roomFeaturesByRoom.set(key, arr);
+      }
       continue;
     }
 
-    if (e?.type === "CACHE_REVEALED") {
-      const p = e?.payload ?? {};
-      const at = p?.at;
+    if (e?.type === "STAIRS_DISCOVERED") {
+      const floorId = safeStr(p.floorId);
+      const roomId = safeStr(p.roomId);
+      if (!floorId || !roomId) continue;
 
-      if (!isXY(at) || !withinBounds(at, w, h)) continue;
-
-      const k = keyXY(at);
-      const note =
-        typeof p?.cacheType === "string" && p.cacheType.trim()
-          ? p.cacheType
-          : typeof p?.note === "string"
-            ? p.note
-            : null;
-
-      marksByTile.set(k, createMark(at, "cache", e, note));
-      discovered.add(k);
-      continue;
-    }
-
-    if (e?.type === "ALTAR_REVEALED") {
-      const p = e?.payload ?? {};
-      const at = p?.at;
-
-      if (!isXY(at) || !withinBounds(at, w, h)) continue;
-
-      const k = keyXY(at);
-      const note = typeof p?.note === "string" ? p.note : null;
-
-      marksByTile.set(k, createMark(at, "altar", e, note));
-      discovered.add(k);
-      continue;
-    }
-
-    if (e?.type === "STAIRS_REVEALED") {
-      const p = e?.payload ?? {};
-      const at = p?.at;
-
-      if (!isXY(at) || !withinBounds(at, w, h)) continue;
-
-      const k = keyXY(at);
-      const note = typeof p?.note === "string" ? p.note : null;
-
-      marksByTile.set(k, createMark(at, "stairs", e, note));
-      discovered.add(k);
-      continue;
-    }
-
-    if (e?.type === "PATROL_SIGNS_REVEALED") {
-      const p = e?.payload ?? {};
-      const at = p?.at;
-
-      if (!isXY(at) || !withinBounds(at, w, h)) continue;
-
-      const k = keyXY(at);
-      const note =
-        typeof p?.note === "string" && p.note.trim()
-          ? p.note
-          : "patrol signs";
-
-      marksByTile.set(k, createMark(at, "hazard", e, note));
-      discovered.add(k);
+      const key = roomKey(floorId, roomId);
+      const arr = roomFeaturesByRoom.get(key) ?? [];
+      if (!arr.some((f) => f.featureKind === "stairs")) {
+        arr.push({
+          floorId,
+          roomId,
+          featureKind: "stairs",
+          note: safeStr(p.direction) ?? null,
+          timestamp: ts,
+        });
+        roomFeaturesByRoom.set(key, arr);
+      }
       continue;
     }
   }
 
-  const marks = Array.from(marksByTile.values());
-  return { position, discovered, marksByTile, marks };
+  const floorsInOrder = Array.from(floorOrder.entries())
+    .sort((a, b) => a[1] - b[1])
+    .map(([floorId]) => floorId);
+
+  const activeFloorId =
+    currentFloorId ??
+    floorsInOrder[0] ??
+    Array.from(rooms.values())[0]?.floorId ??
+    null;
+
+  const currentFloorRooms = Array.from(rooms.values())
+    .filter((room) => room.floorId === activeFloorId)
+    .sort((a, b) => a.revealedAt - b.revealedAt);
+
+  const currentFloorConnections = Array.from(connections.values())
+    .filter((connection) => connection.floorId === activeFloorId)
+    .sort((a, b) => a.discoveredAt - b.discoveredAt);
+
+  const discoveredFeatureCount = Array.from(roomFeaturesByRoom.values()).reduce(
+    (acc, arr) => acc + arr.length,
+    0
+  );
+
+  return {
+    currentFloorId: activeFloorId,
+    currentRoomId,
+    floorsInOrder,
+    currentFloorRooms,
+    currentFloorConnections,
+    roomFeaturesByRoom,
+    doorByConnectionId,
+    discoveredRoomCount: rooms.size,
+    discoveredConnectionCount: connections.size,
+    discoveredFeatureCount,
+  };
 }
 
-function LegendChip({ label, swatch }: { label: string; swatch: React.ReactNode }) {
+function buildRoomLayout(
+  rooms: RoomGraphRoom[],
+  connections: RoomGraphConnection[],
+  currentRoomId: string | null
+): {
+  positionedRooms: PositionedRoom[];
+  width: number;
+  height: number;
+} {
+  if (rooms.length === 0) {
+    return { positionedRooms: [], width: 0, height: 0 };
+  }
+
+  const roomById = new Map<string, RoomGraphRoom>(rooms.map((r) => [r.roomId, r]));
+  const adjacency = new Map<string, string[]>();
+
+  for (const room of rooms) adjacency.set(room.roomId, []);
+
+  for (const connection of connections) {
+    if (!roomById.has(connection.fromRoomId) || !roomById.has(connection.toRoomId)) continue;
+    adjacency.get(connection.fromRoomId)?.push(connection.toRoomId);
+    adjacency.get(connection.toRoomId)?.push(connection.fromRoomId);
+  }
+
+  const root =
+    (currentRoomId && roomById.has(currentRoomId) ? currentRoomId : null) ??
+    rooms.find((r) => r.enteredAt !== null)?.roomId ??
+    rooms[0]?.roomId;
+
+  const depthById = new Map<string, number>();
+  const queue: string[] = [];
+
+  if (root) {
+    depthById.set(root, 0);
+    queue.push(root);
+
+    while (queue.length > 0) {
+      const id = queue.shift()!;
+      const depth = depthById.get(id) ?? 0;
+      const neighbors = adjacency.get(id) ?? [];
+
+      for (const nextId of neighbors) {
+        if (depthById.has(nextId)) continue;
+        depthById.set(nextId, depth + 1);
+        queue.push(nextId);
+      }
+    }
+  }
+
+  let spillDepth = Math.max(0, ...Array.from(depthById.values()));
+  for (const room of rooms) {
+    if (!depthById.has(room.roomId)) {
+      spillDepth += 1;
+      depthById.set(room.roomId, spillDepth);
+    }
+  }
+
+  const columns = new Map<number, RoomGraphRoom[]>();
+  for (const room of rooms) {
+    const depth = depthById.get(room.roomId) ?? 0;
+    const col = columns.get(depth) ?? [];
+    col.push(room);
+    columns.set(depth, col);
+  }
+
+  const sortedDepths = Array.from(columns.keys()).sort((a, b) => a - b);
+  const positionedRooms: PositionedRoom[] = [];
+
+  for (const depth of sortedDepths) {
+    const colRooms = (columns.get(depth) ?? []).slice().sort((a, b) => {
+      const aScore = a.enteredAt ?? a.revealedAt;
+      const bScore = b.enteredAt ?? b.revealedAt;
+      return aScore - bScore;
+    });
+
+    const totalH = colRooms.length * NODE_H + Math.max(0, colRooms.length - 1) * ROW_GAP;
+
+    colRooms.forEach((room, idx) => {
+      const x = PAD_X + depth * (NODE_W + COL_GAP);
+      const y = PAD_Y + idx * (NODE_H + ROW_GAP) + 12;
+
+      positionedRooms.push({
+        ...room,
+        x,
+        y,
+      });
+    });
+
+    if (totalH > 0) {
+      void totalH;
+    }
+  }
+
+  const maxX = Math.max(...positionedRooms.map((r) => r.x + NODE_W), PAD_X + NODE_W);
+  const maxY = Math.max(...positionedRooms.map((r) => r.y + NODE_H), PAD_Y + NODE_H);
+
+  return {
+    positionedRooms,
+    width: maxX + PAD_X,
+    height: maxY + PAD_Y,
+  };
+}
+
+function LegendChip({ label, swatch }: { label: string; swatch: ReactNode }) {
   return (
     <span
       style={{
@@ -282,7 +532,7 @@ function IconImg({
   src: string;
   alt: string;
   size: number;
-  style?: React.CSSProperties;
+  style?: CSSProperties;
 }) {
   return (
     <img
@@ -304,22 +554,31 @@ function IconImg({
 }
 
 export default function ExplorationMapPanel({ events, mapW = 13, mapH = 9 }: Props) {
-  const derived = useMemo(() => deriveMapState(events, mapW, mapH), [events, mapW, mapH]);
+  void mapW;
+  void mapH;
+
+  const derived = useMemo(() => deriveGraphState(events), [events]);
+  const layout = useMemo(
+    () => buildRoomLayout(derived.currentFloorRooms, derived.currentFloorConnections, derived.currentRoomId),
+    [derived.currentFloorRooms, derived.currentFloorConnections, derived.currentRoomId]
+  );
 
   const hasMountedRef = useRef(false);
   const lastSnapshotRef = useRef<{
-    discoveredCount: number;
-    markCount: number;
+    discoveredRoomCount: number;
+    discoveredConnectionCount: number;
+    discoveredFeatureCount: number;
     lastEventId: string | null;
   } | null>(null);
 
   useEffect(() => {
     const lastEventId =
-      events.length > 0 ? String((events[events.length - 1] as any)?.id ?? "") : null;
+      events.length > 0 ? String((events[events.length - 1] as SessionEvent)?.id ?? "") : null;
 
     const currentSnapshot = {
-      discoveredCount: derived.discovered.size,
-      markCount: derived.marks.length,
+      discoveredRoomCount: derived.discoveredRoomCount,
+      discoveredConnectionCount: derived.discoveredConnectionCount,
+      discoveredFeatureCount: derived.discoveredFeatureCount,
       lastEventId,
     };
 
@@ -333,25 +592,34 @@ export default function ExplorationMapPanel({ events, mapW = 13, mapH = 9 }: Pro
     lastSnapshotRef.current = currentSnapshot;
     if (!prev) return;
 
-    const discoveredIncreased = currentSnapshot.discoveredCount > prev.discoveredCount;
-    const marksIncreased = currentSnapshot.markCount > prev.markCount;
+    const roomsIncreased = currentSnapshot.discoveredRoomCount > prev.discoveredRoomCount;
+    const connectionsIncreased = currentSnapshot.discoveredConnectionCount > prev.discoveredConnectionCount;
+    const featuresIncreased = currentSnapshot.discoveredFeatureCount > prev.discoveredFeatureCount;
     const eventChanged = currentSnapshot.lastEventId !== prev.lastEventId;
 
-    if (eventChanged && (discoveredIncreased || marksIncreased)) {
+    if (eventChanged && (roomsIncreased || connectionsIncreased || featuresIncreased)) {
       playDiscoveryChime();
     }
-  }, [events, derived.discovered.size, derived.marks.length]);
-
-  const TILE = 26;
-  const GAP = 5;
+  }, [
+    events,
+    derived.discoveredRoomCount,
+    derived.discoveredConnectionCount,
+    derived.discoveredFeatureCount,
+  ]);
 
   const playerAsset = assetForPlayer();
+
+  const roomPosById = useMemo(() => {
+    return new Map<string, PositionedRoom>(layout.positionedRooms.map((room) => [room.roomId, room]));
+  }, [layout.positionedRooms]);
+
+  const currentRoom = derived.currentFloorRooms.find((room) => room.roomId === derived.currentRoomId) ?? null;
+  const currentFloorLabel = derived.currentFloorId ? labelForFloor(derived.currentFloorId) : "Unknown Floor";
 
   return (
     <CardSection title="Exploration Map (Canon View)">
       <p className="muted" style={{ marginTop: 0 }}>
-        This map is derived from canon events. Movement / reveal / marks are drafted during resolution and only become
-        canon when the Arbiter commits.
+        This map is derived from canon events. Discovery reveals rooms, thresholds, and routes — not abstract tiles.
       </p>
 
       <div
@@ -364,7 +632,7 @@ export default function ExplorationMapPanel({ events, mapW = 13, mapH = 9 }: Pro
         }}
       >
         <LegendChip
-          label="Player"
+          label="Current Room"
           swatch={
             <span
               style={{
@@ -374,8 +642,8 @@ export default function ExplorationMapPanel({ events, mapW = 13, mapH = 9 }: Pro
                 alignItems: "center",
                 justifyContent: "center",
                 borderRadius: 8,
-                border: "1px solid rgba(255,255,255,0.12)",
-                background: "rgba(0,0,0,0.20)",
+                border: "1px solid rgba(138,180,255,0.55)",
+                background: "rgba(138,180,255,0.14)",
                 boxShadow: "0 6px 18px rgba(0,0,0,0.35)",
               }}
             >
@@ -384,15 +652,15 @@ export default function ExplorationMapPanel({ events, mapW = 13, mapH = 9 }: Pro
           }
         />
         <LegendChip
-          label="Known"
+          label="Discovered Room"
           swatch={
             <span
               aria-hidden
               style={{
-                width: 16,
-                height: 16,
-                borderRadius: 6,
-                border: "1px solid rgba(255,255,255,0.12)",
+                width: 18,
+                height: 18,
+                borderRadius: 8,
+                border: "1px solid rgba(255,255,255,0.14)",
                 background: "rgba(255,255,255,0.08)",
                 display: "inline-block",
               }}
@@ -400,259 +668,306 @@ export default function ExplorationMapPanel({ events, mapW = 13, mapH = 9 }: Pro
           }
         />
         <LegendChip
-          label="Fog"
+          label="Door / Threshold"
           swatch={
-            <span
-              aria-hidden
-              style={{
-                width: 16,
-                height: 16,
-                borderRadius: 6,
-                border: "1px solid rgba(255,255,255,0.10)",
-                background: "rgba(0,0,0,0.62)",
-                display: "inline-block",
-              }}
-            />
+            <span aria-hidden style={{ fontSize: 14, lineHeight: 1 }}>
+              🔒
+            </span>
           }
         />
         <LegendChip
-          label="Marks"
+          label="Stairs / Shrine / Loot / Hazard"
           swatch={
-            <span style={{ display: "inline-flex", gap: 6, alignItems: "center" }}>
-              {(["door", "stairs", "altar", "cache", "hazard"] as MapMarkKind[]).map((k) => {
-                const a = assetForMark(k);
-                if (!a) return null;
-                return (
-                  <span
-                    key={k}
-                    style={{
-                      width: 18,
-                      height: 18,
-                      display: "inline-flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      borderRadius: 8,
-                      border: "1px solid rgba(255,255,255,0.10)",
-                      background: "rgba(0,0,0,0.20)",
-                    }}
-                    title={a.label}
-                  >
-                    <IconImg src={a.src} alt={a.label} size={14} />
-                  </span>
-                );
-              })}
+            <span style={{ display: "inline-flex", gap: 4, alignItems: "center", fontSize: 14 }}>
+              <span>⇩</span>
+              <span>★</span>
+              <span>💰</span>
+              <span>⚠</span>
             </span>
           }
         />
       </div>
 
       <div className="muted" style={{ marginBottom: 12 }}>
-        Position:{" "}
-        <strong>
-          ({derived.position.x},{derived.position.y})
-        </strong>{" "}
-        · Discovered: <strong>{derived.discovered.size}</strong>
-        {derived.marks.length > 0 && (
+        Floor: <strong>{currentFloorLabel}</strong>
+        {currentRoom ? (
           <>
             {" "}
-            · Marks: <strong>{derived.marks.length}</strong>
+            · Current Room: <strong>{labelForRoom(currentRoom.roomId, currentRoom.roomType)}</strong>
           </>
-        )}
+        ) : null}
+        {" "}
+        · Rooms: <strong>{derived.currentFloorRooms.length}</strong>
+        {" "}
+        · Routes: <strong>{derived.currentFloorConnections.length}</strong>
       </div>
 
-      <div
-        style={{
-          display: "inline-block",
-          padding: 12,
-          borderRadius: 14,
-          border: "1px solid rgba(255,255,255,0.10)",
-          background:
-            "radial-gradient(1200px 420px at 30% 0%, rgba(255,255,255,0.06), rgba(255,255,255,0.02) 45%, rgba(0,0,0,0.30) 100%)",
-          boxShadow:
-            "inset 0 1px 0 rgba(255,255,255,0.06), inset 0 -1px 0 rgba(0,0,0,0.35), 0 18px 40px rgba(0,0,0,0.35)",
-          backdropFilter: "blur(4px)",
-          maxWidth: "100%",
-        }}
-      >
+      {layout.positionedRooms.length === 0 ? (
         <div
           style={{
-            position: "relative",
-            borderRadius: 12,
+            padding: 16,
+            borderRadius: 14,
+            border: "1px solid rgba(255,255,255,0.10)",
+            background: "rgba(255,255,255,0.03)",
+          }}
+        >
+          <div style={{ fontWeight: 800, marginBottom: 6 }}>No discovered rooms yet.</div>
+          <div className="muted" style={{ fontSize: 13 }}>
+            Once canon room discovery events are recorded, the dungeon graph will appear here.
+          </div>
+        </div>
+      ) : (
+        <div
+          style={{
+            display: "block",
+            padding: 12,
+            borderRadius: 14,
+            border: "1px solid rgba(255,255,255,0.10)",
+            background:
+              "radial-gradient(1200px 420px at 30% 0%, rgba(255,255,255,0.06), rgba(255,255,255,0.02) 45%, rgba(0,0,0,0.30) 100%)",
+            boxShadow:
+              "inset 0 1px 0 rgba(255,255,255,0.06), inset 0 -1px 0 rgba(0,0,0,0.35), 0 18px 40px rgba(0,0,0,0.35)",
+            backdropFilter: "blur(4px)",
+            overflowX: "auto",
+            maxWidth: "100%",
           }}
         >
           <div
             style={{
-              display: "grid",
-              gridTemplateColumns: `repeat(${mapW}, ${TILE}px)`,
-              gap: GAP,
-              padding: 12,
+              position: "relative",
+              width: Math.max(layout.width, 520),
+              height: Math.max(layout.height, 240),
               borderRadius: 12,
               border: "1px solid rgba(255,255,255,0.10)",
               background: "linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.02))",
               boxShadow: "inset 0 0 0 1px rgba(0,0,0,0.25)",
+              overflow: "hidden",
             }}
           >
-            {Array.from({ length: mapW * mapH }, (_, i) => {
-              const x = i % mapW;
-              const y = Math.floor(i / mapW);
+            <svg
+              width={Math.max(layout.width, 520)}
+              height={Math.max(layout.height, 240)}
+              style={{
+                position: "absolute",
+                inset: 0,
+                pointerEvents: "none",
+              }}
+            >
+              {derived.currentFloorConnections.map((connection) => {
+                const from = roomPosById.get(connection.fromRoomId);
+                const to = roomPosById.get(connection.toRoomId);
+                if (!from || !to) return null;
 
-              const here = derived.position.x === x && derived.position.y === y;
-              const seen = derived.discovered.has(`${x},${y}`);
+                const x1 = from.x + NODE_W / 2;
+                const y1 = from.y + NODE_H / 2;
+                const x2 = to.x + NODE_W / 2;
+                const y2 = to.y + NODE_H / 2;
 
-              const mark = derived.marksByTile.get(`${x},${y}`) ?? null;
-              const markAsset = mark ? assetForMark(mark.kind) : null;
+                const door = derived.doorByConnectionId.get(connection.connectionId);
+                const isLocked =
+                  connection.connectionType === "locked_door" ||
+                  door?.locked === true;
+                const isOpened = door?.opened === true;
+                const isStairs = connection.connectionType === "stairs";
+                const isSecret = connection.connectionType === "secret";
 
-              const titleParts: string[] = [];
-              titleParts.push(seen ? `(${x},${y})` : "Unknown");
-              if (mark) {
-                titleParts.push(`Mark: ${mark.kind}`);
-                if (mark.note) titleParts.push(`Note: ${mark.note}`);
-              }
+                return (
+                  <g key={connection.connectionId}>
+                    <line
+                      x1={x1}
+                      y1={y1}
+                      x2={x2}
+                      y2={y2}
+                      stroke={
+                        isLocked
+                          ? "rgba(255,196,118,0.62)"
+                          : isStairs
+                            ? "rgba(138,180,255,0.60)"
+                            : isSecret
+                              ? "rgba(188,160,255,0.55)"
+                              : "rgba(255,255,255,0.24)"
+                      }
+                      strokeWidth={isLocked || isStairs ? 3 : 2}
+                      strokeDasharray={
+                        isSecret ? "6 6" : isLocked && !isOpened ? "8 5" : undefined
+                      }
+                      opacity={0.92}
+                    />
+                    <circle
+                      cx={(x1 + x2) / 2}
+                      cy={(y1 + y2) / 2}
+                      r={12}
+                      fill="rgba(10,10,10,0.82)"
+                      stroke="rgba(255,255,255,0.12)"
+                    />
+                    <text
+                      x={(x1 + x2) / 2}
+                      y={(y1 + y2) / 2 + 4}
+                      textAnchor="middle"
+                      fontSize="12"
+                      fill="rgba(245,236,216,0.94)"
+                    >
+                      {isStairs ? "⇩" : isLocked ? "🔒" : isSecret ? "✦" : "•"}
+                    </text>
+                  </g>
+                );
+              })}
+            </svg>
 
-              const fogBg = "rgba(0,0,0,0.64)";
-              const knownBg = "rgba(255,255,255,0.07)";
-              const playerBg = "rgba(138,180,255,0.10)";
+            {layout.positionedRooms.map((room) => {
+              const key = roomKey(room.floorId, room.roomId);
+              const features = derived.roomFeaturesByRoom.get(key) ?? [];
+              const isCurrent = room.roomId === derived.currentRoomId;
 
-              const baseBorder = "1px solid rgba(255,255,255,0.10)";
-              const knownBorder = "1px solid rgba(255,255,255,0.14)";
-              const playerBorder = "1px solid rgba(138,180,255,0.65)";
+              const roomTitle = labelForRoom(room.roomId, room.roomType);
+              const roomTypeLabel = room.roomType ? titleCase(room.roomType) : "Room";
 
               return (
                 <div
-                  key={`${x},${y}`}
-                  title={titleParts.join(" · ")}
+                  key={key}
+                  title={`${roomTitle} · ${roomTypeLabel}`}
                   style={{
-                    width: TILE,
-                    height: TILE,
-                    borderRadius: 8,
-                    border: here ? playerBorder : seen ? knownBorder : baseBorder,
-                    background: !seen ? fogBg : here ? playerBg : knownBg,
-                    position: "relative",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    lineHeight: 1,
-                    userSelect: "none",
+                    position: "absolute",
+                    left: room.x,
+                    top: room.y,
+                    width: NODE_W,
+                    height: NODE_H,
+                    borderRadius: 16,
+                    border: isCurrent
+                      ? "1px solid rgba(138,180,255,0.62)"
+                      : "1px solid rgba(255,255,255,0.12)",
+                    background: isCurrent
+                      ? "linear-gradient(180deg, rgba(138,180,255,0.12), rgba(255,255,255,0.05))"
+                      : "linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.03))",
+                    boxShadow: isCurrent
+                      ? "0 0 0 3px rgba(138,180,255,0.10), 0 12px 28px rgba(0,0,0,0.28)"
+                      : "0 10px 24px rgba(0,0,0,0.24)",
+                    padding: "10px 12px",
+                    display: "grid",
+                    gap: 8,
                     overflow: "hidden",
-                    transition:
-                      "background 180ms ease, border-color 180ms ease, transform 140ms ease, opacity 180ms ease",
-                    transform: here ? "translateY(-0.5px)" : "none",
-                    opacity: seen ? 1 : 0.95,
                   }}
                 >
-                  {seen ? (
-                    <span
-                      aria-hidden
-                      style={{
-                        position: "absolute",
-                        inset: 0,
-                        background:
-                          "radial-gradient(18px 18px at 30% 25%, rgba(255,255,255,0.06), rgba(255,255,255,0.00) 60%), radial-gradient(22px 22px at 70% 80%, rgba(0,0,0,0.18), rgba(0,0,0,0.00) 62%)",
-                        opacity: here ? 0.55 : 0.35,
-                        pointerEvents: "none",
-                      }}
-                    />
-                  ) : null}
+                  <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8 }}>
+                    <div style={{ minWidth: 0 }}>
+                      <div
+                        style={{
+                          fontWeight: 900,
+                          fontSize: 14,
+                          lineHeight: 1.2,
+                          color: "rgba(245,236,216,0.96)",
+                        }}
+                      >
+                        {roomTitle}
+                      </div>
+                      <div className="muted" style={{ fontSize: 11, marginTop: 4 }}>
+                        {roomTypeLabel}
+                      </div>
+                    </div>
 
-                  {seen && markAsset ? (
-                    <span
-                      style={{
-                        position: "absolute",
-                        inset: 0,
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        pointerEvents: "none",
-                        filter: "drop-shadow(0 2px 6px rgba(0,0,0,0.35))",
-                        opacity: here ? 0.55 : 0.9,
-                      }}
-                    >
-                      <IconImg src={markAsset.src} alt={markAsset.label} size={16} />
-                    </span>
-                  ) : null}
+                    {isCurrent ? (
+                      <span
+                        aria-hidden
+                        style={{
+                          width: 24,
+                          height: 24,
+                          borderRadius: 12,
+                          border: "1px solid rgba(138,180,255,0.70)",
+                          background: "rgba(0,0,0,0.22)",
+                          boxShadow: "0 0 0 3px rgba(138,180,255,0.14), 0 0 18px rgba(138,180,255,0.24)",
+                          display: "inline-flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          flex: "0 0 auto",
+                        }}
+                      >
+                        <IconImg src={playerAsset.src} alt={playerAsset.label} size={16} />
+                      </span>
+                    ) : null}
+                  </div>
 
-                  {here ? (
-                    <span
-                      aria-hidden
-                      style={{
-                        position: "relative",
-                        width: 18,
-                        height: 18,
-                        borderRadius: 9,
-                        border: "1px solid rgba(138,180,255,0.70)",
-                        background: "rgba(0,0,0,0.22)",
-                        boxShadow: "0 0 0 3px rgba(138,180,255,0.14), 0 0 18px rgba(138,180,255,0.32)",
-                        display: "inline-flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        pointerEvents: "none",
-                      }}
-                    >
-                      <IconImg src={playerAsset.src} alt={playerAsset.label} size={14} />
-                    </span>
-                  ) : null}
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+                    {features.length > 0 ? (
+                      features.slice(0, 4).map((feature, idx) => (
+                        <span
+                          key={`${feature.featureKind}-${idx}`}
+                          title={
+                            feature.note
+                              ? `${titleCase(feature.featureKind)} — ${feature.note}`
+                              : titleCase(feature.featureKind)
+                          }
+                          style={{
+                            minWidth: 22,
+                            height: 22,
+                            padding: "0 6px",
+                            borderRadius: 999,
+                            border: "1px solid rgba(255,255,255,0.10)",
+                            background: "rgba(0,0,0,0.20)",
+                            display: "inline-flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            fontSize: 12,
+                          }}
+                        >
+                          {iconForFeature(feature.featureKind)}
+                        </span>
+                      ))
+                    ) : (
+                      <span className="muted" style={{ fontSize: 11 }}>
+                        No revealed features
+                      </span>
+                    )}
+                  </div>
                 </div>
               );
             })}
+
+            <span
+              aria-hidden
+              style={{
+                position: "absolute",
+                inset: 0,
+                borderRadius: 12,
+                pointerEvents: "none",
+                background: [
+                  "radial-gradient(220px 220px at 20% 18%, rgba(255,190,120,0.10), rgba(255,190,120,0.00) 62%)",
+                  "radial-gradient(260px 260px at 82% 24%, rgba(255,200,140,0.08), rgba(255,200,140,0.00) 65%)",
+                  "radial-gradient(260px 200px at 52% 58%, rgba(138,180,255,0.06), rgba(138,180,255,0.00) 70%)",
+                  "radial-gradient(120% 120% at 50% 45%, rgba(0,0,0,0.00) 52%, rgba(0,0,0,0.22) 78%, rgba(0,0,0,0.36) 100%)",
+                ].join(", "),
+                mixBlendMode: "screen",
+                opacity: 0.9,
+              }}
+            />
           </div>
 
-          <span
-            aria-hidden
-            style={{
-              position: "absolute",
-              inset: 0,
-              borderRadius: 12,
-              pointerEvents: "none",
-              background: [
-                "radial-gradient(220px 220px at 20% 18%, rgba(255,190,120,0.10), rgba(255,190,120,0.00) 62%)",
-                "radial-gradient(260px 260px at 82% 24%, rgba(255,200,140,0.08), rgba(255,200,140,0.00) 65%)",
-                "radial-gradient(260px 200px at 52% 58%, rgba(138,180,255,0.06), rgba(138,180,255,0.00) 70%)",
-                "radial-gradient(120% 120% at 50% 45%, rgba(0,0,0,0.00) 52%, rgba(0,0,0,0.22) 78%, rgba(0,0,0,0.36) 100%)",
-              ].join(", "),
-              mixBlendMode: "screen",
-              opacity: 0.9,
-            }}
-          />
-
-          <span
-            aria-hidden
-            style={{
-              position: "absolute",
-              inset: 0,
-              borderRadius: 12,
-              pointerEvents: "none",
-              background: "linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.00) 42%)",
-              opacity: 0.35,
-            }}
-          />
+          <div className="muted" style={{ marginTop: 10, fontSize: 12 }}>
+            Discovery reveals places and routes. Locked thresholds, stairs, shrines, hazards, and treasure are remembered on the graph.
+          </div>
         </div>
+      )}
 
-        <div className="muted" style={{ marginTop: 10, fontSize: 12 }}>
-          Fog clears only through canon events. Marks indicate remembered features — not revealed neighbors.
-        </div>
-      </div>
-
-      {derived.marks.length > 0 && (
+      {derived.currentFloorRooms.length > 0 && (
         <details style={{ marginTop: 14 }}>
-          <summary className="muted">Show marks</summary>
+          <summary className="muted">Show discovered rooms</summary>
           <ul style={{ marginTop: 10 }}>
-            {derived.marks
-              .slice()
-              .sort((a, b) => a.timestamp - b.timestamp)
-              .map((m) => {
-                const a = assetForMark(m.kind);
-                return (
-                  <li key={m.eventId}>
-                    <strong>{m.kind}</strong> at ({m.at.x},{m.at.y})
-                    {m.note ? <> — {m.note}</> : null}
-                    {a ? (
-                      <span style={{ marginLeft: 10, verticalAlign: "middle" }}>
-                        <IconImg src={a.src} alt={a.label} size={14} style={{ display: "inline-block" }} />
-                      </span>
-                    ) : null}
-                  </li>
-                );
-              })}
+            {derived.currentFloorRooms.map((room) => {
+              const key = roomKey(room.floorId, room.roomId);
+              const features = derived.roomFeaturesByRoom.get(key) ?? [];
+              return (
+                <li key={key} style={{ marginBottom: 8 }}>
+                  <strong>{labelForRoom(room.roomId, room.roomType)}</strong>
+                  {" — "}
+                  {labelForFloor(room.floorId)}
+                  {features.length > 0 ? (
+                    <>
+                      {" · "}
+                      {features.map((f) => titleCase(f.featureKind)).join(", ")}
+                    </>
+                  ) : null}
+                </li>
+              );
+            })}
           </ul>
         </details>
       )}
