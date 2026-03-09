@@ -22,6 +22,8 @@ type Props = {
   mapH?: number;
 };
 
+export type MapMarkKind = "door" | "stairs" | "altar" | "cache" | "hazard";
+
 type RoomGraphRoom = {
   floorId: string;
   roomId: string;
@@ -472,8 +474,6 @@ function buildRoomLayout(
       return aScore - bScore;
     });
 
-    const totalH = colRooms.length * NODE_H + Math.max(0, colRooms.length - 1) * ROW_GAP;
-
     colRooms.forEach((room, idx) => {
       const x = PAD_X + depth * (NODE_W + COL_GAP);
       const y = PAD_Y + idx * (NODE_H + ROW_GAP) + 12;
@@ -484,10 +484,6 @@ function buildRoomLayout(
         y,
       });
     });
-
-    if (totalH > 0) {
-      void totalH;
-    }
   }
 
   const maxX = Math.max(...positionedRooms.map((r) => r.x + NODE_W), PAD_X + NODE_W);
