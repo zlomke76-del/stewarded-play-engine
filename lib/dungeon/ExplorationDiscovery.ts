@@ -207,8 +207,7 @@ function buildDoorDiscoveryDraft(
 
 function buildFeatureDrafts(
   floorId: FloorId,
-  room: DungeonRoom,
-  targetFloorIdForStairs?: FloorId | null
+  room: DungeonRoom
 ): DungeonEventDraft[] {
   const out: DungeonEventDraft[] = [];
 
@@ -222,7 +221,7 @@ function buildFeatureDrafts(
           floorId,
           roomId: room.id,
           direction,
-          targetFloorId: targetFloorIdForStairs ?? null,
+          targetFloorId: null,
         })
       );
       continue;
@@ -239,19 +238,6 @@ function buildFeatureDrafts(
   }
 
   return out;
-}
-
-function inferNeighborTargetFloorId(
-  dungeon: DungeonDefinition,
-  floor: DungeonFloor,
-  connection: DungeonConnection
-): FloorId | null {
-  if (connection.type !== "stairs") return floor.id;
-
-  const wantsUp = connection.note === "up";
-  const targetIndex = wantsUp ? floor.floorIndex - 1 : floor.floorIndex + 1;
-  const targetFloor = dungeon.floors.find((f) => f.floorIndex === targetIndex) ?? null;
-  return targetFloor?.id ?? null;
 }
 
 function buildCurrentRoomDiscoveryDrafts(
@@ -295,10 +281,7 @@ function buildCurrentRoomDiscoveryDrafts(
     }
   }
 
-  for (const featureDraft of buildFeatureDrafts(
-    ctx.floorId,
-    room
-  )) {
+  for (const featureDraft of buildFeatureDrafts(ctx.floorId, room)) {
     if (featureDraft.type === "ROOM_FEATURE_REVEALED") {
       const kind = featureDraft.payload.featureKind;
       if (alreadyHasFeatureRevealed(events, ctx.floorId, room.id, kind)) continue;
