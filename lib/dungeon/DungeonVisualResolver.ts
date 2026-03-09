@@ -57,11 +57,7 @@ function pickDeterministic<T>(seed: string, items: readonly T[], fallback: T): T
 
 function isCryptBand(theme: string | null | undefined): boolean {
   const key = slugKey(theme);
-  return (
-    key === "forgotten_crypt" ||
-    key === "crypt" ||
-    key.includes("crypt")
-  );
+  return key === "forgotten_crypt" || key === "crypt" || key.includes("crypt");
 }
 
 function buildDeterministicAsset(seed: string, assets: readonly string[], fallback: string): string {
@@ -71,26 +67,13 @@ function buildDeterministicAsset(seed: string, assets: readonly string[], fallba
 // ------------------------------------------------------------
 // Asset registries
 // ------------------------------------------------------------
-// Add additional variants here as you create them.
-// The resolver call sites do not need to change.
-// ------------------------------------------------------------
 
 const ROOM_ASSETS: Record<string, readonly string[]> = {
-  entrance: [
-    "/assets/V3/Dungeon/Dungeon_Entrance_Main_01.png",
-  ],
-  corridor: [
-    "/assets/V3/Dungeon/Dungeon_Entrance_Corridor_01.png",
-  ],
-  guard_post: [
-    "/assets/V3/Dungeon/Dungeon_Entrance_Guard_Post_01.png",
-  ],
-  ruined_outpost_default: [
-    "/assets/V3/Dungeon/Dungeon_Entrance_Military_Outpost_01.png",
-  ],
-  default: [
-    "/assets/V3/Dungeon/Dungeon_Entrance_Main_01.png",
-  ],
+  entrance: ["/assets/V3/Dungeon/Dungeon_Entrance_Main_01.png"],
+  corridor: ["/assets/V3/Dungeon/Dungeon_Entrance_Corridor_01.png"],
+  guard_post: ["/assets/V3/Dungeon/Dungeon_Entrance_Guard_Post_01.png"],
+  ruined_outpost_default: ["/assets/V3/Dungeon/Dungeon_Entrance_Military_Outpost_01.png"],
+  default: ["/assets/V3/Dungeon/Dungeon_Entrance_Main_01.png"],
 };
 
 const STANDARD_STAIRS_UP_ASSETS: readonly string[] = [
@@ -118,7 +101,7 @@ export function resolveRoomImage(args: ResolveRoomImageArgs): string {
   const floorTheme = slugKey(args.floorTheme);
   const roomType = slugKey(room?.roomType ?? "") as RoomType | string;
   const roomId = normalizeText(room?.id ?? "unknown-room");
-  const roomLabel = normalizeText(room?.label ?? roomType || "room");
+  const roomLabel = normalizeText((room?.label ?? roomType) || "room");
   const seed = `${args.dungeonSeed}:${floorTheme}:${roomType}:${roomId}:${roomLabel}:room-image`;
 
   const exactRoomAssets = ROOM_ASSETS[roomType];
@@ -158,9 +141,6 @@ export function resolveFloorBackdropImage(args: {
 // Rule:
 // - Use CRYPT stair art whenever the destination is in the crypt band
 // - Otherwise use standard stair art
-//
-// This makes the descent into the crypt feel like a threshold escalation
-// before the player fully arrives there.
 // ------------------------------------------------------------
 
 export function resolveTransitionImage(args: ResolveTransitionImageArgs): string {
@@ -202,12 +182,9 @@ export function resolveStairImageForRoom(args: {
 // Optional utility for richer UI logic
 // ------------------------------------------------------------
 
-export function inferVisualBand(theme: DungeonFloorTheme | string | null | undefined):
-  | "main"
-  | "down"
-  | "lower"
-  | "crypt"
-  | "unknown" {
+export function inferVisualBand(
+  theme: DungeonFloorTheme | string | null | undefined
+): "main" | "down" | "lower" | "crypt" | "unknown" {
   const key = slugKey(theme);
 
   if (isCryptBand(key)) return "crypt";
