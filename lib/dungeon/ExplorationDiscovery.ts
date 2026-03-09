@@ -45,6 +45,21 @@ export type DiscoveryContext = {
   enteredFromRoomId?: string | null;
 };
 
+type RoomFeatureRevealedDraft = DungeonEventDraft<"ROOM_FEATURE_REVEALED">;
+type StairsDiscoveredDraft = DungeonEventDraft<"STAIRS_DISCOVERED">;
+
+function isRoomFeatureRevealedDraft(
+  draft: DungeonEventDraft
+): draft is RoomFeatureRevealedDraft {
+  return draft.type === "ROOM_FEATURE_REVEALED";
+}
+
+function isStairsDiscoveredDraft(
+  draft: DungeonEventDraft
+): draft is StairsDiscoveredDraft {
+  return draft.type === "STAIRS_DISCOVERED";
+}
+
 function safeStr(x: unknown): string | null {
   return typeof x === "string" && x.trim() ? x.trim() : null;
 }
@@ -282,12 +297,12 @@ function buildCurrentRoomDiscoveryDrafts(
   }
 
   for (const featureDraft of buildFeatureDrafts(ctx.floorId, room)) {
-    if (featureDraft.type === "ROOM_FEATURE_REVEALED") {
+    if (isRoomFeatureRevealedDraft(featureDraft)) {
       const kind = featureDraft.payload.featureKind;
       if (alreadyHasFeatureRevealed(events, ctx.floorId, room.id, kind)) continue;
     }
 
-    if (featureDraft.type === "STAIRS_DISCOVERED") {
+    if (isStairsDiscoveredDraft(featureDraft)) {
       if (alreadyHasStairsDiscovered(events, ctx.floorId, room.id)) continue;
     }
 
@@ -356,7 +371,7 @@ export function deriveExplorationDiscoveryDrafts(
         ? `${draft.type}:${draft.payload.connectionId}`
         : draft.type === "DOOR_DISCOVERED"
         ? `${draft.type}:${draft.payload.doorId}`
-        : draft.type === "ROOM_FEATURE_REVEALED"
+        : isRoomFeatureRevealedDraft(draft)
         ? `${draft.type}:${draft.payload.floorId}:${draft.payload.roomId}:${draft.payload.featureKind}`
         : draft.type === "STAIRS_DISCOVERED"
         ? `${draft.type}:${draft.payload.floorId}:${draft.payload.roomId}`
