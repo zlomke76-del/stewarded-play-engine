@@ -45,8 +45,30 @@ export type DiscoveryContext = {
   enteredFromRoomId?: string | null;
 };
 
+type RoomRevealedDraft = DungeonEventDraft<"ROOM_REVEALED">;
+type RoomEnteredDraft = DungeonEventDraft<"ROOM_ENTERED">;
+type RoomConnectionDiscoveredDraft = DungeonEventDraft<"ROOM_CONNECTION_DISCOVERED">;
+type DoorDiscoveredDraft = DungeonEventDraft<"DOOR_DISCOVERED">;
 type RoomFeatureRevealedDraft = DungeonEventDraft<"ROOM_FEATURE_REVEALED">;
 type StairsDiscoveredDraft = DungeonEventDraft<"STAIRS_DISCOVERED">;
+
+function isRoomRevealedDraft(draft: DungeonEventDraft): draft is RoomRevealedDraft {
+  return draft.type === "ROOM_REVEALED";
+}
+
+function isRoomEnteredDraft(draft: DungeonEventDraft): draft is RoomEnteredDraft {
+  return draft.type === "ROOM_ENTERED";
+}
+
+function isRoomConnectionDiscoveredDraft(
+  draft: DungeonEventDraft
+): draft is RoomConnectionDiscoveredDraft {
+  return draft.type === "ROOM_CONNECTION_DISCOVERED";
+}
+
+function isDoorDiscoveredDraft(draft: DungeonEventDraft): draft is DoorDiscoveredDraft {
+  return draft.type === "DOOR_DISCOVERED";
+}
 
 function isRoomFeatureRevealedDraft(
   draft: DungeonEventDraft
@@ -161,7 +183,7 @@ function buildRoomRevealDraft(
   floorId: FloorId,
   room: DungeonRoom,
   enteredViaConnectionId?: string | null
-): DungeonEventDraft<"ROOM_REVEALED"> {
+): RoomRevealedDraft {
   return makeDungeonEventDraft("ROOM_REVEALED", {
     floorId,
     roomId: room.id,
@@ -176,7 +198,7 @@ function buildRoomEnterDraft(args: {
   fromRoomId?: string | null;
   viaConnectionId?: string | null;
   viaConnectionType?: string | null;
-}): DungeonEventDraft<"ROOM_ENTERED"> {
+}): RoomEnteredDraft {
   return makeDungeonEventDraft("ROOM_ENTERED", {
     floorId: args.floorId,
     roomId: args.room.id,
@@ -191,7 +213,7 @@ function buildConnectionDiscoveryDraft(
   floorId: FloorId,
   fromRoomId: RoomId,
   connection: DungeonConnection
-): DungeonEventDraft<"ROOM_CONNECTION_DISCOVERED"> {
+): RoomConnectionDiscoveredDraft {
   const toRoomId = getConnectedRoomId(connection, fromRoomId) ?? connection.toRoomId;
 
   return makeDungeonEventDraft("ROOM_CONNECTION_DISCOVERED", {
@@ -207,7 +229,7 @@ function buildDoorDiscoveryDraft(
   floorId: FloorId,
   roomId: RoomId,
   connection: DungeonConnection
-): DungeonEventDraft<"DOOR_DISCOVERED"> | null {
+): DoorDiscoveredDraft | null {
   if (!connection.doorId) return null;
 
   return makeDungeonEventDraft("DOOR_DISCOVERED", {
@@ -223,13 +245,12 @@ function buildDoorDiscoveryDraft(
 function buildFeatureDrafts(
   floorId: FloorId,
   room: DungeonRoom
-): DungeonEventDraft[] {
-  const out: DungeonEventDraft[] = [];
+): Array<RoomFeatureRevealedDraft | StairsDiscoveredDraft> {
+  const out: Array<RoomFeatureRevealedDraft | StairsDiscoveredDraft> = [];
 
   for (const feature of room.features) {
     if (feature.kind === "stairs") {
-      const direction =
-        room.roomType === "stairs_up" ? "up" : "down";
+      const direction = room.roomType === "stairs_up" ? "up" : "down";
 
       out.push(
         makeDungeonEventDraft("STAIRS_DISCOVERED", {
@@ -345,6 +366,34 @@ function buildAdjacentRevealDrafts(
   return drafts;
 }
 
+function makeDraftKey(draft: DungeonEventDraft): string {
+  if (isRoomRevealedDraft(draft)) {
+    return `${draft.type}:${draft.payload.floorId}:${draft.payload.roomId}`;
+  }
+
+  if (isRoomEnteredDraft(draft)) {
+    return `${draft.type}:${draft.payload.floorId}:${draft.payload.roomId}`;
+  }
+
+  if (isRoomConnectionDiscoveredDraft(draft)) {
+    return `${draft.type}:${draft.payload.connectionId}`;
+  }
+
+  if (isDoorDiscoveredDraft(draft)) {
+    return `${draft.type}:${draft.payload.doorId}`;
+  }
+
+  if (isRoomFeatureRevealedDraft(draft)) {
+    return `${draft.type}:${draft.payload.floorId}:${draft.payload.roomId}:${draft.payload.featureKind}`;
+  }
+
+  if (isStairsDiscoveredDraft(draft)) {
+    return `${draft.type}:${draft.payload.floorId}:${draft.payload.roomId}`;
+  }
+
+  return JSON.stringify(draft);
+}
+
 export function deriveExplorationDiscoveryDrafts(
   ctx: DiscoveryContext
 ): DungeonEventDraft[] {
@@ -362,21 +411,7 @@ export function deriveExplorationDiscoveryDrafts(
   const unique = new Map<string, DungeonEventDraft>();
 
   for (const draft of drafts) {
-    const key =
-      draft.type === "ROOM_REVEALED"
-        ? `${draft.type}:${draft.payload.floorId}:${draft.payload.roomId}`
-        : draft.type === "ROOM_ENTERED"
-        ? `${draft.type}:${draft.payload.floorId}:${draft.payload.roomId}`
-        : draft.type === "ROOM_CONNECTION_DISCOVERED"
-        ? `${draft.type}:${draft.payload.connectionId}`
-        : draft.type === "DOOR_DISCOVERED"
-        ? `${draft.type}:${draft.payload.doorId}`
-        : isRoomFeatureRevealedDraft(draft)
-        ? `${draft.type}:${draft.payload.floorId}:${draft.payload.roomId}:${draft.payload.featureKind}`
-        : draft.type === "STAIRS_DISCOVERED"
-        ? `${draft.type}:${draft.payload.floorId}:${draft.payload.roomId}`
-        : JSON.stringify(draft);
-
+    const key = makeDraftKey(draft);
     if (!unique.has(key)) {
       unique.set(key, draft);
     }
