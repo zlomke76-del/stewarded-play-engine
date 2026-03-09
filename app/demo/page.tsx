@@ -76,6 +76,15 @@ import {
 } from "@/lib/dungeon/DungeonNavigation";
 import { deriveExplorationDiscoveryDrafts } from "@/lib/dungeon/ExplorationDiscovery";
 import { deriveDungeonEvolution } from "@/lib/dungeon/DungeonEvolution";
+import {
+  describeRoomEntry,
+  describeRoomExits,
+  describeRoomFeatures,
+  describeRoomSummary,
+  type OpeningChronicleSeed,
+  type NarrationExit,
+  type NarrationFeature,
+} from "@/lib/dungeon/DungeonNarration";
 import type { DungeonConnection, DungeonDefinition, DungeonRoom } from "@/lib/dungeon/FloorState";
 import type { RoomFeatureKind } from "@/lib/dungeon/RoomTypes";
 import type { EnemyEncounterTheme } from "@/lib/game/EnemyDatabase";
@@ -480,6 +489,137 @@ function inferObjective(args: {
 function summarizeRoomTitle(room: DungeonRoom | null) {
   if (!room) return "Unknown Chamber";
   return `${room.label}`;
+}
+
+function normalizeNarrationText(value: unknown): string {
+  return String(value ?? "").replace(/\s+/g, " ").trim();
+}
+
+function toStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((item) => normalizeNarrationText(item))
+    .filter(Boolean);
+}
+
+function uniqueStrings(values: string[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+
+  for (const value of values) {
+    const normalized = normalizeNarrationText(value);
+    if (!normalized) continue;
+    if (seen.has(normalized)) continue;
+    seen.add(normalized);
+    out.push(normalized);
+  }
+
+  return out;
+}
+
+function extractOpeningChronicleSeed(initialTable: InitialTable | null): OpeningChronicleSeed | null {
+  if (!initialTable) return null;
+
+  const raw = initialTable as Record<string, unknown>;
+
+  const openingFrame =
+    normalizeNarrationText(raw.openingFrame) ||
+    normalizeNarrationText(raw.introFrame) ||
+    normalizeNarrationText(raw.frame) ||
+    normalizeNarrationText(raw.location) ||
+    normalizeNarrationText(raw.openingText);
+
+  const locationTraits = uniqueStrings([
+    ...toStringArray(raw.locationTraits),
+    ...toStringArray(raw.locationTags),
+    ...toStringArray(raw.atmosphereTags),
+    ...toStringArray(raw.environmentTags),
+  ]);
+
+  const oddities = uniqueStrings([
+    ...toStringArray(raw.oddities),
+    ...toStringArray(raw.strangeDetails),
+    ...toStringArray(raw.anomalies),
+  ]);
+
+  const factionNames = uniqueStrings([
+    ...toStringArray(raw.factionNames),
+    ...toStringArray(raw.factions),
+  ]);
+
+  const factionDesires = uniqueStrings([
+    ...toStringArray(raw.factionDesires),
+    ...toStringArray(raw.factionGoals),
+    ...toStringArray(raw.desires),
+  ]);
+
+  const factionPressures = uniqueStrings([
+    ...toStringArray(raw.factionPressures),
+    ...toStringArray(raw.pressures),
+    ...toStringArray(raw.activeThreats),
+  ]);
+
+  const dormantHook =
+    normalizeNarrationText(raw.dormantHook) ||
+    normalizeNarrationText(raw.hook) ||
+    normalizeNarrationText(raw.mysteryHook) ||
+    normalizeNarrationText(raw.recurringHook);
+
+  if (
+    !openingFrame &&
+    locationTraits.length === 0 &&
+    oddities.length === 0 &&
+    factionNames.length === 0 &&
+    factionDesires.length === 0 &&
+    factionPressures.length === 0 &&
+    !dormantHook
+  ) {
+    return null;
+  }
+
+  return {
+    openingFrame,
+    locationTraits,
+    oddities,
+    factionNames,
+    factionDesires,
+    factionPressures,
+    dormantHook,
+  };
+}
+
+function toNarrationFeatures(features: RoomFeatureLite[]): NarrationFeature[] {
+  return features.map((feature) => ({
+    kind: feature.kind,
+    note: feature.note,
+  }));
+}
+
+function toNarrationExits(args: {
+  currentRoom: DungeonRoom | null;
+  currentFloorRooms: DungeonRoom[];
+  allDungeonRooms: DungeonRoom[];
+  connections: DungeonConnection[];
+}): NarrationExit[] {
+  const { currentRoom, currentFloorRooms, allDungeonRooms, connections } = args;
+  if (!currentRoom) return [];
+
+  return connections.map((connection) => {
+    const targetRoomId =
+      connection.fromRoomId === currentRoom.id ? connection.toRoomId : connection.fromRoomId;
+
+    const targetRoom =
+      currentFloorRooms.find((room) => room.id === targetRoomId) ??
+      allDungeonRooms.find((room) => room.id === targetRoomId) ??
+      null;
+
+    return {
+      type: connection.type,
+      targetLabel: targetRoom?.label ?? targetRoomId,
+      locked: connection.locked === true || connection.type === "locked_door",
+      note: connection.note ?? null,
+    };
+  });
 }
 
 // ------------------------------------------------------------
@@ -976,6 +1116,11 @@ export default function DemoPage() {
     return renderInitialTableNarration(initialTable);
   }, [initialTable]);
 
+  const chronicleSeed = useMemo(
+    () => extractOpeningChronicleSeed(initialTable),
+    [initialTable]
+  );
+
   useEffect(() => {
     if (!initialTable) return;
     if (tableDraftText.trim() === "") setTableDraftText(renderedTableNarration);
@@ -1106,6 +1251,39 @@ export default function DemoPage() {
   );
 
   const currentFeatures = useMemo(() => currentRoomFeatureLite(currentRoom), [currentRoom]);
+  const narrationFeatures = useMemo(() => toNarrationFeatures(currentFeatures), [currentFeatures]);
+
+  const roomConnectionsView = useMemo(() => {
+    return reachableConnections.map((connection) => {
+      const targetRoomId =
+        connection.fromRoomId === currentRoom.id ? connection.toRoomId : connection.fromRoomId;
+      const targetRoom =
+        currentFloor.rooms.find((r) => r.id === targetRoomId) ??
+        dungeon.floors.flatMap((f) => f.rooms).find((r) => r.id === targetRoomId) ??
+        null;
+
+      return {
+        id: connection.id,
+        type: connection.type,
+        targetRoomId,
+        targetLabel: targetRoom?.label ?? targetRoomId,
+        targetType: targetRoom?.roomType ?? "unknown",
+        locked: connection.locked === true || connection.type === "locked_door",
+        note: connection.note ?? null,
+      };
+    });
+  }, [reachableConnections, currentRoom.id, currentFloor.rooms, dungeon.floors]);
+
+  const narrationExits = useMemo(
+    () =>
+      toNarrationExits({
+        currentRoom,
+        currentFloorRooms: currentFloor.rooms,
+        allDungeonRooms: dungeon.floors.flatMap((floor) => floor.rooms),
+        connections: reachableConnections,
+      }),
+    [currentRoom, currentFloor.rooms, dungeon.floors, reachableConnections]
+  );
 
   useEffect(() => {
     if (!tableAccepted || !partyCanonical) return;
@@ -1455,38 +1633,83 @@ export default function DemoPage() {
   const currentRoomTitle = useMemo(() => summarizeRoomTitle(currentRoom), [currentRoom]);
 
   const roomNarrative = useMemo(() => {
-    const lines: string[] = [];
-    lines.push(`${currentRoomTitle} — ${currentFloor.label}`);
-    if (currentRoom.storyHint) lines.push(currentRoom.storyHint);
-    if (currentFeatures.length > 0) {
-      lines.push(`Known features: ${currentFeatures.map((f) => f.kind.replaceAll("_", " ")).join(", ")}.`);
-    }
-    if (dungeonEvolution.signals.length > 0) {
-      lines.push(dungeonEvolution.signals[0]);
-    }
-    return lines.join(" ");
-  }, [currentRoomTitle, currentFloor.label, currentRoom, currentFeatures, dungeonEvolution.signals]);
-
-  const roomConnectionsView = useMemo(() => {
-    return reachableConnections.map((connection) => {
-      const targetRoomId =
-        connection.fromRoomId === currentRoom.id ? connection.toRoomId : connection.fromRoomId;
-      const targetRoom =
-        currentFloor.rooms.find((r) => r.id === targetRoomId) ??
-        dungeon.floors.flatMap((f) => f.rooms).find((r) => r.id === targetRoomId) ??
-        null;
-
-      return {
-        id: connection.id,
-        type: connection.type,
-        targetRoomId,
-        targetLabel: targetRoom?.label ?? targetRoomId,
-        targetType: targetRoom?.roomType ?? "unknown",
-        locked: connection.locked === true || connection.type === "locked_door",
-        note: connection.note ?? null,
-      };
+    return describeRoomEntry({
+      dungeonSeed: dungeon.seed,
+      floorTheme: currentFloor.theme,
+      roomType: currentRoom.roomType,
+      roomLabel: currentRoom.label,
+      features: narrationFeatures,
+      exits: narrationExits,
+      lootHint: currentRoom.lootHint ?? null,
+      storyHint: currentRoom.storyHint ?? null,
+      chronicle: chronicleSeed,
     });
-  }, [reachableConnections, currentRoom.id, currentFloor.rooms, dungeon.floors]);
+  }, [
+    dungeon.seed,
+    currentFloor.theme,
+    currentRoom.roomType,
+    currentRoom.label,
+    currentRoom.lootHint,
+    currentRoom.storyHint,
+    narrationFeatures,
+    narrationExits,
+    chronicleSeed,
+  ]);
+
+  const roomFeatureNarrative = useMemo(() => {
+    const lines = describeRoomFeatures({
+      dungeonSeed: dungeon.seed,
+      floorTheme: currentFloor.theme,
+      roomType: currentRoom.roomType,
+      roomLabel: currentRoom.label,
+      features: narrationFeatures,
+      chronicle: chronicleSeed,
+    });
+
+    if (dungeonEvolution.signals.length > 0) {
+      return [...lines, ...dungeonEvolution.signals].slice(0, 6);
+    }
+
+    return lines;
+  }, [
+    dungeon.seed,
+    currentFloor.theme,
+    currentRoom.roomType,
+    currentRoom.label,
+    narrationFeatures,
+    chronicleSeed,
+    dungeonEvolution.signals,
+  ]);
+
+  const roomExitNarrative = useMemo(() => {
+    return describeRoomExits({
+      dungeonSeed: dungeon.seed,
+      roomType: currentRoom.roomType,
+      exits: narrationExits,
+    });
+  }, [dungeon.seed, currentRoom.roomType, narrationExits]);
+
+  const roomSummary = useMemo(() => {
+    return describeRoomSummary({
+      dungeonSeed: dungeon.seed,
+      floorTheme: currentFloor.theme,
+      roomType: currentRoom.roomType,
+      roomLabel: currentRoom.label,
+      features: narrationFeatures,
+      lootHint: currentRoom.lootHint ?? null,
+      chronicle: chronicleSeed,
+      encounterTheme: currentRoom.encounterSeed?.theme ?? null,
+    });
+  }, [
+    dungeon.seed,
+    currentFloor.theme,
+    currentRoom.roomType,
+    currentRoom.label,
+    narrationFeatures,
+    currentRoom.lootHint,
+    currentRoom.encounterSeed?.theme,
+    chronicleSeed,
+  ]);
 
   const resolutionMovement = useMemo<{
     from?: { x: number; y: number } | null;
@@ -1771,6 +1994,20 @@ export default function DemoPage() {
                         </div>
                       </div>
 
+                      <div
+                        style={{
+                          padding: 12,
+                          borderRadius: 12,
+                          border: "1px solid rgba(255,255,255,0.10)",
+                          background: "rgba(255,255,255,0.03)",
+                        }}
+                      >
+                        <div style={{ fontWeight: 800, marginBottom: 8 }}>Current Read</div>
+                        <div className="muted" style={{ fontSize: 13, lineHeight: 1.7 }}>
+                          {roomSummary}
+                        </div>
+                      </div>
+
                       {dungeonEvolution.signals.length > 0 && (
                         <div
                           style={{
@@ -1826,9 +2063,33 @@ export default function DemoPage() {
                         }}
                       >
                         <div style={{ fontSize: 16, fontWeight: 900 }}>{currentRoomTitle}</div>
-                        <div className="muted" style={{ marginTop: 6, lineHeight: 1.6 }}>
+                        <div className="muted" style={{ marginTop: 8, lineHeight: 1.7, whiteSpace: "pre-line" }}>
                           {roomNarrative}
                         </div>
+                      </div>
+
+                      <div style={{ display: "grid", gap: 10 }}>
+                        <div style={{ fontWeight: 800 }}>What Stands Out</div>
+                        {roomFeatureNarrative.length === 0 ? (
+                          <div className="muted">Nothing distinct has been resolved about the room yet.</div>
+                        ) : (
+                          <div
+                            style={{
+                              padding: 12,
+                              borderRadius: 12,
+                              border: "1px solid rgba(255,255,255,0.08)",
+                              background: "rgba(255,255,255,0.03)",
+                            }}
+                          >
+                            <ul style={{ margin: 0, paddingLeft: 18 }}>
+                              {roomFeatureNarrative.map((line, idx) => (
+                                <li key={`${idx}-${line}`} style={{ marginBottom: 6, lineHeight: 1.55 }}>
+                                  {line}
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
                       </div>
 
                       <div style={{ display: "grid", gap: 10 }}>
@@ -1836,26 +2097,47 @@ export default function DemoPage() {
                         {roomConnectionsView.length === 0 ? (
                           <div className="muted">No routes are currently available from this room.</div>
                         ) : (
-                          roomConnectionsView.map((route) => (
-                            <div
-                              key={route.id}
-                              style={{
-                                padding: 12,
-                                borderRadius: 12,
-                                border: "1px solid rgba(255,255,255,0.08)",
-                                background: "rgba(255,255,255,0.03)",
-                              }}
-                            >
-                              <div style={{ fontWeight: 800 }}>
-                                {route.targetLabel}
+                          <>
+                            {roomExitNarrative.length > 0 && (
+                              <div
+                                style={{
+                                  padding: 12,
+                                  borderRadius: 12,
+                                  border: "1px solid rgba(255,255,255,0.08)",
+                                  background: "rgba(255,255,255,0.03)",
+                                }}
+                              >
+                                <ul style={{ margin: 0, paddingLeft: 18 }}>
+                                  {roomExitNarrative.map((line, idx) => (
+                                    <li key={`${idx}-${line}`} style={{ marginBottom: 6, lineHeight: 1.55 }}>
+                                      {line}
+                                    </li>
+                                  ))}
+                                </ul>
                               </div>
-                              <div className="muted" style={{ marginTop: 4, fontSize: 12 }}>
-                                {route.type.replaceAll("_", " ")} · {route.targetType.replaceAll("_", " ")}
-                                {route.locked ? " · locked" : ""}
-                                {route.note ? ` · ${route.note}` : ""}
+                            )}
+
+                            {roomConnectionsView.map((route) => (
+                              <div
+                                key={route.id}
+                                style={{
+                                  padding: 12,
+                                  borderRadius: 12,
+                                  border: "1px solid rgba(255,255,255,0.08)",
+                                  background: "rgba(255,255,255,0.03)",
+                                }}
+                              >
+                                <div style={{ fontWeight: 800 }}>
+                                  {route.targetLabel}
+                                </div>
+                                <div className="muted" style={{ marginTop: 4, fontSize: 12 }}>
+                                  {route.type.replaceAll("_", " ")} · {route.targetType.replaceAll("_", " ")}
+                                  {route.locked ? " · locked" : ""}
+                                  {route.note ? ` · ${route.note}` : ""}
+                                </div>
                               </div>
-                            </div>
-                          ))
+                            ))}
+                          </>
                         )}
                       </div>
 
@@ -2008,7 +2290,7 @@ export default function DemoPage() {
                       }}
                       role={role}
                       dmMode={resolutionDmMode}
-                      setupText={`${playerInput}\n\nCurrent Room: ${currentRoomTitle}`}
+                      setupText={`${playerInput}\n\nCurrent Room: ${currentRoomTitle}\n\n${roomSummary}`}
                       movement={resolutionMovement}
                       combat={resolutionCombat}
                       rollModifier={actingRollModifier}
