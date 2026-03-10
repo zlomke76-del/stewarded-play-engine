@@ -55,6 +55,7 @@ export type DungeonTrapDefinition = {
   name: string;
   danger: DungeonTrapDanger;
   assetPath: string;
+  audioPath: string;
   compatibleRoomTypes: DungeonTrapRoomType[];
   compatibleThemes: DungeonTheme[];
   generationWeight: number;
@@ -69,6 +70,7 @@ export const DUNGEON_TRAP_REGISTRY: Record<
     name: "Spike Pit",
     danger: "high",
     assetPath: "/assets/V3/Dungeon/Traps/spike_pit_01.png",
+    audioPath: "/assets/audio/traps/sfx_trap_spikes_01.mp3",
     compatibleRoomTypes: ["chamber", "antechamber", "crypt", "tomb"],
     compatibleThemes: [
       "forgotten_catacomb",
@@ -83,6 +85,7 @@ export const DUNGEON_TRAP_REGISTRY: Record<
     name: "Swinging Blades",
     danger: "high",
     assetPath: "/assets/V3/Dungeon/Traps/swinging_corridor_01.png",
+    audioPath: "/assets/audio/traps/sfx_swinging_corridor_01.mp3",
     compatibleRoomTypes: ["corridor", "hall", "chokepoint", "passage"],
     compatibleThemes: [
       "abandoned_keep",
@@ -97,6 +100,7 @@ export const DUNGEON_TRAP_REGISTRY: Record<
     name: "Poison Dart Wall",
     danger: "moderate",
     assetPath: "/assets/V3/Dungeon/Traps/poison_darts_01.png",
+    audioPath: "/assets/audio/traps/sfx_poison_darts_01.mp3",
     compatibleRoomTypes: ["treasure", "vault", "chamber"],
     compatibleThemes: [
       "forgotten_catacomb",
@@ -111,6 +115,7 @@ export const DUNGEON_TRAP_REGISTRY: Record<
     name: "Falling Stone Block",
     danger: "severe",
     assetPath: "/assets/V3/Dungeon/Traps/falling_stone_block_01.png",
+    audioPath: "/assets/audio/traps/sfx_falling_stone_block_01.mp3",
     compatibleRoomTypes: ["corridor", "hall", "chokepoint"],
     compatibleThemes: [
       "dwarven_ruin",
@@ -125,6 +130,7 @@ export const DUNGEON_TRAP_REGISTRY: Record<
     name: "Crushing Walls",
     danger: "deadly",
     assetPath: "/assets/V3/Dungeon/Traps/crushing_walls_01.png",
+    audioPath: "/assets/audio/traps/sfx_crushing_walls_01.mp3",
     compatibleRoomTypes: ["corridor", "hall", "chokepoint"],
     compatibleThemes: [
       "dwarven_ruin",
@@ -139,6 +145,7 @@ export const DUNGEON_TRAP_REGISTRY: Record<
     name: "Gas Chamber",
     danger: "high",
     assetPath: "/assets/V3/Dungeon/Traps/gas_chamber_01.png",
+    audioPath: "/assets/audio/traps/sfx_gas_chamber_01.mp3",
     compatibleRoomTypes: ["shrine", "ritual", "crypt", "chamber"],
     compatibleThemes: [
       "cult_temple",
@@ -157,10 +164,7 @@ export function getDungeonTrapById(
   trapId: DungeonTrapId | string | null | undefined,
 ): DungeonTrapDefinition | null {
   if (!trapId) return null;
-  return (
-    DUNGEON_TRAP_REGISTRY[trapId as DungeonTrapId] ??
-    null
-  );
+  return DUNGEON_TRAP_REGISTRY[trapId as DungeonTrapId] ?? null;
 }
 
 export function getDungeonTrapAssetPath(
@@ -168,6 +172,13 @@ export function getDungeonTrapAssetPath(
 ): string | null {
   const trap = getDungeonTrapById(trapId);
   return trap?.assetPath ?? null;
+}
+
+export function getDungeonTrapAudioPath(
+  trapId: DungeonTrapId | string | null | undefined,
+): string | null {
+  const trap = getDungeonTrapById(trapId);
+  return trap?.audioPath ?? null;
 }
 
 export function listDungeonTrapIds(): DungeonTrapId[] {
@@ -222,5 +233,5 @@ export function chooseWeightedDungeonTrap(
     }
   }
 
-  return candidates[0];
+  return candidates[0] ?? null;
 }
