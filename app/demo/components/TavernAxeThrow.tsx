@@ -39,29 +39,31 @@ type AxeVisualState = {
   embedded: boolean;
 };
 
-const LANE_BG = "/assets/V3/Dungeon/Tavern/axe_01.png";
-const TARGET_SRC = "/assets/V3/Dungeon/Tavern/Axe_Throwing/target_01.png";
+// -----------------------------------------------------------------------------
+// ASSET PATHS
+// Verify these match the exact filenames in your repo.
+// If your portrait axe-lane scene is named differently, change LANE_BG_SRC only.
+// -----------------------------------------------------------------------------
+const LANE_BG_SRC = "/assets/V3/Dungeon/Tavern/Axe_Throwing/target_01.png";
 const AXE_SRC = "/assets/V3/Dungeon/Tavern/Axe_Throwing/axe_01.png";
 
 const HIT_SFX = "/assets/audio/sfx_axe_hit_01.mp3";
 const MISS_SFX = "/assets/audio/sfx_axe_miss_01.mp3";
 
-const SCENE_W = 920;
-const SCENE_H = 920;
+// Portrait lane scene sizing
+const SCENE_W = 992;
+const SCENE_H = 1536;
 
-const TARGET_W = 310;
-const TARGET_H = 310;
-const TARGET_X = 505;
-const TARGET_Y = 168;
+// Approximate target center for the portrait lane art
+const TARGET_CENTER_X = 496;
+const TARGET_CENTER_Y = 476;
 
-const TARGET_CENTER_X = TARGET_X + TARGET_W / 2;
-const TARGET_CENTER_Y = TARGET_Y + TARGET_H / 2;
+// Approximate axe resting start in lower-left foreground
+const START_X = 128;
+const START_Y = 1165;
 
-const AXE_W = 200;
-const AXE_H = 360;
-
-const START_X = 88;
-const START_Y = 610;
+const AXE_W = 240;
+const AXE_H = 430;
 
 function clamp(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n));
@@ -76,16 +78,16 @@ function easeOutCubic(t: number) {
 }
 
 function evaluateThrow(distance: number): ThrowOutcome {
-  if (distance <= 22) {
+  if (distance <= 26) {
     return { score: 100, label: "Bullseye", distance };
   }
-  if (distance <= 52) {
+  if (distance <= 62) {
     return { score: 60, label: "Inner Ring", distance };
   }
-  if (distance <= 92) {
+  if (distance <= 108) {
     return { score: 30, label: "Outer Ring", distance };
   }
-  if (distance <= 128) {
+  if (distance <= 148) {
     return { score: 10, label: "Graze", distance };
   }
   return { score: 0, label: "Miss", distance };
@@ -111,7 +113,7 @@ export default function TavernAxeThrow({
   const [chargePower, setChargePower] = useState(0.35);
   const [isCharging, setIsCharging] = useState(false);
 
-  const [roundMessage, setRoundMessage] = useState<string>(
+  const [roundMessage, setRoundMessage] = useState(
     "Hold the throw button to build power. Move your pointer up or down to aim."
   );
   const [impactFlash, setImpactFlash] = useState(false);
@@ -150,7 +152,7 @@ export default function TavernAxeThrow({
     const flight = activeFlight;
 
     function step(now: number) {
-      setAxe((prev) => {
+      setAxe(() => {
         const rawT = clamp((now - flight.startedAt) / flight.durationMs, 0, 1);
         const t = easeOutCubic(rawT);
 
@@ -200,8 +202,10 @@ export default function TavernAxeThrow({
     if (!rect) return;
 
     const y = event.clientY - rect.top;
-    const relative = y - TARGET_CENTER_Y;
-    setAimOffsetY(clamp(relative, -120, 120));
+    const relativeY = (y / rect.height) * SCENE_H;
+    const centered = relativeY - TARGET_CENTER_Y;
+
+    setAimOffsetY(clamp(centered, -150, 150));
   }
 
   function beginCharge() {
@@ -230,22 +234,21 @@ export default function TavernAxeThrow({
     if (chargeRafRef.current) cancelAnimationFrame(chargeRafRef.current);
 
     const power = chargePower;
-    const accuracyPenalty = (1 - power) * 34;
+    const accuracyPenalty = (1 - power) * 42;
     const randomDriftX = (Math.random() * 2 - 1) * accuracyPenalty;
-    const randomDriftY = (Math.random() * 2 - 1) * (accuracyPenalty + 10);
+    const randomDriftY = (Math.random() * 2 - 1) * (accuracyPenalty + 14);
 
-    const endX = TARGET_CENTER_X - AXE_W / 2 + randomDriftX;
-    const aimedY = TARGET_CENTER_Y + aimOffsetY * 0.45;
-    const endY = aimedY - AXE_H / 2 + randomDriftY;
+    const aimedY = TARGET_CENTER_Y + aimOffsetY * 0.55;
+    const endX = TARGET_CENTER_X - AXE_W * 0.36 + randomDriftX;
+    const endY = aimedY - AXE_H * 0.24 + randomDriftY;
 
     const durationMs = Math.round(560 + (1 - power) * 220);
-    const arcHeight = 160 + power * 160;
-    const spinDeg = 540 + power * 720;
+    const arcHeight = 220 + power * 180;
+    const spinDeg = 540 + power * 760;
     const finalStickDeg = -26 + Math.random() * 18;
 
     setThrowsLeft((v) => Math.max(0, v - 1));
     setRoundMessage("The axe cuts through the smoky tavern air...");
-
     setActiveFlight({
       startedAt: performance.now(),
       durationMs,
@@ -262,8 +265,8 @@ export default function TavernAxeThrow({
   function resolveImpact(flight: ActiveFlight) {
     setActiveFlight(null);
 
-    const axeHeadX = flight.endX + AXE_W * 0.7;
-    const axeHeadY = flight.endY + AXE_H * 0.28;
+    const axeHeadX = flight.endX + AXE_W * 0.68;
+    const axeHeadY = flight.endY + AXE_H * 0.2;
 
     const dx = axeHeadX - TARGET_CENTER_X;
     const dy = axeHeadY - TARGET_CENTER_Y;
@@ -336,7 +339,7 @@ export default function TavernAxeThrow({
     setRoundMessage("Hold the throw button to build power. Move your pointer up or down to aim.");
   }
 
-  const aimMarkerY = clamp(TARGET_CENTER_Y + aimOffsetY, TARGET_Y + 18, TARGET_Y + TARGET_H - 18);
+  const aimMarkerY = clamp(TARGET_CENTER_Y + aimOffsetY, TARGET_CENTER_Y - 180, TARGET_CENTER_Y + 180);
 
   return (
     <div
@@ -346,12 +349,7 @@ export default function TavernAxeThrow({
         gap: 18,
       }}
     >
-      <div
-        style={{
-          display: "grid",
-          gap: 8,
-        }}
-      >
+      <div style={{ display: "grid", gap: 8 }}>
         <div style={{ fontSize: 24, fontWeight: 900 }}>Tavern Axe Lane</div>
         <div style={{ fontSize: 14, opacity: 0.78, lineHeight: 1.55 }}>
           Warm up before the descent. Three throws. A steady hand earns more than applause.
@@ -364,8 +362,8 @@ export default function TavernAxeThrow({
         style={{
           position: "relative",
           width: "100%",
-          maxWidth: 920,
-          aspectRatio: "1 / 1",
+          maxWidth: 560,
+          aspectRatio: `${SCENE_W} / ${SCENE_H}`,
           borderRadius: 20,
           overflow: "hidden",
           border: "1px solid rgba(255,255,255,0.12)",
@@ -376,7 +374,7 @@ export default function TavernAxeThrow({
         }}
       >
         <img
-          src={LANE_BG}
+          src={LANE_BG_SRC}
           alt="Tavern axe lane"
           draggable={false}
           style={{
@@ -385,35 +383,21 @@ export default function TavernAxeThrow({
             width: "100%",
             height: "100%",
             objectFit: "cover",
-          }}
-        />
-
-        <img
-          src={TARGET_SRC}
-          alt="Target"
-          draggable={false}
-          style={{
-            position: "absolute",
-            left: `${(TARGET_X / SCENE_W) * 100}%`,
-            top: `${(TARGET_Y / SCENE_H) * 100}%`,
-            width: `${(TARGET_W / SCENE_W) * 100}%`,
-            height: `${(TARGET_H / SCENE_H) * 100}%`,
-            objectFit: "contain",
-            transform: boardShake ? "translateX(2px) rotate(0.35deg)" : "translateX(0px) rotate(0deg)",
+            transform: boardShake ? "translateX(1px)" : "translateX(0px)",
             transition: "transform 120ms ease-out",
-            filter: impactFlash ? "brightness(1.15)" : "brightness(1)",
+            filter: impactFlash ? "brightness(1.08)" : "brightness(1)",
           }}
         />
 
         <div
           style={{
             position: "absolute",
-            left: `${((TARGET_X + TARGET_W * 0.08) / SCENE_W) * 100}%`,
+            left: `${((TARGET_CENTER_X - 160) / SCENE_W) * 100}%`,
             top: `${(aimMarkerY / SCENE_H) * 100}%`,
-            width: `${(TARGET_W * 0.84 / SCENE_W) * 100}%`,
+            width: `${(320 / SCENE_W) * 100}%`,
             height: 2,
-            background: "rgba(255, 244, 214, 0.28)",
-            boxShadow: "0 0 12px rgba(255, 220, 140, 0.25)",
+            background: "rgba(255, 244, 214, 0.24)",
+            boxShadow: "0 0 12px rgba(255, 220, 140, 0.22)",
             pointerEvents: "none",
           }}
         />
@@ -449,7 +433,7 @@ export default function TavernAxeThrow({
             inset: 0,
             pointerEvents: "none",
             background: impactFlash
-              ? "radial-gradient(circle at 72% 28%, rgba(255,210,140,0.18), rgba(255,255,255,0) 26%)"
+              ? "radial-gradient(circle at 50% 31%, rgba(255,210,140,0.16), rgba(255,255,255,0) 24%)"
               : "transparent",
             transition: "background 120ms ease-out",
           }}
