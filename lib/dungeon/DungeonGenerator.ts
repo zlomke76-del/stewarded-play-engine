@@ -13,10 +13,7 @@
 // - It does not mutate runtime state
 // ------------------------------------------------------------
 
-import type {
-  DungeonFloorTheme,
-  RoomType,
-} from "@/lib/dungeon/RoomTypes";
+import type { DungeonFloorTheme, RoomType } from "@/lib/dungeon/RoomTypes";
 import {
   FLOOR_THEME_DEFINITIONS,
   ROOM_TYPE_DEFINITIONS,
@@ -173,6 +170,26 @@ function buildFloorLabel(theme: DungeonFloorTheme, floorIndex: number): string {
   return `${FLOOR_THEME_DEFINITIONS[theme].label} — Floor ${floorIndex + 1}`;
 }
 
+function removeRoomTypeOnce(pool: RoomType[], roomType: RoomType) {
+  const index = pool.indexOf(roomType);
+  if (index >= 0) {
+    pool.splice(index, 1);
+  }
+}
+
+function maybeAddRareRoom(
+  rng: () => number,
+  pool: RoomType[],
+  rareRoomTypes: readonly RoomType[],
+  chance: number
+) {
+  if (!rareRoomTypes.length) return;
+  if (rng() > chance) return;
+
+  const candidate = pickOne(rng, rareRoomTypes);
+  pool.push(candidate);
+}
+
 function buildCoreRoomPlanForTheme(
   rng: () => number,
   theme: DungeonFloorTheme,
@@ -180,12 +197,66 @@ function buildCoreRoomPlanForTheme(
   isLastFloor: boolean
 ): RoomType[] {
   const definition = FLOOR_THEME_DEFINITIONS[theme];
+
   const commonPool = definition.commonRoomTypes.filter(
     (t) => t !== "entrance" && t !== "stairs_down" && t !== "stairs_up"
   );
+  const rarePool = [...definition.rareRoomTypes];
 
-  const roomCount = randomInt(rng, 5, 7);
-  const picked = pickManyUnique(rng, commonPool, Math.max(3, roomCount - 2));
+  const targetRoomCount = randomInt(rng, 5, 7);
+  const internalTargetCount = Math.max(3, targetRoomCount - 2);
+
+  const selected: RoomType[] = [];
+
+  const addGuaranteed = (roomType: RoomType) => {
+    if (selected.includes(roomType)) return;
+    selected.push(roomType);
+    removeRoomTypeOnce(commonPool, roomType);
+    removeRoomTypeOnce(rarePool, roomType);
+  };
+
+  // Stronger authored identity for the opening floors.
+  // Floor 1 should feel like a real place: corridor + storage, with shrine as a rare emotional beat.
+  if (theme === "ruined_outpost") {
+    addGuaranteed("corridor");
+    addGuaranteed("storage");
+
+    if (rng() < 0.35) {
+      addGuaranteed("guard_post");
+    }
+    if (rng() < 0.28) {
+      addGuaranteed("shrine");
+    }
+  }
+
+  // Crypt floors should more reliably feel sepulchral and haunted.
+  if (theme === "forgotten_crypt") {
+    addGuaranteed("crypt");
+
+    if (rng() < 0.45) {
+      addGuaranteed("bone_pit");
+    }
+    if (rng() < 0.3) {
+      addGuaranteed("shrine");
+    }
+  }
+
+  // Add a rare room sometimes before filling from commons.
+  maybeAddRareRoom(rng, selected, rarePool, 0.35);
+
+  const remainingNeeded = Math.max(0, internalTargetCount - selected.length);
+  const pickedCommon = pickManyUnique(rng, commonPool, remainingNeeded);
+  selected.push(...pickedCommon);
+
+  // If we still came up short because of unique pool limits, backfill from rare rooms.
+  while (selected.length < internalTargetCount && rarePool.length > 0) {
+    const rare = pickOne(rng, rarePool);
+    if (!selected.includes(rare)) {
+      selected.push(rare);
+    } else {
+      break;
+    }
+  }
 
   const plan: RoomType[] = [];
 
@@ -195,7 +266,7 @@ function buildCoreRoomPlanForTheme(
     plan.push("stairs_up");
   }
 
-  plan.push(...picked);
+  plan.push(...selected);
 
   if (!isLastFloor) {
     plan.push("stairs_down");
