@@ -28,6 +28,7 @@ type ActiveFlight = {
   arcHeight: number;
   spinDeg: number;
   finalStickDeg: number;
+  forcedMiss?: "low" | "high" | null;
 };
 
 type AxeVisualState = {
@@ -57,13 +58,22 @@ const START_Y = 1165;
 const AXE_W = 240;
 const AXE_H = 430;
 
-// blade tip approximation in local image space
-const AXE_TIP_X = AXE_W * 0.78;
-const AXE_TIP_Y = AXE_H * 0.18;
+// tighter blade-tip approximation
+const AXE_TIP_X = AXE_W * 0.735;
+const AXE_TIP_Y = AXE_H * 0.155;
 
 // aim slider range
 const AIM_MIN = -150;
 const AIM_MAX = 150;
+
+// power gating
+const MIN_STICK_POWER = 0.28;
+const MAX_STICK_POWER = 0.84;
+
+// floor miss landing spots
+const FLOOR_MISS_LOW_Y = 1210;
+const FLOOR_MISS_HIGH_Y = 980;
+const FLOOR_MISS_X = 420;
 
 function clamp(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n));
@@ -78,16 +88,16 @@ function easeOutCubic(t: number) {
 }
 
 function evaluateThrow(distance: number): ThrowOutcome {
-  if (distance <= 26) {
+  if (distance <= 18) {
     return { score: 100, label: "Bullseye", distance };
   }
-  if (distance <= 62) {
+  if (distance <= 48) {
     return { score: 60, label: "Inner Ring", distance };
   }
-  if (distance <= 108) {
+  if (distance <= 86) {
     return { score: 30, label: "Outer Ring", distance };
   }
-  if (distance <= 148) {
+  if (distance <= 118) {
     return { score: 10, label: "Graze", distance };
   }
   return { score: 0, label: "Miss", distance };
@@ -96,15 +106,15 @@ function evaluateThrow(distance: number): ThrowOutcome {
 function finalStickRotation(outcome: ThrowOutcome): number {
   switch (outcome.label) {
     case "Bullseye":
-      return -18 + Math.random() * 8;
+      return -14 + Math.random() * 6;
     case "Inner Ring":
-      return -22 + Math.random() * 10;
+      return -18 + Math.random() * 8;
     case "Outer Ring":
-      return -26 + Math.random() * 12;
+      return -22 + Math.random() * 10;
     case "Graze":
-      return -32 + Math.random() * 14;
+      return -28 + Math.random() * 12;
     default:
-      return 72 + Math.random() * 18;
+      return 78 + Math.random() * 18;
   }
 }
 
@@ -220,8 +230,10 @@ export default function TavernAxeThrow({
 
     function tick(now: number) {
       const elapsed = now - startedAt;
-      const wave = (Math.sin(elapsed / 260) + 1) / 2;
-      const power = 0.18 + wave * 0.82;
+
+      // slowed down from prior version
+      const wave = (Math.sin(elapsed / 520) + 1) / 2;
+      const power = 0.12 + wave * 0.88;
       setChargePower(power);
 
       chargeRafRef.current = requestAnimationFrame(tick);
@@ -237,20 +249,42 @@ export default function TavernAxeThrow({
     if (chargeRafRef.current) cancelAnimationFrame(chargeRafRef.current);
 
     const power = chargePower;
+    const tooSoft = power < MIN_STICK_POWER;
+    const tooHard = power > MAX_STICK_POWER;
+
     const accuracyPenalty = (1 - power) * 42;
     const randomDriftX = (Math.random() * 2 - 1) * accuracyPenalty;
     const randomDriftY = (Math.random() * 2 - 1) * (accuracyPenalty + 14);
 
     const aimedY = TARGET_CENTER_Y + aimOffsetY * 0.55;
-    const endX = TARGET_CENTER_X - AXE_W * 0.36 + randomDriftX;
-    const endY = aimedY - AXE_H * 0.24 + randomDriftY;
 
-    const durationMs = Math.round(560 + (1 - power) * 220);
-    const arcHeight = 220 + power * 180;
-    const spinDeg = 540 + power * 760;
+    let endX = TARGET_CENTER_X - AXE_W * 0.39 + randomDriftX;
+    let endY = aimedY - AXE_H * 0.19 + randomDriftY;
+    let forcedMiss: "low" | "high" | null = null;
+
+    if (tooSoft) {
+      forcedMiss = "low";
+      endX = FLOOR_MISS_X + (Math.random() * 80 - 40);
+      endY = FLOOR_MISS_LOW_Y + (Math.random() * 36 - 18);
+    } else if (tooHard) {
+      forcedMiss = "high";
+      endX = FLOOR_MISS_X + 90 + (Math.random() * 70 - 35);
+      endY = FLOOR_MISS_HIGH_Y + (Math.random() * 30 - 15);
+    }
+
+    const durationMs = Math.round(620 + (1 - power) * 260);
+    const arcHeight = tooSoft ? 90 : tooHard ? 290 : 220 + power * 180;
+    const spinDeg = 520 + power * 720;
 
     setThrowsLeft((v) => Math.max(0, v - 1));
-    setRoundMessage("The axe cuts through the smoky tavern air...");
+
+    if (tooSoft) {
+      setRoundMessage("Too soft. The axe dies early and drops short.");
+    } else if (tooHard) {
+      setRoundMessage("Too hard. The throw overdrives and fails to bite cleanly.");
+    } else {
+      setRoundMessage("The axe cuts through the smoky tavern air...");
+    }
 
     setActiveFlight({
       startedAt: performance.now(),
@@ -261,12 +295,50 @@ export default function TavernAxeThrow({
       endY,
       arcHeight,
       spinDeg,
-      finalStickDeg: -22,
+      finalStickDeg: -18,
+      forcedMiss,
     });
   }
 
   function resolveImpact(flight: ActiveFlight) {
     setActiveFlight(null);
+
+    if (flight.forcedMiss) {
+      const missRotation = flight.forcedMiss === "high" ? 126 : 102;
+
+      setAxe({
+        x: flight.endX,
+        y: flight.endY,
+        rotation: missRotation,
+        visible: true,
+        flying: false,
+        embedded: false,
+      });
+
+      if (missAudioRef.current) {
+        missAudioRef.current.currentTime = 0;
+        missAudioRef.current.play().catch(() => {});
+      }
+
+      const outcome: ThrowOutcome = {
+        score: 0,
+        label: "Miss",
+        distance: 999,
+      };
+
+      setBestThrow((prev) => {
+        if (!prev) return outcome;
+        return prev.score >= outcome.score ? prev : outcome;
+      });
+
+      if (flight.forcedMiss === "low") {
+        setRoundMessage("Too soft. The axe drops to the floor before it can stick.");
+      } else {
+        setRoundMessage("Too hard. The throw glances and crashes to the floor.");
+      }
+
+      return;
+    }
 
     const axeTipX = flight.endX + AXE_TIP_X;
     const axeTipY = flight.endY + AXE_TIP_Y;
@@ -279,17 +351,44 @@ export default function TavernAxeThrow({
     const hit = outcome.score > 0;
     const stickDeg = finalStickRotation(outcome);
 
-    // slight "embed into wood" nudge
-    const embeddedX = hit ? flight.endX - 14 : flight.endX;
-    const embeddedY = hit ? flight.endY - 6 : flight.endY + 18;
+    if (!hit) {
+      const floorX = flight.endX + 36;
+      const floorY = FLOOR_MISS_LOW_Y + 8;
+
+      setAxe({
+        x: floorX,
+        y: floorY,
+        rotation: 108,
+        visible: true,
+        flying: false,
+        embedded: false,
+      });
+
+      if (missAudioRef.current) {
+        missAudioRef.current.currentTime = 0;
+        missAudioRef.current.play().catch(() => {});
+      }
+
+      setBestThrow((prev) => {
+        if (!prev) return outcome;
+        return prev.score >= outcome.score ? prev : outcome;
+      });
+
+      setRoundMessage("Miss. The blade skids off and drops to the floor.");
+      return;
+    }
+
+    // stronger embed into board
+    const embeddedX = flight.endX - 22;
+    const embeddedY = flight.endY - 10;
 
     setAxe({
       x: embeddedX,
       y: embeddedY,
-      rotation: hit ? stickDeg : stickDeg,
+      rotation: stickDeg,
       visible: true,
       flying: false,
-      embedded: hit,
+      embedded: true,
     });
 
     setImpactFlash(true);
@@ -297,16 +396,9 @@ export default function TavernAxeThrow({
     window.setTimeout(() => setImpactFlash(false), 130);
     window.setTimeout(() => setBoardShake(false), 220);
 
-    if (hit) {
-      if (hitAudioRef.current) {
-        hitAudioRef.current.currentTime = 0;
-        hitAudioRef.current.play().catch(() => {});
-      }
-    } else {
-      if (missAudioRef.current) {
-        missAudioRef.current.currentTime = 0;
-        missAudioRef.current.play().catch(() => {});
-      }
+    if (hitAudioRef.current) {
+      hitAudioRef.current.currentTime = 0;
+      hitAudioRef.current.play().catch(() => {});
     }
 
     setTotalScore((v) => v + outcome.score);
@@ -321,10 +413,8 @@ export default function TavernAxeThrow({
       setRoundMessage("A strong throw. Clean steel, solid wood.");
     } else if (outcome.label === "Outer Ring") {
       setRoundMessage("Good enough to earn a few nods.");
-    } else if (outcome.label === "Graze") {
-      setRoundMessage("A scrape. The blade bites, but not cleanly.");
     } else {
-      setRoundMessage("Miss. The floor remembers the clatter.");
+      setRoundMessage("A scrape. The blade bites, but not cleanly.");
     }
   }
 
@@ -567,16 +657,18 @@ export default function TavernAxeThrow({
                       width: `${Math.round(chargePower * 100)}%`,
                       height: "100%",
                       background:
-                        chargePower >= 0.8
-                          ? "linear-gradient(90deg, rgba(255,189,92,0.92), rgba(255,120,72,0.92))"
-                          : "linear-gradient(90deg, rgba(196,176,122,0.92), rgba(255,189,92,0.92))",
+                        chargePower < MIN_STICK_POWER || chargePower > MAX_STICK_POWER
+                          ? "linear-gradient(90deg, rgba(160,70,70,0.92), rgba(220,110,90,0.92))"
+                          : chargePower >= 0.74
+                            ? "linear-gradient(90deg, rgba(196,176,122,0.92), rgba(255,189,92,0.92))"
+                            : "linear-gradient(90deg, rgba(128,148,182,0.92), rgba(196,176,122,0.92))",
                       transition: isCharging ? "none" : "width 140ms ease-out",
                     }}
                   />
                 </div>
 
                 <div style={{ marginTop: 8, fontSize: 12, opacity: 0.7 }}>
-                  Aim is now separate from the throw button.
+                  Red zones will miss completely.
                 </div>
               </div>
 
@@ -677,13 +769,15 @@ export default function TavernAxeThrow({
               step={1}
               value={aimOffsetY}
               onChange={(e) => setAimOffsetY(Number(e.target.value))}
-              style={{
-                writingMode: "vertical-lr",
-                WebkitAppearance: "slider-vertical",
-                width: 28,
-                height: 240,
-                cursor: "pointer",
-              } as React.CSSProperties}
+              style={
+                {
+                  writingMode: "vertical-lr",
+                  WebkitAppearance: "slider-vertical",
+                  width: 28,
+                  height: 240,
+                  cursor: "pointer",
+                } as React.CSSProperties
+              }
             />
 
             <div style={{ fontSize: 12, opacity: 0.72, textAlign: "center", lineHeight: 1.5 }}>
