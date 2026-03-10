@@ -13,10 +13,10 @@ import { headers } from "next/headers";
 export const metadata: Metadata = {
   metadataBase: new URL("https://www.moralclarity.ai"),
   title: {
-    default: "Moral Clarity AI",
-    template: "%s • Moral Clarity AI",
+    default: "Echoes of Fate",
+    template: "%s • Echoes of Fate",
   },
-  description: "Anchored answers. Neutral • Guidance.",
+  description: "Echoes of Fate — Every action leaves an echo.",
 };
 
 export const viewport: Viewport = {
