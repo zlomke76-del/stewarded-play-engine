@@ -391,17 +391,8 @@ export default function DemoPage() {
                     demo.setActiveSection("mode");
                     demo.setPartyDraft((prev: any) => prev ?? null);
                   }}
-                  partySize={demo.partySize}
-                  partyLocked={demo.partyLocked}
-                  onSetPartySize={(n) => {
-                    if (demo.dmMode === null) return;
-                    demo.setEnteredDungeon(false);
-                    demo.setTableAccepted(false);
-                    demo.setGameplayFocusStep("pressure");
-                    demo.setPartySize(n);
-                  }}
                   onEnter={demo.enterDungeon}
-                  canEnter={demo.dmMode !== null && demo.partySize > 0}
+                  canEnter={demo.dmMode !== null}
                   heroImageSrc={demo.HERO_IMAGE_SRC}
                   heroImageOk={demo.heroImageOk}
                   onHeroImageError={() => demo.setHeroImageOk(false)}
@@ -409,6 +400,10 @@ export default function DemoPage() {
                   onJump={(k) => jumpTo(k)}
                   outcomesCount={demo.outcomesCount}
                   canonCount={demo.canonCount}
+                  activePartySize={demo.progression.party.activeSlots}
+                  unlockedPartySlots={demo.progression.party.unlockedSlots}
+                  maxPartySlots={demo.progression.party.maxSlots}
+                  completionRequiresFullFellowship={demo.progression.campaign.completionRequiresFullParty}
                 />
               )}
 
@@ -426,17 +421,8 @@ export default function DemoPage() {
                     demo.setActiveSection("mode");
                     demo.setPartyDraft((prev: any) => prev ?? null);
                   }}
-                  partySize={demo.partySize}
-                  partyLocked={demo.partyLocked}
-                  onSetPartySize={(n) => {
-                    if (demo.dmMode === null) return;
-                    demo.setEnteredDungeon(false);
-                    demo.setTableAccepted(false);
-                    demo.setGameplayFocusStep("pressure");
-                    demo.setPartySize(n);
-                  }}
                   onEnter={demo.enterDungeon}
-                  canEnter={demo.dmMode !== null && demo.partySize > 0}
+                  canEnter={demo.dmMode !== null}
                   heroImageSrc={demo.HERO_IMAGE_SRC}
                   heroImageOk={demo.heroImageOk}
                   onHeroImageError={() => demo.setHeroImageOk(false)}
@@ -444,6 +430,10 @@ export default function DemoPage() {
                   onJump={(k) => jumpTo(k)}
                   outcomesCount={demo.outcomesCount}
                   canonCount={demo.canonCount}
+                  activePartySize={demo.progression.party.activeSlots}
+                  unlockedPartySlots={demo.progression.party.unlockedSlots}
+                  maxPartySlots={demo.progression.party.maxSlots}
+                  completionRequiresFullFellowship={demo.progression.campaign.completionRequiresFullParty}
                 />
               )}
             </div>
@@ -474,11 +464,11 @@ export default function DemoPage() {
                 partyCanonicalExists={demo.partyCanonicalExists}
                 partyLocked={demo.partyLocked}
                 partyLockedByCombat={demo.partyLockedByCombat}
-                setPartySize={(n) => demo.setPartySize(n)}
-                randomizePartyNames={demo.randomizePartyNames}
                 commitParty={demo.commitParty}
-                safeInt={demo.safeInt}
                 setPartyDraft={demo.setPartyDraft}
+                unlockedPartySlots={demo.progression.party.unlockedSlots}
+                maxPartySlots={demo.progression.party.maxSlots}
+                completionRequiresFullFellowship={demo.progression.campaign.completionRequiresFullParty}
               />
             </div>
 
