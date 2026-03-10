@@ -7,13 +7,14 @@
 // Receives all values and callbacks from the page orchestrator.
 //
 // Updated onboarding flow:
-// - full mode now uses progressive reveal
-// - opening state shows ONLY:
-//    1) Choose Your Play Style
-//    2) Hero image panel
+// - full mode uses progressive reveal
+// - opening state shows only:
+//    1) title + subtitle
+//    2) Choose Your Play Style
+//    3) cinematic hero image panel
 // - Party Size appears only after mode is chosen
 // - Enter panel appears only after mode is chosen
-// - Chapter chips remain hidden in full mode
+// - full mode includes richer DM descriptions + more atmospheric styling
 // - compact mode remains the richer in-progress adventure header
 // ------------------------------------------------------------
 
@@ -137,15 +138,17 @@ function TriToggle({
   const knobLeft = dmMode === null ? 16 : isSolace ? 32 : 0;
 
   const labelStyle = (active: boolean) => ({
-    fontSize: 12,
-    opacity: disabled ? 0.6 : active ? 0.92 : 0.78,
-    fontWeight: active ? 900 : 650,
+    fontSize: 13,
+    opacity: disabled ? 0.6 : active ? 0.96 : 0.8,
+    fontWeight: active ? 900 : 700,
     cursor: disabled ? "not-allowed" : "pointer",
     userSelect: "none" as const,
+    transition: "opacity 140ms ease, transform 140ms ease",
+    transform: active ? "translateY(-1px)" : "translateY(0px)",
   });
 
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+    <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
       <button
         type="button"
         onClick={() => !disabled && onSetDmMode("human")}
@@ -163,8 +166,8 @@ function TriToggle({
         aria-label="toggle"
         disabled
         style={{
-          width: 54,
-          height: 28,
+          width: 58,
+          height: 30,
           borderRadius: 999,
           border: "1px solid rgba(255,255,255,0.18)",
           background: disabled ? "rgba(255,255,255,0.03)" : "rgba(255,255,255,0.06)",
@@ -172,6 +175,7 @@ function TriToggle({
           cursor: "default",
           padding: 0,
           opacity: disabled ? 0.65 : 1,
+          boxShadow: "inset 0 0 20px rgba(0,0,0,0.24)",
         }}
         title={dmMode === null ? "Declare a style" : undefined}
       >
@@ -180,11 +184,12 @@ function TriToggle({
             position: "absolute",
             top: 3,
             left: 3 + knobLeft,
-            width: 22,
-            height: 22,
+            width: 24,
+            height: 24,
             borderRadius: 999,
-            background: "rgba(220,220,255,0.85)",
-            boxShadow: "0 0 0 1px rgba(0,0,0,0.2)",
+            background: "rgba(220,220,255,0.88)",
+            boxShadow:
+              "0 0 0 1px rgba(0,0,0,0.22), 0 0 18px rgba(150,175,255,0.18)",
             transition: "left 160ms ease",
           }}
         />
@@ -223,6 +228,7 @@ function PartyPips({ count, compact = false }: { count: number; compact?: boolea
             border: "1px solid rgba(255,255,255,0.14)",
             background: "rgba(255,255,255,0.04)",
             fontSize: compact ? 13 : 16,
+            boxShadow: "0 6px 16px rgba(0,0,0,0.2)",
           }}
           title={`Adventurer ${i + 1}`}
         >
@@ -257,6 +263,57 @@ function SummaryPill({
         {label}
       </span>
       <span style={{ fontSize: 13, fontWeight: 850 }}>{value}</span>
+    </div>
+  );
+}
+
+function ModeLoreBlock({ dmMode }: { dmMode: DMMode | null }) {
+  const title =
+    dmMode === "human"
+      ? "Human Dungeon Master"
+      : dmMode === "solace-neutral"
+        ? "Solace Dungeon Master"
+        : "Choose Who Guides the Adventure";
+
+  const body =
+    dmMode === "human"
+      ? "A human DM interprets the world through judgment, improvisation, and personal storytelling. You shape the pace, tone, and consequences by hand."
+      : dmMode === "solace-neutral"
+        ? "Solace guides the expedition with responsive pacing and narrative continuity. The dungeon keeps moving while preserving balance, tone, and consequence."
+        : "A human DM offers handcrafted control and creative rulings. Solace offers a living guided flow that keeps the story moving through the dark.";
+
+  return (
+    <div
+      style={{
+        padding: "12px 13px",
+        borderRadius: 14,
+        border: "1px solid rgba(255,255,255,0.10)",
+        background:
+          "linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.025))",
+        boxShadow: "inset 0 1px 0 rgba(255,255,255,0.03)",
+      }}
+    >
+      <div
+        style={{
+          fontSize: 12,
+          fontWeight: 900,
+          letterSpacing: 0.45,
+          textTransform: "uppercase",
+          color: "rgba(190,205,255,0.88)",
+          marginBottom: 7,
+        }}
+      >
+        {title}
+      </div>
+      <div
+        style={{
+          fontSize: 12.5,
+          lineHeight: 1.55,
+          opacity: 0.8,
+        }}
+      >
+        {body}
+      </div>
     </div>
   );
 }
@@ -309,8 +366,8 @@ export default function HeroOnboarding({
 }: Props) {
   const dmHint = useMemo(() => {
     if (dmMode === "solace-neutral") return "Solace keeps the adventure moving.";
-    if (dmMode === "human") return "You choose how each action resolves.";
-    return "Pick a style to begin.";
+    if (dmMode === "human") return "You decide how each action resolves.";
+    return "Choose who guides the fate of the expedition.";
   }, [dmMode]);
 
   const modeLabel = useMemo(() => {
@@ -499,39 +556,121 @@ export default function HeroOnboarding({
     <section
       className="card"
       style={{
-        background: "rgba(17,17,17,0.82)",
+        position: "relative",
+        background:
+          "linear-gradient(180deg, rgba(17,17,17,0.86), rgba(10,10,10,0.86))",
         border: "1px solid rgba(255,255,255,0.10)",
-        borderRadius: 16,
-        padding: 16,
+        borderRadius: 18,
+        padding: "28px 24px",
+        marginTop: 20,
+        boxShadow: "0 18px 60px rgba(0,0,0,0.36)",
+        overflow: "hidden",
       }}
     >
-      <div style={{ display: "grid", gap: 14 }}>
-        <div>
-          <div style={{ fontSize: 26, fontWeight: 950, letterSpacing: 0.2 }}>{heroTitle}</div>
-          <div style={{ marginTop: 6, fontSize: 14, opacity: 0.86 }}>{heroSubtitle}</div>
+      <style jsx>{`
+        @keyframes heroTorchPulse {
+          0% {
+            filter: brightness(0.92) contrast(1.06) saturate(1.06);
+          }
+          50% {
+            filter: brightness(1) contrast(1.1) saturate(1.12);
+          }
+          100% {
+            filter: brightness(0.92) contrast(1.06) saturate(1.06);
+          }
+        }
+
+        @keyframes heroMistShift {
+          0% {
+            transform: translate3d(-1%, 0, 0) scale(1.02);
+            opacity: 0.18;
+          }
+          50% {
+            transform: translate3d(1%, -1%, 0) scale(1.04);
+            opacity: 0.28;
+          }
+          100% {
+            transform: translate3d(-1%, 0, 0) scale(1.02);
+            opacity: 0.18;
+          }
+        }
+
+        @keyframes onboardingFadeUp {
+          0% {
+            opacity: 0;
+            transform: translateY(8px);
+          }
+          100% {
+            opacity: 1;
+            transform: translateY(0);
+          }
+        }
+      `}</style>
+
+      <div
+        aria-hidden
+        style={{
+          position: "absolute",
+          inset: "-120px",
+          background:
+            "radial-gradient(600px 400px at 50% 0%, rgba(140,160,255,0.10), transparent 70%)",
+          pointerEvents: "none",
+          zIndex: 0,
+        }}
+      />
+
+      <div style={{ position: "relative", zIndex: 1, display: "grid", gap: 18 }}>
+        <div style={{ display: "grid", gap: 8 }}>
+          <div
+            style={{
+              fontSize: 34,
+              fontWeight: 950,
+              letterSpacing: 0.4,
+              lineHeight: 1.04,
+              textShadow: "0 6px 24px rgba(0,0,0,0.38)",
+            }}
+          >
+            {heroTitle}
+          </div>
+          <div
+            style={{
+              fontSize: 15,
+              opacity: 0.82,
+              lineHeight: 1.45,
+              maxWidth: 700,
+            }}
+          >
+            {heroSubtitle}
+          </div>
         </div>
 
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: "1.05fr 0.95fr",
-            gap: 12,
+            gridTemplateColumns: "minmax(0, 1.06fr) minmax(0, 0.94fr)",
+            gap: 16,
             alignItems: "stretch",
           }}
         >
-          <div style={{ display: "grid", gap: 12 }}>
+          <div style={{ display: "grid", gap: 12, alignContent: "start" }}>
             <div
               style={{
                 display: "grid",
-                gridTemplateColumns: "1fr",
-                gap: 10,
-                padding: 14,
-                borderRadius: 14,
-                background: "rgba(255,255,255,0.04)",
+                gap: 12,
+                padding: 16,
+                borderRadius: 16,
+                background:
+                  "linear-gradient(180deg, rgba(255,255,255,0.045), rgba(255,255,255,0.028))",
                 border: "1px solid rgba(255,255,255,0.10)",
+                boxShadow: "inset 0 1px 0 rgba(255,255,255,0.03)",
+                animation: "onboardingFadeUp 300ms ease both",
+                minHeight: showPartyStep ? "auto" : 278,
+                alignContent: showPartyStep ? "start" : "center",
               }}
             >
-              <div style={{ fontWeight: 900, letterSpacing: 0.2 }}>Choose Your Play Style</div>
+              <div style={{ fontWeight: 900, letterSpacing: 0.2, fontSize: 18 }}>
+                Choose Your Play Style
+              </div>
 
               <TriToggle
                 dmMode={dmMode}
@@ -543,22 +682,26 @@ export default function HeroOnboarding({
                 rightLabel="Solace"
               />
 
-              <div style={{ fontSize: 12, opacity: 0.78 }}>{dmHint}</div>
+              <div style={{ fontSize: 12.5, opacity: 0.82, lineHeight: 1.45 }}>{dmHint}</div>
+
+              <ModeLoreBlock dmMode={dmMode} />
             </div>
 
             {showPartyStep && (
               <div
                 style={{
                   display: "grid",
-                  gridTemplateColumns: "1fr",
-                  gap: 10,
-                  padding: 12,
-                  borderRadius: 14,
-                  background: "rgba(255,255,255,0.04)",
+                  gap: 12,
+                  padding: 16,
+                  borderRadius: 16,
+                  background:
+                    "linear-gradient(180deg, rgba(255,255,255,0.045), rgba(255,255,255,0.028))",
                   border: "1px solid rgba(255,255,255,0.10)",
+                  boxShadow: "inset 0 1px 0 rgba(255,255,255,0.03)",
+                  animation: "onboardingFadeUp 320ms ease both",
                 }}
               >
-                <div style={{ fontWeight: 900, letterSpacing: 0.2 }}>Party Size</div>
+                <div style={{ fontWeight: 900, letterSpacing: 0.2, fontSize: 18 }}>Party Size</div>
 
                 <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                   {([1, 2, 3, 4, 5, 6] as const).map((n) => {
@@ -577,17 +720,20 @@ export default function HeroOnboarding({
                         }}
                         disabled={partyLocked}
                         style={{
-                          padding: "8px 10px",
-                          borderRadius: 10,
+                          padding: "9px 11px",
+                          borderRadius: 11,
                           border: active
                             ? "1px solid rgba(138,180,255,0.55)"
                             : "1px solid rgba(255,255,255,0.12)",
-                          background: active ? "rgba(138,180,255,0.10)" : "rgba(255,255,255,0.04)",
+                          background: active
+                            ? "rgba(138,180,255,0.12)"
+                            : "rgba(255,255,255,0.04)",
                           cursor: partyLocked ? "not-allowed" : "pointer",
                           opacity: partyLocked ? 0.6 : 1,
-                          minWidth: 36,
+                          minWidth: 38,
                           textAlign: "center",
                           fontWeight: 850,
+                          boxShadow: active ? "0 0 20px rgba(100,140,255,0.10)" : "none",
                         }}
                         title={partyLocked ? "Party locked by canon/combat" : undefined}
                       >
@@ -597,15 +743,19 @@ export default function HeroOnboarding({
                   })}
                 </div>
 
-                <div style={{ display: "grid", gap: 8 }}>
-                  <div style={{ fontSize: 12, opacity: 0.78 }}>
-                    {partyLocked ? "Party locked for this session." : "Choose how many adventurers enter the dungeon."}
+                <div style={{ display: "grid", gap: 9 }}>
+                  <div style={{ fontSize: 12.5, opacity: 0.8, lineHeight: 1.45 }}>
+                    {partyLocked
+                      ? "Party locked for this session."
+                      : "Choose how many adventurers descend into the dark."}
                   </div>
 
                   <div>
-                    <div style={{ fontWeight: 900, letterSpacing: 0.2, marginBottom: 6 }}>Assemble Your Party</div>
-                    <div style={{ fontSize: 12, opacity: 0.78, marginBottom: 10 }}>
-                      These are the adventurers entering the dungeon.
+                    <div style={{ fontWeight: 900, letterSpacing: 0.2, marginBottom: 7 }}>
+                      Assemble Your Party
+                    </div>
+                    <div style={{ fontSize: 12.5, opacity: 0.78, marginBottom: 10, lineHeight: 1.45 }}>
+                      These are the souls entering the dungeon’s memory.
                     </div>
                     <PartyPips count={partySize} />
                   </div>
@@ -616,12 +766,13 @@ export default function HeroOnboarding({
 
           <div
             style={{
-              borderRadius: 16,
+              borderRadius: 18,
               overflow: "hidden",
               border: "1px solid rgba(255,255,255,0.10)",
               background: "rgba(0,0,0,0.40)",
               position: "relative",
-              minHeight: 320,
+              minHeight: 360,
+              boxShadow: "0 16px 44px rgba(0,0,0,0.42)",
             }}
           >
             {heroImageOk ? (
@@ -636,9 +787,9 @@ export default function HeroOnboarding({
                   height: "100%",
                   objectFit: "cover",
                   display: "block",
-                  opacity: 0.88,
-                  filter: "brightness(0.90) contrast(1.08) saturate(1.08)",
-                  transform: "scale(1.02)",
+                  opacity: 0.9,
+                  animation: "heroTorchPulse 6s ease-in-out infinite",
+                  transform: "scale(1.025)",
                 }}
               />
             ) : (
@@ -657,7 +808,7 @@ export default function HeroOnboarding({
                 position: "absolute",
                 inset: 0,
                 background:
-                  "linear-gradient(90deg, rgba(0,0,0,0.68) 0%, rgba(0,0,0,0.35) 32%, rgba(0,0,0,0.35) 68%, rgba(0,0,0,0.68) 100%), radial-gradient(120% 95% at 50% 55%, rgba(0,0,0,0.05), rgba(0,0,0,0.78))",
+                  "linear-gradient(90deg, rgba(0,0,0,0.70) 0%, rgba(0,0,0,0.34) 32%, rgba(0,0,0,0.34) 68%, rgba(0,0,0,0.70) 100%), radial-gradient(120% 95% at 50% 55%, rgba(0,0,0,0.04), rgba(0,0,0,0.82))",
                 pointerEvents: "none",
               }}
             />
@@ -675,30 +826,51 @@ export default function HeroOnboarding({
             />
 
             <div
+              aria-hidden
+              style={{
+                position: "absolute",
+                inset: 0,
+                background:
+                  "radial-gradient(circle at 50% 78%, rgba(235,245,255,0.18) 0%, rgba(160,180,220,0.08) 18%, rgba(0,0,0,0) 42%)",
+                mixBlendMode: "screen",
+                animation: "heroMistShift 8s ease-in-out infinite",
+                pointerEvents: "none",
+              }}
+            />
+
+            <div
               style={{
                 position: "absolute",
                 left: 14,
                 right: 14,
                 bottom: 14,
-                padding: 12,
-                borderRadius: 14,
+                padding: 14,
+                borderRadius: 16,
                 border: "1px solid rgba(255,255,255,0.12)",
-                background: "linear-gradient(180deg, rgba(10,10,10,0.35), rgba(10,10,10,0.62))",
+                background: "linear-gradient(180deg, rgba(10,10,10,0.34), rgba(10,10,10,0.64))",
                 backdropFilter: "blur(10px)",
                 boxShadow: "0 12px 40px rgba(0,0,0,0.45)",
               }}
             >
-              <div style={{ fontWeight: 950, fontSize: 16, letterSpacing: 0.2 }}>
+              <div style={{ fontWeight: 950, fontSize: 18, letterSpacing: 0.2 }}>
                 {showEnterStep ? "Enter the Dungeon" : "The Journey Begins"}
               </div>
-              <div style={{ marginTop: 4, fontSize: 12, opacity: 0.8 }}>
+              <div style={{ marginTop: 5, fontSize: 12.5, opacity: 0.82, lineHeight: 1.45 }}>
                 {showEnterStep
                   ? "You declare intent. The world remembers what you do."
-                  : "Choose how fate will guide the adventure."}
+                  : "Choose who guides the expedition, and the echoes of fate will answer."}
               </div>
 
               {showEnterStep ? (
-                <div style={{ marginTop: 10, display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+                <div
+                  style={{
+                    marginTop: 12,
+                    display: "flex",
+                    gap: 10,
+                    alignItems: "center",
+                    flexWrap: "wrap",
+                  }}
+                >
                   <button
                     type="button"
                     onClick={() => {
@@ -711,25 +883,30 @@ export default function HeroOnboarding({
                     }}
                     disabled={!canEnter}
                     style={{
-                      padding: "10px 14px",
+                      padding: "11px 16px",
                       borderRadius: 12,
                       fontWeight: 950,
                       letterSpacing: 0.2,
-                      border: canEnter ? "1px solid rgba(255,255,255,0.24)" : "1px solid rgba(255,255,255,0.18)",
-                      background: canEnter ? "rgba(255,255,255,0.12)" : "rgba(255,255,255,0.04)",
+                      border: canEnter
+                        ? "1px solid rgba(255,255,255,0.24)"
+                        : "1px solid rgba(255,255,255,0.18)",
+                      background: canEnter
+                        ? "rgba(255,255,255,0.12)"
+                        : "rgba(255,255,255,0.04)",
                       cursor: canEnter ? "pointer" : "not-allowed",
                       opacity: canEnter ? 1 : 0.6,
+                      boxShadow: canEnter ? "0 0 18px rgba(255,255,255,0.06)" : "none",
                     }}
                   >
                     Enter
                   </button>
 
-                  <div style={{ fontSize: 12, opacity: 0.74 }}>
-                    Next: accept the scene and start acting.
+                  <div style={{ fontSize: 12.5, opacity: 0.76 }}>
+                    Next: accept the scene and begin the descent.
                   </div>
                 </div>
               ) : (
-                <div style={{ marginTop: 10, fontSize: 12, opacity: 0.74 }}>
+                <div style={{ marginTop: 12, fontSize: 12.5, opacity: 0.76 }}>
                   Choose a play style to continue.
                 </div>
               )}
@@ -737,7 +914,15 @@ export default function HeroOnboarding({
           </div>
         </div>
 
-        <div style={{ marginTop: 10, display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 10 }}>
+        <div
+          style={{
+            marginTop: 2,
+            display: "flex",
+            justifyContent: "space-between",
+            flexWrap: "wrap",
+            gap: 10,
+          }}
+        >
           <div className="muted" style={{ fontSize: 12 }}>
             outcomes: <strong>{outcomesCount}</strong> · canon events: <strong>{canonCount}</strong>
           </div>
