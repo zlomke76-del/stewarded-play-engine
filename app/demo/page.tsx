@@ -18,6 +18,11 @@ import type { DemoSectionId } from "./demoTypes";
 export default function DemoPage() {
   const demo = useDemoRuntime();
   const [showTitleOverlay, setShowTitleOverlay] = useState(true);
+  const [titleReady, setTitleReady] = useState(false);
+
+  useEffect(() => {
+    setTitleReady(true);
+  }, []);
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
@@ -29,6 +34,36 @@ export default function DemoPage() {
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, []);
+
+  useEffect(() => {
+    if (!showTitleOverlay) return;
+
+    const audio = demo.introAudioRef.current;
+    if (!audio) return;
+
+    audio.currentTime = 0;
+    audio.volume = 0.72;
+
+    const tryPlay = () => {
+      audio.play().catch(() => {});
+    };
+
+    tryPlay();
+
+    const unlock = () => {
+      tryPlay();
+      window.removeEventListener("pointerdown", unlock);
+      window.removeEventListener("keydown", unlock);
+    };
+
+    window.addEventListener("pointerdown", unlock);
+    window.addEventListener("keydown", unlock);
+
+    return () => {
+      window.removeEventListener("pointerdown", unlock);
+      window.removeEventListener("keydown", unlock);
+    };
+  }, [showTitleOverlay, demo.introAudioRef]);
 
   function dismissTitleOverlay() {
     setShowTitleOverlay(false);
@@ -94,6 +129,83 @@ export default function DemoPage() {
             transform: translateY(0);
           }
         }
+
+        @keyframes titleFadeIn {
+          0% {
+            opacity: 0;
+            transform: translateY(10px) scale(0.985);
+          }
+          100% {
+            opacity: 1;
+            transform: translateY(0) scale(1);
+          }
+        }
+
+        @keyframes titleFloat {
+          0% {
+            transform: translateY(0px);
+          }
+          50% {
+            transform: translateY(-4px);
+          }
+          100% {
+            transform: translateY(0px);
+          }
+        }
+
+        @keyframes torchFlicker {
+          0% {
+            opacity: 0.96;
+            filter: brightness(0.98);
+          }
+          20% {
+            opacity: 1;
+            filter: brightness(1.02);
+          }
+          40% {
+            opacity: 0.985;
+            filter: brightness(0.995);
+          }
+          60% {
+            opacity: 1;
+            filter: brightness(1.015);
+          }
+          80% {
+            opacity: 0.975;
+            filter: brightness(1);
+          }
+          100% {
+            opacity: 0.96;
+            filter: brightness(0.99);
+          }
+        }
+
+        @keyframes mistDrift {
+          0% {
+            transform: translate3d(-1.5%, 0%, 0) scale(1.02);
+            opacity: 0.18;
+          }
+          50% {
+            transform: translate3d(1.5%, -1%, 0) scale(1.045);
+            opacity: 0.26;
+          }
+          100% {
+            transform: translate3d(-1.5%, 0%, 0) scale(1.02);
+            opacity: 0.18;
+          }
+        }
+
+        @keyframes glowPulse {
+          0% {
+            opacity: 0.14;
+          }
+          50% {
+            opacity: 0.24;
+          }
+          100% {
+            opacity: 0.14;
+          }
+        }
       `}</style>
 
       <audio
@@ -107,9 +219,9 @@ export default function DemoPage() {
       <div style={{ position: "relative", zIndex: 1, minHeight: "100vh" }}>
         <div
           style={{
-            transition: "filter 360ms ease, opacity 360ms ease, transform 360ms ease",
+            transition: "filter 420ms ease, opacity 420ms ease, transform 420ms ease",
             filter: showTitleOverlay ? "blur(2px)" : "blur(0px)",
-            opacity: showTitleOverlay ? 0.42 : 1,
+            opacity: showTitleOverlay ? 0.35 : 1,
             transform: showTitleOverlay ? "scale(0.995)" : "scale(1)",
             pointerEvents: showTitleOverlay ? "none" : "auto",
             userSelect: showTitleOverlay ? "none" : "auto",
@@ -245,32 +357,90 @@ export default function DemoPage() {
               alignItems: "center",
               justifyContent: "center",
               background:
-                "radial-gradient(circle at center, rgba(10,14,24,0.28) 0%, rgba(4,6,12,0.78) 55%, rgba(0,0,0,0.9) 100%)",
+                "radial-gradient(circle at center, rgba(15,20,30,0.16) 0%, rgba(5,8,14,0.68) 52%, rgba(0,0,0,0.9) 100%)",
               padding: 24,
+              overflow: "hidden",
             }}
           >
             <div
+              aria-hidden
+              style={{
+                position: "absolute",
+                inset: 0,
+                background:
+                  "radial-gradient(circle at 50% 44%, rgba(92,152,255,0.16) 0%, rgba(92,152,255,0.08) 14%, rgba(0,0,0,0) 38%)",
+                animation: "glowPulse 4.8s ease-in-out infinite",
+                pointerEvents: "none",
+              }}
+            />
+
+            <div
+              aria-hidden
+              style={{
+                position: "absolute",
+                inset: "-8%",
+                background:
+                  "radial-gradient(circle at 50% 62%, rgba(210,220,255,0.16) 0%, rgba(160,180,220,0.08) 18%, rgba(0,0,0,0) 42%)",
+                mixBlendMode: "screen",
+                animation: "mistDrift 9s ease-in-out infinite",
+                pointerEvents: "none",
+              }}
+            />
+
+            <div
               style={{
                 width: "100%",
-                maxWidth: 1200,
+                maxWidth: 1280,
                 display: "flex",
                 flexDirection: "column",
                 alignItems: "center",
                 justifyContent: "center",
-                gap: 18,
+                gap: 12,
+                animation: titleReady ? "titleFadeIn 700ms ease both" : undefined,
+                position: "relative",
+                zIndex: 1,
               }}
             >
-              <img
-                src="/assets/cover/title_page.png"
-                alt="Echoes of Fate title screen"
+              <div
                 style={{
+                  position: "relative",
                   width: "100%",
-                  maxWidth: 960,
-                  height: "auto",
-                  objectFit: "contain",
-                  filter: "drop-shadow(0 24px 80px rgba(0,0,0,0.75))",
+                  display: "flex",
+                  justifyContent: "center",
+                  animation: "titleFloat 7s ease-in-out infinite",
                 }}
-              />
+              >
+                <div
+                  aria-hidden
+                  style={{
+                    position: "absolute",
+                    inset: "9% 18% 10% 18%",
+                    borderRadius: 40,
+                    background:
+                      "radial-gradient(circle at 50% 45%, rgba(90,150,255,0.16) 0%, rgba(90,150,255,0.06) 25%, rgba(0,0,0,0) 58%)",
+                    filter: "blur(26px)",
+                    animation: "glowPulse 4.2s ease-in-out infinite",
+                    pointerEvents: "none",
+                  }}
+                />
+
+                <img
+                  src="/assets/cover/title_page.png"
+                  alt="Echoes of Fate title screen"
+                  style={{
+                    width: "75vw",
+                    maxWidth: 1100,
+                    minWidth: 320,
+                    height: "auto",
+                    objectFit: "contain",
+                    position: "relative",
+                    zIndex: 2,
+                    animation: "torchFlicker 4.8s ease-in-out infinite",
+                    filter:
+                      "drop-shadow(0 28px 90px rgba(0,0,0,0.84)) drop-shadow(0 0 44px rgba(80,140,255,0.16))",
+                  }}
+                />
+              </div>
 
               <button
                 type="button"
@@ -278,18 +448,20 @@ export default function DemoPage() {
                 style={{
                   appearance: "none",
                   border: "1px solid rgba(255,255,255,0.18)",
-                  background: "linear-gradient(180deg, rgba(255,255,255,0.18), rgba(255,255,255,0.08))",
+                  background:
+                    "linear-gradient(180deg, rgba(255,255,255,0.22), rgba(255,255,255,0.09))",
                   color: "#ffffff",
-                  padding: "14px 28px",
+                  padding: "14px 30px",
                   borderRadius: 18,
                   fontSize: 18,
                   fontWeight: 700,
                   letterSpacing: "0.04em",
                   cursor: "pointer",
-                  boxShadow: "0 12px 40px rgba(0,0,0,0.4)",
+                  boxShadow: "0 14px 44px rgba(0,0,0,0.48)",
                   backdropFilter: "blur(8px)",
                   WebkitBackdropFilter: "blur(8px)",
-                  transition: "transform 120ms ease, background 160ms ease, box-shadow 160ms ease",
+                  transition:
+                    "transform 120ms ease, background 160ms ease, box-shadow 160ms ease, border-color 160ms ease",
                 }}
                 onMouseDown={(e) => {
                   e.currentTarget.style.transform = "scale(0.985)";
@@ -299,17 +471,18 @@ export default function DemoPage() {
                 }}
                 onMouseLeave={(e) => {
                   e.currentTarget.style.transform = "scale(1)";
+                  e.currentTarget.style.background =
+                    "linear-gradient(180deg, rgba(255,255,255,0.22), rgba(255,255,255,0.09))";
+                  e.currentTarget.style.boxShadow = "0 14px 44px rgba(0,0,0,0.48)";
+                  e.currentTarget.style.borderColor = "rgba(255,255,255,0.18)";
                 }}
                 onMouseEnter={(e) => {
                   e.currentTarget.style.background =
-                    "linear-gradient(180deg, rgba(255,255,255,0.24), rgba(255,255,255,0.12))";
-                  e.currentTarget.style.boxShadow = "0 16px 48px rgba(0,0,0,0.48)";
+                    "linear-gradient(180deg, rgba(255,255,255,0.28), rgba(255,255,255,0.13))";
+                  e.currentTarget.style.boxShadow = "0 18px 54px rgba(0,0,0,0.56)";
+                  e.currentTarget.style.borderColor = "rgba(140,180,255,0.34)";
                 }}
-                onMouseOut={(e) => {
-                  e.currentTarget.style.background =
-                    "linear-gradient(180deg, rgba(255,255,255,0.18), rgba(255,255,255,0.08))";
-                  e.currentTarget.style.boxShadow = "0 12px 40px rgba(0,0,0,0.4)";
-                }}
+                aria-label="Enter the Dungeon"
               >
                 Enter the Dungeon
               </button>
@@ -318,11 +491,11 @@ export default function DemoPage() {
                 style={{
                   fontSize: 13,
                   letterSpacing: "0.08em",
-                  textTransform: "uppercase",
-                  color: "rgba(255,255,255,0.68)",
+                  color: "rgba(255,255,255,0.72)",
+                  textShadow: "0 2px 12px rgba(0,0,0,0.45)",
                 }}
               >
-                Press Enter
+                Press Enter to Begin
               </div>
             </div>
           </div>
