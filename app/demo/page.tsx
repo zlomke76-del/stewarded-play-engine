@@ -349,6 +349,12 @@ export default function DemoPage() {
       />
       <audio ref={demo.bgmAudioRef} preload="auto" style={{ display: "none" }} />
       <audio
+        ref={demo.ambienceAudioRef}
+        preload="auto"
+        src="/assets/audio/sfx_dungeon_ambience_01.mp3"
+        style={{ display: "none" }}
+      />
+      <audio
         ref={torchAudioRef}
         preload="auto"
         src="/assets/audio/sfx_burning_torches_01.mp3"
