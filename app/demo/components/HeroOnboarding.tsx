@@ -3,19 +3,15 @@
 // ------------------------------------------------------------
 // HeroOnboarding.tsx
 // ------------------------------------------------------------
-// Visual-only onboarding hero / compact adventure header.
-// Receives all values and callbacks from the page orchestrator.
-//
 // Updated onboarding flow:
 // - full mode uses progressive reveal
-// - opening state shows only:
+// - opening state shows:
 //    1) title + subtitle
 //    2) Choose Your Play Style
-//    3) cinematic hero image panel
-// - Party Size appears only after mode is chosen
-// - Enter panel appears only after mode is chosen
-// - full mode includes richer DM descriptions + more atmospheric styling
-// - compact mode remains the richer in-progress adventure header
+//    3) begin-alone / fellowship framing
+//    4) cinematic hero image panel
+// - Party Size selection is removed
+// - compact mode reflects fellowship progression instead of starting party size
 // ------------------------------------------------------------
 
 import React, { useMemo } from "react";
@@ -46,16 +42,69 @@ function playSfx(src: string, volume = 0.66) {
   try {
     const audio = new Audio(src);
     audio.volume = volume;
-    void audio.play().catch(() => {
-      // fail silently; onboarding SFX should never block flow
-    });
+    void audio.play().catch(() => {});
   } catch {
     // fail silently
   }
 }
 
-function clampInt(n: number, lo: number, hi: number) {
-  return Math.max(lo, Math.min(hi, Math.trunc(n)));
+function FellowshipPips({
+  active,
+  unlocked,
+  max,
+  compact = false,
+}: {
+  active: number;
+  unlocked: number;
+  max: number;
+  compact?: boolean;
+}) {
+  const size = compact ? 28 : 34;
+
+  return (
+    <div style={{ display: "flex", gap: compact ? 8 : 10, flexWrap: "wrap", alignItems: "center" }}>
+      {Array.from({ length: max }, (_, i) => {
+        const slot = i + 1;
+        const isActive = slot <= active;
+        const isUnlocked = slot <= unlocked;
+
+        return (
+          <span
+            key={slot}
+            style={{
+              width: size,
+              height: size,
+              borderRadius: 999,
+              display: "grid",
+              placeItems: "center",
+              border: isActive
+                ? "1px solid rgba(138,180,255,0.35)"
+                : isUnlocked
+                  ? "1px solid rgba(255,255,255,0.14)"
+                  : "1px solid rgba(255,255,255,0.08)",
+              background: isActive
+                ? "rgba(138,180,255,0.12)"
+                : isUnlocked
+                  ? "rgba(255,255,255,0.04)"
+                  : "rgba(255,255,255,0.02)",
+              fontSize: compact ? 13 : 16,
+              boxShadow: isActive ? "0 6px 16px rgba(0,0,0,0.24)" : "none",
+              opacity: isUnlocked ? 1 : 0.5,
+            }}
+            title={
+              isActive
+                ? `Active fellowship slot ${slot}`
+                : isUnlocked
+                  ? `Unlocked fellowship slot ${slot}`
+                  : `Locked fellowship slot ${slot}`
+            }
+          >
+            {isActive ? "⚔" : isUnlocked ? "◌" : "🔒"}
+          </span>
+        );
+      })}
+    </div>
+  );
 }
 
 function Chip({
@@ -134,7 +183,6 @@ function TriToggle({
 }) {
   const isHuman = dmMode === "human";
   const isSolace = dmMode === "solace-neutral";
-
   const knobLeft = dmMode === null ? 16 : isSolace ? 32 : 0;
 
   const labelStyle = (active: boolean) => ({
@@ -206,35 +254,6 @@ function TriToggle({
       >
         {rightLabel}
       </button>
-    </div>
-  );
-}
-
-function PartyPips({ count, compact = false }: { count: number; compact?: boolean }) {
-  const n = clampInt(count, 1, 6);
-  const size = compact ? 28 : 34;
-
-  return (
-    <div style={{ display: "flex", gap: compact ? 8 : 10, flexWrap: "wrap", alignItems: "center" }}>
-      {Array.from({ length: n }, (_, i) => (
-        <span
-          key={i}
-          style={{
-            width: size,
-            height: size,
-            borderRadius: 999,
-            display: "grid",
-            placeItems: "center",
-            border: "1px solid rgba(255,255,255,0.14)",
-            background: "rgba(255,255,255,0.04)",
-            fontSize: compact ? 13 : 16,
-            boxShadow: "0 6px 16px rgba(0,0,0,0.2)",
-          }}
-          title={`Adventurer ${i + 1}`}
-        >
-          ⚔
-        </span>
-      ))}
     </div>
   );
 }
@@ -321,28 +340,22 @@ function ModeLoreBlock({ dmMode }: { dmMode: DMMode | null }) {
 type Props = {
   heroTitle: string;
   heroSubtitle: string;
-
   presentationMode?: PresentationMode;
-
   dmMode: DMMode | null;
   onSetDmMode: (next: DMMode) => void;
-
-  partySize: number;
-  partyLocked: boolean;
-  onSetPartySize: (n: number) => void;
-
   onEnter: () => void;
   canEnter: boolean;
-
   heroImageSrc: string;
   heroImageOk: boolean;
   onHeroImageError: () => void;
-
   chapterState: Record<ChapterKey, ChipState>;
   onJump: (key: ChapterKey) => void;
-
   outcomesCount: number;
   canonCount: number;
+  activePartySize: number;
+  unlockedPartySlots: number;
+  maxPartySlots: number;
+  completionRequiresFullFellowship: boolean;
 };
 
 export default function HeroOnboarding({
@@ -351,9 +364,6 @@ export default function HeroOnboarding({
   presentationMode = "full",
   dmMode,
   onSetDmMode,
-  partySize,
-  partyLocked,
-  onSetPartySize,
   onEnter,
   canEnter,
   heroImageSrc,
@@ -363,6 +373,10 @@ export default function HeroOnboarding({
   onJump,
   outcomesCount,
   canonCount,
+  activePartySize,
+  unlockedPartySlots,
+  maxPartySlots,
+  completionRequiresFullFellowship,
 }: Props) {
   const dmHint = useMemo(() => {
     if (dmMode === "solace-neutral") return "Solace keeps the adventure moving.";
@@ -380,7 +394,7 @@ export default function HeroOnboarding({
     const ordered: Array<{ key: ChapterKey; label: string }> = [
       { key: "mode", label: "Mode" },
       { key: "table", label: "Chronicle" },
-      { key: "party", label: "Party" },
+      { key: "party", label: "Fellowship" },
       { key: "pressure", label: "Pressure" },
       { key: "map", label: "Map" },
       { key: "combat", label: "Combat" },
@@ -434,13 +448,18 @@ export default function HeroOnboarding({
                 }}
               >
                 <SummaryPill label="Mode" value={modeLabel} />
-                <SummaryPill label="Party" value={`${partySize} Adventurer${partySize === 1 ? "" : "s"}`} />
+                <SummaryPill label="Fellowship" value={`${activePartySize} / ${maxPartySlots}`} />
+                <SummaryPill label="Unlocked" value={`${unlockedPartySlots} Slot${unlockedPartySlots === 1 ? "" : "s"}`} />
                 <SummaryPill label="Chapter" value={compactActiveChapter} />
-                <SummaryPill label="Canon" value={`${canonCount}`} />
               </div>
 
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-                <PartyPips count={partySize} compact />
+                <FellowshipPips
+                  active={activePartySize}
+                  unlocked={unlockedPartySlots}
+                  max={maxPartySlots}
+                  compact
+                />
                 <div style={{ fontSize: 12, opacity: 0.72 }}>{dmHint}</div>
               </div>
             </div>
@@ -508,7 +527,7 @@ export default function HeroOnboarding({
               >
                 <div style={{ fontWeight: 900, fontSize: 14 }}>Adventure in Progress</div>
                 <div style={{ marginTop: 3, fontSize: 12, opacity: 0.78 }}>
-                  Earlier rites are complete. The deeper chapters now take the stage.
+                  One hero began the descent. The fellowship is still incomplete.
                 </div>
               </div>
             </div>
@@ -524,7 +543,7 @@ export default function HeroOnboarding({
           >
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
               <Chip label="Mode" state={chapterState.mode} compact onClick={() => { playSfx(SFX.buttonClick, 0.58); onJump("mode"); }} />
-              <Chip label="Party" state={chapterState.party} compact onClick={() => { playSfx(SFX.buttonClick, 0.58); onJump("party"); }} />
+              <Chip label="Fellowship" state={chapterState.party} compact onClick={() => { playSfx(SFX.buttonClick, 0.58); onJump("party"); }} />
               <Chip label="Table" state={chapterState.table} compact onClick={() => { playSfx(SFX.buttonClick, 0.58); onJump("table"); }} />
               <Chip label="Pressure" state={chapterState.pressure} compact onClick={() => { playSfx(SFX.buttonClick, 0.58); onJump("pressure"); }} />
               <Chip label="Map" state={chapterState.map} compact onClick={() => { playSfx(SFX.buttonClick, 0.58); onJump("map"); }} />
@@ -540,7 +559,9 @@ export default function HeroOnboarding({
                 outcomes: <strong>{outcomesCount}</strong> · canon events: <strong>{canonCount}</strong>
               </div>
               <div style={{ fontSize: 12, opacity: 0.68 }}>
-                The current chapter now owns the screen.
+                {completionRequiresFullFellowship
+                  ? "True completion remains sealed until the full fellowship stands."
+                  : "The path to completion is open."}
               </div>
             </div>
           </div>
@@ -549,7 +570,7 @@ export default function HeroOnboarding({
     );
   }
 
-  const showPartyStep = dmMode !== null;
+  const showFellowshipStep = dmMode !== null;
   const showEnterStep = dmMode !== null;
 
   return (
@@ -664,8 +685,6 @@ export default function HeroOnboarding({
                 border: "1px solid rgba(255,255,255,0.10)",
                 boxShadow: "inset 0 1px 0 rgba(255,255,255,0.03)",
                 animation: "onboardingFadeUp 300ms ease both",
-                minHeight: showPartyStep ? "auto" : 278,
-                alignContent: showPartyStep ? "start" : "center",
               }}
             >
               <div style={{ fontWeight: 900, letterSpacing: 0.2, fontSize: 18 }}>
@@ -687,7 +706,7 @@ export default function HeroOnboarding({
               <ModeLoreBlock dmMode={dmMode} />
             </div>
 
-            {showPartyStep && (
+            {showFellowshipStep && (
               <div
                 style={{
                   display: "grid",
@@ -701,63 +720,45 @@ export default function HeroOnboarding({
                   animation: "onboardingFadeUp 320ms ease both",
                 }}
               >
-                <div style={{ fontWeight: 900, letterSpacing: 0.2, fontSize: 18 }}>Party Size</div>
+                <div style={{ fontWeight: 900, letterSpacing: 0.2, fontSize: 18 }}>
+                  You Begin Alone
+                </div>
 
-                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                  {([1, 2, 3, 4, 5, 6] as const).map((n) => {
-                    const active = partySize === n;
-                    return (
-                      <button
-                        key={n}
-                        type="button"
-                        onClick={() => {
-                          if (partyLocked) {
-                            playSfx(SFX.uiFailure, 0.52);
-                            return;
-                          }
-                          playSfx(SFX.buttonClick, 0.6);
-                          onSetPartySize(n);
-                        }}
-                        disabled={partyLocked}
-                        style={{
-                          padding: "9px 11px",
-                          borderRadius: 11,
-                          border: active
-                            ? "1px solid rgba(138,180,255,0.55)"
-                            : "1px solid rgba(255,255,255,0.12)",
-                          background: active
-                            ? "rgba(138,180,255,0.12)"
-                            : "rgba(255,255,255,0.04)",
-                          cursor: partyLocked ? "not-allowed" : "pointer",
-                          opacity: partyLocked ? 0.6 : 1,
-                          minWidth: 38,
-                          textAlign: "center",
-                          fontWeight: 850,
-                          boxShadow: active ? "0 0 20px rgba(100,140,255,0.10)" : "none",
-                        }}
-                        title={partyLocked ? "Party locked by canon/combat" : undefined}
-                      >
-                        {n}
-                      </button>
-                    );
-                  })}
+                <div style={{ fontSize: 12.5, opacity: 0.84, lineHeight: 1.55 }}>
+                  One hero enters the dark. Fellowship is not chosen at the threshold — it is earned
+                  through survival, consequence, trust, and sacrifice.
                 </div>
 
                 <div style={{ display: "grid", gap: 9 }}>
-                  <div style={{ fontSize: 12.5, opacity: 0.8, lineHeight: 1.45 }}>
-                    {partyLocked
-                      ? "Party locked for this session."
-                      : "Choose how many adventurers descend into the dark."}
+                  <div style={{ fontWeight: 900, letterSpacing: 0.2 }}>
+                    Fellowship Progression
                   </div>
+                  <div style={{ fontSize: 12.5, opacity: 0.78, lineHeight: 1.45 }}>
+                    Power and companionship will not always grow together. Some milestones will force a
+                    choice between strengthening the hero and unlocking another place in the fellowship.
+                  </div>
+                  <FellowshipPips
+                    active={activePartySize}
+                    unlocked={unlockedPartySlots}
+                    max={maxPartySlots}
+                  />
+                </div>
 
-                  <div>
-                    <div style={{ fontWeight: 900, letterSpacing: 0.2, marginBottom: 7 }}>
-                      Assemble Your Party
-                    </div>
-                    <div style={{ fontSize: 12.5, opacity: 0.78, marginBottom: 10, lineHeight: 1.45 }}>
-                      These are the souls entering the dungeon’s memory.
-                    </div>
-                    <PartyPips count={partySize} />
+                <div
+                  style={{
+                    padding: "12px 13px",
+                    borderRadius: 14,
+                    border: "1px solid rgba(255,255,255,0.10)",
+                    background:
+                      "linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.02))",
+                  }}
+                >
+                  <div style={{ fontWeight: 900, fontSize: 13, marginBottom: 6 }}>
+                    North Star
+                  </div>
+                  <div style={{ fontSize: 12.5, lineHeight: 1.55, opacity: 0.78 }}>
+                    Rare heroes may defeat impossible things alone, but true campaign completion remains
+                    sealed until the full fellowship of six stands assembled.
                   </div>
                 </div>
               </div>
@@ -857,7 +858,7 @@ export default function HeroOnboarding({
               </div>
               <div style={{ marginTop: 5, fontSize: 12.5, opacity: 0.82, lineHeight: 1.45 }}>
                 {showEnterStep
-                  ? "You declare intent. The world remembers what you do."
+                  ? "You enter with one hero only. The depths will decide whether strength or fellowship comes first."
                   : "Choose who guides the expedition, and the echoes of fate will answer."}
               </div>
 
@@ -902,7 +903,7 @@ export default function HeroOnboarding({
                   </button>
 
                   <div style={{ fontSize: 12.5, opacity: 0.76 }}>
-                    Next: accept the scene and begin the descent.
+                    Next: accept the scene and declare the lone hero who descends first.
                   </div>
                 </div>
               ) : (
