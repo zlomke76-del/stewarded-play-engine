@@ -6,6 +6,8 @@ import NextActionHint from "@/components/NextActionHint";
 import CombatSection from "./CombatSection";
 import ActionSection from "./ActionSection";
 import CanonChronicleSection from "./CanonChronicleSection";
+import GameStateAdvisoryPanel from "./GameStateAdvisoryPanel";
+import RoomTopologyPanel from "./RoomTopologyPanel";
 import { anchorId, scrollToSection, inferOptionKind } from "../demoUtils";
 import { displayName } from "../hooks/useDemoRuntime";
 
@@ -124,74 +126,14 @@ export default function GameplayViewport({ demo }: Props) {
 
       <div id={anchorId("pressure")} style={{ scrollMarginTop: 90 }}>
         {demo.gameplayAllowsPressure && (
-          <CardSection title="Dungeon State (Room/Floor Advisory)">
-            <div style={{ display: "grid", gap: 14 }}>
-              <div style={{ display: "grid", gap: 4 }}>
-                <div style={{ fontSize: 18, fontWeight: 900 }}>
-                  {demo.currentRoomTitle}
-                </div>
-                <div className="muted" style={{ fontSize: 13 }}>
-                  {demo.currentFloor.label} · {demo.location.floorId} / {demo.location.roomId}
-                </div>
-              </div>
-
-              <div
-                style={{
-                  padding: 12,
-                  borderRadius: 12,
-                  border: "1px solid rgba(255,255,255,0.10)",
-                  background: "rgba(255,255,255,0.04)",
-                }}
-              >
-                <div style={{ fontWeight: 800, marginBottom: 6 }}>
-                  Condition: {demo.dungeonEvolution.condition} · Apex: {demo.dungeonEvolution.apex}
-                </div>
-                <div style={{ fontSize: 12, opacity: 0.8, lineHeight: 1.6 }}>
-                  Room pressure {demo.dungeonEvolution.debug.roomPressure} · Room awareness{" "}
-                  {demo.dungeonEvolution.debug.roomAwareness} · Nearby pressure{" "}
-                  {demo.dungeonEvolution.debug.nearbyPressureMax}
-                </div>
-              </div>
-
-              <div
-                style={{
-                  padding: 12,
-                  borderRadius: 12,
-                  border: "1px solid rgba(255,255,255,0.10)",
-                  background: "rgba(255,255,255,0.03)",
-                }}
-              >
-                <div style={{ fontWeight: 800, marginBottom: 8 }}>Current Read</div>
-                <div className="muted" style={{ fontSize: 13, lineHeight: 1.7 }}>
-                  {demo.roomSummary}
-                </div>
-              </div>
-
-              {demo.dungeonEvolution.signals.length > 0 && (
-                <div
-                  style={{
-                    padding: 12,
-                    borderRadius: 12,
-                    border: "1px solid rgba(255,255,255,0.10)",
-                    background: "rgba(255,255,255,0.03)",
-                  }}
-                >
-                  <div style={{ fontWeight: 800, marginBottom: 8 }}>Signals</div>
-                  <ul style={{ margin: 0, paddingLeft: 18 }}>
-                    {demo.dungeonEvolution.signals.map((signal: string, idx: number) => (
-                      <li key={idx} style={{ marginBottom: 5, lineHeight: 1.5 }}>
-                        {signal}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-
-              <div className="muted" style={{ fontSize: 12 }}>
-                Advisory only — canon remains governed by recorded events.
-              </div>
-            </div>
-          </CardSection>
+          <GameStateAdvisoryPanel
+            currentRoomTitle={demo.currentRoomTitle}
+            currentFloorLabel={demo.currentFloor.label}
+            floorId={demo.location.floorId}
+            roomId={demo.location.roomId}
+            dungeonEvolution={demo.dungeonEvolution}
+            roomSummary={demo.roomSummary}
+          />
         )}
       </div>
 
@@ -211,188 +153,16 @@ export default function GameplayViewport({ demo }: Props) {
 
       <div id={anchorId("map")} style={{ scrollMarginTop: 90 }}>
         {demo.gameplayAllowsMap && (
-          <CardSection title="Dungeon Topology (Room Graph View)">
-            <div style={{ display: "grid", gap: 16 }}>
-              <div
-                key={demo.currentRoomVisualKey}
-                style={{
-                  padding: 14,
-                  borderRadius: 14,
-                  border: "1px solid rgba(255,255,255,0.10)",
-                  background: "rgba(255,255,255,0.04)",
-                  display: "grid",
-                  gap: 12,
-                  animation: "roomFadeIn 320ms ease",
-                }}
-              >
-                {demo.roomImage ? (
-                  <div
-                    style={{
-                      position: "relative",
-                      overflow: "hidden",
-                      borderRadius: 12,
-                    }}
-                  >
-                    <img
-                      src={demo.roomImage}
-                      alt={demo.currentRoomTitle}
-                      style={{
-                        width: "100%",
-                        maxHeight: 320,
-                        objectFit: "cover",
-                        borderRadius: 12,
-                        display: "block",
-                        animation: "roomImageIn 420ms ease",
-                      }}
-                    />
-                    <div
-                      style={{
-                        position: "absolute",
-                        inset: 0,
-                        background:
-                          "linear-gradient(to bottom, rgba(0,0,0,0.02) 0%, rgba(0,0,0,0.18) 100%)",
-                        pointerEvents: "none",
-                      }}
-                    />
-                  </div>
-                ) : null}
-
-                <div
-                  style={{
-                    fontSize: 16,
-                    fontWeight: 900,
-                    animation: "roomTextIn 360ms ease",
-                  }}
-                >
-                  {demo.currentRoomTitle}
-                </div>
-
-                <div
-                  className="muted"
-                  style={{
-                    marginTop: 8,
-                    lineHeight: 1.7,
-                    whiteSpace: "pre-line",
-                    animation: "roomTextIn 420ms ease",
-                  }}
-                >
-                  {demo.roomNarrative}
-                </div>
-              </div>
-
-              <div style={{ display: "grid", gap: 10 }}>
-                <div style={{ fontWeight: 800 }}>What Stands Out</div>
-                {demo.roomFeatureNarrative.length === 0 ? (
-                  <div className="muted">Nothing distinct has been resolved about the room yet.</div>
-                ) : (
-                  <div
-                    style={{
-                      padding: 12,
-                      borderRadius: 12,
-                      border: "1px solid rgba(255,255,255,0.08)",
-                      background: "rgba(255,255,255,0.03)",
-                    }}
-                  >
-                    <ul style={{ margin: 0, paddingLeft: 18 }}>
-                      {demo.roomFeatureNarrative.map((line: string, idx: number) => (
-                        <li key={`${idx}-${line}`} style={{ marginBottom: 6, lineHeight: 1.55 }}>
-                          {line}
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-              </div>
-
-              <div style={{ display: "grid", gap: 10 }}>
-                <div style={{ fontWeight: 800 }}>Exits & Routes</div>
-                {demo.roomConnectionsView.length === 0 ? (
-                  <div className="muted">No routes are currently available from this room.</div>
-                ) : (
-                  <>
-                    {demo.roomExitNarrative.length > 0 && (
-                      <div
-                        style={{
-                          padding: 12,
-                          borderRadius: 12,
-                          border: "1px solid rgba(255,255,255,0.08)",
-                          background: "rgba(255,255,255,0.03)",
-                        }}
-                      >
-                        <ul style={{ margin: 0, paddingLeft: 18 }}>
-                          {demo.roomExitNarrative.map((line: string, idx: number) => (
-                            <li key={`${idx}-${line}`} style={{ marginBottom: 6, lineHeight: 1.55 }}>
-                              {line}
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    )}
-
-                    {demo.roomConnectionsView.map((route: any) => (
-                      <div
-                        key={route.id}
-                        style={{
-                          padding: 12,
-                          borderRadius: 12,
-                          border: "1px solid rgba(255,255,255,0.08)",
-                          background: "rgba(255,255,255,0.03)",
-                          display: "grid",
-                          gap: 10,
-                        }}
-                      >
-                        {route.previewImage ? (
-                          <img
-                            src={route.previewImage}
-                            alt={route.targetLabel}
-                            style={{
-                              width: "100%",
-                              maxHeight: 140,
-                              objectFit: "cover",
-                              borderRadius: 10,
-                              display: "block",
-                            }}
-                          />
-                        ) : null}
-
-                        <div style={{ fontWeight: 800 }}>{route.targetLabel}</div>
-
-                        <div className="muted" style={{ marginTop: 4, fontSize: 12 }}>
-                          {route.type.replaceAll("_", " ")} · {route.targetType.replaceAll("_", " ")}
-                          {route.locked ? " · locked" : ""}
-                          {route.note ? ` · ${route.note}` : ""}
-                        </div>
-                      </div>
-                    ))}
-                  </>
-                )}
-              </div>
-
-              <div style={{ display: "grid", gap: 10 }}>
-                <div style={{ fontWeight: 800 }}>Known Features</div>
-                {demo.currentFeatures.length === 0 ? (
-                  <div className="muted">No special room features have been revealed yet.</div>
-                ) : (
-                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                    {demo.currentFeatures.map((feature: any, idx: number) => (
-                      <span
-                        key={`${feature.kind}-${idx}`}
-                        style={{
-                          padding: "8px 10px",
-                          borderRadius: 999,
-                          border: "1px solid rgba(255,255,255,0.10)",
-                          background: "rgba(255,255,255,0.04)",
-                          fontSize: 12,
-                        }}
-                      >
-                        {feature.kind.replaceAll("_", " ")}
-                      </span>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
-          </CardSection>
+          <RoomTopologyPanel
+            currentRoomVisualKey={demo.currentRoomVisualKey}
+            currentRoomTitle={demo.currentRoomTitle}
+            roomImage={demo.roomImage}
+            roomNarrative={demo.roomNarrative}
+            roomFeatureNarrative={demo.roomFeatureNarrative}
+            roomExitNarrative={demo.roomExitNarrative}
+            roomConnectionsView={demo.roomConnectionsView}
+            currentFeatures={demo.currentFeatures}
+          />
         )}
       </div>
 
