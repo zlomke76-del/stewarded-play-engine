@@ -6,13 +6,15 @@
 // Visual-only onboarding hero / compact adventure header.
 // Receives all values and callbacks from the page orchestrator.
 //
-// Upgraded:
-// - supports two presentation modes:
-//   1) "full"    -> pre-entry onboarding hero
-//   2) "compact" -> slim adventure header after entry
-// - keeps local UI SFX for mode selection, party size, chapter chips,
-//   and the Enter button
-// - keeps music ownership in page/orchestrator
+// Updated onboarding flow:
+// - full mode now uses progressive reveal
+// - opening state shows ONLY:
+//    1) Choose Your Play Style
+//    2) Hero image panel
+// - Party Size appears only after mode is chosen
+// - Enter panel appears only after mode is chosen
+// - Chapter chips remain hidden in full mode
+// - compact mode remains the richer in-progress adventure header
 // ------------------------------------------------------------
 
 import React, { useMemo } from "react";
@@ -159,7 +161,7 @@ function TriToggle({
       <button
         type="button"
         aria-label="toggle"
-        disabled={true}
+        disabled
         style={{
           width: 54,
           height: 28,
@@ -382,9 +384,7 @@ export default function HeroOnboarding({
 
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
                 <PartyPips count={partySize} compact />
-                <div style={{ fontSize: 12, opacity: 0.72 }}>
-                  {dmHint}
-                </div>
+                <div style={{ fontSize: 12, opacity: 0.72 }}>{dmHint}</div>
               </div>
             </div>
 
@@ -492,6 +492,9 @@ export default function HeroOnboarding({
     );
   }
 
+  const showPartyStep = dmMode !== null;
+  const showEnterStep = dmMode !== null;
+
   return (
     <section
       className="card"
@@ -511,7 +514,7 @@ export default function HeroOnboarding({
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: "1.1fr 0.9fr",
+            gridTemplateColumns: "1.05fr 0.95fr",
             gap: 12,
             alignItems: "stretch",
           }}
@@ -522,7 +525,7 @@ export default function HeroOnboarding({
                 display: "grid",
                 gridTemplateColumns: "1fr",
                 gap: 10,
-                padding: 12,
+                padding: 14,
                 borderRadius: 14,
                 background: "rgba(255,255,255,0.04)",
                 border: "1px solid rgba(255,255,255,0.10)",
@@ -543,98 +546,72 @@ export default function HeroOnboarding({
               <div style={{ fontSize: 12, opacity: 0.78 }}>{dmHint}</div>
             </div>
 
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "1fr",
-                gap: 10,
-                padding: 12,
-                borderRadius: 14,
-                background: "rgba(255,255,255,0.04)",
-                border: "1px solid rgba(255,255,255,0.10)",
-                opacity: dmMode === null ? 0.75 : 1,
-              }}
-            >
-              <div style={{ fontWeight: 900, letterSpacing: 0.2 }}>Party Size</div>
+            {showPartyStep && (
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "1fr",
+                  gap: 10,
+                  padding: 12,
+                  borderRadius: 14,
+                  background: "rgba(255,255,255,0.04)",
+                  border: "1px solid rgba(255,255,255,0.10)",
+                }}
+              >
+                <div style={{ fontWeight: 900, letterSpacing: 0.2 }}>Party Size</div>
 
-              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                {([1, 2, 3, 4, 5, 6] as const).map((n) => {
-                  const active = partySize === n;
-                  return (
-                    <button
-                      key={n}
-                      type="button"
-                      onClick={() => {
-                        if (dmMode === null || partyLocked) {
-                          playSfx(SFX.uiFailure, 0.52);
-                          return;
-                        }
-                        playSfx(SFX.buttonClick, 0.6);
-                        onSetPartySize(n);
-                      }}
-                      disabled={dmMode === null || partyLocked}
-                      style={{
-                        padding: "8px 10px",
-                        borderRadius: 10,
-                        border: active
-                          ? "1px solid rgba(138,180,255,0.55)"
-                          : "1px solid rgba(255,255,255,0.12)",
-                        background: active ? "rgba(138,180,255,0.10)" : "rgba(255,255,255,0.04)",
-                        cursor: dmMode === null || partyLocked ? "not-allowed" : "pointer",
-                        opacity: dmMode === null || partyLocked ? 0.6 : 1,
-                        minWidth: 36,
-                        textAlign: "center",
-                        fontWeight: 850,
-                      }}
-                      title={partyLocked ? "Party locked by canon/combat" : undefined}
-                    >
-                      {n}
-                    </button>
-                  );
-                })}
-              </div>
-
-              <div style={{ display: "grid", gap: 8 }}>
-                <div style={{ fontSize: 12, opacity: 0.78 }}>
-                  {partyLocked ? "Party locked for this session." : "Quick start — details come next."}
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  {([1, 2, 3, 4, 5, 6] as const).map((n) => {
+                    const active = partySize === n;
+                    return (
+                      <button
+                        key={n}
+                        type="button"
+                        onClick={() => {
+                          if (partyLocked) {
+                            playSfx(SFX.uiFailure, 0.52);
+                            return;
+                          }
+                          playSfx(SFX.buttonClick, 0.6);
+                          onSetPartySize(n);
+                        }}
+                        disabled={partyLocked}
+                        style={{
+                          padding: "8px 10px",
+                          borderRadius: 10,
+                          border: active
+                            ? "1px solid rgba(138,180,255,0.55)"
+                            : "1px solid rgba(255,255,255,0.12)",
+                          background: active ? "rgba(138,180,255,0.10)" : "rgba(255,255,255,0.04)",
+                          cursor: partyLocked ? "not-allowed" : "pointer",
+                          opacity: partyLocked ? 0.6 : 1,
+                          minWidth: 36,
+                          textAlign: "center",
+                          fontWeight: 850,
+                        }}
+                        title={partyLocked ? "Party locked by canon/combat" : undefined}
+                      >
+                        {n}
+                      </button>
+                    );
+                  })}
                 </div>
 
-                <div>
-                  <div style={{ fontWeight: 900, letterSpacing: 0.2, marginBottom: 6 }}>Assemble Your Party</div>
-                  <div style={{ fontSize: 12, opacity: 0.78, marginBottom: 10 }}>
-                    These are the adventurers entering the dungeon.
+                <div style={{ display: "grid", gap: 8 }}>
+                  <div style={{ fontSize: 12, opacity: 0.78 }}>
+                    {partyLocked ? "Party locked for this session." : "Choose how many adventurers enter the dungeon."}
                   </div>
-                  <PartyPips count={partySize} />
+
+                  <div>
+                    <div style={{ fontWeight: 900, letterSpacing: 0.2, marginBottom: 6 }}>Assemble Your Party</div>
+                    <div style={{ fontSize: 12, opacity: 0.78, marginBottom: 10 }}>
+                      These are the adventurers entering the dungeon.
+                    </div>
+                    <PartyPips count={partySize} />
+                  </div>
                 </div>
               </div>
-            </div>
-
-            <div
-              style={{
-                marginTop: 2,
-                paddingTop: 10,
-                borderTop: "1px solid rgba(255,255,255,0.10)",
-                display: "grid",
-                gap: 10,
-              }}
-            >
-              <div style={{ fontWeight: 900, letterSpacing: 0.2 }}>Chapters</div>
-
-              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                <Chip label="Mode" state={chapterState.mode} onClick={() => { playSfx(SFX.buttonClick, 0.58); onJump("mode"); }} />
-                <Chip label="Party" state={chapterState.party} onClick={() => { playSfx(SFX.buttonClick, 0.58); onJump("party"); }} />
-                <Chip label="Table" state={chapterState.table} onClick={() => { playSfx(SFX.buttonClick, 0.58); onJump("table"); }} />
-                <Chip label="Pressure" state={chapterState.pressure} onClick={() => { playSfx(SFX.buttonClick, 0.58); onJump("pressure"); }} />
-                <Chip label="Map" state={chapterState.map} onClick={() => { playSfx(SFX.buttonClick, 0.58); onJump("map"); }} />
-                <Chip label="Combat" state={chapterState.combat} onClick={() => { playSfx(SFX.buttonClick, 0.58); onJump("combat"); }} />
-                <Chip label="Action" state={chapterState.action} onClick={() => { playSfx(SFX.buttonClick, 0.58); onJump("action"); }} />
-                <Chip label="Resolution" state={chapterState.resolution} onClick={() => { playSfx(SFX.buttonClick, 0.58); onJump("resolution"); }} />
-                <Chip label="Canon" state={chapterState.canon} onClick={() => { playSfx(SFX.buttonClick, 0.58); onJump("canon"); }} />
-                <Chip label="Chronicle" state={chapterState.ledger} onClick={() => { playSfx(SFX.buttonClick, 0.58); onJump("ledger"); }} />
-              </div>
-
-              <div style={{ fontSize: 12, opacity: 0.70 }}>Progress unlocks the deeper chapters.</div>
-            </div>
+            )}
           </div>
 
           <div
@@ -711,41 +688,51 @@ export default function HeroOnboarding({
                 boxShadow: "0 12px 40px rgba(0,0,0,0.45)",
               }}
             >
-              <div style={{ fontWeight: 950, fontSize: 16, letterSpacing: 0.2 }}>Enter the Dungeon</div>
-              <div style={{ marginTop: 4, fontSize: 12, opacity: 0.80 }}>
-                You declare intent. The world remembers what you do.
+              <div style={{ fontWeight: 950, fontSize: 16, letterSpacing: 0.2 }}>
+                {showEnterStep ? "Enter the Dungeon" : "The Journey Begins"}
+              </div>
+              <div style={{ marginTop: 4, fontSize: 12, opacity: 0.8 }}>
+                {showEnterStep
+                  ? "You declare intent. The world remembers what you do."
+                  : "Choose how fate will guide the adventure."}
               </div>
 
-              <div style={{ marginTop: 10, display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (!canEnter) {
-                      playSfx(SFX.uiFailure, 0.54);
-                      return;
-                    }
-                    playSfx(SFX.uiSuccess, 0.68);
-                    onEnter();
-                  }}
-                  disabled={!canEnter}
-                  style={{
-                    padding: "10px 14px",
-                    borderRadius: 12,
-                    fontWeight: 950,
-                    letterSpacing: 0.2,
-                    border: canEnter ? "1px solid rgba(255,255,255,0.24)" : "1px solid rgba(255,255,255,0.18)",
-                    background: canEnter ? "rgba(255,255,255,0.12)" : "rgba(255,255,255,0.04)",
-                    cursor: canEnter ? "pointer" : "not-allowed",
-                    opacity: canEnter ? 1 : 0.6,
-                  }}
-                >
-                  Enter
-                </button>
+              {showEnterStep ? (
+                <div style={{ marginTop: 10, display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!canEnter) {
+                        playSfx(SFX.uiFailure, 0.54);
+                        return;
+                      }
+                      playSfx(SFX.uiSuccess, 0.68);
+                      onEnter();
+                    }}
+                    disabled={!canEnter}
+                    style={{
+                      padding: "10px 14px",
+                      borderRadius: 12,
+                      fontWeight: 950,
+                      letterSpacing: 0.2,
+                      border: canEnter ? "1px solid rgba(255,255,255,0.24)" : "1px solid rgba(255,255,255,0.18)",
+                      background: canEnter ? "rgba(255,255,255,0.12)" : "rgba(255,255,255,0.04)",
+                      cursor: canEnter ? "pointer" : "not-allowed",
+                      opacity: canEnter ? 1 : 0.6,
+                    }}
+                  >
+                    Enter
+                  </button>
 
-                <div style={{ fontSize: 12, opacity: 0.74 }}>
-                  {dmMode === null ? "Choose a play style first." : "Next: accept the scene and start acting."}
+                  <div style={{ fontSize: 12, opacity: 0.74 }}>
+                    Next: accept the scene and start acting.
+                  </div>
                 </div>
-              </div>
+              ) : (
+                <div style={{ marginTop: 10, fontSize: 12, opacity: 0.74 }}>
+                  Choose a play style to continue.
+                </div>
+              )}
             </div>
           </div>
         </div>
