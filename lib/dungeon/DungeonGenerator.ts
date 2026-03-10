@@ -110,22 +110,34 @@ function makeDoorId(floorIndex: number, doorIndex: number): DoorId {
 }
 
 function chooseFloorThemes(rng: () => number, floorCount: number): DungeonFloorTheme[] {
-  const progression: DungeonFloorTheme[] = [
-    "ruined_outpost",
-    "forgotten_crypt",
+  if (floorCount <= 1) {
+    return ["ruined_outpost"];
+  }
+
+  if (floorCount === 2) {
+    return ["ruined_outpost", "forgotten_crypt"];
+  }
+
+  if (floorCount === 3) {
+    return ["ruined_outpost", "cult_temple", "forgotten_crypt"];
+  }
+
+  const midPool: DungeonFloorTheme[] = [
     "cult_temple",
     "arcane_forge",
+    "wild_depths",
     "ancient_vault",
   ];
 
-  if (floorCount <= progression.length) {
-    return progression.slice(0, floorCount);
+  const out: DungeonFloorTheme[] = ["ruined_outpost"];
+
+  while (out.length < floorCount - 1) {
+    const nextTheme = pickOne(rng, midPool);
+    out.push(nextTheme);
   }
 
-  const out = [...progression];
-  while (out.length < floorCount) {
-    out.push(pickOne(rng, progression.slice(2)));
-  }
+  out.push("forgotten_crypt");
+
   return out;
 }
 
@@ -179,7 +191,7 @@ function removeRoomTypeOnce(pool: RoomType[], roomType: RoomType) {
 
 function maybeAddRareRoom(
   rng: () => number,
-  pool: RoomType[],
+  selected: RoomType[],
   rareRoomTypes: readonly RoomType[],
   chance: number
 ) {
@@ -187,7 +199,9 @@ function maybeAddRareRoom(
   if (rng() > chance) return;
 
   const candidate = pickOne(rng, rareRoomTypes);
-  pool.push(candidate);
+  if (!selected.includes(candidate)) {
+    selected.push(candidate);
+  }
 }
 
 function buildCoreRoomPlanForTheme(
@@ -215,8 +229,6 @@ function buildCoreRoomPlanForTheme(
     removeRoomTypeOnce(rarePool, roomType);
   };
 
-  // Stronger authored identity for the opening floors.
-  // Floor 1 should feel like a real place: corridor + storage, with shrine as a rare emotional beat.
   if (theme === "ruined_outpost") {
     addGuaranteed("corridor");
     addGuaranteed("storage");
@@ -229,7 +241,6 @@ function buildCoreRoomPlanForTheme(
     }
   }
 
-  // Crypt floors should more reliably feel sepulchral and haunted.
   if (theme === "forgotten_crypt") {
     addGuaranteed("crypt");
 
@@ -241,21 +252,22 @@ function buildCoreRoomPlanForTheme(
     }
   }
 
-  // Add a rare room sometimes before filling from commons.
   maybeAddRareRoom(rng, selected, rarePool, 0.35);
 
   const remainingNeeded = Math.max(0, internalTargetCount - selected.length);
   const pickedCommon = pickManyUnique(rng, commonPool, remainingNeeded);
   selected.push(...pickedCommon);
 
-  // If we still came up short because of unique pool limits, backfill from rare rooms.
   while (selected.length < internalTargetCount && rarePool.length > 0) {
     const rare = pickOne(rng, rarePool);
     if (!selected.includes(rare)) {
       selected.push(rare);
-    } else {
-      break;
+      continue;
     }
+
+    const remainingRare = rarePool.filter((roomType) => !selected.includes(roomType));
+    if (!remainingRare.length) break;
+    selected.push(pickOne(rng, remainingRare));
   }
 
   const plan: RoomType[] = [];
@@ -345,6 +357,8 @@ function mapFloorThemeToTrapTheme(theme: DungeonFloorTheme): DungeonTheme {
       return "dwarven_ruin";
     case "ancient_vault":
       return "burial_tomb";
+    case "wild_depths":
+      return "generic_stone_dungeon";
     default:
       return "generic_stone_dungeon";
   }
