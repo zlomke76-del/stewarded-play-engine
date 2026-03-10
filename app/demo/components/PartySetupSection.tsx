@@ -78,9 +78,7 @@ function playSfx(src: string, volume = 0.66) {
   try {
     const audio = new Audio(src);
     audio.volume = volume;
-    void audio.play().catch(() => {
-      // fail silently; UI audio should never block editing flow
-    });
+    void audio.play().catch(() => {});
   } catch {
     // fail silently
   }
@@ -269,6 +267,54 @@ function StatChip({
   );
 }
 
+function FellowshipSlots({
+  unlockedPartySlots,
+  maxPartySlots,
+}: {
+  unlockedPartySlots: number;
+  maxPartySlots: number;
+}) {
+  return (
+    <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+      {Array.from({ length: maxPartySlots }, (_, i) => {
+        const slot = i + 1;
+        const unlocked = slot <= unlockedPartySlots;
+        const active = slot === 1;
+
+        return (
+          <div
+            key={slot}
+            style={{
+              width: 70,
+              padding: "10px 8px",
+              borderRadius: 12,
+              border: active
+                ? "1px solid rgba(138,180,255,0.34)"
+                : unlocked
+                  ? "1px solid rgba(255,255,255,0.12)"
+                  : "1px solid rgba(255,255,255,0.08)",
+              background: active
+                ? "rgba(138,180,255,0.10)"
+                : unlocked
+                  ? "rgba(255,255,255,0.04)"
+                  : "rgba(255,255,255,0.02)",
+              display: "grid",
+              gap: 6,
+              justifyItems: "center",
+              opacity: unlocked ? 1 : 0.58,
+            }}
+          >
+            <div style={{ fontSize: 18 }}>{active ? "⚔" : unlocked ? "◌" : "🔒"}</div>
+            <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: 0.3 }}>
+              {active ? "Hero" : unlocked ? `Slot ${slot}` : `Locked ${slot}`}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 export default function PartySetupSection(props: {
   enabled: boolean;
   partyDraft: PartyDeclaredPayload | null;
@@ -276,11 +322,11 @@ export default function PartySetupSection(props: {
   partyCanonicalExists: boolean;
   partyLocked: boolean;
   partyLockedByCombat: boolean;
-  setPartySize: (n: number) => void;
-  randomizePartyNames: () => void;
   commitParty: () => void;
-  safeInt: (n: unknown, fallback: number, lo: number, hi: number) => number;
   setPartyDraft: React.Dispatch<React.SetStateAction<PartyDeclaredPayload | null>>;
+  unlockedPartySlots: number;
+  maxPartySlots: number;
+  completionRequiresFullFellowship: boolean;
 }) {
   const {
     enabled,
@@ -289,65 +335,72 @@ export default function PartySetupSection(props: {
     partyCanonicalExists,
     partyLocked,
     partyLockedByCombat,
-    setPartySize,
-    randomizePartyNames,
     commitParty,
     setPartyDraft,
+    unlockedPartySlots,
+    maxPartySlots,
+    completionRequiresFullFellowship,
   } = props;
 
   const [showDeclaredEditor, setShowDeclaredEditor] = useState(false);
 
   const editable = !partyLocked && !!partyDraft;
-  const rows = (partyDraft?.members ?? partyMembersFallback) as PartyMember[];
-  const currentCount = partyDraft?.members?.length ?? partyMembersFallback.length ?? 4;
+  const sourceHero = (partyDraft?.members?.[0] ?? partyMembersFallback?.[0]) as PartyMember | undefined;
+  const row: PartyMember | null = sourceHero ?? null;
   const canCollapseToSummary = partyCanonicalExists && partyLocked;
   const showFullEditor = !canCollapseToSummary || showDeclaredEditor;
 
-  const rosterSummary = useMemo(() => {
-    const uniqueSpecies = new Set<string>();
-    const uniqueClasses = new Set<string>();
-
-    rows.forEach((row) => {
-      uniqueSpecies.add(getResolvedSpecies(row.species));
-      uniqueClasses.add(getResolvedClass(row.className));
-    });
+  const heroSummary = useMemo(() => {
+    if (!row) {
+      return {
+        hpTotal: 0,
+        resolvedSpecies: "Human",
+        resolvedClass: "Warrior",
+      };
+    }
 
     return {
-      speciesCount: uniqueSpecies.size,
-      classCount: uniqueClasses.size,
-      hpTotal: rows.reduce((sum, row) => sum + Number(row.hpCurrent ?? 0), 0),
+      hpTotal: Number(row.hpCurrent ?? 0),
+      resolvedSpecies: getResolvedSpecies(row.species),
+      resolvedClass: getResolvedClass(row.className),
     };
-  }, [rows]);
+  }, [row]);
 
-  function setMemberField(idx: number, patch: Partial<PartyMember>) {
+  function setHeroField(patch: Partial<PartyMember>) {
     setPartyDraft((prev) => {
-      if (!prev) return prev;
-      const next = { ...prev, members: prev.members.map((x) => ({ ...x })) };
-      next.members[idx] = { ...next.members[idx], ...patch };
-      return next;
+      if (!prev || !prev.members?.length) return prev;
+
+      const current = { ...prev.members[0], ...patch };
+      return {
+        ...prev,
+        members: [current],
+      };
     });
   }
 
-  function setPortrait(idx: number, portrait: PortraitType) {
+  function setPortrait(portrait: PortraitType) {
     playSfx(SFX.buttonClick, 0.52);
-    setMemberField(idx, { portrait });
+    setHeroField({ portrait });
   }
 
-  function setSpecies(idx: number, row: PartyMember, nextSpecies: string) {
+  function setSpecies(nextSpecies: string) {
+    if (!row) return;
     const next = resolvePartyLoadout(row.className || "Warrior", nextSpecies || "Human");
-    setMemberField(idx, {
+    setHeroField({
       species: nextSpecies,
       traits: next.traitIds,
     });
   }
 
-  function setClass(idx: number, row: PartyMember, nextClassName: string) {
+  function setClass(nextClassName: string) {
+    if (!row) return;
+
     const next = resolvePartyLoadout(nextClassName || "Warrior", row.species || "Human");
     const resolvedClass = getResolvedClass(nextClassName || "Warrior");
     const focus = inferBuildFocus(row, getResolvedClass(row.className || "Warrior"));
     const focusedStats = applyBuildFocusToStats(getBaseStatsForClass(resolvedClass), focus);
 
-    setMemberField(idx, {
+    setHeroField({
       className: nextClassName,
       skills: next.skillIds,
       ac: focusedStats.ac,
@@ -357,13 +410,15 @@ export default function PartySetupSection(props: {
     });
   }
 
-  function setBuildFocus(idx: number, row: PartyMember, focus: BuildFocus) {
+  function setBuildFocus(focus: BuildFocus) {
+    if (!row) return;
+
     const resolvedClass = getResolvedClass(row.className || "Warrior");
     const base = getBaseStatsForClass(resolvedClass);
     const nextStats = applyBuildFocusToStats(base, focus);
 
     playSfx(SFX.buttonClick, 0.54);
-    setMemberField(idx, {
+    setHeroField({
       ac: nextStats.ac,
       hpMax: nextStats.hpMax,
       hpCurrent: nextStats.hpMax,
@@ -437,7 +492,35 @@ export default function PartySetupSection(props: {
     border: "1px solid rgba(120,180,255,0.22)",
   };
 
-  if (!enabled) return null;
+  if (!enabled || !row) return null;
+
+  const speciesValue = normalizeSpeciesValue(row?.species ?? "");
+  const speciesIsCustom = speciesValue.length > 0 && !isKnownValue(speciesValue, SAFE_SPECIES);
+
+  const speciesSelectValue =
+    speciesValue.length === 0
+      ? ""
+      : speciesIsCustom
+        ? "__custom__"
+        : SAFE_SPECIES.find((x) => x.toLowerCase() === speciesValue.toLowerCase()) ?? "";
+
+  const classValue = normalizeClassValue(row?.className ?? "");
+  const classIsCustom =
+    classValue.length > 0 && !isKnownValue(classValue, SAFE_CLASS_ARCHETYPES);
+
+  const classSelectValue =
+    classValue.length === 0
+      ? ""
+      : classIsCustom
+        ? "__custom__"
+        : SAFE_CLASS_ARCHETYPES.find((x) => x.toLowerCase() === classValue.toLowerCase()) ?? "";
+
+  const { resolvedSpecies, resolvedClass, skillIds, traitIds } = getResolvedLoadout(row);
+  const currentFocus = inferBuildFocus(row, resolvedClass);
+  const portraitPath = getPortraitPath(resolvedSpecies, resolvedClass, row?.portrait ?? "Male");
+  const skillLabels = skillIds.map((skillId) => getSkillDefinition(skillId)?.label ?? skillId);
+  const traitLabels = traitIds.map((traitId) => getSpeciesTraitDefinition(traitId)?.label ?? traitId);
+  const display = row?.name?.trim() || "The Lone Hero";
 
   return (
     <div style={{ scrollMarginTop: 90 }}>
@@ -453,28 +536,29 @@ export default function PartySetupSection(props: {
           >
             <div>
               <div style={{ fontSize: 24, fontWeight: 950, letterSpacing: 0.2 }}>
-                Assemble the Party
+                Declare the Lone Hero
               </div>
               <div style={{ marginTop: 6, fontSize: 14, opacity: 0.82, maxWidth: 820, lineHeight: 1.6 }}>
-                Declare the adventurers once. Identity comes first: portrait, name, species, class, and
-                build focus. Stats are then shaped through that role rather than raw freeform tuning.
+                The journey begins with one hero only. Identity comes first: portrait, name, species,
+                class, and build focus. The rest of the fellowship remains locked in the depths until
+                it is earned.
               </div>
 
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 12 }}>
                 <SectionPill tone={partyCanonicalExists ? "good" : "default"}>
-                  <strong>{rows.length}</strong> {rows.length === 1 ? "Adventurer" : "Adventurers"}
+                  <strong>1</strong> Starting Hero
                 </SectionPill>
                 <SectionPill>
-                  <strong>{rosterSummary.classCount}</strong> Class{rosterSummary.classCount === 1 ? "" : "es"}
+                  <strong>{heroSummary.resolvedClass}</strong> Class
                 </SectionPill>
                 <SectionPill>
-                  <strong>{rosterSummary.speciesCount}</strong> Species
+                  <strong>{heroSummary.resolvedSpecies}</strong> Lineage
                 </SectionPill>
                 <SectionPill tone="warn">
-                  <strong>{rosterSummary.hpTotal}</strong> Total HP
+                  <strong>{heroSummary.hpTotal}</strong> Total HP
                 </SectionPill>
                 <SectionPill tone={partyCanonicalExists ? "good" : "default"}>
-                  {partyCanonicalExists ? "Canonical roster locked" : "Draft roster only"}
+                  {partyCanonicalExists ? "Hero canonized" : "Draft hero only"}
                 </SectionPill>
                 {partyLockedByCombat ? <SectionPill tone="warn">Combat lock active</SectionPill> : null}
               </div>
@@ -498,177 +582,96 @@ export default function PartySetupSection(props: {
                   alignSelf: "start",
                 }}
               >
-                Collapse Roster
+                Collapse Hero
               </button>
             )}
           </div>
 
+          <div
+            style={{
+              padding: "14px 16px",
+              borderRadius: 16,
+              border: "1px solid rgba(255,255,255,0.10)",
+              background: "rgba(255,255,255,0.04)",
+              display: "grid",
+              gap: 10,
+            }}
+          >
+            <div style={{ fontWeight: 900, letterSpacing: 0.2, fontSize: 17 }}>
+              Fellowship Progression
+            </div>
+            <div style={{ fontSize: 13, opacity: 0.8, lineHeight: 1.6 }}>
+              The campaign begins with a single active hero. Additional fellowship slots must be earned
+              through milestones, recruit opportunities, and power-versus-companionship choices.
+            </div>
+            <FellowshipSlots
+              unlockedPartySlots={unlockedPartySlots}
+              maxPartySlots={maxPartySlots}
+            />
+            <div style={{ fontSize: 12, opacity: 0.72, lineHeight: 1.5 }}>
+              {completionRequiresFullFellowship
+                ? "True completion remains blocked until all six fellowship seats are assembled."
+                : "Campaign completion is not currently blocked by fellowship size."}
+            </div>
+          </div>
+
           {!showFullEditor && (
-            <>
-              <div
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
-                  gap: 10,
-                }}
-              >
-                {rows.map((row, idx) => {
-                  const i1 = idx + 1;
-                  const { resolvedSpecies, resolvedClass } = getResolvedLoadout(row);
-                  const portraitPath = getPortraitPath(resolvedSpecies, resolvedClass, row?.portrait ?? "Male");
-                  const display = row.name?.trim() || `Player ${i1}`;
-
-                  return (
-                    <div
-                      key={row.id || `summary_${i1}`}
-                      style={{
-                        display: "grid",
-                        gridTemplateColumns: "52px 1fr",
-                        gap: 10,
-                        alignItems: "center",
-                        padding: "10px 12px",
-                        borderRadius: 12,
-                        border: "1px solid rgba(255,255,255,0.08)",
-                        background: "rgba(255,255,255,0.04)",
-                      }}
-                    >
-                      <div
-                        style={{
-                          width: 52,
-                          height: 52,
-                          borderRadius: 10,
-                          overflow: "hidden",
-                          border: "1px solid rgba(255,255,255,0.10)",
-                          background: "rgba(255,255,255,0.04)",
-                        }}
-                      >
-                        <img
-                          src={portraitPath}
-                          alt={`${display} portrait`}
-                          style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
-                          onError={(e) => {
-                            const img = e.currentTarget;
-                            img.onerror = null;
-                            img.src = getPortraitPath("Human", "Warrior", row?.portrait ?? "Male");
-                          }}
-                        />
-                      </div>
-
-                      <div style={{ minWidth: 0 }}>
-                        <div style={{ fontWeight: 900 }}>{display}</div>
-                        <div style={{ fontSize: 12, opacity: 0.74, marginTop: 2 }}>
-                          {resolvedSpecies} · {resolvedClass}
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                gap: 12,
+                flexWrap: "wrap",
+                alignItems: "center",
+                padding: "14px 16px",
+                borderRadius: 14,
+                border: "1px solid rgba(255,255,255,0.10)",
+                background: "rgba(255,255,255,0.04)",
+              }}
+            >
+              <div style={{ fontSize: 13, opacity: 0.82, lineHeight: 1.6 }}>
+                The hero editor is folded away because this identity is already committed to canon.
+                Later growth will unlock fellowship rather than replacing this beginning.
               </div>
 
-              <div
+              <button
+                onClick={() => {
+                  playSfx(SFX.buttonClick, 0.58);
+                  setShowDeclaredEditor(true);
+                }}
                 style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  gap: 12,
-                  flexWrap: "wrap",
-                  alignItems: "center",
-                  padding: "14px 16px",
-                  borderRadius: 14,
-                  border: "1px solid rgba(255,255,255,0.10)",
-                  background: "rgba(255,255,255,0.04)",
+                  ...controlButtonBase,
+                  border: "1px solid rgba(255,255,255,0.12)",
+                  background: "rgba(255,255,255,0.05)",
+                  color: "inherit",
                 }}
               >
-                <div style={{ fontSize: 13, opacity: 0.82, lineHeight: 1.6 }}>
-                  The roster editor is folded away because the party is already committed. These adventurers
-                  now define session identity and combat presence.
-                </div>
-
-                <button
-                  onClick={() => {
-                    playSfx(SFX.buttonClick, 0.58);
-                    setShowDeclaredEditor(true);
-                  }}
-                  style={{
-                    ...controlButtonBase,
-                    border: "1px solid rgba(255,255,255,0.12)",
-                    background: "rgba(255,255,255,0.05)",
-                    color: "inherit",
-                  }}
-                >
-                  Review Full Roster
-                </button>
-              </div>
-            </>
+                Review Hero
+              </button>
+            </div>
           )}
 
           {showFullEditor && (
             <>
               <div
                 style={{
-                  display: "grid",
-                  gridTemplateColumns: "minmax(180px, 220px) 1fr",
-                  gap: 12,
+                  display: "flex",
+                  gap: 10,
+                  flexWrap: "wrap",
                   alignItems: "center",
+                  justifyContent: "space-between",
                   padding: "14px 16px",
                   borderRadius: 16,
                   border: "1px solid rgba(255,255,255,0.10)",
                   background: "rgba(255,255,255,0.04)",
                 }}
               >
-                <div style={{ display: "grid", gap: 6 }}>
-                  <TinyLabel>Party Count</TinyLabel>
-                  <select
-                    value={currentCount}
-                    onChange={(e) => {
-                      if (partyLocked) {
-                        playSfx(SFX.uiFailure, 0.5);
-                        return;
-                      }
-                      playSfx(SFX.buttonClick, 0.58);
-                      setPartySize(Number(e.target.value));
-                    }}
-                    disabled={partyLocked}
-                    style={selectStyle}
-                  >
-                    {[1, 2, 3, 4, 5, 6].map((n) => (
-                      <option key={n} value={n}>
-                        {n} {n === 1 ? "Player" : "Players"}
-                      </option>
-                    ))}
-                  </select>
+                <div style={{ fontSize: 13, opacity: 0.82, lineHeight: 1.6, maxWidth: 760 }}>
+                  Commit a single starting hero to canon. Future companions and party slots will be earned
+                  through the campaign rather than selected here.
                 </div>
 
-                <div
-                  style={{
-                    display: "flex",
-                    gap: 10,
-                    flexWrap: "wrap",
-                    alignItems: "center",
-                    justifyContent: "flex-start",
-                  }}
-                >
-                  <button
-                    onClick={() => {
-                      if (partyLocked || !partyDraft) {
-                        playSfx(SFX.uiFailure, 0.5);
-                        return;
-                      }
-                      playSfx(SFX.buttonClick, 0.58);
-                      randomizePartyNames();
-                    }}
-                    disabled={partyLocked || !partyDraft}
-                    style={{
-                      ...controlButtonBase,
-                      border: "1px solid rgba(255,255,255,0.12)",
-                      background: editable ? "rgba(255,255,255,0.08)" : "rgba(255,255,255,0.04)",
-                      color: "inherit",
-                      opacity: editable ? 1 : 0.6,
-                      cursor: editable ? "pointer" : "not-allowed",
-                    }}
-                  >
-                    🎲 Randomize Names
-                  </button>
-
+                <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
                   <button
                     onClick={() => {
                       if (partyLocked || !partyDraft) {
@@ -693,424 +696,386 @@ export default function PartySetupSection(props: {
                       cursor: editable ? "pointer" : "not-allowed",
                     }}
                   >
-                    Commit Party to Canon
+                    Commit Hero to Canon
                   </button>
 
                   <span style={{ fontSize: 12, opacity: 0.72 }}>
-                    {partyCanonicalExists ? "Canonical party declared ✓" : "Draft only · not yet canonical"}
+                    {partyCanonicalExists ? "Canonical hero declared ✓" : "Draft hero only · not yet canonical"}
                     {partyLockedByCombat ? " · Combat lock active" : ""}
                   </span>
                 </div>
               </div>
 
-              <div style={{ display: "grid", gap: 14 }}>
-                {rows.map((row, idx) => {
-                  const i1 = idx + 1;
-
-                  const speciesValue = normalizeSpeciesValue(row?.species ?? "");
-                  const speciesIsCustom = speciesValue.length > 0 && !isKnownValue(speciesValue, SAFE_SPECIES);
-
-                  const speciesSelectValue =
-                    speciesValue.length === 0
-                      ? ""
-                      : speciesIsCustom
-                        ? "__custom__"
-                        : SAFE_SPECIES.find((x) => x.toLowerCase() === speciesValue.toLowerCase()) ?? "";
-
-                  const classValue = normalizeClassValue(row?.className ?? "");
-                  const classIsCustom =
-                    classValue.length > 0 && !isKnownValue(classValue, SAFE_CLASS_ARCHETYPES);
-
-                  const classSelectValue =
-                    classValue.length === 0
-                      ? ""
-                      : classIsCustom
-                        ? "__custom__"
-                        : SAFE_CLASS_ARCHETYPES.find((x) => x.toLowerCase() === classValue.toLowerCase()) ?? "";
-
-                  const { resolvedSpecies, resolvedClass, skillIds, traitIds } = getResolvedLoadout(row);
-                  const currentFocus = inferBuildFocus(row, resolvedClass);
-
-                  const portraitPath = getPortraitPath(resolvedSpecies, resolvedClass, row?.portrait ?? "Male");
-                  const skillLabels = skillIds.map((skillId) => getSkillDefinition(skillId)?.label ?? skillId);
-                  const traitLabels = traitIds.map((traitId) => getSpeciesTraitDefinition(traitId)?.label ?? traitId);
-                  const display = row?.name?.trim() || `Player ${i1}`;
-
-                  return (
-                    <article
-                      key={row.id || `player_${i1}`}
+              <article
+                style={{
+                  borderRadius: 18,
+                  border: "1px solid rgba(255,255,255,0.10)",
+                  background:
+                    "linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.02))",
+                  padding: 16,
+                  boxShadow: "inset 0 1px 0 rgba(255,255,255,0.03)",
+                }}
+              >
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "110px minmax(0, 1fr)",
+                    gap: 16,
+                    alignItems: "start",
+                  }}
+                >
+                  <div style={{ display: "grid", gap: 10 }}>
+                    <div
                       style={{
-                        borderRadius: 18,
-                        border: "1px solid rgba(255,255,255,0.10)",
-                        background:
-                          "linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.02))",
-                        padding: 16,
-                        boxShadow: "inset 0 1px 0 rgba(255,255,255,0.03)",
+                        width: 110,
+                        height: 132,
+                        borderRadius: 14,
+                        overflow: "hidden",
+                        border: "1px solid rgba(255,255,255,0.12)",
+                        background: "rgba(255,255,255,0.04)",
+                        boxShadow: "0 10px 24px rgba(0,0,0,0.18)",
+                      }}
+                      title={`${resolvedSpecies} ${resolvedClass} ${row?.portrait ?? "Male"}`}
+                    >
+                      <img
+                        src={portraitPath}
+                        alt={`${display} portrait`}
+                        style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+                        onError={(e) => {
+                          const img = e.currentTarget;
+                          img.onerror = null;
+                          img.src = getPortraitPath("Human", "Warrior", row?.portrait ?? "Male");
+                        }}
+                      />
+                    </div>
+
+                    <div
+                      style={{
+                        display: "grid",
+                        gridTemplateColumns: "1fr 1fr",
+                        gap: 8,
+                      }}
+                    >
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (!editable) {
+                            playSfx(SFX.uiFailure, 0.5);
+                            return;
+                          }
+                          setPortrait("Male");
+                        }}
+                        disabled={!editable}
+                        style={{
+                          ...controlButtonBase,
+                          padding: "8px 0",
+                          fontSize: 12,
+                          border: row?.portrait === "Male"
+                            ? "1px solid rgba(138,180,255,0.42)"
+                            : "1px solid rgba(255,255,255,0.12)",
+                          background: row?.portrait === "Male"
+                            ? "rgba(138,180,255,0.12)"
+                            : "rgba(255,255,255,0.04)",
+                          color: "inherit",
+                          opacity: editable ? 1 : 0.6,
+                          cursor: editable ? "pointer" : "not-allowed",
+                        }}
+                      >
+                        Male
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (!editable) {
+                            playSfx(SFX.uiFailure, 0.5);
+                            return;
+                          }
+                          setPortrait("Female");
+                        }}
+                        disabled={!editable}
+                        style={{
+                          ...controlButtonBase,
+                          padding: "8px 0",
+                          fontSize: 12,
+                          border: row?.portrait === "Female"
+                            ? "1px solid rgba(138,180,255,0.42)"
+                            : "1px solid rgba(255,255,255,0.12)",
+                          background: row?.portrait === "Female"
+                            ? "rgba(138,180,255,0.12)"
+                            : "rgba(255,255,255,0.04)",
+                          color: "inherit",
+                          opacity: editable ? 1 : 0.6,
+                          cursor: editable ? "pointer" : "not-allowed",
+                        }}
+                      >
+                        Female
+                      </button>
+                    </div>
+                  </div>
+
+                  <div style={{ display: "grid", gap: 14, minWidth: 0 }}>
+                    <div
+                      style={{
+                        display: "grid",
+                        gridTemplateColumns: "minmax(220px, 1.1fr) repeat(4, minmax(110px, 0.55fr))",
+                        gap: 12,
+                        alignItems: "end",
+                      }}
+                    >
+                      <div>
+                        <TinyLabel>Hero</TinyLabel>
+                        <input
+                          value={row?.name ?? ""}
+                          disabled={!editable}
+                          onChange={(e) => setHeroField({ name: e.target.value })}
+                          placeholder="The Lone Hero"
+                          style={inputStyle}
+                        />
+                        <div style={{ marginTop: 8, fontSize: 13, opacity: 0.82 }}>
+                          <strong>{display}</strong> · {resolvedSpecies} {resolvedClass}
+                        </div>
+                      </div>
+
+                      <div>
+                        <TinyLabel>Armor Class</TinyLabel>
+                        <StatChip label="AC" value={row?.ac ?? 14} />
+                      </div>
+
+                      <div>
+                        <TinyLabel>HP</TinyLabel>
+                        <StatChip label="HP" value={row?.hpCurrent ?? 12} />
+                      </div>
+
+                      <div>
+                        <TinyLabel>HP Max</TinyLabel>
+                        <StatChip label="HP Max" value={row?.hpMax ?? 12} />
+                      </div>
+
+                      <div>
+                        <TinyLabel>Initiative</TinyLabel>
+                        <StatChip label="Init" value={row?.initiativeMod ?? 1} />
+                      </div>
+                    </div>
+
+                    <div
+                      style={{
+                        display: "grid",
+                        gridTemplateColumns: "minmax(180px, 1fr) minmax(180px, 1fr)",
+                        gap: 12,
+                        alignItems: "start",
+                      }}
+                    >
+                      <div style={{ minWidth: 0 }}>
+                        <TinyLabel>Species</TinyLabel>
+                        <select
+                          value={speciesSelectValue}
+                          disabled={!editable}
+                          onChange={(e) => {
+                            const v = e.target.value;
+                            playSfx(SFX.buttonClick, 0.54);
+
+                            if (v === "") {
+                              setSpecies("");
+                              return;
+                            }
+
+                            if (v === "__custom__") {
+                              if (!speciesIsCustom) {
+                                setHeroField({ species: "", traits: [] });
+                              }
+                              return;
+                            }
+
+                            setSpecies(v);
+                          }}
+                          style={selectStyle}
+                        >
+                          <option value="">—</option>
+                          {SAFE_SPECIES.map((s) => (
+                            <option key={s} value={s}>
+                              {s}
+                            </option>
+                          ))}
+                          <option value="__custom__">Custom…</option>
+                        </select>
+
+                        {speciesSelectValue === "__custom__" && (
+                          <input
+                            value={speciesIsCustom ? speciesValue : ""}
+                            disabled={!editable}
+                            onChange={(e) => {
+                              const nextSpecies = e.target.value;
+                              setSpecies(nextSpecies);
+                            }}
+                            placeholder="Custom species"
+                            style={{ ...inputStyle, marginTop: 8 }}
+                          />
+                        )}
+                      </div>
+
+                      <div style={{ minWidth: 0 }}>
+                        <TinyLabel>Class</TinyLabel>
+                        <select
+                          value={classSelectValue}
+                          disabled={!editable}
+                          onChange={(e) => {
+                            const v = e.target.value;
+                            playSfx(SFX.buttonClick, 0.54);
+
+                            if (v === "") {
+                              setClass("");
+                              return;
+                            }
+
+                            if (v === "__custom__") {
+                              if (!classIsCustom) {
+                                setHeroField({
+                                  className: "",
+                                  skills: [],
+                                });
+                              }
+                              return;
+                            }
+
+                            setClass(v);
+                          }}
+                          style={selectStyle}
+                        >
+                          <option value="">—</option>
+                          {SAFE_CLASS_ARCHETYPES.map((c) => (
+                            <option key={c} value={c}>
+                              {c}
+                            </option>
+                          ))}
+                          <option value="__custom__">Custom…</option>
+                        </select>
+
+                        {classSelectValue === "__custom__" && (
+                          <input
+                            value={classIsCustom ? classValue : ""}
+                            disabled={!editable}
+                            onChange={(e) => {
+                              const nextClassName = e.target.value;
+                              setClass(nextClassName);
+                            }}
+                            placeholder="Custom class"
+                            style={{ ...inputStyle, marginTop: 8 }}
+                          />
+                        )}
+                      </div>
+                    </div>
+
+                    <div
+                      style={{
+                        padding: "12px 14px",
+                        borderRadius: 12,
+                        border: "1px solid rgba(255,255,255,0.08)",
+                        background: "rgba(255,255,255,0.03)",
+                      }}
+                    >
+                      <TinyLabel>Build Focus</TinyLabel>
+
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                        {BUILD_FOCUS_OPTIONS.map((option) => {
+                          const active = currentFocus === option.id;
+                          return (
+                            <button
+                              key={option.id}
+                              type="button"
+                              onClick={() => {
+                                if (!editable) {
+                                  playSfx(SFX.uiFailure, 0.5);
+                                  return;
+                                }
+                                setBuildFocus(option.id);
+                              }}
+                              disabled={!editable}
+                              title={option.hint}
+                              style={{
+                                ...controlButtonBase,
+                                padding: "8px 10px",
+                                fontSize: 12,
+                                border: active
+                                  ? "1px solid rgba(138,180,255,0.42)"
+                                  : "1px solid rgba(255,255,255,0.12)",
+                                background: active
+                                  ? "rgba(138,180,255,0.12)"
+                                  : "rgba(255,255,255,0.04)",
+                                color: "inherit",
+                                opacity: editable ? 1 : 0.6,
+                                cursor: editable ? "pointer" : "not-allowed",
+                              }}
+                            >
+                              {option.label}
+                            </button>
+                          );
+                        })}
+                      </div>
+
+                      <div style={{ marginTop: 8, fontSize: 12, opacity: 0.72 }}>
+                        Choose one stance to shape survivability and speed without raw stat editing.
+                      </div>
+                    </div>
+
+                    <div
+                      style={{
+                        display: "grid",
+                        gridTemplateColumns: "1fr 1fr",
+                        gap: 12,
                       }}
                     >
                       <div
                         style={{
-                          display: "grid",
-                          gridTemplateColumns: "110px minmax(0, 1fr)",
-                          gap: 16,
-                          alignItems: "start",
+                          padding: "12px 14px",
+                          borderRadius: 12,
+                          border: "1px solid rgba(255,255,255,0.08)",
+                          background: "rgba(255,255,255,0.03)",
                         }}
                       >
-                        <div style={{ display: "grid", gap: 10 }}>
-                          <div
-                            style={{
-                              width: 110,
-                              height: 132,
-                              borderRadius: 14,
-                              overflow: "hidden",
-                              border: "1px solid rgba(255,255,255,0.12)",
-                              background: "rgba(255,255,255,0.04)",
-                              boxShadow: "0 10px 24px rgba(0,0,0,0.18)",
-                            }}
-                            title={`${resolvedSpecies} ${resolvedClass} ${row?.portrait ?? "Male"}`}
-                          >
-                            <img
-                              src={portraitPath}
-                              alt={`${display} portrait`}
-                              style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
-                              onError={(e) => {
-                                const img = e.currentTarget;
-                                img.onerror = null;
-                                img.src = getPortraitPath("Human", "Warrior", row?.portrait ?? "Male");
-                              }}
-                            />
-                          </div>
-
-                          <div
-                            style={{
-                              display: "grid",
-                              gridTemplateColumns: "1fr 1fr",
-                              gap: 8,
-                            }}
-                          >
-                            <button
-                              type="button"
-                              onClick={() => {
-                                if (!editable) {
-                                  playSfx(SFX.uiFailure, 0.5);
-                                  return;
-                                }
-                                setPortrait(idx, "Male");
-                              }}
-                              disabled={!editable}
-                              style={{
-                                ...controlButtonBase,
-                                padding: "8px 0",
-                                fontSize: 12,
-                                border: row?.portrait === "Male"
-                                  ? "1px solid rgba(138,180,255,0.42)"
-                                  : "1px solid rgba(255,255,255,0.12)",
-                                background: row?.portrait === "Male"
-                                  ? "rgba(138,180,255,0.12)"
-                                  : "rgba(255,255,255,0.04)",
-                                color: "inherit",
-                                opacity: editable ? 1 : 0.6,
-                                cursor: editable ? "pointer" : "not-allowed",
-                              }}
-                            >
-                              Male
-                            </button>
-
-                            <button
-                              type="button"
-                              onClick={() => {
-                                if (!editable) {
-                                  playSfx(SFX.uiFailure, 0.5);
-                                  return;
-                                }
-                                setPortrait(idx, "Female");
-                              }}
-                              disabled={!editable}
-                              style={{
-                                ...controlButtonBase,
-                                padding: "8px 0",
-                                fontSize: 12,
-                                border: row?.portrait === "Female"
-                                  ? "1px solid rgba(138,180,255,0.42)"
-                                  : "1px solid rgba(255,255,255,0.12)",
-                                background: row?.portrait === "Female"
-                                  ? "rgba(138,180,255,0.12)"
-                                  : "rgba(255,255,255,0.04)",
-                                color: "inherit",
-                                opacity: editable ? 1 : 0.6,
-                                cursor: editable ? "pointer" : "not-allowed",
-                              }}
-                            >
-                              Female
-                            </button>
-                          </div>
-                        </div>
-
-                        <div style={{ display: "grid", gap: 14, minWidth: 0 }}>
-                          <div
-                            style={{
-                              display: "grid",
-                              gridTemplateColumns: "minmax(220px, 1.1fr) repeat(4, minmax(110px, 0.55fr))",
-                              gap: 12,
-                              alignItems: "end",
-                            }}
-                          >
-                            <div>
-                              <TinyLabel>Adventurer</TinyLabel>
-                              <input
-                                value={row?.name ?? ""}
-                                disabled={!editable}
-                                onChange={(e) => setMemberField(idx, { name: e.target.value })}
-                                placeholder={`Player ${i1}`}
-                                style={inputStyle}
-                              />
-                              <div style={{ marginTop: 8, fontSize: 13, opacity: 0.82 }}>
-                                <strong>{display}</strong> · {resolvedSpecies} {resolvedClass}
-                              </div>
-                            </div>
-
-                            <div>
-                              <TinyLabel>Armor Class</TinyLabel>
-                              <StatChip label="AC" value={row?.ac ?? 14} />
-                            </div>
-
-                            <div>
-                              <TinyLabel>HP</TinyLabel>
-                              <StatChip label="HP" value={row?.hpCurrent ?? 12} />
-                            </div>
-
-                            <div>
-                              <TinyLabel>HP Max</TinyLabel>
-                              <StatChip label="HP Max" value={row?.hpMax ?? 12} />
-                            </div>
-
-                            <div>
-                              <TinyLabel>Initiative</TinyLabel>
-                              <StatChip label="Init" value={row?.initiativeMod ?? 1} />
-                            </div>
-                          </div>
-
-                          <div
-                            style={{
-                              display: "grid",
-                              gridTemplateColumns: "minmax(180px, 1fr) minmax(180px, 1fr)",
-                              gap: 12,
-                              alignItems: "start",
-                            }}
-                          >
-                            <div style={{ minWidth: 0 }}>
-                              <TinyLabel>Species</TinyLabel>
-                              <select
-                                value={speciesSelectValue}
-                                disabled={!editable}
-                                onChange={(e) => {
-                                  const v = e.target.value;
-                                  playSfx(SFX.buttonClick, 0.54);
-
-                                  if (v === "") {
-                                    setSpecies(idx, row, "");
-                                    return;
-                                  }
-
-                                  if (v === "__custom__") {
-                                    if (!speciesIsCustom) {
-                                      setMemberField(idx, { species: "", traits: [] });
-                                    }
-                                    return;
-                                  }
-
-                                  setSpecies(idx, row, v);
-                                }}
-                                style={selectStyle}
-                              >
-                                <option value="">—</option>
-                                {SAFE_SPECIES.map((s) => (
-                                  <option key={s} value={s}>
-                                    {s}
-                                  </option>
-                                ))}
-                                <option value="__custom__">Custom…</option>
-                              </select>
-
-                              {speciesSelectValue === "__custom__" && (
-                                <input
-                                  value={speciesIsCustom ? speciesValue : ""}
-                                  disabled={!editable}
-                                  onChange={(e) => {
-                                    const nextSpecies = e.target.value;
-                                    setSpecies(idx, row, nextSpecies);
-                                  }}
-                                  placeholder="Custom species"
-                                  style={{ ...inputStyle, marginTop: 8 }}
-                                />
-                              )}
-                            </div>
-
-                            <div style={{ minWidth: 0 }}>
-                              <TinyLabel>Class</TinyLabel>
-                              <select
-                                value={classSelectValue}
-                                disabled={!editable}
-                                onChange={(e) => {
-                                  const v = e.target.value;
-                                  playSfx(SFX.buttonClick, 0.54);
-
-                                  if (v === "") {
-                                    setClass(idx, row, "");
-                                    return;
-                                  }
-
-                                  if (v === "__custom__") {
-                                    if (!classIsCustom) {
-                                      setMemberField(idx, {
-                                        className: "",
-                                        skills: [],
-                                      });
-                                    }
-                                    return;
-                                  }
-
-                                  setClass(idx, row, v);
-                                }}
-                                style={selectStyle}
-                              >
-                                <option value="">—</option>
-                                {SAFE_CLASS_ARCHETYPES.map((c) => (
-                                  <option key={c} value={c}>
-                                    {c}
-                                  </option>
-                                ))}
-                                <option value="__custom__">Custom…</option>
-                              </select>
-
-                              {classSelectValue === "__custom__" && (
-                                <input
-                                  value={classIsCustom ? classValue : ""}
-                                  disabled={!editable}
-                                  onChange={(e) => {
-                                    const nextClassName = e.target.value;
-                                    setClass(idx, row, nextClassName);
-                                  }}
-                                  placeholder="Custom class"
-                                  style={{ ...inputStyle, marginTop: 8 }}
-                                />
-                              )}
-                            </div>
-                          </div>
-
-                          <div
-                            style={{
-                              padding: "12px 14px",
-                              borderRadius: 12,
-                              border: "1px solid rgba(255,255,255,0.08)",
-                              background: "rgba(255,255,255,0.03)",
-                            }}
-                          >
-                            <TinyLabel>Build Focus</TinyLabel>
-
-                            <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-                              {BUILD_FOCUS_OPTIONS.map((option) => {
-                                const active = currentFocus === option.id;
-                                return (
-                                  <button
-                                    key={option.id}
-                                    type="button"
-                                    onClick={() => {
-                                      if (!editable) {
-                                        playSfx(SFX.uiFailure, 0.5);
-                                        return;
-                                      }
-                                      setBuildFocus(idx, row, option.id);
-                                    }}
-                                    disabled={!editable}
-                                    title={option.hint}
-                                    style={{
-                                      ...controlButtonBase,
-                                      padding: "8px 10px",
-                                      fontSize: 12,
-                                      border: active
-                                        ? "1px solid rgba(138,180,255,0.42)"
-                                        : "1px solid rgba(255,255,255,0.12)",
-                                      background: active
-                                        ? "rgba(138,180,255,0.12)"
-                                        : "rgba(255,255,255,0.04)",
-                                      color: "inherit",
-                                      opacity: editable ? 1 : 0.6,
-                                      cursor: editable ? "pointer" : "not-allowed",
-                                    }}
-                                  >
-                                    {option.label}
-                                  </button>
-                                );
-                              })}
-                            </div>
-
-                            <div style={{ marginTop: 8, fontSize: 12, opacity: 0.72 }}>
-                              Choose one stance to shape survivability and speed without raw stat editing.
-                            </div>
-                          </div>
-
-                          <div
-                            style={{
-                              display: "grid",
-                              gridTemplateColumns: "1fr 1fr",
-                              gap: 12,
-                            }}
-                          >
-                            <div
-                              style={{
-                                padding: "12px 14px",
-                                borderRadius: 12,
-                                border: "1px solid rgba(255,255,255,0.08)",
-                                background: "rgba(255,255,255,0.03)",
-                              }}
-                            >
-                              <TinyLabel>Class Skills</TinyLabel>
-                              <div style={{ display: "flex", flexWrap: "wrap", gap: 6, minHeight: 28 }}>
-                                {skillLabels.length > 0 ? (
-                                  skillLabels.map((label, skillIdx) => (
-                                    <span key={`${row.id || i1}_skill_${label}_${skillIdx}`} style={tagStyle}>
-                                      {label}
-                                    </span>
-                                  ))
-                                ) : (
-                                  <span className="muted" style={{ fontSize: 12 }}>
-                                    No class skills
-                                  </span>
-                                )}
-                              </div>
-                            </div>
-
-                            <div
-                              style={{
-                                padding: "12px 14px",
-                                borderRadius: 12,
-                                border: "1px solid rgba(255,255,255,0.08)",
-                                background: "rgba(255,255,255,0.03)",
-                              }}
-                            >
-                              <TinyLabel>Species Traits</TinyLabel>
-                              <div style={{ display: "flex", flexWrap: "wrap", gap: 6, minHeight: 28 }}>
-                                {traitLabels.length > 0 ? (
-                                  traitLabels.map((label, traitIdx) => (
-                                    <span key={`${row.id || i1}_trait_${label}_${traitIdx}`} style={traitTagStyle}>
-                                      {label}
-                                    </span>
-                                  ))
-                                ) : (
-                                  <span className="muted" style={{ fontSize: 12 }}>
-                                    No species traits
-                                  </span>
-                                )}
-                              </div>
-                            </div>
-                          </div>
+                        <TinyLabel>Class Skills</TinyLabel>
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: 6, minHeight: 28 }}>
+                          {skillLabels.length > 0 ? (
+                            skillLabels.map((label, skillIdx) => (
+                              <span key={`hero_skill_${label}_${skillIdx}`} style={tagStyle}>
+                                {label}
+                              </span>
+                            ))
+                          ) : (
+                            <span className="muted" style={{ fontSize: 12 }}>
+                              No class skills
+                            </span>
+                          )}
                         </div>
                       </div>
-                    </article>
-                  );
-                })}
-              </div>
+
+                      <div
+                        style={{
+                          padding: "12px 14px",
+                          borderRadius: 12,
+                          border: "1px solid rgba(255,255,255,0.08)",
+                          background: "rgba(255,255,255,0.03)",
+                        }}
+                      >
+                        <TinyLabel>Species Traits</TinyLabel>
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: 6, minHeight: 28 }}>
+                          {traitLabels.length > 0 ? (
+                            traitLabels.map((label, traitIdx) => (
+                              <span key={`hero_trait_${label}_${traitIdx}`} style={traitTagStyle}>
+                                {label}
+                              </span>
+                            ))
+                          ) : (
+                            <span className="muted" style={{ fontSize: 12 }}>
+                              No species traits
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </article>
 
               <div
                 style={{
@@ -1123,9 +1088,8 @@ export default function PartySetupSection(props: {
                   lineHeight: 1.7,
                 }}
               >
-                Combat numbers are now shaped through role focus instead of raw freeform stat entry. That
-                keeps party creation readable, bounded, and more game-like while still letting the player
-                meaningfully define each adventurer.
+                The opening declaration now binds a single hero to the dungeon’s canon. Fellowship growth
+                happens later through progression, recruitment, and consequence rather than pre-run roster assembly.
               </div>
             </>
           )}
