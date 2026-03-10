@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import StewardedShell from "@/components/layout/StewardedShell";
 import ModeHeader from "@/components/layout/ModeHeader";
@@ -53,6 +53,8 @@ function useTitleViewportBand(): TitleViewportBand {
 
 export default function DemoPage() {
   const demo = useDemoRuntime();
+  const torchAudioRef = useRef<HTMLAudioElement | null>(null);
+
   const [showTitleOverlay, setShowTitleOverlay] = useState(true);
   const [titleReady, setTitleReady] = useState(false);
   const viewportBand = useTitleViewportBand();
@@ -159,6 +161,42 @@ export default function DemoPage() {
       window.removeEventListener("keydown", unlock);
     };
   }, [showTitleOverlay, demo.introAudioRef]);
+
+  useEffect(() => {
+    const torchAudio = torchAudioRef.current;
+    if (!torchAudio) return;
+
+    const shouldPlayTorchAmbience =
+      showTitleOverlay || (demo.showFullHero && !demo.showGameplay);
+
+    torchAudio.loop = true;
+    torchAudio.volume = 0.1;
+
+    if (!shouldPlayTorchAmbience) {
+      torchAudio.pause();
+      return;
+    }
+
+    const tryPlay = () => {
+      torchAudio.play().catch(() => {});
+    };
+
+    tryPlay();
+
+    const unlock = () => {
+      tryPlay();
+      window.removeEventListener("pointerdown", unlock);
+      window.removeEventListener("keydown", unlock);
+    };
+
+    window.addEventListener("pointerdown", unlock);
+    window.addEventListener("keydown", unlock);
+
+    return () => {
+      window.removeEventListener("pointerdown", unlock);
+      window.removeEventListener("keydown", unlock);
+    };
+  }, [showTitleOverlay, demo.showFullHero, demo.showGameplay]);
 
   function dismissTitleOverlay() {
     setShowTitleOverlay(false);
@@ -310,6 +348,12 @@ export default function DemoPage() {
         style={{ display: "none" }}
       />
       <audio ref={demo.bgmAudioRef} preload="auto" style={{ display: "none" }} />
+      <audio
+        ref={torchAudioRef}
+        preload="auto"
+        src="/assets/audio/sfx_burning_torches_01.mp3"
+        style={{ display: "none" }}
+      />
 
       <div style={{ position: "relative", zIndex: 1, minHeight: "100vh" }}>
         <div
