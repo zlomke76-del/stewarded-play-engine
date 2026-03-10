@@ -1,19 +1,4 @@
 // lib/dungeon/DungeonVisualResolver.ts
-// ------------------------------------------------------------
-// Echoes of Fate — Dungeon Visual Resolver
-// ------------------------------------------------------------
-// Purpose:
-// - Resolve deterministic room artwork from room/floor semantics
-// - Resolve deterministic stair / transition artwork from floor-to-floor movement
-// - Keep visual selection stable from run inputs
-//
-// Notes:
-// - PURE module: no mutation, no side effects
-// - Same inputs -> same outputs
-// - Safe fallbacks are always returned
-// - Add more asset paths over time without changing call sites
-// ------------------------------------------------------------
-
 import type { DungeonFloor, DungeonRoom } from "@/lib/dungeon/FloorState";
 import type { DungeonFloorTheme, RoomType } from "@/lib/dungeon/RoomTypes";
 
@@ -64,37 +49,29 @@ function buildDeterministicAsset(seed: string, assets: readonly string[], fallba
   return pickDeterministic(seed, assets, fallback);
 }
 
-// ------------------------------------------------------------
-// Asset registries
-// ------------------------------------------------------------
-
 const ROOM_ASSETS: Record<string, readonly string[]> = {
-  entrance: ["/assets/V3/Dungeon/Dungeon_Entrance_Main_01.png"],
-  corridor: ["/assets/V3/Dungeon/Dungeon_Entrance_Corridor_01.png"],
-  guard_post: ["/assets/V3/Dungeon/Dungeon_Entrance_Guard_Post_01.png"],
-  ruined_outpost_default: ["/assets/V3/Dungeon/Dungeon_Entrance_Military_Outpost_01.png"],
-  default: ["/assets/V3/Dungeon/Dungeon_Entrance_Main_01.png"],
+  entrance: ["/assets/V3/Dungeon/Entrance/Main_01.png"],
+  corridor: ["/assets/V3/Dungeon/Corridor/Corridor_01.png"],
+  guard_post: ["/assets/V3/Dungeon/Guard_Post/Guard_Post_01.png"],
+  ruined_outpost_default: ["/assets/V3/Dungeon/Military_Outpost/Military_Outpost_01.png"],
+  default: ["/assets/V3/Dungeon/Entrance/Main_01.png"],
 };
 
 const STANDARD_STAIRS_UP_ASSETS: readonly string[] = [
-  "/assets/V3/Dungeon/Stairs/Stairs_Up_01.png",
+  "/assets/V3/Dungeon/Stairs/up_01.png",
 ];
 
 const STANDARD_STAIRS_DOWN_ASSETS: readonly string[] = [
-  "/assets/V3/Dungeon/Stairs/Stairs_Down_01.png",
+  "/assets/V3/Dungeon/Stairs/down_01.png",
 ];
 
 const CRYPT_STAIRS_UP_ASSETS: readonly string[] = [
-  "/assets/V3/Dungeon/Crypt/Stairs/Crypt_Stairs_Up_01.png",
+  "/assets/V3/Dungeon/Crypt/Stairs/up_01.png",
 ];
 
 const CRYPT_STAIRS_DOWN_ASSETS: readonly string[] = [
-  "/assets/V3/Dungeon/Crypt/Stairs/Crypt_Stairs_Down_01.png",
+  "/assets/V3/Dungeon/Crypt/Stairs/down_01.png",
 ];
-
-// ------------------------------------------------------------
-// Room image resolution
-// ------------------------------------------------------------
 
 export function resolveRoomImage(args: ResolveRoomImageArgs): string {
   const room = args.room;
@@ -135,14 +112,6 @@ export function resolveFloorBackdropImage(args: {
   return buildDeterministicAsset(seed, fallbackAssets, fallbackAssets[0]!);
 }
 
-// ------------------------------------------------------------
-// Transition / stair image resolution
-// ------------------------------------------------------------
-// Rule:
-// - Use CRYPT stair art whenever the destination is in the crypt band
-// - Otherwise use standard stair art
-// ------------------------------------------------------------
-
 export function resolveTransitionImage(args: ResolveTransitionImageArgs): string {
   const fromTheme = slugKey(args.fromFloorTheme);
   const toTheme = slugKey(args.toFloorTheme);
@@ -151,13 +120,11 @@ export function resolveTransitionImage(args: ResolveTransitionImageArgs): string
   const seed = `${args.dungeonSeed}:${fromTheme}:${toTheme}:${direction}:transition-image`;
 
   if (destinationIsCrypt) {
-    const assets =
-      direction === "up" ? CRYPT_STAIRS_UP_ASSETS : CRYPT_STAIRS_DOWN_ASSETS;
+    const assets = direction === "up" ? CRYPT_STAIRS_UP_ASSETS : CRYPT_STAIRS_DOWN_ASSETS;
     return buildDeterministicAsset(seed, assets, assets[0]!);
   }
 
-  const assets =
-    direction === "up" ? STANDARD_STAIRS_UP_ASSETS : STANDARD_STAIRS_DOWN_ASSETS;
+  const assets = direction === "up" ? STANDARD_STAIRS_UP_ASSETS : STANDARD_STAIRS_DOWN_ASSETS;
   return buildDeterministicAsset(seed, assets, assets[0]!);
 }
 
@@ -177,10 +144,6 @@ export function resolveStairImageForRoom(args: {
     direction,
   });
 }
-
-// ------------------------------------------------------------
-// Optional utility for richer UI logic
-// ------------------------------------------------------------
 
 export function inferVisualBand(
   theme: DungeonFloorTheme | string | null | undefined
