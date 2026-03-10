@@ -1481,11 +1481,36 @@ export function useDemoRuntime() {
     effectivePlayerNames,
 
     progressionState,
+    progression: {
+      hero: {
+        level: progressionState.heroLevel,
+        upgradePoints: progressionState.heroUpgradePoints,
+        upgrades: progressionState.heroUpgrades,
+      },
+      party: {
+        activeSlots: progressionState.activePartySize,
+        unlockedSlots: progressionState.unlockedPartySlots,
+        maxSlots: progressionState.maxPartySlots,
+      },
+      campaign: {
+        fullFellowshipAssembled: progressionState.fullFellowshipAssembled,
+        completionRequiresFullFellowship:
+          progressionState.completionRequiresFullFellowship,
+        completionRequiresFullParty:
+          progressionState.completionRequiresFullFellowship,
+        completionBlocked: progressionState.campaignCompletionBlocked,
+      },
+      companions: {
+        recruited: progressionState.recruitedCompanionIds,
+      },
+    },
+
     unlockedPartySlots: progressionState.unlockedPartySlots,
     activePartySize: progressionState.activePartySize,
     maxPartySlots: progressionState.maxPartySlots,
     fullFellowshipAssembled: progressionState.fullFellowshipAssembled,
-    completionRequiresFullFellowship: progressionState.completionRequiresFullFellowship,
+    completionRequiresFullFellowship:
+      progressionState.completionRequiresFullFellowship,
     campaignCompletionBlocked: progressionState.campaignCompletionBlocked,
 
     dungeon,
@@ -1509,7 +1534,6 @@ export function useDemoRuntime() {
       allDungeonRooms: dungeon.floors.flatMap((floor) => floor.rooms),
       connections: reachableConnections,
     }),
-
     roomImage,
     roomConnectionsView,
 
