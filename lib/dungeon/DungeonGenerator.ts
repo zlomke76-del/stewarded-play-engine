@@ -279,44 +279,28 @@ function mapFloorThemeToTrapTheme(theme: DungeonFloorTheme): DungeonTheme {
   }
 }
 
+const ROOM_TYPE_TO_TRAP_ROOM_TYPE: Partial<Record<string, DungeonTrapRoomType>> = {
+  entrance: "antechamber",
+  corridor: "corridor",
+  hall: "hall",
+  passage: "passage",
+  chokepoint: "chokepoint",
+  chamber: "chamber",
+  crypt: "crypt",
+  tomb: "tomb",
+  ossuary: "ossuary",
+  shrine: "shrine",
+  ritual_chamber: "ritual",
+  treasure_room: "treasure",
+  relic_vault: "vault",
+  armory: "armory",
+  prison: "prison",
+  stairs_up: "stair",
+  stairs_down: "stair",
+};
+
 function mapRoomTypeToTrapRoomType(roomType: RoomType): DungeonTrapRoomType | null {
-  switch (roomType) {
-    case "entrance":
-      return "antechamber";
-    case "corridor":
-      return "corridor";
-    case "hall":
-      return "hall";
-    case "passage":
-      return "passage";
-    case "chokepoint":
-      return "chokepoint";
-    case "chamber":
-      return "chamber";
-    case "crypt":
-      return "crypt";
-    case "tomb":
-      return "tomb";
-    case "ossuary":
-      return "ossuary";
-    case "shrine":
-      return "shrine";
-    case "ritual_chamber":
-      return "ritual";
-    case "treasure_room":
-      return "treasure";
-    case "relic_vault":
-      return "vault";
-    case "armory":
-      return "armory";
-    case "prison":
-      return "prison";
-    case "stairs_up":
-    case "stairs_down":
-      return "stair";
-    default:
-      return null;
-  }
+  return ROOM_TYPE_TO_TRAP_ROOM_TYPE[roomType] ?? null;
 }
 
 function canRoomHostTrap(roomType: RoomType): boolean {
@@ -351,7 +335,6 @@ function chooseTrapForRoom(
 
   if (!mappedRoomType) return null;
 
-  // Keep trap density meaningful rather than saturating every room.
   const trapChance =
     mappedRoomType === "corridor" ||
     mappedRoomType === "hall" ||
