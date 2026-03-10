@@ -147,18 +147,18 @@ export default function TavernAxeThrow({
   useEffect(() => {
     if (!activeFlight) return;
 
+    const flight = activeFlight;
+
     function step(now: number) {
       setAxe((prev) => {
-        if (!activeFlight) return prev;
-
-        const rawT = clamp((now - activeFlight.startedAt) / activeFlight.durationMs, 0, 1);
+        const rawT = clamp((now - flight.startedAt) / flight.durationMs, 0, 1);
         const t = easeOutCubic(rawT);
 
-        const x = lerp(activeFlight.startX, activeFlight.endX, t);
-        const yBase = lerp(activeFlight.startY, activeFlight.endY, t);
-        const arcLift = activeFlight.arcHeight * 4 * t * (1 - t);
+        const x = lerp(flight.startX, flight.endX, t);
+        const yBase = lerp(flight.startY, flight.endY, t);
+        const arcLift = flight.arcHeight * 4 * t * (1 - t);
         const y = yBase - arcLift;
-        const rotation = lerp(-16, activeFlight.spinDeg, t);
+        const rotation = lerp(-16, flight.spinDeg, t);
 
         return {
           x,
@@ -170,13 +170,13 @@ export default function TavernAxeThrow({
         };
       });
 
-      const done = now >= activeFlight.startedAt + activeFlight.durationMs;
+      const done = now >= flight.startedAt + flight.durationMs;
       if (!done) {
         rafRef.current = requestAnimationFrame(step);
         return;
       }
 
-      resolveImpact(activeFlight);
+      resolveImpact(flight);
     }
 
     rafRef.current = requestAnimationFrame(step);
@@ -287,11 +287,15 @@ export default function TavernAxeThrow({
     window.setTimeout(() => setBoardShake(false), 220);
 
     if (hit) {
-      hitAudioRef.current?.currentTime && (hitAudioRef.current.currentTime = 0);
-      hitAudioRef.current?.play().catch(() => {});
+      if (hitAudioRef.current) {
+        hitAudioRef.current.currentTime = 0;
+        hitAudioRef.current.play().catch(() => {});
+      }
     } else {
-      missAudioRef.current?.currentTime && (missAudioRef.current.currentTime = 0);
-      missAudioRef.current?.play().catch(() => {});
+      if (missAudioRef.current) {
+        missAudioRef.current.currentTime = 0;
+        missAudioRef.current.play().catch(() => {});
+      }
     }
 
     setTotalScore((v) => v + outcome.score);
