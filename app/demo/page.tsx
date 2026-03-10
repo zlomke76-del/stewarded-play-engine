@@ -339,6 +339,42 @@ export default function DemoPage() {
             opacity: 0.14;
           }
         }
+
+        @keyframes emberBreath {
+          0% {
+            box-shadow:
+              0 0 0 rgba(255, 166, 82, 0),
+              0 12px 34px rgba(0, 0, 0, 0.28),
+              inset 0 1px 0 rgba(255, 233, 193, 0.28);
+          }
+          50% {
+            box-shadow:
+              0 0 28px rgba(255, 166, 82, 0.16),
+              0 18px 44px rgba(0, 0, 0, 0.34),
+              inset 0 1px 0 rgba(255, 233, 193, 0.4);
+          }
+          100% {
+            box-shadow:
+              0 0 0 rgba(255, 166, 82, 0),
+              0 12px 34px rgba(0, 0, 0, 0.28),
+              inset 0 1px 0 rgba(255, 233, 193, 0.28);
+          }
+        }
+
+        @keyframes thresholdGlow {
+          0% {
+            opacity: 0.18;
+            transform: scale(0.98);
+          }
+          50% {
+            opacity: 0.34;
+            transform: scale(1.01);
+          }
+          100% {
+            opacity: 0.18;
+            transform: scale(0.98);
+          }
+        }
       `}</style>
 
       <audio
@@ -585,22 +621,31 @@ export default function DemoPage() {
                 type="button"
                 onClick={dismissTitleOverlay}
                 style={{
-                  appearance: "none",
-                  border: "1px solid rgba(255,255,255,0.18)",
-                  background:
-                    "linear-gradient(180deg, rgba(255,255,255,0.22), rgba(255,255,255,0.09))",
-                  color: "#ffffff",
-                  padding: titleLayout.buttonPadding,
+                  position: "relative",
+                  minWidth: viewportBand === "mobile" ? 240 : 320,
+                  padding:
+                    viewportBand === "mobile"
+                      ? "16px 22px"
+                      : viewportBand === "tablet"
+                        ? "18px 30px"
+                        : "20px 42px",
                   borderRadius: 18,
-                  fontSize: titleLayout.buttonFontSize,
-                  fontWeight: 700,
-                  letterSpacing: "0.04em",
+                  border: "1px solid rgba(255, 211, 148, 0.34)",
+                  background:
+                    "linear-gradient(180deg, rgba(255,226,188,0.18), rgba(184,94,26,0.18) 42%, rgba(46,22,8,0.72) 100%)",
+                  color: "rgba(255,245,230,0.98)",
+                  fontSize: viewportBand === "mobile" ? 18 : 20,
+                  fontWeight: 900,
+                  letterSpacing: "0.16em",
+                  textTransform: "uppercase",
                   cursor: "pointer",
-                  boxShadow: "0 14px 44px rgba(0,0,0,0.48)",
-                  backdropFilter: "blur(8px)",
-                  WebkitBackdropFilter: "blur(8px)",
+                  backdropFilter: "blur(10px)",
+                  WebkitBackdropFilter: "blur(10px)",
+                  boxShadow:
+                    "0 12px 34px rgba(0,0,0,0.28), inset 0 1px 0 rgba(255,233,193,0.28)",
+                  animation: "emberBreath 3.6s ease-in-out infinite",
                   transition:
-                    "transform 120ms ease, background 160ms ease, box-shadow 160ms ease, border-color 160ms ease",
+                    "transform 140ms ease, filter 160ms ease, box-shadow 180ms ease, border-color 180ms ease, background 180ms ease",
                 }}
                 onMouseDown={(e) => {
                   e.currentTarget.style.transform = "scale(0.985)";
@@ -610,20 +655,36 @@ export default function DemoPage() {
                 }}
                 onMouseLeave={(e) => {
                   e.currentTarget.style.transform = "scale(1)";
+                  e.currentTarget.style.filter = "brightness(1)";
+                  e.currentTarget.style.borderColor = "rgba(255, 211, 148, 0.34)";
                   e.currentTarget.style.background =
-                    "linear-gradient(180deg, rgba(255,255,255,0.22), rgba(255,255,255,0.09))";
-                  e.currentTarget.style.boxShadow = "0 14px 44px rgba(0,0,0,0.48)";
-                  e.currentTarget.style.borderColor = "rgba(255,255,255,0.18)";
+                    "linear-gradient(180deg, rgba(255,226,188,0.18), rgba(184,94,26,0.18) 42%, rgba(46,22,8,0.72) 100%)";
+                  e.currentTarget.style.boxShadow =
+                    "0 12px 34px rgba(0,0,0,0.28), inset 0 1px 0 rgba(255,233,193,0.28)";
                 }}
                 onMouseEnter={(e) => {
+                  e.currentTarget.style.filter = "brightness(1.05)";
+                  e.currentTarget.style.borderColor = "rgba(255, 223, 166, 0.58)";
                   e.currentTarget.style.background =
-                    "linear-gradient(180deg, rgba(255,255,255,0.28), rgba(255,255,255,0.13))";
-                  e.currentTarget.style.boxShadow = "0 18px 54px rgba(0,0,0,0.56)";
-                  e.currentTarget.style.borderColor = "rgba(140,180,255,0.34)";
+                    "linear-gradient(180deg, rgba(255,236,204,0.24), rgba(205,111,35,0.24) 42%, rgba(56,26,10,0.78) 100%)";
+                  e.currentTarget.style.boxShadow =
+                    "0 0 30px rgba(255,166,82,0.18), 0 18px 44px rgba(0,0,0,0.34), inset 0 1px 0 rgba(255,241,214,0.42)";
                 }}
                 aria-label="Enter the Dungeon"
               >
-                Enter the Dungeon
+                <span
+                  aria-hidden
+                  style={{
+                    position: "absolute",
+                    inset: -6,
+                    borderRadius: 22,
+                    background:
+                      "radial-gradient(circle at 50% 50%, rgba(255,166,82,0.18), rgba(255,166,82,0) 70%)",
+                    animation: "thresholdGlow 4s ease-in-out infinite",
+                    pointerEvents: "none",
+                  }}
+                />
+                <span style={{ position: "relative", zIndex: 1 }}>Enter the Dungeon</span>
               </button>
 
               <div
