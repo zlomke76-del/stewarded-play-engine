@@ -1258,6 +1258,7 @@ export default function DemoPage() {
   const narrationFeatures = useMemo(() => toNarrationFeatures(currentFeatures), [currentFeatures]);
 
   const currentRoomTitle = useMemo(() => summarizeRoomTitle(currentRoom), [currentRoom]);
+  const currentRoomVisualKey = `${location.floorId}:${location.roomId}`;
 
   const roomImage = useMemo(() => {
     return resolveRoomImage({
@@ -1863,6 +1864,43 @@ export default function DemoPage() {
 
   return (
     <AmbientBackground>
+      <style jsx global>{`
+        @keyframes roomFadeIn {
+          0% {
+            opacity: 0;
+            transform: translateY(8px);
+          }
+          100% {
+            opacity: 1;
+            transform: translateY(0);
+          }
+        }
+
+        @keyframes roomImageIn {
+          0% {
+            opacity: 0;
+            transform: scale(1.025);
+            filter: blur(4px);
+          }
+          100% {
+            opacity: 1;
+            transform: scale(1);
+            filter: blur(0);
+          }
+        }
+
+        @keyframes roomTextIn {
+          0% {
+            opacity: 0;
+            transform: translateY(6px);
+          }
+          100% {
+            opacity: 1;
+            transform: translateY(0);
+          }
+        }
+      `}</style>
+
       <audio ref={introAudioRef} preload="auto" src="/audio/music/chronicles_intro.mp3" style={{ display: "none" }} />
       <audio ref={bgmAudioRef} preload="auto" style={{ display: "none" }} />
 
@@ -2090,6 +2128,7 @@ export default function DemoPage() {
                   <CardSection title="Dungeon Topology (Room Graph View)">
                     <div style={{ display: "grid", gap: 16 }}>
                       <div
+                        key={currentRoomVisualKey}
                         style={{
                           padding: 14,
                           borderRadius: 14,
@@ -2097,25 +2136,61 @@ export default function DemoPage() {
                           background: "rgba(255,255,255,0.04)",
                           display: "grid",
                           gap: 12,
+                          animation: "roomFadeIn 320ms ease",
                         }}
                       >
                         {roomImage ? (
-                          <img
-                            src={roomImage}
-                            alt={currentRoomTitle}
+                          <div
                             style={{
-                              width: "100%",
-                              maxHeight: 320,
-                              objectFit: "cover",
+                              position: "relative",
+                              overflow: "hidden",
                               borderRadius: 12,
-                              display: "block",
                             }}
-                          />
+                          >
+                            <img
+                              src={roomImage}
+                              alt={currentRoomTitle}
+                              style={{
+                                width: "100%",
+                                maxHeight: 320,
+                                objectFit: "cover",
+                                borderRadius: 12,
+                                display: "block",
+                                animation: "roomImageIn 420ms ease",
+                              }}
+                            />
+
+                            <div
+                              style={{
+                                position: "absolute",
+                                inset: 0,
+                                background:
+                                  "linear-gradient(to bottom, rgba(0,0,0,0.02) 0%, rgba(0,0,0,0.18) 100%)",
+                                pointerEvents: "none",
+                              }}
+                            />
+                          </div>
                         ) : null}
 
-                        <div style={{ fontSize: 16, fontWeight: 900 }}>{currentRoomTitle}</div>
+                        <div
+                          style={{
+                            fontSize: 16,
+                            fontWeight: 900,
+                            animation: "roomTextIn 360ms ease",
+                          }}
+                        >
+                          {currentRoomTitle}
+                        </div>
 
-                        <div className="muted" style={{ marginTop: 8, lineHeight: 1.7, whiteSpace: "pre-line" }}>
+                        <div
+                          className="muted"
+                          style={{
+                            marginTop: 8,
+                            lineHeight: 1.7,
+                            whiteSpace: "pre-line",
+                            animation: "roomTextIn 420ms ease",
+                          }}
+                        >
                           {roomNarrative}
                         </div>
                       </div>
