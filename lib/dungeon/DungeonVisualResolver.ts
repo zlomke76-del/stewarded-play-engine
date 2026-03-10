@@ -1,6 +1,10 @@
 // lib/dungeon/DungeonVisualResolver.ts
 import type { DungeonFloor, DungeonRoom } from "@/lib/dungeon/FloorState";
 import type { DungeonFloorTheme, RoomType } from "@/lib/dungeon/RoomTypes";
+import {
+  getDungeonTrapAssetPath,
+  type DungeonTrapId,
+} from "@/lib/dungeon/traps/DungeonTrapRegistry";
 
 export type VisualDirection = "up" | "down";
 
@@ -45,8 +49,65 @@ function isCryptBand(theme: string | null | undefined): boolean {
   return key === "forgotten_crypt" || key === "crypt" || key.includes("crypt");
 }
 
-function buildDeterministicAsset(seed: string, assets: readonly string[], fallback: string): string {
+function buildDeterministicAsset(
+  seed: string,
+  assets: readonly string[],
+  fallback: string
+): string {
   return pickDeterministic(seed, assets, fallback);
+}
+
+function parseTrapIdFromStoryHint(storyHint: string | null | undefined): DungeonTrapId | null {
+  const text = normalizeText(storyHint);
+  if (!text) return null;
+
+  const segments = text
+    .split("||")
+    .map((part) => normalizeText(part))
+    .filter(Boolean);
+
+  for (const segment of segments) {
+    const fields = segment
+      .split("|")
+      .map((part) => normalizeText(part))
+      .filter(Boolean);
+
+    for (const field of fields) {
+      if (!field.startsWith("trap:")) continue;
+      const trapId = normalizeText(field.slice("trap:".length));
+      if (!trapId) continue;
+      return trapId as DungeonTrapId;
+    }
+  }
+
+  return null;
+}
+
+function parseTrapIdFromFeatures(room: DungeonRoom | null): DungeonTrapId | null {
+  const features = Array.isArray(room?.features) ? room!.features : [];
+
+  for (const feature of features) {
+    const kind = slugKey((feature as { kind?: unknown })?.kind);
+    const note = normalizeText((feature as { note?: unknown })?.note);
+
+    if (kind !== "hazard") continue;
+    if (!note) continue;
+    if (!note.startsWith("trap_")) continue;
+
+    return note as DungeonTrapId;
+  }
+
+  return null;
+}
+
+function extractTrapIdFromRoom(room: DungeonRoom | null): DungeonTrapId | null {
+  return parseTrapIdFromFeatures(room) ?? parseTrapIdFromStoryHint(room?.storyHint);
+}
+
+function resolveTrapAssetForRoom(room: DungeonRoom | null): string | null {
+  const trapId = extractTrapIdFromRoom(room);
+  if (!trapId) return null;
+  return getDungeonTrapAssetPath(trapId);
 }
 
 const ROOM_ASSETS: Record<string, readonly string[]> = {
@@ -80,6 +141,11 @@ export function resolveRoomImage(args: ResolveRoomImageArgs): string {
   const roomId = normalizeText(room?.id ?? "unknown-room");
   const roomLabel = normalizeText((room?.label ?? roomType) || "room");
   const seed = `${args.dungeonSeed}:${floorTheme}:${roomType}:${roomId}:${roomLabel}:room-image`;
+
+  const trapAsset = resolveTrapAssetForRoom(room);
+  if (trapAsset) {
+    return trapAsset;
+  }
 
   const exactRoomAssets = ROOM_ASSETS[roomType];
   if (exactRoomAssets?.length) {
