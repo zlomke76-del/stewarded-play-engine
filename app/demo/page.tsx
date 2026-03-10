@@ -226,41 +226,6 @@ export default function DemoPage() {
     scrollToSection(nextKey);
   }
 
-  function advancePreludeFlow() {
-    if (demo.presentationPhase === "chronicle") {
-      demo.setActiveSection("table");
-      queueMicrotask(() => scrollToSection("table"));
-      return;
-    }
-
-    if (!demo.showInitialTable) {
-      demo.setActiveSection("table");
-      queueMicrotask(() => scrollToSection("table"));
-      return;
-    }
-
-    if (!demo.tableAccepted) {
-      demo.setActiveSection("table");
-      queueMicrotask(() => scrollToSection("table"));
-      return;
-    }
-
-    if (!demo.partyCanonicalExists || !demo.partyLocked) {
-      demo.setActiveSection("party");
-      queueMicrotask(() => scrollToSection("party"));
-      return;
-    }
-
-    const tavernAnchor = document.getElementById("echoes-tavern-anchor");
-    if (tavernAnchor) {
-      tavernAnchor.scrollIntoView({ behavior: "smooth", block: "start" });
-      return;
-    }
-
-    demo.setActiveSection("party");
-    queueMicrotask(() => scrollToSection("party"));
-  }
-
   const showChronicleOnly = demo.presentationPhase === "chronicle";
 
   const shouldShowTavern =
@@ -269,8 +234,7 @@ export default function DemoPage() {
     demo.tableAccepted &&
     demo.partyCanonicalExists &&
     demo.partyLocked &&
-    !demo.showGameplay &&
-    !demo.enteredDungeon;
+    !demo.showGameplay;
 
   return (
     <AmbientBackground>
@@ -483,7 +447,7 @@ export default function DemoPage() {
                       demo.setActiveSection("mode");
                       demo.setPartyDraft((prev: any) => prev ?? null);
                     }}
-                    onEnter={advancePreludeFlow}
+                    onEnter={demo.enterDungeon}
                     canEnter={demo.dmMode !== null}
                     heroImageSrc={demo.HERO_IMAGE_SRC}
                     heroImageOk={demo.heroImageOk}
@@ -513,7 +477,7 @@ export default function DemoPage() {
                       demo.setActiveSection("mode");
                       demo.setPartyDraft((prev: any) => prev ?? null);
                     }}
-                    onEnter={advancePreludeFlow}
+                    onEnter={demo.enterDungeon}
                     canEnter={demo.dmMode !== null}
                     heroImageSrc={demo.HERO_IMAGE_SRC}
                     heroImageOk={demo.heroImageOk}
@@ -574,7 +538,7 @@ export default function DemoPage() {
               <div id="echoes-tavern-anchor" style={{ scrollMarginTop: 90, marginTop: 16 }}>
                 <TavernHub
                   onBeginDescent={() => {
-                    demo.enterDungeon();
+                    demo.setEnteredDungeon(true);
                     demo.setGameplayFocusStep("pressure");
                     queueMicrotask(() => {
                       const gameplayAnchor = document.getElementById(anchorId("pressure"));
