@@ -77,6 +77,7 @@ export type PresentationPhase =
   | "onboarding"
   | "chronicle"
   | "party-declaration"
+  | "tavern"
   | "gameplay";
 
 export type GameplayFocusStep = "pressure" | "map" | "action";
@@ -376,7 +377,8 @@ export function useDemoRuntime() {
   const [initialTable, setInitialTable] = useState<InitialTable | null>(null);
   const [tableAccepted, setTableAccepted] = useState(false);
   const [tableDraftText, setTableDraftText] = useState("");
-  const [enteredDungeon, setEnteredDungeon] = useState(false);
+  const [enteredDungeon, setEnteredDungeonState] = useState(false);
+  const [dungeonDescentConfirmed, setDungeonDescentConfirmed] = useState(false);
 
   const [activeSection, setActiveSection] = useState<DemoSectionId>("mode");
   const [gameplayFocusStep, setGameplayFocusStep] = useState<GameplayFocusStep>("pressure");
@@ -627,19 +629,43 @@ export function useDemoRuntime() {
     }
   }
 
+  function setEnteredDungeon(next: boolean) {
+    setEnteredDungeonState(next);
+
+    if (!next) {
+      setDungeonDescentConfirmed(false);
+      return;
+    }
+
+    if (tableAccepted && partyCanonicalExists) {
+      setDungeonDescentConfirmed(true);
+      setGameplayFocusStep("pressure");
+      setActiveSection("pressure");
+    }
+  }
+
+  function beginDungeonDescent() {
+    setEnteredDungeonState(true);
+    setDungeonDescentConfirmed(true);
+    setGameplayFocusStep("pressure");
+    setActiveSection("pressure");
+  }
+
+  const dungeonAudioActive = dungeonDescentConfirmed;
+
   useEffect(() => {
-    if (enteredDungeon) return;
+    if (dungeonAudioActive) return;
     stopAllMusic();
-  }, [enteredDungeon]);
+  }, [dungeonAudioActive]);
 
   useEffect(() => {
     const intro = introAudioRef.current;
     if (!intro) return;
-    intro.loop = enteredDungeon && !tableAccepted;
-  }, [enteredDungeon, tableAccepted]);
+    intro.loop = enteredDungeon && !tableAccepted && !dungeonDescentConfirmed;
+  }, [enteredDungeon, tableAccepted, dungeonDescentConfirmed]);
 
   useEffect(() => {
-    if (!enteredDungeon) {
+    if (!dungeonAudioActive) {
       stopAmbience();
       return;
     }
@@ -658,10 +684,10 @@ export function useDemoRuntime() {
     } catch {
       // fail silently
     }
-  }, [enteredDungeon]);
+  }, [dungeonAudioActive]);
 
   useEffect(() => {
-    if (!enteredDungeon) return;
+    if (!dungeonAudioActive) return;
 
     const intro = introAudioRef.current;
     const introIsPlaying = !!intro && !intro.paused && intro.currentTime > 0;
@@ -687,7 +713,7 @@ export function useDemoRuntime() {
     if (currentMusicModeRef.current !== "ambient") {
       startAmbientTheme();
     }
-  }, [enteredDungeon, tableAccepted, combatActive]);
+  }, [dungeonAudioActive, tableAccepted, combatActive]);
 
   function setPartySize(_nextCount: number) {
     setPartyDraft((prev) => {
@@ -761,7 +787,7 @@ export function useDemoRuntime() {
 
     if (tableAccepted) {
       setGameplayFocusStep("pressure");
-      setActiveSection("pressure");
+      setActiveSection("party");
     }
   }
 
@@ -788,7 +814,8 @@ export function useDemoRuntime() {
   useEffect(() => {
     if (dmMode === null) return;
     setTableAccepted(false);
-    setEnteredDungeon(false);
+    setEnteredDungeonState(false);
+    setDungeonDescentConfirmed(false);
     setGameplayFocusStep("pressure");
   }, [dmMode]);
 
@@ -1262,6 +1289,7 @@ export function useDemoRuntime() {
     const doneMode = dmMode !== null;
     const doneTable = tableAccepted;
     const doneParty = partyCanonicalExists;
+    const doneDescent = dungeonDescentConfirmed;
 
     return {
       mode: doneMode ? ("done" as const) : ("next" as const),
@@ -1273,22 +1301,23 @@ export function useDemoRuntime() {
           : doneMode
             ? ("next" as const)
             : ("locked" as const),
-      pressure: doneTable && doneParty ? ("open" as const) : ("locked" as const),
-      map: doneTable && doneParty ? ("open" as const) : ("locked" as const),
-      combat: doneTable && doneParty ? ("open" as const) : ("locked" as const),
-      action: doneTable && doneParty ? ("open" as const) : ("locked" as const),
-      resolution: doneTable && doneParty ? ("open" as const) : ("locked" as const),
-      canon: doneTable && doneParty ? ("open" as const) : ("locked" as const),
-      ledger: doneTable && doneParty ? ("open" as const) : ("locked" as const),
+      pressure: doneTable && doneParty && doneDescent ? ("open" as const) : ("locked" as const),
+      map: doneTable && doneParty && doneDescent ? ("open" as const) : ("locked" as const),
+      combat: doneTable && doneParty && doneDescent ? ("open" as const) : ("locked" as const),
+      action: doneTable && doneParty && doneDescent ? ("open" as const) : ("locked" as const),
+      resolution: doneTable && doneParty && doneDescent ? ("open" as const) : ("locked" as const),
+      canon: doneTable && doneParty && doneDescent ? ("open" as const) : ("locked" as const),
+      ledger: doneTable && doneParty && doneDescent ? ("open" as const) : ("locked" as const),
     };
-  }, [dmMode, tableAccepted, partyCanonicalExists, showInitialTable]);
+  }, [dmMode, tableAccepted, partyCanonicalExists, showInitialTable, dungeonDescentConfirmed]);
 
   const presentationPhase: PresentationPhase = useMemo(() => {
     if (dmMode === null || !enteredDungeon) return "onboarding";
     if (!tableAccepted) return "chronicle";
     if (!partyCanonicalExists) return "party-declaration";
+    if (!dungeonDescentConfirmed) return "tavern";
     return "gameplay";
-  }, [dmMode, enteredDungeon, tableAccepted, partyCanonicalExists]);
+  }, [dmMode, enteredDungeon, tableAccepted, partyCanonicalExists, dungeonDescentConfirmed]);
 
   const showFullHero = presentationPhase === "onboarding";
   const showCompactHero = presentationPhase !== "onboarding";
@@ -1309,7 +1338,12 @@ export function useDemoRuntime() {
 
   const resolutionDmMode = useMemo(() => (dmMode === "solace-neutral" ? "solace_neutral" : "human"), [dmMode]);
 
-  const allowGameplay = dmMode !== null && tableAccepted && partyCanonicalExists;
+  const allowGameplay =
+    dmMode !== null &&
+    tableAccepted &&
+    partyCanonicalExists &&
+    dungeonDescentConfirmed;
+
   const gameplayAllowsPressure = showGameplay && allowGameplay;
   const gameplayAllowsMap = gameplayAllowsPressure && (gameplayFocusStep === "map" || gameplayFocusStep === "action");
   const gameplayAllowsAction = gameplayAllowsPressure && gameplayFocusStep === "action";
@@ -1461,7 +1495,8 @@ export function useDemoRuntime() {
   function enterDungeon() {
     if (!canEnterDungeon) return;
     playIntroTheme(true);
-    setEnteredDungeon(true);
+    setEnteredDungeonState(true);
+    setDungeonDescentConfirmed(false);
     setActiveSection("table");
   }
 
@@ -1488,6 +1523,8 @@ export function useDemoRuntime() {
     renderedTableNarration,
     enteredDungeon,
     setEnteredDungeon,
+    dungeonDescentConfirmed,
+    beginDungeonDescent,
 
     activeSection,
     setActiveSection,
