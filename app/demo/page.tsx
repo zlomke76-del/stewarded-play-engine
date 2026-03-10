@@ -391,11 +391,12 @@ export default function DemoPage() {
               style={{
                 width: "100%",
                 maxWidth: 1280,
+                maxHeight: "calc(100vh - 48px)",
                 display: "flex",
                 flexDirection: "column",
                 alignItems: "center",
                 justifyContent: "center",
-                gap: 12,
+                gap: 10,
                 animation: titleReady ? "titleFadeIn 700ms ease both" : undefined,
                 position: "relative",
                 zIndex: 1,
@@ -405,8 +406,10 @@ export default function DemoPage() {
                 style={{
                   position: "relative",
                   width: "100%",
+                  flex: "0 1 auto",
                   display: "flex",
                   justifyContent: "center",
+                  alignItems: "center",
                   animation: "titleFloat 7s ease-in-out infinite",
                 }}
               >
@@ -414,7 +417,7 @@ export default function DemoPage() {
                   aria-hidden
                   style={{
                     position: "absolute",
-                    inset: "9% 18% 10% 18%",
+                    inset: "10% 18% 12% 18%",
                     borderRadius: 40,
                     background:
                       "radial-gradient(circle at 50% 45%, rgba(90,150,255,0.16) 0%, rgba(90,150,255,0.06) 25%, rgba(0,0,0,0) 58%)",
@@ -428,10 +431,11 @@ export default function DemoPage() {
                   src="/assets/cover/title_page.png"
                   alt="Echoes of Fate title screen"
                   style={{
-                    width: "75vw",
-                    maxWidth: 1100,
-                    minWidth: 320,
+                    width: "auto",
                     height: "auto",
+                    maxWidth: "min(78vw, 1100px)",
+                    maxHeight: "72vh",
+                    minWidth: 280,
                     objectFit: "contain",
                     position: "relative",
                     zIndex: 2,
