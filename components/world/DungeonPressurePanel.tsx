@@ -3,19 +3,21 @@
 // ------------------------------------------------------------
 // DungeonPressurePanel.tsx
 // ------------------------------------------------------------
-// Advisory-only dungeon pressure + zone inference + awareness meter.
+// Advisory-only dungeon pressure + room inference + floor awareness.
 // NO authority, NO mutation, NO automation.
 //
 // Purpose:
-// - Make zone pressure + awareness visible
-// - Show nearby heat
-// - Recommend (never assert) current location/zone
+// - Make local room pressure + floor awareness visible
+// - Show nearby connected-room tension
+// - Recommend (never assert) current location / room state
 // - Preserve Arbiter authority
 //
-// Upgrade:
-// - Integrates DungeonEvolution as a READ-ONLY deterministic layer
-// - Environmental Memory derives from discovery + pressure + patrol +
-//   outcome signals
+// Echoes of Fate refactor:
+// - Retargeted away from tile-zone inference toward room / floor state
+// - Uses currentRoomId as the primary anchor when available
+// - Infers nearby rooms from canon events and room id fallback rules
+// - Keeps DungeonEvolution as a READ-ONLY deterministic layer
+// - Environmental Memory now derives from room-local and nearby-room signals
 // - Adds tactical recommendation layer
 // - Adds low-rumble SFX on meaningful danger escalation
 // ------------------------------------------------------------
@@ -44,11 +46,9 @@ type Props = {
 // Helpers
 // ------------------------------------------------------------
 
-type ZoneCoord = { zx: number; zy: number };
-type ZoneId = string;
-type XY = { x: number; y: number };
+type RoomId = string;
+type FloorId = string;
 
-const ZONE_SIZE_TILES = 4;
 const DANGER_RUMBLE_SRC = "/assets/audio/sfx_low_rumble_01.mp3";
 
 function clamp(n: number, min: number, max: number) {
@@ -74,79 +74,68 @@ function titleCase(input: string) {
 function prettyRoomLabel(roomId?: string) {
   const raw = safeStr(roomId);
   if (!raw) return null;
+
+  const canonical = /^floor_(\d+)_room_(\d+)$/i.exec(raw);
+  if (canonical) {
+    return `Room ${Number(canonical[2])}`;
+  }
+
   return titleCase(raw);
 }
 
-function parseZoneId(zoneId: string): ZoneCoord | null {
-  const m = /^(\-?\d+),(\-?\d+)$/.exec(zoneId.trim());
+function prettyFloorLabel(floorId?: string | null) {
+  const raw = safeStr(floorId);
+  if (!raw) return null;
+
+  const canonical = /^floor_(\d+)$/i.exec(raw);
+  if (!canonical) return titleCase(raw);
+
+  const index = Number(canonical[1]);
+  if (!Number.isFinite(index)) return titleCase(raw);
+
+  if (index === 1) return "Surface Threshold";
+  if (index === 2) return "Depth 1";
+  if (index === 3) return "Depth 2";
+  return `Depth ${index - 1}`;
+}
+
+function inferFloorIdFromRoomId(roomId?: string | null): FloorId | null {
+  const raw = safeStr(roomId);
+  if (!raw) return null;
+
+  const m = /^(floor_\d+)_room_\d+$/i.exec(raw);
+  return m ? m[1] : null;
+}
+
+function parseRoomOrdinal(roomId?: string | null): { floorIndex: number; roomIndex: number } | null {
+  const raw = safeStr(roomId);
+  if (!raw) return null;
+
+  const m = /^floor_(\d+)_room_(\d+)$/i.exec(raw);
   if (!m) return null;
-  const zx = Number(m[1]);
-  const zy = Number(m[2]);
-  if (!Number.isFinite(zx) || !Number.isFinite(zy)) return null;
-  return { zx, zy };
+
+  const floorIndex = Number(m[1]);
+  const roomIndex = Number(m[2]);
+
+  if (!Number.isFinite(floorIndex) || !Number.isFinite(roomIndex)) return null;
+  return { floorIndex, roomIndex };
 }
 
-function makeZoneId(zx: number, zy: number): ZoneId {
-  return `${zx},${zy}`;
-}
+function roomDistanceHint(currentRoomId: string, targetRoomId: string): string {
+  const a = parseRoomOrdinal(currentRoomId);
+  const b = parseRoomOrdinal(targetRoomId);
 
-function zoneFromTileXY(x: number, y: number, zoneSize = ZONE_SIZE_TILES): ZoneId {
-  const zx = Math.floor(x / zoneSize);
-  const zy = Math.floor(y / zoneSize);
-  return makeZoneId(zx, zy);
-}
-
-function adjacentZones(zoneId: ZoneId): ZoneId[] {
-  const c = parseZoneId(zoneId);
-  if (!c) return [];
-  const { zx, zy } = c;
-  return [
-    makeZoneId(zx, zy - 1),
-    makeZoneId(zx, zy + 1),
-    makeZoneId(zx - 1, zy),
-    makeZoneId(zx + 1, zy),
-  ];
-}
-
-function formatDir(dx: number, dy: number): string {
-  if (dx === 0 && dy < 0) return "north";
-  if (dx === 0 && dy > 0) return "south";
-  if (dx < 0 && dy === 0) return "west";
-  if (dx > 0 && dy === 0) return "east";
-  if (dx < 0 && dy < 0) return "northwest";
-  if (dx > 0 && dy < 0) return "northeast";
-  if (dx < 0 && dy > 0) return "southwest";
-  if (dx > 0 && dy > 0) return "southeast";
-  return "nearby";
-}
-
-function relativeDirection(fromZoneId: ZoneId, targetZoneId: ZoneId): string {
-  const a = parseZoneId(fromZoneId);
-  const b = parseZoneId(targetZoneId);
   if (!a || !b) return "nearby";
 
-  const dx = b.zx - a.zx;
-  const dy = b.zy - a.zy;
-  return formatDir(dx, dy);
-}
+  if (a.floorIndex !== b.floorIndex) {
+    return b.floorIndex > a.floorIndex ? "deeper" : "above";
+  }
 
-function tileToZoneIdFromPayload(payload: any): ZoneId | null {
-  const zoneId = safeStr(payload?.zoneId);
-  if (zoneId) return zoneId;
-
-  const x =
-    safeNum(payload?.x) ??
-    safeNum(payload?.at?.x) ??
-    safeNum(payload?.tile?.x) ??
-    safeNum(payload?.to?.x);
-  const y =
-    safeNum(payload?.y) ??
-    safeNum(payload?.at?.y) ??
-    safeNum(payload?.tile?.y) ??
-    safeNum(payload?.to?.y);
-
-  if (x === null || y === null) return null;
-  return zoneFromTileXY(x, y, ZONE_SIZE_TILES);
+  const diff = b.roomIndex - a.roomIndex;
+  if (diff === 0) return "here";
+  if (Math.abs(diff) === 1) return diff > 0 ? "ahead" : "behind";
+  if (diff > 1) return "further ahead";
+  return "further behind";
 }
 
 function playDangerRumble(volume = 0.42) {
@@ -198,7 +187,7 @@ function statusForAwareness(a: number): {
   const x = clamp(Math.round(a), 0, 100);
   if (x < 25) return { label: "Calm", nextHint: "Noise and failure will draw attention." };
   if (x < 50) return { label: "Whispers", nextHint: "Minor signs of movement nearby." };
-  if (x < 75) return { label: "Search", nextHint: "Patrols begin probing the area." };
+  if (x < 75) return { label: "Search", nextHint: "Patrols begin probing the floor." };
   if (x < 100) return { label: "Reinforcements", nextHint: "A response is likely if disturbances continue." };
   return { label: "Alarm", nextHint: "The dungeon responds." };
 }
@@ -220,89 +209,269 @@ function awarenessRank(label: ReturnType<typeof statusForAwareness>["label"]): n
   }
 }
 
+function extractRoomIdFromPayload(payload: any): RoomId | null {
+  return (
+    safeStr(payload?.roomId) ??
+    safeStr(payload?.currentRoomId) ??
+    safeStr(payload?.toRoomId) ??
+    safeStr(payload?.fromRoomId) ??
+    safeStr(payload?.targetRoomId) ??
+    safeStr(payload?.nextRoomId) ??
+    safeStr(payload?.at?.roomId) ??
+    safeStr(payload?.room?.id) ??
+    safeStr(payload?.world?.roomId) ??
+    safeStr(payload?.world?.at?.roomId) ??
+    null
+  );
+}
+
+function extractFloorIdFromPayload(payload: any): FloorId | null {
+  return (
+    safeStr(payload?.floorId) ??
+    safeStr(payload?.currentFloorId) ??
+    safeStr(payload?.toFloorId) ??
+    safeStr(payload?.targetFloorId) ??
+    safeStr(payload?.world?.floorId) ??
+    inferFloorIdFromRoomId(extractRoomIdFromPayload(payload)) ??
+    null
+  );
+}
+
 // ------------------------------------------------------------
-// Canon-derived position + zone inference
+// Canon-derived room / floor inference
 // ------------------------------------------------------------
 
-function derivePlayerPosition(events: readonly SessionEvent[]): XY | null {
-  let last: XY | null = null;
-  for (const e of events as any[]) {
-    if (e?.type !== "PLAYER_MOVED") continue;
-    const to = e?.payload?.to;
-    const x = safeNum(to?.x);
-    const y = safeNum(to?.y);
-    if (x === null || y === null) continue;
-    last = { x, y };
+function deriveCurrentRoomId(events: readonly SessionEvent[], explicitCurrentRoomId?: string): RoomId | null {
+  if (safeStr(explicitCurrentRoomId)) return explicitCurrentRoomId!;
+
+  for (let i = events.length - 1; i >= 0; i--) {
+    const e = events[i] as any;
+
+    const direct =
+      safeStr(e?.payload?.currentRoomId) ??
+      safeStr(e?.payload?.roomId) ??
+      safeStr(e?.payload?.toRoomId) ??
+      safeStr(e?.payload?.targetRoomId) ??
+      safeStr(e?.payload?.world?.roomId);
+
+    if (direct) return direct;
+
+    if (e?.type === "ROOM_ENTERED") {
+      const entered = extractRoomIdFromPayload(e?.payload);
+      if (entered) return entered;
+    }
   }
-  return last;
+
+  return null;
+}
+
+function deriveCurrentFloorId(events: readonly SessionEvent[], currentRoomId: string | null): FloorId | null {
+  for (let i = events.length - 1; i >= 0; i--) {
+    const e = events[i] as any;
+    const floorId = extractFloorIdFromPayload(e?.payload);
+    if (floorId) return floorId;
+  }
+
+  return inferFloorIdFromRoomId(currentRoomId);
+}
+
+function buildRoomAdjacency(events: readonly SessionEvent[]): Map<RoomId, Set<RoomId>> {
+  const graph = new Map<RoomId, Set<RoomId>>();
+
+  function link(a?: string | null, b?: string | null) {
+    const ra = safeStr(a);
+    const rb = safeStr(b);
+    if (!ra || !rb || ra === rb) return;
+
+    if (!graph.has(ra)) graph.set(ra, new Set());
+    if (!graph.has(rb)) graph.set(rb, new Set());
+
+    graph.get(ra)!.add(rb);
+    graph.get(rb)!.add(ra);
+  }
+
+  for (const e of events as any[]) {
+    const payload = e?.payload ?? {};
+
+    link(payload?.fromRoomId, payload?.toRoomId);
+    link(payload?.roomAId, payload?.roomBId);
+    link(payload?.currentRoomId, payload?.nextRoomId);
+    link(payload?.currentRoomId, payload?.targetRoomId);
+    link(payload?.from?.roomId, payload?.to?.roomId);
+    link(payload?.world?.fromRoomId, payload?.world?.toRoomId);
+
+    if (e?.type === "ROOM_ENTERED") {
+      link(payload?.fromRoomId, payload?.roomId);
+    }
+  }
+
+  return graph;
+}
+
+function inferNearbyRooms(
+  currentRoomId: string | null,
+  currentFloorId: string | null,
+  adjacency: Map<RoomId, Set<RoomId>>
+): RoomId[] {
+  if (!currentRoomId) return [];
+
+  const direct = Array.from(adjacency.get(currentRoomId) ?? []);
+  if (direct.length > 0) return direct;
+
+  const parsed = parseRoomOrdinal(currentRoomId);
+  if (!parsed) return [];
+
+  const candidates: RoomId[] = [];
+  const before = `floor_${parsed.floorIndex}_room_${parsed.roomIndex - 1}`;
+  const after = `floor_${parsed.floorIndex}_room_${parsed.roomIndex + 1}`;
+
+  if (parsed.roomIndex > 1) candidates.push(before);
+  candidates.push(after);
+
+  return candidates.filter((roomId) => inferFloorIdFromRoomId(roomId) === currentFloorId);
 }
 
 // ------------------------------------------------------------
 // Pressure + awareness derivation
 // ------------------------------------------------------------
 
-type ZonePressureState = {
-  byZone: Map<ZoneId, number>;
+type RoomPressureState = {
+  byRoom: Map<RoomId, number>;
   estimated: boolean;
 };
 
-function deriveZonePressure(events: readonly SessionEvent[]): ZonePressureState {
-  const byZone = new Map<ZoneId, number>();
+function deriveRoomPressure(events: readonly SessionEvent[]): RoomPressureState {
+  const byRoom = new Map<RoomId, number>();
   let sawCanonical = false;
 
   for (const e of events as any[]) {
-    if (e?.type !== "ZONE_PRESSURE_CHANGED") continue;
-    const zoneId = typeof e?.payload?.zoneId === "string" ? e.payload.zoneId : null;
+    if (e?.type !== "ROOM_PRESSURE_CHANGED" && e?.type !== "ZONE_PRESSURE_CHANGED") continue;
+
+    const roomId = extractRoomIdFromPayload(e?.payload);
     const delta = safeNum(e?.payload?.delta);
-    if (!zoneId || delta === null) continue;
+
+    if (!roomId || delta === null) continue;
 
     sawCanonical = true;
-    const prev = byZone.get(zoneId) ?? 0;
-    byZone.set(zoneId, clamp(prev + delta, 0, 100));
+    const prev = byRoom.get(roomId) ?? 0;
+    byRoom.set(roomId, clamp(prev + delta, 0, 100));
   }
 
-  return { byZone, estimated: !sawCanonical };
+  if (sawCanonical) {
+    return { byRoom, estimated: false };
+  }
+
+  for (const e of events as any[]) {
+    const roomId = extractRoomIdFromPayload(e?.payload);
+    if (!roomId) continue;
+
+    let delta = 0;
+
+    switch (e?.type) {
+      case "COMBAT_STARTED":
+        delta = 14;
+        break;
+      case "COMBAT_ENDED":
+        delta = 6;
+        break;
+      case "HAZARD_REVEALED":
+      case "TRAP_TRIGGERED":
+        delta = 12;
+        break;
+      case "DOOR_LOCKED":
+        delta = 5;
+        break;
+      case "PATROL_SIGNS_REVEALED":
+        delta = 8;
+        break;
+      case "ZONE_RESPONSE_TRIGGERED":
+      case "ROOM_RESPONSE_TRIGGERED":
+        delta = 16;
+        break;
+      case "CACHE_REVEALED":
+      case "ALTAR_REVEALED":
+      case "STAIRS_REVEALED":
+        delta = 3;
+        break;
+      case "OUTCOME": {
+        const world = e?.payload?.world;
+        if (world?.trap) delta += world.trap.state === "disarmed" ? -4 : 10;
+        if (world?.lock) delta += 4;
+        break;
+      }
+      default:
+        break;
+    }
+
+    if (delta === 0) continue;
+    const prev = byRoom.get(roomId) ?? 0;
+    byRoom.set(roomId, clamp(prev + delta, 0, 100));
+  }
+
+  return { byRoom, estimated: true };
 }
 
-type ZoneAwarenessState = {
-  byZone: Map<ZoneId, number>;
+type FloorAwarenessState = {
+  byFloor: Map<FloorId, number>;
   estimated: boolean;
 };
 
-function deriveZoneAwareness(events: readonly SessionEvent[], pressure: ZonePressureState): ZoneAwarenessState {
-  const byZone = new Map<ZoneId, number>();
+function deriveFloorAwareness(
+  events: readonly SessionEvent[],
+  roomPressure: RoomPressureState
+): FloorAwarenessState {
+  const byFloor = new Map<FloorId, number>();
   let sawCanonical = false;
 
   for (const e of events as any[]) {
-    if (e?.type === "ZONE_AWARENESS_CHANGED") {
-      const zoneId = typeof e?.payload?.zoneId === "string" ? e.payload.zoneId : null;
-      const delta = safeNum(e?.payload?.delta);
-      if (!zoneId || delta === null) continue;
-
-      sawCanonical = true;
-      const prev = byZone.get(zoneId) ?? 0;
-      byZone.set(zoneId, clamp(prev + delta, 0, 100));
+    if (
+      e?.type !== "FLOOR_AWARENESS_CHANGED" &&
+      e?.type !== "ROOM_AWARENESS_CHANGED" &&
+      e?.type !== "ZONE_AWARENESS_CHANGED" &&
+      e?.type !== "ZONE_RESPONSE_TRIGGERED" &&
+      e?.type !== "ROOM_RESPONSE_TRIGGERED"
+    ) {
       continue;
     }
 
-    if (e?.type === "ZONE_RESPONSE_TRIGGERED") {
-      const zoneId = typeof e?.payload?.zoneId === "string" ? e.payload.zoneId : null;
-      if (!zoneId) continue;
+    const floorId = extractFloorIdFromPayload(e?.payload);
+    if (!floorId) continue;
 
+    if (e?.type === "ZONE_RESPONSE_TRIGGERED" || e?.type === "ROOM_RESPONSE_TRIGGERED") {
       sawCanonical = true;
       const resetTo = safeNum(e?.payload?.resetTo);
-      byZone.set(zoneId, clamp(resetTo ?? 40, 0, 100));
+      byFloor.set(floorId, clamp(resetTo ?? 40, 0, 100));
       continue;
     }
+
+    const delta = safeNum(e?.payload?.delta);
+    if (delta === null) continue;
+
+    sawCanonical = true;
+    const prev = byFloor.get(floorId) ?? 0;
+    byFloor.set(floorId, clamp(prev + delta, 0, 100));
   }
 
-  if (sawCanonical) return { byZone, estimated: false };
+  if (sawCanonical) return { byFloor, estimated: false };
 
-  const estimatedMap = new Map<ZoneId, number>();
-  for (const [zoneId, p] of pressure.byZone.entries()) {
-    estimatedMap.set(zoneId, clamp(Math.round(p * 1.15), 0, 100));
+  const rollup = new Map<FloorId, number[]>();
+
+  for (const [roomId, p] of roomPressure.byRoom.entries()) {
+    const floorId = inferFloorIdFromRoomId(roomId);
+    if (!floorId) continue;
+    const list = rollup.get(floorId) ?? [];
+    list.push(p);
+    rollup.set(floorId, list);
   }
-  return { byZone: estimatedMap, estimated: true };
+
+  const estimated = new Map<FloorId, number>();
+  for (const [floorId, values] of rollup.entries()) {
+    const max = values.length ? Math.max(...values) : 0;
+    const avg = values.length ? values.reduce((a, b) => a + b, 0) / values.length : 0;
+    estimated.set(floorId, clamp(Math.round(max * 0.6 + avg * 0.5), 0, 100));
+  }
+
+  return { byFloor: estimated, estimated: true };
 }
 
 // ------------------------------------------------------------
@@ -312,30 +481,43 @@ function deriveZoneAwareness(events: readonly SessionEvent[], pressure: ZonePres
 function recommendLocation(parsedCommand?: any): { label: string; reason: string } {
   const text = parsedCommand?.rawInput?.toLowerCase?.() ?? "";
 
-  if (text.includes("open door") || text.includes("enter") || text.includes("hallway") || text.includes("passage")) {
+  if (
+    text.includes("open door") ||
+    text.includes("enter") ||
+    text.includes("hallway") ||
+    text.includes("passage")
+  ) {
     return {
       label: "Stone Hallway",
-      reason: "Door/entry language implies movement into an interior passage.",
+      reason: "Door or entry language implies movement into an interior passage.",
+    };
+  }
+
+  if (text.includes("descend") || text.includes("stairs")) {
+    return {
+      label: "Descending Passage",
+      reason: "Descent language suggests a transition point deeper into the dungeon.",
     };
   }
 
   return {
-    label: "Dungeon Entrance",
-    reason: "No movement signal detected; default staging location.",
+    label: "Dungeon Threshold",
+    reason: "No room-confirming signal detected; default staging location.",
   };
 }
 
 // ------------------------------------------------------------
-// Advisory zone naming
+// Advisory room naming
 // ------------------------------------------------------------
 
-function deriveZoneTitle(args: {
+function deriveRoomTitle(args: {
   events: readonly SessionEvent[];
-  currentZoneId: ZoneId;
+  currentRoomId: RoomId | null;
   currentPressure: number;
-  currentAwareness: number;
+  floorAwareness: number;
 }): string {
-  const { events, currentZoneId, currentPressure, currentAwareness } = args;
+  const { events, currentRoomId, currentPressure, floorAwareness } = args;
+  if (!currentRoomId) return "Unknown Chamber";
 
   let hasDoor = false;
   let hasLock = false;
@@ -347,18 +529,8 @@ function deriveZoneTitle(args: {
   let hasCombat = false;
 
   for (const e of events as any[]) {
-    const zoneId =
-      safeStr(e?.payload?.zoneId) ??
-      tileToZoneIdFromPayload(e?.payload) ??
-      (e?.type === "PLAYER_MOVED"
-        ? (() => {
-            const x = safeNum(e?.payload?.to?.x);
-            const y = safeNum(e?.payload?.to?.y);
-            return x !== null && y !== null ? zoneFromTileXY(x, y, ZONE_SIZE_TILES) : null;
-          })()
-        : null);
-
-    if (zoneId !== currentZoneId) continue;
+    const roomId = extractRoomIdFromPayload(e?.payload);
+    if (roomId !== currentRoomId) continue;
 
     switch (e?.type) {
       case "DOOR_DISCOVERED":
@@ -368,6 +540,7 @@ function deriveZoneTitle(args: {
         hasLock = true;
         break;
       case "HAZARD_REVEALED":
+      case "TRAP_TRIGGERED":
         hasHazard = true;
         break;
       case "CACHE_REVEALED":
@@ -388,12 +561,6 @@ function deriveZoneTitle(args: {
         break;
       case "OUTCOME": {
         const world = e?.payload?.world;
-        if (!world) break;
-        const outcomeZoneId =
-          safeStr(world?.zoneId) ??
-          tileToZoneIdFromPayload(world) ??
-          tileToZoneIdFromPayload(world?.at);
-        if (outcomeZoneId !== currentZoneId) break;
         if (world?.lock) hasLock = true;
         if (world?.trap) hasHazard = true;
         break;
@@ -404,20 +571,21 @@ function deriveZoneTitle(args: {
   }
 
   if (hasAltar && hasStairs) return "Shrine Descent";
-  if (hasAltar) return "Shrine Approach";
+  if (hasAltar) return "Ritual Chamber";
   if (hasStairs) return "Descending Passage";
+  if (hasCache && hasLock) return "Sealed Store";
   if (hasCache) return "Forgotten Cache";
-  if (hasLock) return "The Locked Passage";
-  if (hasHazard && hasCombat) return "Blooded Corridor";
-  if (hasHazard) return "Danger Corridor";
-  if (hasPatrol && currentAwareness >= 45) return "Hunting Hall";
-  if (hasPatrol) return "Watch Corridor";
-  if (hasDoor) return "Stone Doorway";
+  if (hasLock) return "Locked Approach";
+  if (hasHazard && hasCombat) return "Blooded Chamber";
+  if (hasHazard) return "Danger Room";
+  if (hasPatrol && floorAwareness >= 45) return "Hunting Hall";
+  if (hasPatrol) return "Watch Room";
+  if (hasDoor) return "Stone Threshold";
   if (hasCombat) return "Clash Site";
-  if (currentPressure >= 70) return "Crisis Hall";
-  if (currentAwareness >= 75) return "Alarmed Passage";
-  if (currentPressure >= 40 || currentAwareness >= 45) return "Uneasy Hall";
-  return "Silent Hall";
+  if (currentPressure >= 70) return "Crisis Chamber";
+  if (floorAwareness >= 75) return "Alarmed Passage";
+  if (currentPressure >= 40 || floorAwareness >= 45) return "Uneasy Hall";
+  return prettyRoomLabel(currentRoomId) ?? "Silent Hall";
 }
 
 // ------------------------------------------------------------
@@ -454,21 +622,13 @@ function pushUnique(map: Map<string, string>, key: string, value: string) {
 
 function deriveEnvironmentalMemory(args: {
   events: readonly SessionEvent[];
-  currentZoneId: ZoneId;
-  adjacentZoneIds: ZoneId[];
-  currentRoomId?: string;
+  currentRoomId: RoomId | null;
+  nearbyRoomIds: RoomId[];
   currentPressure: number;
-  currentAwareness: number;
+  floorAwareness: number;
   nearbyMaxPressure: number;
 }): EnvironmentalMemory {
-  const {
-    events,
-    currentZoneId,
-    adjacentZoneIds,
-    currentPressure,
-    currentAwareness,
-    nearbyMaxPressure,
-  } = args;
+  const { events, currentRoomId, nearbyRoomIds, currentPressure, floorAwareness, nearbyMaxPressure } = args;
 
   const localThreats = new Map<string, string>();
   const localObstacles = new Map<string, string>();
@@ -476,7 +636,7 @@ function deriveEnvironmentalMemory(args: {
   const nearbySignals = new Map<string, string>();
   const recentChanges = new Map<string, string>();
 
-  const adjacentSet = new Set(adjacentZoneIds);
+  const nearbySet = new Set(nearbyRoomIds);
 
   let localHazardCount = 0;
   let localLockedDoorCount = 0;
@@ -498,30 +658,22 @@ function deriveEnvironmentalMemory(args: {
   const recentEventLines: string[] = [];
 
   for (const e of events as any[]) {
-    const zoneId =
-      safeStr(e?.payload?.zoneId) ??
-      tileToZoneIdFromPayload(e?.payload) ??
-      (e?.type === "PLAYER_MOVED"
-        ? (() => {
-            const x = safeNum(e?.payload?.to?.x);
-            const y = safeNum(e?.payload?.to?.y);
-            return x !== null && y !== null ? zoneFromTileXY(x, y, ZONE_SIZE_TILES) : null;
-          })()
-        : null);
+    const roomId = extractRoomIdFromPayload(e?.payload);
+    const floorId = extractFloorIdFromPayload(e?.payload);
 
-    const isLocal = zoneId === currentZoneId;
-    const isNearby = !!zoneId && adjacentSet.has(zoneId);
+    const isLocal = !!currentRoomId && roomId === currentRoomId;
+    const isNearby = !!roomId && nearbySet.has(roomId);
 
     switch (e?.type) {
       case "DOOR_DISCOVERED": {
         if (isLocal) {
           localDoorCount += 1;
           pushUnique(localObstacles, "door-discovered", "A discovered door offers a possible route forward.");
-        } else if (isNearby && zoneId) {
+        } else if (isNearby && currentRoomId && roomId) {
           pushUnique(
             nearbySignals,
-            `door-discovered-${zoneId}`,
-            `A newly found passage opens ${relativeDirection(currentZoneId, zoneId)}.`
+            `door-discovered-${roomId}`,
+            `A newly found passage opens ${roomDistanceHint(currentRoomId, roomId)}.`
           );
         }
         recentEventLines.push("A hidden or obscured doorway was discovered.");
@@ -532,28 +684,29 @@ function deriveEnvironmentalMemory(args: {
         if (isLocal) {
           localLockedDoorCount += 1;
           pushUnique(localObstacles, "door-locked", "A locked passage is preventing immediate progress.");
-        } else if (isNearby && zoneId) {
+        } else if (isNearby && currentRoomId && roomId) {
           nearbyLockedDoors += 1;
           pushUnique(
             nearbySignals,
-            `door-locked-${zoneId}`,
-            `A locked route seals the way ${relativeDirection(currentZoneId, zoneId)}.`
+            `door-locked-${roomId}`,
+            `A locked route blocks the way ${roomDistanceHint(currentRoomId, roomId)}.`
           );
         }
         recentEventLines.push("Iron locks were found securing a door.");
         break;
       }
 
-      case "HAZARD_REVEALED": {
+      case "HAZARD_REVEALED":
+      case "TRAP_TRIGGERED": {
         if (isLocal) {
           localHazardCount += 1;
-          pushUnique(localThreats, "hazard-local", "A revealed hazard makes this zone unsafe.");
-        } else if (isNearby && zoneId) {
+          pushUnique(localThreats, "hazard-local", "A revealed hazard makes this room unsafe.");
+        } else if (isNearby && currentRoomId && roomId) {
           nearbyHazards += 1;
           pushUnique(
             nearbySignals,
-            `hazard-${zoneId}`,
-            `Dangerous terrain or a trap is known ${relativeDirection(currentZoneId, zoneId)}.`
+            `hazard-${roomId}`,
+            `Dangerous terrain or a trap is known ${roomDistanceHint(currentRoomId, roomId)}.`
           );
         }
         recentEventLines.push("A hidden danger was revealed.");
@@ -564,11 +717,11 @@ function deriveEnvironmentalMemory(args: {
         if (isLocal) {
           localCacheCount += 1;
           pushUnique(localOpportunities, "cache-local", "A discovered cache may reward a careful return.");
-        } else if (isNearby && zoneId) {
+        } else if (isNearby && currentRoomId && roomId) {
           pushUnique(
             nearbySignals,
-            `cache-${zoneId}`,
-            `Valuable supplies may be reachable ${relativeDirection(currentZoneId, zoneId)}.`
+            `cache-${roomId}`,
+            `Useful supplies may be reachable ${roomDistanceHint(currentRoomId, roomId)}.`
           );
         }
         recentEventLines.push("A useful cache was identified.");
@@ -579,11 +732,11 @@ function deriveEnvironmentalMemory(args: {
         if (isLocal) {
           localAltarCount += 1;
           pushUnique(localOpportunities, "altar-local", "An altar or sacred point may offer a ritual advantage.");
-        } else if (isNearby && zoneId) {
+        } else if (isNearby && currentRoomId && roomId) {
           pushUnique(
             nearbySignals,
-            `altar-${zoneId}`,
-            `A place of ritual significance lies ${relativeDirection(currentZoneId, zoneId)}.`
+            `altar-${roomId}`,
+            `A place of ritual significance lies ${roomDistanceHint(currentRoomId, roomId)}.`
           );
         }
         recentEventLines.push("A ritual site was brought to light.");
@@ -594,11 +747,11 @@ function deriveEnvironmentalMemory(args: {
         if (isLocal) {
           localStairsCount += 1;
           pushUnique(localOpportunities, "stairs-local", "A stairway offers a deeper route through the dungeon.");
-        } else if (isNearby && zoneId) {
+        } else if (isNearby && currentRoomId && roomId) {
           pushUnique(
             nearbySignals,
-            `stairs-${zoneId}`,
-            `A route deeper into the dungeon lies ${relativeDirection(currentZoneId, zoneId)}.`
+            `stairs-${roomId}`,
+            `A route deeper into the dungeon lies ${roomDistanceHint(currentRoomId, roomId)}.`
           );
         }
         recentEventLines.push("A transition point deeper into the dungeon was revealed.");
@@ -609,12 +762,12 @@ function deriveEnvironmentalMemory(args: {
         if (isLocal) {
           localPatrolSignsCount += 1;
           pushUnique(localThreats, "patrol-local", "Enemy movement has been detected nearby.");
-        } else if (isNearby && zoneId) {
+        } else if (isNearby && currentRoomId && roomId) {
           nearbyPatrolSigns += 1;
           pushUnique(
             nearbySignals,
-            `patrol-${zoneId}`,
-            `Patrol signs suggest enemy movement ${relativeDirection(currentZoneId, zoneId)}.`
+            `patrol-${roomId}`,
+            `Patrol signs suggest enemy movement ${roomDistanceHint(currentRoomId, roomId)}.`
           );
         }
         recentEventLines.push("Signs of patrol traffic were discovered.");
@@ -624,12 +777,12 @@ function deriveEnvironmentalMemory(args: {
       case "COMBAT_STARTED": {
         if (isLocal) {
           localCombatStarted += 1;
-          pushUnique(localThreats, "combat-started", "Violence has already broken out in this zone.");
-        } else if (isNearby && zoneId) {
+          pushUnique(localThreats, "combat-started", "Violence has already broken out in this room.");
+        } else if (isNearby && currentRoomId && roomId) {
           pushUnique(
             nearbySignals,
-            `combat-started-${zoneId}`,
-            `Conflict has flared ${relativeDirection(currentZoneId, zoneId)}.`
+            `combat-started-${roomId}`,
+            `Conflict has flared ${roomDistanceHint(currentRoomId, roomId)}.`
           );
         }
         recentEventLines.push("Combat erupted nearby.");
@@ -640,39 +793,43 @@ function deriveEnvironmentalMemory(args: {
         if (isLocal) {
           localCombatEnded += 1;
           pushUnique(localThreats, "combat-ended", "The aftermath of recent combat lingers here.");
-        } else if (isNearby && zoneId) {
+        } else if (isNearby && currentRoomId && roomId) {
           pushUnique(
             nearbySignals,
-            `combat-ended-${zoneId}`,
-            `The signs of recent violence lie ${relativeDirection(currentZoneId, zoneId)}.`
+            `combat-ended-${roomId}`,
+            `The signs of recent violence lie ${roomDistanceHint(currentRoomId, roomId)}.`
           );
         }
         recentEventLines.push("A clash recently ended.");
         break;
       }
 
+      case "ROOM_PRESSURE_CHANGED":
       case "ZONE_PRESSURE_CHANGED": {
-        const eventZoneId = safeStr(e?.payload?.zoneId);
-        const delta = safeNum(e?.payload?.delta);
-        if (eventZoneId === currentZoneId && delta !== null) {
-          latestPressureDelta = delta;
+        if (roomId === currentRoomId) {
+          const delta = safeNum(e?.payload?.delta);
+          if (delta !== null) latestPressureDelta = delta;
         }
         break;
       }
 
+      case "FLOOR_AWARENESS_CHANGED":
+      case "ROOM_AWARENESS_CHANGED":
       case "ZONE_AWARENESS_CHANGED": {
-        const eventZoneId = safeStr(e?.payload?.zoneId);
         const delta = safeNum(e?.payload?.delta);
-        if (eventZoneId === currentZoneId && delta !== null) {
+        if (delta === null) break;
+
+        const localFloorId = currentRoomId ? inferFloorIdFromRoomId(currentRoomId) : null;
+        if (floorId && floorId === localFloorId) {
           latestAwarenessDelta = delta;
         }
         break;
       }
 
-      case "ZONE_RESPONSE_TRIGGERED": {
-        const eventZoneId = safeStr(e?.payload?.zoneId);
-        if (eventZoneId === currentZoneId) {
-          pushUnique(localThreats, "zone-response", "The zone has already mounted a response to disturbance.");
+      case "ZONE_RESPONSE_TRIGGERED":
+      case "ROOM_RESPONSE_TRIGGERED": {
+        if (isLocal) {
+          pushUnique(localThreats, "room-response", "The dungeon has already mounted a response to disturbance here.");
           recentEventLines.push("The dungeon responded to the party's activity.");
         }
         break;
@@ -682,14 +839,13 @@ function deriveEnvironmentalMemory(args: {
         const world = e?.payload?.world;
         if (!world) break;
 
-        const outcomeZoneId =
-          safeStr(world?.zoneId) ??
-          tileToZoneIdFromPayload(world) ??
-          tileToZoneIdFromPayload(world?.at) ??
-          zoneId;
+        const outcomeRoomId =
+          safeStr(world?.roomId) ??
+          safeStr(world?.at?.roomId) ??
+          roomId;
 
-        const outcomeIsLocal = outcomeZoneId === currentZoneId;
-        const outcomeIsNearby = !!outcomeZoneId && adjacentSet.has(outcomeZoneId);
+        const outcomeIsLocal = !!currentRoomId && outcomeRoomId === currentRoomId;
+        const outcomeIsNearby = !!outcomeRoomId && nearbySet.has(outcomeRoomId);
 
         if (world?.lock) {
           const state = safeStr(world.lock.state) ?? "changed";
@@ -698,11 +854,11 @@ function deriveEnvironmentalMemory(args: {
 
           if (outcomeIsLocal) {
             pushUnique(localObstacles, `outcome-lock-${state}-${keyId ?? "none"}`, line);
-          } else if (outcomeIsNearby && outcomeZoneId) {
+          } else if (outcomeIsNearby && currentRoomId && outcomeRoomId) {
             pushUnique(
               nearbySignals,
-              `outcome-lock-${outcomeZoneId}-${state}-${keyId ?? "none"}`,
-              `A manipulated door lies ${relativeDirection(currentZoneId, outcomeZoneId)}.`
+              `outcome-lock-${outcomeRoomId}-${state}-${keyId ?? "none"}`,
+              `A manipulated door lies ${roomDistanceHint(currentRoomId, outcomeRoomId)}.`
             );
           }
         }
@@ -720,11 +876,11 @@ function deriveEnvironmentalMemory(args: {
             } else {
               pushUnique(localThreats, `outcome-trap-${state}`, line);
             }
-          } else if (outcomeIsNearby && outcomeZoneId) {
+          } else if (outcomeIsNearby && currentRoomId && outcomeRoomId) {
             pushUnique(
               nearbySignals,
-              `outcome-trap-${outcomeZoneId}-${state}`,
-              `Trap activity is known ${relativeDirection(currentZoneId, outcomeZoneId)}.`
+              `outcome-trap-${outcomeRoomId}-${state}`,
+              `Trap activity is known ${roomDistanceHint(currentRoomId, outcomeRoomId)}.`
             );
           }
         }
@@ -738,7 +894,7 @@ function deriveEnvironmentalMemory(args: {
   }
 
   if (localHazardCount > 1) {
-    pushUnique(localThreats, "hazard-count", `Multiple hazards have been identified in this zone (${localHazardCount}).`);
+    pushUnique(localThreats, "hazard-count", `Multiple hazards have been identified in this room (${localHazardCount}).`);
   }
 
   if (localLockedDoorCount > 1) {
@@ -746,7 +902,7 @@ function deriveEnvironmentalMemory(args: {
   }
 
   if (localDoorCount > 1 && localLockedDoorCount === 0) {
-    pushUnique(localObstacles, "door-count", `Several potential routes have been revealed in this zone (${localDoorCount}).`);
+    pushUnique(localObstacles, "door-count", `Several potential routes have been revealed in this room (${localDoorCount}).`);
   }
 
   if (localCacheCount > 1) {
@@ -762,7 +918,7 @@ function deriveEnvironmentalMemory(args: {
   }
 
   if (localCombatStarted > 0 && localCombatEnded === 0) {
-    pushUnique(localThreats, "combat-ongoing-memory", "This zone has already drawn blood and may not settle quickly.");
+    pushUnique(localThreats, "combat-ongoing-memory", "This room has already drawn blood and may not settle quickly.");
   }
 
   if (localCombatEnded > 0) {
@@ -770,48 +926,48 @@ function deriveEnvironmentalMemory(args: {
   }
 
   if (currentPressure >= 70) {
-    pushUnique(localThreats, "pressure-high", "Pressure in this zone is severe; the dungeon is actively pushing back.");
+    pushUnique(localThreats, "pressure-high", "Pressure in this room is severe; the dungeon is actively pushing back.");
   } else if (currentPressure >= 40) {
-    pushUnique(localThreats, "pressure-rising", "Pressure is building in this zone.");
+    pushUnique(localThreats, "pressure-rising", "Pressure is building in this room.");
   }
 
-  if (currentAwareness >= 75) {
-    pushUnique(localThreats, "awareness-high", "The area is close to open alarm.");
-  } else if (currentAwareness >= 45) {
+  if (floorAwareness >= 75) {
+    pushUnique(localThreats, "awareness-high", "This floor is close to open alarm.");
+  } else if (floorAwareness >= 45) {
     pushUnique(localThreats, "awareness-mid", "Enemy awareness is elevated and probing behavior is likely.");
   }
 
   if (nearbyMaxPressure >= 70) {
-    pushUnique(nearbySignals, "nearby-pressure-high", "A neighboring zone is under extreme pressure.");
+    pushUnique(nearbySignals, "nearby-pressure-high", "A connected room is under extreme pressure.");
   } else if (nearbyMaxPressure >= 40) {
-    pushUnique(nearbySignals, "nearby-pressure-mid", "Tension is rising in an adjacent zone.");
+    pushUnique(nearbySignals, "nearby-pressure-mid", "Tension is rising in a connected room.");
   }
 
   if (nearbyPatrolSigns > 1) {
-    pushUnique(nearbySignals, "nearby-patrol-count", "Multiple adjacent patrol indicators suggest the dungeon is moving pieces around.");
+    pushUnique(nearbySignals, "nearby-patrol-count", "Multiple nearby patrol indicators suggest the dungeon is moving pieces around.");
   }
 
   if (nearbyHazards > 1) {
-    pushUnique(nearbySignals, "nearby-hazard-count", "Several dangers have been identified in neighboring zones.");
+    pushUnique(nearbySignals, "nearby-hazard-count", "Several dangers have been identified in connected rooms.");
   }
 
   if (nearbyLockedDoors > 1) {
-    pushUnique(nearbySignals, "nearby-locked-count", "Adjacent routes appear heavily controlled or sealed.");
+    pushUnique(nearbySignals, "nearby-locked-count", "Nearby routes appear heavily controlled or sealed.");
   }
 
   if (latestPressureDelta !== null) {
     if (latestPressureDelta > 0) {
-      pushUnique(recentChanges, "pressure-up", `Zone pressure recently increased by ${latestPressureDelta}.`);
+      pushUnique(recentChanges, "pressure-up", `Room pressure recently increased by ${latestPressureDelta}.`);
     } else if (latestPressureDelta < 0) {
-      pushUnique(recentChanges, "pressure-down", `Zone pressure recently eased by ${Math.abs(latestPressureDelta)}.`);
+      pushUnique(recentChanges, "pressure-down", `Room pressure recently eased by ${Math.abs(latestPressureDelta)}.`);
     }
   }
 
   if (latestAwarenessDelta !== null) {
     if (latestAwarenessDelta > 0) {
-      pushUnique(recentChanges, "awareness-up", `Enemy awareness recently rose by ${latestAwarenessDelta}.`);
+      pushUnique(recentChanges, "awareness-up", `Floor awareness recently rose by ${latestAwarenessDelta}.`);
     } else if (latestAwarenessDelta < 0) {
-      pushUnique(recentChanges, "awareness-down", `Enemy awareness recently fell by ${Math.abs(latestAwarenessDelta)}.`);
+      pushUnique(recentChanges, "awareness-down", `Floor awareness recently fell by ${Math.abs(latestAwarenessDelta)}.`);
     }
   }
 
@@ -886,32 +1042,32 @@ type TacticalRecommendation = {
 
 function deriveTacticalRecommendation(args: {
   currentPressure: number;
-  currentAwareness: number;
+  floorAwareness: number;
   nearbyMaxPressure: number;
   memory: EnvironmentalMemory;
-  zoneTitle: string;
+  roomTitle: string;
   evolution: { apex: string; condition: string; signals: string[] };
 }): TacticalRecommendation {
-  const { currentPressure, currentAwareness, nearbyMaxPressure, memory, zoneTitle, evolution } = args;
+  const { currentPressure, floorAwareness, nearbyMaxPressure, memory, roomTitle, evolution } = args;
 
   const highPressure = currentPressure >= 70;
-  const highAwareness = currentAwareness >= 75;
-  const midAwareness = currentAwareness >= 45;
+  const highAwareness = floorAwareness >= 75;
+  const midAwareness = floorAwareness >= 45;
   const nearbyHot = nearbyMaxPressure >= 60;
 
   if (memory.flags.hasLockedPath && (midAwareness || nearbyHot)) {
     return {
       priority: "blocker",
       headline: "Progress is constrained by a locked route.",
-      reason: `A known path in ${zoneTitle} remains sealed, and nearby pressure suggests delaying could invite a stronger response.`,
+      reason: `A known path in ${roomTitle} remains sealed, and nearby pressure suggests delaying could invite a stronger response.`,
     };
   }
 
   if (memory.flags.hasHazard && highPressure) {
     return {
       priority: "warning",
-      headline: "This zone is becoming dangerous to linger in.",
-      reason: `A known hazard is active in ${zoneTitle}, and the current pressure level suggests the dungeon is already pushing back.`,
+      headline: "This room is becoming dangerous to linger in.",
+      reason: `A known hazard is active in ${roomTitle}, and the current pressure level suggests the dungeon is already pushing back.`,
     };
   }
 
@@ -919,30 +1075,30 @@ function deriveTacticalRecommendation(args: {
     return {
       priority: "warning",
       headline: "Enemy attention is close to open alarm.",
-      reason: `The area is no longer quiet. Further noise or failed actions in ${zoneTitle} are likely to draw a sharper response.`,
+      reason: `The floor is no longer quiet. Further noise or failed actions in ${roomTitle} are likely to draw a sharper response.`,
     };
   }
 
-  if (memory.flags.hasOpportunity && !highPressure && currentAwareness < 50) {
+  if (memory.flags.hasOpportunity && !highPressure && floorAwareness < 50) {
     return {
       priority: "opportunity",
       headline: "This is a strong moment to exploit a known opportunity.",
-      reason: `Something useful has already been identified in ${zoneTitle}, and enemy attention has not yet fully hardened around it.`,
+      reason: `Something useful has already been identified in ${roomTitle}, and enemy attention has not yet fully hardened around it.`,
     };
   }
 
-  if (memory.flags.hasPatrolRisk && currentAwareness < 75) {
+  if (memory.flags.hasPatrolRisk && floorAwareness < 75) {
     return {
       priority: "warning",
       headline: "Patrol activity makes caution more valuable than speed.",
-      reason: `Signs of movement or rising tension suggest the dungeon is shifting around this zone, even if it has not yet reached full alarm.`,
+      reason: `Signs of movement or rising tension suggest the dungeon is shifting around this room, even if it has not yet reached full alarm.`,
     };
   }
 
   if (nearbyHot) {
     return {
       priority: "guidance",
-      headline: "A neighboring zone is carrying the greater tension.",
+      headline: "A connected room is carrying the greater tension.",
       reason: `Pressure nearby is higher than it is here, which may shape the safest route or the next point of escalation.`,
     };
   }
@@ -951,7 +1107,7 @@ function deriveTacticalRecommendation(args: {
     return {
       priority: "guidance",
       headline: "The dungeon's broader condition is worsening.",
-      reason: `Even if ${zoneTitle} is momentarily stable, the surrounding system feels more hostile and may not stay quiet for long.`,
+      reason: `Even if ${roomTitle} is momentarily stable, the surrounding system feels more hostile and may not stay quiet for long.`,
     };
   }
 
@@ -959,14 +1115,14 @@ function deriveTacticalRecommendation(args: {
     return {
       priority: "guidance",
       headline: "Recent changes matter more than the stillness suggests.",
-      reason: `This zone has shifted recently, so the last few discoveries or disturbances should guide the next move more than habit should.`,
+      reason: `This room has shifted recently, so the last few discoveries or disturbances should guide the next move more than habit should.`,
     };
   }
 
   return {
     priority: "guidance",
     headline: "The best move is to stay deliberate.",
-    reason: `${zoneTitle} is not yet forcing an immediate answer, but the dungeon remains reactive to careless noise, delay, and pressure.`,
+    reason: `${roomTitle} is not yet forcing an immediate answer, but the dungeon remains reactive to careless noise, delay, and pressure.`,
   };
 }
 
@@ -1151,83 +1307,77 @@ function MeterBar({
 // ------------------------------------------------------------
 
 export default function DungeonPressurePanel({ turn, currentRoomId, events, parsedCommand }: Props) {
-  const playerPos = useMemo(() => derivePlayerPosition(events), [events]);
+  const resolvedRoomId = useMemo(() => deriveCurrentRoomId(events, currentRoomId), [events, currentRoomId]);
+  const currentFloorId = useMemo(() => deriveCurrentFloorId(events, resolvedRoomId), [events, resolvedRoomId]);
 
-  const zoneId = useMemo<ZoneId>(() => {
-    if (playerPos) return zoneFromTileXY(playerPos.x, playerPos.y, ZONE_SIZE_TILES);
-    return makeZoneId(0, 0);
-  }, [playerPos]);
+  const adjacency = useMemo(() => buildRoomAdjacency(events), [events]);
+  const nearbyRooms = useMemo(
+    () => inferNearbyRooms(resolvedRoomId, currentFloorId, adjacency),
+    [resolvedRoomId, currentFloorId, adjacency]
+  );
 
-  const adjacent = useMemo(() => adjacentZones(zoneId), [zoneId]);
+  const roomPressure = useMemo(() => deriveRoomPressure(events), [events]);
+  const floorAwareness = useMemo(() => deriveFloorAwareness(events, roomPressure), [events, roomPressure]);
 
-  const zonePressure = useMemo(() => deriveZonePressure(events), [events]);
-  const zoneAwareness = useMemo(() => deriveZoneAwareness(events, zonePressure), [events, zonePressure]);
-
-  const currentPressure = zonePressure.byZone.get(zoneId) ?? 0;
-  const currentAwareness = zoneAwareness.byZone.get(zoneId) ?? 0;
+  const currentPressure = resolvedRoomId ? roomPressure.byRoom.get(resolvedRoomId) ?? 0 : 0;
+  const currentAwareness = currentFloorId ? floorAwareness.byFloor.get(currentFloorId) ?? 0 : 0;
 
   const tier = tierForPressure(currentPressure);
   const awarenessStatus = statusForAwareness(currentAwareness);
 
   const nearbyMaxPressure = useMemo(() => {
     let m = 0;
-    for (const z of adjacent) m = Math.max(m, zonePressure.byZone.get(z) ?? 0);
+    for (const roomId of nearbyRooms) {
+      m = Math.max(m, roomPressure.byRoom.get(roomId) ?? 0);
+    }
     return m;
-  }, [adjacent, zonePressure]);
+  }, [nearbyRooms, roomPressure]);
 
   const nearbyTier = tierForPressure(nearbyMaxPressure);
 
-  const zoneTitle = useMemo(
+  const roomTitle = useMemo(
     () =>
-      deriveZoneTitle({
+      deriveRoomTitle({
         events,
-        currentZoneId: zoneId,
+        currentRoomId: resolvedRoomId,
         currentPressure,
-        currentAwareness,
+        floorAwareness: currentAwareness,
       }),
-    [events, zoneId, currentPressure, currentAwareness]
+    [events, resolvedRoomId, currentPressure, currentAwareness]
   );
 
   const location = useMemo(() => {
-    if (currentRoomId) {
+    if (resolvedRoomId) {
       return {
-        title: prettyRoomLabel(currentRoomId) ?? currentRoomId,
-        subtitle: `Zone ${zoneId}`,
+        title: prettyRoomLabel(resolvedRoomId) ?? resolvedRoomId,
+        subtitle: `${prettyFloorLabel(currentFloorId) ?? currentFloorId ?? "Unknown Floor"}${
+          currentFloorId ? ` · ${currentFloorId}` : ""
+        }`,
         canonical: true,
-        reason: "Confirmed by recorded canon.",
-      };
-    }
-
-    if (playerPos) {
-      return {
-        title: zoneTitle,
-        subtitle: `Zone ${zoneId}`,
-        canonical: false,
-        reason: "Derived from player movement and local dungeon signals.",
+        reason: "Confirmed by recorded canon or current room state.",
       };
     }
 
     const rec = recommendLocation(parsedCommand);
     return {
       title: rec.label,
-      subtitle: `Zone ${zoneId}`,
+      subtitle: prettyFloorLabel(currentFloorId) ?? "Unknown Floor",
       canonical: false,
       reason: rec.reason,
     };
-  }, [currentRoomId, parsedCommand, playerPos, zoneId, zoneTitle]);
+  }, [resolvedRoomId, currentFloorId, parsedCommand]);
 
   const environmentalMemory = useMemo(
     () =>
       deriveEnvironmentalMemory({
         events,
-        currentZoneId: zoneId,
-        adjacentZoneIds: adjacent,
-        currentRoomId: location.canonical ? location.title : undefined,
+        currentRoomId: resolvedRoomId,
+        nearbyRoomIds: nearbyRooms,
         currentPressure,
-        currentAwareness,
+        floorAwareness: currentAwareness,
         nearbyMaxPressure,
       }),
-    [events, zoneId, adjacent, location, currentPressure, currentAwareness, nearbyMaxPressure]
+    [events, resolvedRoomId, nearbyRooms, currentPressure, currentAwareness, nearbyMaxPressure]
   );
 
   const pressurePulse: "none" | "breathe" | "heartbeat" =
@@ -1236,19 +1386,19 @@ export default function DungeonPressurePanel({ turn, currentRoomId, events, pars
   const evolution = useMemo(() => {
     return deriveDungeonEvolution({
       events: events as any,
-      zoneId,
-      nearbyZoneIds: adjacent,
+      zoneId: resolvedRoomId ?? currentFloorId ?? "unknown-room",
+      nearbyZoneIds: nearbyRooms,
     });
-  }, [events, zoneId, adjacent]);
+  }, [events, resolvedRoomId, currentFloorId, nearbyRooms]);
 
   const tacticalRecommendation = useMemo(
     () =>
       deriveTacticalRecommendation({
         currentPressure,
-        currentAwareness,
+        floorAwareness: currentAwareness,
         nearbyMaxPressure,
         memory: environmentalMemory,
-        zoneTitle: location.title,
+        roomTitle: location.title,
         evolution,
       }),
     [currentPressure, currentAwareness, nearbyMaxPressure, environmentalMemory, location.title, evolution]
@@ -1326,16 +1476,16 @@ export default function DungeonPressurePanel({ turn, currentRoomId, events, pars
   const advisoryNotes = useMemo(() => {
     const notes: string[] = [];
 
-    if (zonePressure.estimated) {
-      notes.push("Pressure is not yet canonical (no ZONE_PRESSURE_CHANGED events detected).");
+    if (roomPressure.estimated) {
+      notes.push("Room pressure is not yet canonical; it is being estimated from local events.");
     }
-    if (zoneAwareness.estimated) {
-      notes.push("Awareness is estimated from pressure (no explicit awareness events detected).");
+    if (floorAwareness.estimated) {
+      notes.push("Floor awareness is estimated from room pressure because no explicit floor awareness events were detected.");
     }
 
     notes.push("Advisory only — Arbiter determines all outcomes.");
     return notes;
-  }, [zonePressure.estimated, zoneAwareness.estimated]);
+  }, [roomPressure.estimated, floorAwareness.estimated]);
 
   return (
     <section
@@ -1358,26 +1508,27 @@ export default function DungeonPressurePanel({ turn, currentRoomId, events, pars
         <RingGauge
           value={currentPressure}
           title={tier.tier}
-          subtitle={`Zone Pressure: ${Math.round(currentPressure)}`}
+          subtitle={`Room Pressure: ${Math.round(currentPressure)}`}
           footnote={`Range ${tier.rangeLabel}`}
           pulse={pressurePulse}
         />
 
         <div style={{ display: "grid", gap: 12 }}>
           <div>
-            <div style={{ fontWeight: 800, fontSize: 15 }}>
-              📍 {location.title}
-            </div>
+            <div style={{ fontWeight: 800, fontSize: 15 }}>📍 {location.title}</div>
 
-            <div style={{ fontSize: 12, opacity: 0.72, marginTop: 4 }}>
-              {location.subtitle}
-            </div>
+            <div style={{ fontSize: 12, opacity: 0.72, marginTop: 4 }}>{location.subtitle}</div>
 
             <div style={{ fontSize: 12, opacity: 0.72, marginTop: 4 }}>{location.reason}</div>
 
-            {playerPos ? (
+            <div style={{ fontSize: 12, opacity: 0.65, marginTop: 4 }}>
+              Read: {roomTitle}
+              {resolvedRoomId ? ` · ${resolvedRoomId}` : ""}
+            </div>
+
+            {nearbyRooms.length ? (
               <div style={{ fontSize: 12, opacity: 0.65, marginTop: 4 }}>
-                Tile: ({playerPos.x}, {playerPos.y})
+                Nearby rooms: {nearbyRooms.slice(0, 4).map((roomId) => prettyRoomLabel(roomId) ?? roomId).join(", ")}
               </div>
             ) : null}
           </div>
@@ -1400,14 +1551,14 @@ export default function DungeonPressurePanel({ turn, currentRoomId, events, pars
 
           <MeterBar
             value={currentAwareness}
-            label={`Enemy Attention — ${awarenessStatus.label}`}
+            label={`Floor Attention — ${awarenessStatus.label}`}
             sublabel={awarenessStatus.nextHint}
           />
 
           <MeterBar
             value={nearbyMaxPressure}
-            label={`Tension Nearby — ${nearbyTier.tier}`}
-            sublabel={`Max adjacent zone pressure: ${Math.round(nearbyMaxPressure)} (derived)`}
+            label={`Nearby Tension — ${nearbyTier.tier}`}
+            sublabel={`Max connected-room pressure: ${Math.round(nearbyMaxPressure)}${roomPressure.estimated ? " (derived)" : ""}`}
           />
 
           <div
@@ -1456,6 +1607,11 @@ export default function DungeonPressurePanel({ turn, currentRoomId, events, pars
             <span>
               <strong>Awareness:</strong> {awarenessStatus.label}
             </span>
+            {currentFloorId ? (
+              <span>
+                <strong>Floor:</strong> {prettyFloorLabel(currentFloorId) ?? currentFloorId}
+              </span>
+            ) : null}
           </div>
         </div>
       </div>
