@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import StewardedShell from "@/components/layout/StewardedShell";
 import ModeHeader from "@/components/layout/ModeHeader";
@@ -15,10 +15,105 @@ import { anchorId, scrollToSection } from "./demoUtils";
 import { useDemoRuntime } from "./hooks/useDemoRuntime";
 import type { DemoSectionId } from "./demoTypes";
 
+type TitleViewportBand = "mobile" | "tablet" | "desktop" | "wide";
+
+function useTitleViewportBand(): TitleViewportBand {
+  const [band, setBand] = useState<TitleViewportBand>("desktop");
+
+  useEffect(() => {
+    function computeBand() {
+      const width = window.innerWidth;
+      const height = window.innerHeight;
+
+      if (width < 640 || height < 760) {
+        setBand("mobile");
+        return;
+      }
+
+      if (width < 980) {
+        setBand("tablet");
+        return;
+      }
+
+      if (width >= 1500) {
+        setBand("wide");
+        return;
+      }
+
+      setBand("desktop");
+    }
+
+    computeBand();
+    window.addEventListener("resize", computeBand);
+    return () => window.removeEventListener("resize", computeBand);
+  }, []);
+
+  return band;
+}
+
 export default function DemoPage() {
   const demo = useDemoRuntime();
   const [showTitleOverlay, setShowTitleOverlay] = useState(true);
   const [titleReady, setTitleReady] = useState(false);
+  const viewportBand = useTitleViewportBand();
+
+  const titleLayout = useMemo(() => {
+    switch (viewportBand) {
+      case "mobile":
+        return {
+          overlayPadding: 16,
+          stackGap: 8,
+          imageMaxHeight: "66vh",
+          imageMaxWidth: "92vw",
+          imageMinWidth: 240,
+          imageGlowInset: "12% 10% 14% 10%",
+          buttonPadding: "12px 22px",
+          buttonFontSize: 16,
+          helperFontSize: 12,
+          helperLetterSpacing: "0.06em",
+        };
+      case "tablet":
+        return {
+          overlayPadding: 20,
+          stackGap: 10,
+          imageMaxHeight: "68vh",
+          imageMaxWidth: "86vw",
+          imageMinWidth: 280,
+          imageGlowInset: "11% 14% 13% 14%",
+          buttonPadding: "13px 26px",
+          buttonFontSize: 17,
+          helperFontSize: 12,
+          helperLetterSpacing: "0.08em",
+        };
+      case "wide":
+        return {
+          overlayPadding: 28,
+          stackGap: 12,
+          imageMaxHeight: "78vh",
+          imageMaxWidth: "min(72vw, 1280px)",
+          imageMinWidth: 320,
+          imageGlowInset: "9% 20% 11% 20%",
+          buttonPadding: "15px 32px",
+          buttonFontSize: 18,
+          helperFontSize: 13,
+          helperLetterSpacing: "0.08em",
+        };
+      case "desktop":
+      default:
+        return {
+          overlayPadding: 24,
+          stackGap: 10,
+          imageMaxHeight: "72vh",
+          imageMaxWidth: "min(78vw, 1100px)",
+          imageMinWidth: 280,
+          imageGlowInset: "10% 18% 12% 18%",
+          buttonPadding: "14px 30px",
+          buttonFontSize: 18,
+          helperFontSize: 13,
+          helperLetterSpacing: "0.08em",
+        };
+    }
+  }, [viewportBand]);
 
   useEffect(() => {
     setTitleReady(true);
@@ -358,7 +453,7 @@ export default function DemoPage() {
               justifyContent: "center",
               background:
                 "radial-gradient(circle at center, rgba(15,20,30,0.16) 0%, rgba(5,8,14,0.68) 52%, rgba(0,0,0,0.9) 100%)",
-              padding: 24,
+              padding: titleLayout.overlayPadding,
               overflow: "hidden",
             }}
           >
@@ -390,13 +485,13 @@ export default function DemoPage() {
             <div
               style={{
                 width: "100%",
-                maxWidth: 1280,
-                maxHeight: "calc(100vh - 48px)",
+                maxWidth: 1320,
+                maxHeight: `calc(100vh - ${titleLayout.overlayPadding * 2}px)`,
                 display: "flex",
                 flexDirection: "column",
                 alignItems: "center",
                 justifyContent: "center",
-                gap: 10,
+                gap: titleLayout.stackGap,
                 animation: titleReady ? "titleFadeIn 700ms ease both" : undefined,
                 position: "relative",
                 zIndex: 1,
@@ -417,7 +512,7 @@ export default function DemoPage() {
                   aria-hidden
                   style={{
                     position: "absolute",
-                    inset: "10% 18% 12% 18%",
+                    inset: titleLayout.imageGlowInset,
                     borderRadius: 40,
                     background:
                       "radial-gradient(circle at 50% 45%, rgba(90,150,255,0.16) 0%, rgba(90,150,255,0.06) 25%, rgba(0,0,0,0) 58%)",
@@ -433,9 +528,9 @@ export default function DemoPage() {
                   style={{
                     width: "auto",
                     height: "auto",
-                    maxWidth: "min(78vw, 1100px)",
-                    maxHeight: "72vh",
-                    minWidth: 280,
+                    maxWidth: titleLayout.imageMaxWidth,
+                    maxHeight: titleLayout.imageMaxHeight,
+                    minWidth: titleLayout.imageMinWidth,
                     objectFit: "contain",
                     position: "relative",
                     zIndex: 2,
@@ -455,9 +550,9 @@ export default function DemoPage() {
                   background:
                     "linear-gradient(180deg, rgba(255,255,255,0.22), rgba(255,255,255,0.09))",
                   color: "#ffffff",
-                  padding: "14px 30px",
+                  padding: titleLayout.buttonPadding,
                   borderRadius: 18,
-                  fontSize: 18,
+                  fontSize: titleLayout.buttonFontSize,
                   fontWeight: 700,
                   letterSpacing: "0.04em",
                   cursor: "pointer",
@@ -493,8 +588,8 @@ export default function DemoPage() {
 
               <div
                 style={{
-                  fontSize: 13,
-                  letterSpacing: "0.08em",
+                  fontSize: titleLayout.helperFontSize,
+                  letterSpacing: titleLayout.helperLetterSpacing,
                   color: "rgba(255,255,255,0.72)",
                   textShadow: "0 2px 12px rgba(0,0,0,0.45)",
                 }}
