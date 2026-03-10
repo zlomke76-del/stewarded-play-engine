@@ -225,6 +225,9 @@ export default function DemoPage() {
     scrollToSection(nextKey);
   }
 
+  const showChronicleOnly =
+    demo.presentationPhase === "chronicle";
+
   return (
     <AmbientBackground>
       <style jsx global>{`
@@ -410,78 +413,82 @@ export default function DemoPage() {
           aria-hidden={showTitleOverlay}
         >
           <StewardedShell>
-            <ModeHeader
-              title="Echoes of Fate"
-              onShare={demo.shareCanon}
-              showTitle={false}
-              showRoles={false}
-              showShare={false}
-            />
+            {!showChronicleOnly && (
+              <ModeHeader
+                title="Echoes of Fate"
+                onShare={demo.shareCanon}
+                showTitle={false}
+                showRoles={false}
+                showShare={false}
+              />
+            )}
 
-            <div id={anchorId("mode")} style={{ scrollMarginTop: 90 }}>
-              {demo.showFullHero && (
-                <HeroOnboarding
-                  presentationMode="full"
-                  heroTitle="Echoes of Fate"
-                  heroSubtitle="Every action leaves an echo."
-                  dmMode={demo.dmMode}
-                  onSetDmMode={(nextMode) => {
-                    demo.setDmMode(nextMode);
-                    demo.setEnteredDungeon(false);
-                    demo.setTableAccepted(false);
-                    demo.setGameplayFocusStep("pressure");
-                    demo.setActiveSection("mode");
-                    demo.setPartyDraft((prev: any) => prev ?? null);
-                  }}
-                  onEnter={demo.enterDungeon}
-                  canEnter={demo.dmMode !== null}
-                  heroImageSrc={demo.HERO_IMAGE_SRC}
-                  heroImageOk={demo.heroImageOk}
-                  onHeroImageError={() => demo.setHeroImageOk(false)}
-                  chapterState={demo.chapterState as any}
-                  onJump={(k) => jumpTo(k)}
-                  outcomesCount={demo.outcomesCount}
-                  canonCount={demo.canonCount}
-                  activePartySize={demo.progression.party.activeSlots}
-                  unlockedPartySlots={demo.progression.party.unlockedSlots}
-                  maxPartySlots={demo.progression.party.maxSlots}
-                  completionRequiresFullFellowship={demo.progression.campaign.completionRequiresFullParty}
-                />
-              )}
+            {!showChronicleOnly && (
+              <div id={anchorId("mode")} style={{ scrollMarginTop: 90 }}>
+                {demo.showFullHero && (
+                  <HeroOnboarding
+                    presentationMode="full"
+                    heroTitle="Echoes of Fate"
+                    heroSubtitle="Every action leaves an echo."
+                    dmMode={demo.dmMode}
+                    onSetDmMode={(nextMode) => {
+                      demo.setDmMode(nextMode);
+                      demo.setEnteredDungeon(false);
+                      demo.setTableAccepted(false);
+                      demo.setGameplayFocusStep("pressure");
+                      demo.setActiveSection("mode");
+                      demo.setPartyDraft((prev: any) => prev ?? null);
+                    }}
+                    onEnter={demo.enterDungeon}
+                    canEnter={demo.dmMode !== null}
+                    heroImageSrc={demo.HERO_IMAGE_SRC}
+                    heroImageOk={demo.heroImageOk}
+                    onHeroImageError={() => demo.setHeroImageOk(false)}
+                    chapterState={demo.chapterState as any}
+                    onJump={(k) => jumpTo(k)}
+                    outcomesCount={demo.outcomesCount}
+                    canonCount={demo.canonCount}
+                    activePartySize={demo.progression.party.activeSlots}
+                    unlockedPartySlots={demo.progression.party.unlockedSlots}
+                    maxPartySlots={demo.progression.party.maxSlots}
+                    completionRequiresFullFellowship={demo.progression.campaign.completionRequiresFullParty}
+                  />
+                )}
 
-              {demo.showCompactHero && (
-                <HeroOnboarding
-                  presentationMode="compact"
-                  heroTitle="Echoes of Fate"
-                  heroSubtitle="Every action leaves an echo."
-                  dmMode={demo.dmMode}
-                  onSetDmMode={(nextMode) => {
-                    demo.setDmMode(nextMode);
-                    demo.setEnteredDungeon(false);
-                    demo.setTableAccepted(false);
-                    demo.setGameplayFocusStep("pressure");
-                    demo.setActiveSection("mode");
-                    demo.setPartyDraft((prev: any) => prev ?? null);
-                  }}
-                  onEnter={demo.enterDungeon}
-                  canEnter={demo.dmMode !== null}
-                  heroImageSrc={demo.HERO_IMAGE_SRC}
-                  heroImageOk={demo.heroImageOk}
-                  onHeroImageError={() => demo.setHeroImageOk(false)}
-                  chapterState={demo.chapterState as any}
-                  onJump={(k) => jumpTo(k)}
-                  outcomesCount={demo.outcomesCount}
-                  canonCount={demo.canonCount}
-                  activePartySize={demo.progression.party.activeSlots}
-                  unlockedPartySlots={demo.progression.party.unlockedSlots}
-                  maxPartySlots={demo.progression.party.maxSlots}
-                  completionRequiresFullFellowship={demo.progression.campaign.completionRequiresFullParty}
-                />
-              )}
-            </div>
+                {demo.showCompactHero && demo.presentationPhase !== "chronicle" && (
+                  <HeroOnboarding
+                    presentationMode="compact"
+                    heroTitle="Echoes of Fate"
+                    heroSubtitle="Every action leaves an echo."
+                    dmMode={demo.dmMode}
+                    onSetDmMode={(nextMode) => {
+                      demo.setDmMode(nextMode);
+                      demo.setEnteredDungeon(false);
+                      demo.setTableAccepted(false);
+                      demo.setGameplayFocusStep("pressure");
+                      demo.setActiveSection("mode");
+                      demo.setPartyDraft((prev: any) => prev ?? null);
+                    }}
+                    onEnter={demo.enterDungeon}
+                    canEnter={demo.dmMode !== null}
+                    heroImageSrc={demo.HERO_IMAGE_SRC}
+                    heroImageOk={demo.heroImageOk}
+                    onHeroImageError={() => demo.setHeroImageOk(false)}
+                    chapterState={demo.chapterState as any}
+                    onJump={(k) => jumpTo(k)}
+                    outcomesCount={demo.outcomesCount}
+                    canonCount={demo.canonCount}
+                    activePartySize={demo.progression.party.activeSlots}
+                    unlockedPartySlots={demo.progression.party.unlockedSlots}
+                    maxPartySlots={demo.progression.party.maxSlots}
+                    completionRequiresFullFellowship={demo.progression.campaign.completionRequiresFullParty}
+                  />
+                )}
+              </div>
+            )}
 
             {demo.showInitialTable && (
-              <div id={anchorId("table")} style={{ scrollMarginTop: 90, marginTop: 16 }}>
+              <div id={anchorId("table")} style={{ scrollMarginTop: 90, marginTop: showChronicleOnly ? 0 : 16 }}>
                 <InitialTableSection
                   dmMode={demo.dmMode}
                   initialTable={demo.initialTable}
@@ -498,21 +505,23 @@ export default function DemoPage() {
               </div>
             )}
 
-            <div id={anchorId("party")} style={{ scrollMarginTop: 90, marginTop: 16 }}>
-              <PartySetupSection
-                enabled={demo.showInitialTable && demo.dmMode !== null && demo.tableAccepted}
-                partyDraft={demo.partyDraft}
-                partyMembersFallback={demo.partyMembers}
-                partyCanonicalExists={demo.partyCanonicalExists}
-                partyLocked={demo.partyLocked}
-                partyLockedByCombat={demo.partyLockedByCombat}
-                commitParty={demo.commitParty}
-                setPartyDraft={demo.setPartyDraft}
-                unlockedPartySlots={demo.progression.party.unlockedSlots}
-                maxPartySlots={demo.progression.party.maxSlots}
-                completionRequiresFullFellowship={demo.progression.campaign.completionRequiresFullParty}
-              />
-            </div>
+            {!showChronicleOnly && (
+              <div id={anchorId("party")} style={{ scrollMarginTop: 90, marginTop: 16 }}>
+                <PartySetupSection
+                  enabled={demo.showInitialTable && demo.dmMode !== null && demo.tableAccepted}
+                  partyDraft={demo.partyDraft}
+                  partyMembersFallback={demo.partyMembers}
+                  partyCanonicalExists={demo.partyCanonicalExists}
+                  partyLocked={demo.partyLocked}
+                  partyLockedByCombat={demo.partyLockedByCombat}
+                  commitParty={demo.commitParty}
+                  setPartyDraft={demo.setPartyDraft}
+                  unlockedPartySlots={demo.progression.party.unlockedSlots}
+                  maxPartySlots={demo.progression.party.maxSlots}
+                  completionRequiresFullFellowship={demo.progression.campaign.completionRequiresFullParty}
+                />
+              </div>
+            )}
 
             {demo.showGameplay && demo.allowGameplay && <GameplayViewport demo={demo} />}
           </StewardedShell>
