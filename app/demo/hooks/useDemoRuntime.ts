@@ -368,6 +368,7 @@ export function useDemoRuntime() {
 
   const introAudioRef = useRef<HTMLAudioElement | null>(null);
   const bgmAudioRef = useRef<HTMLAudioElement | null>(null);
+  const ambienceAudioRef = useRef<HTMLAudioElement | null>(null);
   const currentMusicModeRef = useRef<MusicMode>("none");
   const lastAmbientIndexRef = useRef(-1);
   const lastCombatIndexRef = useRef(-1);
@@ -424,9 +425,10 @@ export function useDemoRuntime() {
       if (prev) {
         return {
           ...prev,
-          members: (prev.members ?? []).slice(0, 1).length > 0
-            ? (prev.members ?? []).slice(0, 1)
-            : defaultParty().members,
+          members:
+            (prev.members ?? []).slice(0, 1).length > 0
+              ? (prev.members ?? []).slice(0, 1)
+              : defaultParty().members,
         };
       }
 
@@ -548,9 +550,22 @@ export function useDemoRuntime() {
     }
   }
 
+  function stopAmbience() {
+    const ambience = ambienceAudioRef.current;
+    if (!ambience) return;
+
+    try {
+      ambience.pause();
+      ambience.currentTime = 0;
+    } catch {
+      // fail silently
+    }
+  }
+
   function stopAllMusic() {
     pauseIntroTheme(true);
     pauseBackgroundTheme();
+    stopAmbience();
     currentMusicModeRef.current = "none";
   }
 
@@ -622,6 +637,28 @@ export function useDemoRuntime() {
     if (!intro) return;
     intro.loop = enteredDungeon && !tableAccepted;
   }, [enteredDungeon, tableAccepted]);
+
+  useEffect(() => {
+    if (!enteredDungeon) {
+      stopAmbience();
+      return;
+    }
+
+    const ambience = ambienceAudioRef.current;
+    if (!ambience) return;
+
+    try {
+      ambience.loop = true;
+      ambience.volume = 0.18;
+
+      const playPromise = ambience.play();
+      if (playPromise && typeof playPromise.catch === "function") {
+        playPromise.catch(() => {});
+      }
+    } catch {
+      // fail silently
+    }
+  }, [enteredDungeon]);
 
   useEffect(() => {
     if (!enteredDungeon) return;
@@ -1433,6 +1470,7 @@ export function useDemoRuntime() {
 
     introAudioRef,
     bgmAudioRef,
+    ambienceAudioRef,
 
     state,
     dmMode,
