@@ -114,6 +114,16 @@ const ROOM_ASSETS: Record<string, readonly string[]> = {
   entrance: ["/assets/V3/Dungeon/Entrance/Main_01.png"],
   corridor: ["/assets/V3/Dungeon/Corridor/Corridor_01.png"],
   guard_post: ["/assets/V3/Dungeon/Guard_Post/Guard_Post_01.png"],
+
+  // Newly added room art
+  storage: ["/assets/V3/Dungeon/Storage_Room/storage_01.png"],
+  storage_room: ["/assets/V3/Dungeon/Storage_Room/storage_01.png"],
+  storeroom: ["/assets/V3/Dungeon/Storage_Room/storage_01.png"],
+
+  shrine: ["/assets/V3/Dungeon/Shrine/shrine_01.png"],
+  shrine_room: ["/assets/V3/Dungeon/Shrine/shrine_01.png"],
+  forgotten_shrine: ["/assets/V3/Dungeon/Shrine/shrine_01.png"],
+
   ruined_outpost_default: ["/assets/V3/Dungeon/Military_Outpost/Military_Outpost_01.png"],
   default: ["/assets/V3/Dungeon/Entrance/Main_01.png"],
 };
