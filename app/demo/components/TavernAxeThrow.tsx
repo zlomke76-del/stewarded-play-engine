@@ -39,31 +39,31 @@ type AxeVisualState = {
   embedded: boolean;
 };
 
-// -----------------------------------------------------------------------------
-// ASSET PATHS
-// Verify these match the exact filenames in your repo.
-// If your portrait axe-lane scene is named differently, change LANE_BG_SRC only.
-// -----------------------------------------------------------------------------
 const LANE_BG_SRC = "/assets/V3/Dungeon/Tavern/Axe_Throwing/target_01.png";
 const AXE_SRC = "/assets/V3/Dungeon/Tavern/Axe_Throwing/axe_01.png";
 
 const HIT_SFX = "/assets/audio/sfx_axe_hit_01.mp3";
 const MISS_SFX = "/assets/audio/sfx_axe_miss_01.mp3";
 
-// Portrait lane scene sizing
 const SCENE_W = 992;
 const SCENE_H = 1536;
 
-// Approximate target center for the portrait lane art
 const TARGET_CENTER_X = 496;
 const TARGET_CENTER_Y = 476;
 
-// Approximate axe resting start in lower-left foreground
 const START_X = 128;
 const START_Y = 1165;
 
 const AXE_W = 240;
 const AXE_H = 430;
+
+// blade tip approximation in local image space
+const AXE_TIP_X = AXE_W * 0.78;
+const AXE_TIP_Y = AXE_H * 0.18;
+
+// aim slider range
+const AIM_MIN = -150;
+const AIM_MAX = 150;
 
 function clamp(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n));
@@ -93,12 +93,26 @@ function evaluateThrow(distance: number): ThrowOutcome {
   return { score: 0, label: "Miss", distance };
 }
 
+function finalStickRotation(outcome: ThrowOutcome): number {
+  switch (outcome.label) {
+    case "Bullseye":
+      return -18 + Math.random() * 8;
+    case "Inner Ring":
+      return -22 + Math.random() * 10;
+    case "Outer Ring":
+      return -26 + Math.random() * 12;
+    case "Graze":
+      return -32 + Math.random() * 14;
+    default:
+      return 72 + Math.random() * 18;
+  }
+}
+
 export default function TavernAxeThrow({
   initialThrows = 3,
   onExit,
   onRoundComplete,
 }: Props) {
-  const laneRef = useRef<HTMLDivElement | null>(null);
   const rafRef = useRef<number | null>(null);
   const chargeRafRef = useRef<number | null>(null);
 
@@ -114,7 +128,7 @@ export default function TavernAxeThrow({
   const [isCharging, setIsCharging] = useState(false);
 
   const [roundMessage, setRoundMessage] = useState(
-    "Hold the throw button to build power. Move your pointer up or down to aim."
+    "Set your aim with the slider. Hold the throw button to build power."
   );
   const [impactFlash, setImpactFlash] = useState(false);
   const [boardShake, setBoardShake] = useState(false);
@@ -197,17 +211,6 @@ export default function TavernAxeThrow({
     });
   }, [isRoundOver, onRoundComplete, totalScore, throwsUsed, bestThrow]);
 
-  function handlePointerMove(event: React.PointerEvent<HTMLDivElement>) {
-    const rect = laneRef.current?.getBoundingClientRect();
-    if (!rect) return;
-
-    const y = event.clientY - rect.top;
-    const relativeY = (y / rect.height) * SCENE_H;
-    const centered = relativeY - TARGET_CENTER_Y;
-
-    setAimOffsetY(clamp(centered, -150, 150));
-  }
-
   function beginCharge() {
     if (activeFlight || throwsLeft <= 0) return;
     if (isCharging) return;
@@ -245,10 +248,10 @@ export default function TavernAxeThrow({
     const durationMs = Math.round(560 + (1 - power) * 220);
     const arcHeight = 220 + power * 180;
     const spinDeg = 540 + power * 760;
-    const finalStickDeg = -26 + Math.random() * 18;
 
     setThrowsLeft((v) => Math.max(0, v - 1));
     setRoundMessage("The axe cuts through the smoky tavern air...");
+
     setActiveFlight({
       startedAt: performance.now(),
       durationMs,
@@ -258,27 +261,32 @@ export default function TavernAxeThrow({
       endY,
       arcHeight,
       spinDeg,
-      finalStickDeg,
+      finalStickDeg: -22,
     });
   }
 
   function resolveImpact(flight: ActiveFlight) {
     setActiveFlight(null);
 
-    const axeHeadX = flight.endX + AXE_W * 0.68;
-    const axeHeadY = flight.endY + AXE_H * 0.2;
+    const axeTipX = flight.endX + AXE_TIP_X;
+    const axeTipY = flight.endY + AXE_TIP_Y;
 
-    const dx = axeHeadX - TARGET_CENTER_X;
-    const dy = axeHeadY - TARGET_CENTER_Y;
+    const dx = axeTipX - TARGET_CENTER_X;
+    const dy = axeTipY - TARGET_CENTER_Y;
     const distance = Math.sqrt(dx * dx + dy * dy);
     const outcome = evaluateThrow(distance);
 
     const hit = outcome.score > 0;
+    const stickDeg = finalStickRotation(outcome);
+
+    // slight "embed into wood" nudge
+    const embeddedX = hit ? flight.endX - 14 : flight.endX;
+    const embeddedY = hit ? flight.endY - 6 : flight.endY + 18;
 
     setAxe({
-      x: flight.endX,
-      y: flight.endY,
-      rotation: hit ? flight.finalStickDeg : flight.finalStickDeg + 95,
+      x: embeddedX,
+      y: embeddedY,
+      rotation: hit ? stickDeg : stickDeg,
       visible: true,
       flying: false,
       embedded: hit,
@@ -314,7 +322,7 @@ export default function TavernAxeThrow({
     } else if (outcome.label === "Outer Ring") {
       setRoundMessage("Good enough to earn a few nods.");
     } else if (outcome.label === "Graze") {
-      setRoundMessage("A scrape. You had the line, but not the finish.");
+      setRoundMessage("A scrape. The blade bites, but not cleanly.");
     } else {
       setRoundMessage("Miss. The floor remembers the clatter.");
     }
@@ -336,10 +344,11 @@ export default function TavernAxeThrow({
       flying: false,
       embedded: false,
     });
-    setRoundMessage("Hold the throw button to build power. Move your pointer up or down to aim.");
+    setRoundMessage("Set your aim with the slider. Hold the throw button to build power.");
   }
 
   const aimMarkerY = clamp(TARGET_CENTER_Y + aimOffsetY, TARGET_CENTER_Y - 180, TARGET_CENTER_Y + 180);
+  const aimPercent = Math.round(((aimOffsetY - AIM_MIN) / (AIM_MAX - AIM_MIN)) * 100);
 
   return (
     <div
@@ -357,163 +366,145 @@ export default function TavernAxeThrow({
       </div>
 
       <div
-        ref={laneRef}
-        onPointerMove={handlePointerMove}
         style={{
-          position: "relative",
-          width: "100%",
-          maxWidth: 560,
-          aspectRatio: `${SCENE_W} / ${SCENE_H}`,
-          borderRadius: 20,
-          overflow: "hidden",
-          border: "1px solid rgba(255,255,255,0.12)",
-          boxShadow: "0 30px 80px rgba(0,0,0,0.45)",
-          background: "#120b07",
-          userSelect: "none",
-          touchAction: "none",
+          display: "grid",
+          gridTemplateColumns: "minmax(0, 560px) 180px",
+          gap: 16,
+          alignItems: "stretch",
         }}
       >
-        <img
-          src={LANE_BG_SRC}
-          alt="Tavern axe lane"
-          draggable={false}
-          style={{
-            position: "absolute",
-            inset: 0,
-            width: "100%",
-            height: "100%",
-            objectFit: "cover",
-            transform: boardShake ? "translateX(1px)" : "translateX(0px)",
-            transition: "transform 120ms ease-out",
-            filter: impactFlash ? "brightness(1.08)" : "brightness(1)",
-          }}
-        />
-
         <div
           style={{
-            position: "absolute",
-            left: `${((TARGET_CENTER_X - 160) / SCENE_W) * 100}%`,
-            top: `${(aimMarkerY / SCENE_H) * 100}%`,
-            width: `${(320 / SCENE_W) * 100}%`,
-            height: 2,
-            background: "rgba(255, 244, 214, 0.24)",
-            boxShadow: "0 0 12px rgba(255, 220, 140, 0.22)",
-            pointerEvents: "none",
+            position: "relative",
+            width: "100%",
+            maxWidth: 560,
+            aspectRatio: `${SCENE_W} / ${SCENE_H}`,
+            borderRadius: 20,
+            overflow: "hidden",
+            border: "1px solid rgba(255,255,255,0.12)",
+            boxShadow: "0 30px 80px rgba(0,0,0,0.45)",
+            background: "#120b07",
+            userSelect: "none",
           }}
-        />
-
-        {axe.visible ? (
+        >
           <img
-            src={AXE_SRC}
-            alt="Throwing axe"
+            src={LANE_BG_SRC}
+            alt="Tavern axe lane"
             draggable={false}
             style={{
               position: "absolute",
-              left: `${(axe.x / SCENE_W) * 100}%`,
-              top: `${(axe.y / SCENE_H) * 100}%`,
-              width: `${(AXE_W / SCENE_W) * 100}%`,
-              height: `${(AXE_H / SCENE_H) * 100}%`,
-              objectFit: "contain",
-              pointerEvents: "none",
-              transform: `rotate(${axe.rotation}deg)`,
-              transformOrigin: "62% 34%",
-              filter: axe.flying
-                ? "drop-shadow(0 20px 18px rgba(0,0,0,0.35))"
-                : axe.embedded
-                  ? "drop-shadow(0 8px 12px rgba(0,0,0,0.32))"
-                  : "drop-shadow(0 12px 12px rgba(0,0,0,0.32))",
-              transition: axe.flying ? "none" : "transform 140ms ease-out",
+              inset: 0,
+              width: "100%",
+              height: "100%",
+              objectFit: "cover",
+              transform: boardShake ? "translateX(1px)" : "translateX(0px)",
+              transition: "transform 120ms ease-out",
+              filter: impactFlash ? "brightness(1.08)" : "brightness(1)",
             }}
           />
-        ) : null}
 
-        <div
-          style={{
-            position: "absolute",
-            inset: 0,
-            pointerEvents: "none",
-            background: impactFlash
-              ? "radial-gradient(circle at 50% 31%, rgba(255,210,140,0.16), rgba(255,255,255,0) 24%)"
-              : "transparent",
-            transition: "background 120ms ease-out",
-          }}
-        />
-
-        <div
-          style={{
-            position: "absolute",
-            left: 16,
-            right: 16,
-            top: 16,
-            display: "flex",
-            justifyContent: "space-between",
-            gap: 12,
-            flexWrap: "wrap",
-          }}
-        >
           <div
             style={{
-              padding: "10px 12px",
-              borderRadius: 12,
-              background: "rgba(8,8,8,0.52)",
-              border: "1px solid rgba(255,255,255,0.12)",
-              backdropFilter: "blur(6px)",
+              position: "absolute",
+              left: `${((TARGET_CENTER_X - 160) / SCENE_W) * 100}%`,
+              top: `${(aimMarkerY / SCENE_H) * 100}%`,
+              width: `${(320 / SCENE_W) * 100}%`,
+              height: 2,
+              background: "rgba(255, 244, 214, 0.24)",
+              boxShadow: "0 0 12px rgba(255, 220, 140, 0.22)",
+              pointerEvents: "none",
             }}
-          >
-            <div style={{ fontSize: 11, opacity: 0.68, textTransform: "uppercase", letterSpacing: 0.7 }}>
-              Throws Left
-            </div>
-            <div style={{ fontSize: 24, fontWeight: 900 }}>{throwsLeft}</div>
-          </div>
+          />
+
+          {axe.visible ? (
+            <img
+              src={AXE_SRC}
+              alt="Throwing axe"
+              draggable={false}
+              style={{
+                position: "absolute",
+                left: `${(axe.x / SCENE_W) * 100}%`,
+                top: `${(axe.y / SCENE_H) * 100}%`,
+                width: `${(AXE_W / SCENE_W) * 100}%`,
+                height: `${(AXE_H / SCENE_H) * 100}%`,
+                objectFit: "contain",
+                pointerEvents: "none",
+                transform: `rotate(${axe.rotation}deg)`,
+                transformOrigin: "62% 34%",
+                filter: axe.flying
+                  ? "drop-shadow(0 20px 18px rgba(0,0,0,0.35))"
+                  : axe.embedded
+                    ? "drop-shadow(0 8px 12px rgba(0,0,0,0.32))"
+                    : "drop-shadow(0 12px 12px rgba(0,0,0,0.32))",
+                transition: axe.flying ? "none" : "transform 140ms ease-out, left 140ms ease-out, top 140ms ease-out",
+              }}
+            />
+          ) : null}
 
           <div
             style={{
-              padding: "10px 12px",
-              borderRadius: 12,
-              background: "rgba(8,8,8,0.52)",
-              border: "1px solid rgba(255,255,255,0.12)",
-              backdropFilter: "blur(6px)",
-              minWidth: 140,
+              position: "absolute",
+              inset: 0,
+              pointerEvents: "none",
+              background: impactFlash
+                ? "radial-gradient(circle at 50% 31%, rgba(255,210,140,0.16), rgba(255,255,255,0) 24%)"
+                : "transparent",
+              transition: "background 120ms ease-out",
             }}
-          >
-            <div style={{ fontSize: 11, opacity: 0.68, textTransform: "uppercase", letterSpacing: 0.7 }}>
-              Tavern Score
-            </div>
-            <div style={{ fontSize: 24, fontWeight: 900 }}>{totalScore}</div>
-          </div>
-        </div>
-
-        <div
-          style={{
-            position: "absolute",
-            left: 16,
-            right: 16,
-            bottom: 16,
-            display: "grid",
-            gap: 12,
-          }}
-        >
-          <div
-            style={{
-              padding: "12px 14px",
-              borderRadius: 14,
-              background: "rgba(8,8,8,0.56)",
-              border: "1px solid rgba(255,255,255,0.12)",
-              backdropFilter: "blur(6px)",
-            }}
-          >
-            <div style={{ fontSize: 11, opacity: 0.68, textTransform: "uppercase", letterSpacing: 0.7 }}>
-              Lane Read
-            </div>
-            <div style={{ marginTop: 6, fontSize: 14, lineHeight: 1.5 }}>{roundMessage}</div>
-          </div>
+          />
 
           <div
             style={{
-              display: "grid",
-              gridTemplateColumns: "1fr auto auto",
+              position: "absolute",
+              left: 16,
+              right: 16,
+              top: 16,
+              display: "flex",
+              justifyContent: "space-between",
               gap: 12,
-              alignItems: "end",
+              flexWrap: "wrap",
+            }}
+          >
+            <div
+              style={{
+                padding: "10px 12px",
+                borderRadius: 12,
+                background: "rgba(8,8,8,0.52)",
+                border: "1px solid rgba(255,255,255,0.12)",
+                backdropFilter: "blur(6px)",
+              }}
+            >
+              <div style={{ fontSize: 11, opacity: 0.68, textTransform: "uppercase", letterSpacing: 0.7 }}>
+                Throws Left
+              </div>
+              <div style={{ fontSize: 24, fontWeight: 900 }}>{throwsLeft}</div>
+            </div>
+
+            <div
+              style={{
+                padding: "10px 12px",
+                borderRadius: 12,
+                background: "rgba(8,8,8,0.52)",
+                border: "1px solid rgba(255,255,255,0.12)",
+                backdropFilter: "blur(6px)",
+                minWidth: 140,
+              }}
+            >
+              <div style={{ fontSize: 11, opacity: 0.68, textTransform: "uppercase", letterSpacing: 0.7 }}>
+                Tavern Score
+              </div>
+              <div style={{ fontSize: 24, fontWeight: 900 }}>{totalScore}</div>
+            </div>
+          </div>
+
+          <div
+            style={{
+              position: "absolute",
+              left: 16,
+              right: 16,
+              bottom: 16,
+              display: "grid",
+              gap: 12,
             }}
           >
             <div
@@ -525,97 +516,179 @@ export default function TavernAxeThrow({
                 backdropFilter: "blur(6px)",
               }}
             >
-              <div
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  gap: 12,
-                  fontSize: 12,
-                  opacity: 0.76,
-                }}
-              >
-                <span>Power</span>
-                <span>{Math.round(chargePower * 100)}%</span>
+              <div style={{ fontSize: 11, opacity: 0.68, textTransform: "uppercase", letterSpacing: 0.7 }}>
+                Lane Read
               </div>
+              <div style={{ marginTop: 6, fontSize: 14, lineHeight: 1.5 }}>{roundMessage}</div>
+            </div>
 
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "1fr auto auto",
+                gap: 12,
+                alignItems: "end",
+              }}
+            >
               <div
                 style={{
-                  marginTop: 8,
-                  height: 12,
-                  borderRadius: 999,
-                  overflow: "hidden",
-                  background: "rgba(255,255,255,0.10)",
-                  border: "1px solid rgba(255,255,255,0.08)",
+                  padding: "12px 14px",
+                  borderRadius: 14,
+                  background: "rgba(8,8,8,0.56)",
+                  border: "1px solid rgba(255,255,255,0.12)",
+                  backdropFilter: "blur(6px)",
                 }}
               >
                 <div
                   style={{
-                    width: `${Math.round(chargePower * 100)}%`,
-                    height: "100%",
-                    background:
-                      chargePower >= 0.8
-                        ? "linear-gradient(90deg, rgba(255,189,92,0.92), rgba(255,120,72,0.92))"
-                        : "linear-gradient(90deg, rgba(196,176,122,0.92), rgba(255,189,92,0.92))",
-                    transition: isCharging ? "none" : "width 140ms ease-out",
+                    display: "flex",
+                    justifyContent: "space-between",
+                    gap: 12,
+                    fontSize: 12,
+                    opacity: 0.76,
                   }}
-                />
+                >
+                  <span>Power</span>
+                  <span>{Math.round(chargePower * 100)}%</span>
+                </div>
+
+                <div
+                  style={{
+                    marginTop: 8,
+                    height: 12,
+                    borderRadius: 999,
+                    overflow: "hidden",
+                    background: "rgba(255,255,255,0.10)",
+                    border: "1px solid rgba(255,255,255,0.08)",
+                  }}
+                >
+                  <div
+                    style={{
+                      width: `${Math.round(chargePower * 100)}%`,
+                      height: "100%",
+                      background:
+                        chargePower >= 0.8
+                          ? "linear-gradient(90deg, rgba(255,189,92,0.92), rgba(255,120,72,0.92))"
+                          : "linear-gradient(90deg, rgba(196,176,122,0.92), rgba(255,189,92,0.92))",
+                      transition: isCharging ? "none" : "width 140ms ease-out",
+                    }}
+                  />
+                </div>
+
+                <div style={{ marginTop: 8, fontSize: 12, opacity: 0.7 }}>
+                  Aim is now separate from the throw button.
+                </div>
               </div>
 
-              <div style={{ marginTop: 8, fontSize: 12, opacity: 0.7 }}>
-                Move your pointer to aim high or low. Hold to build force, release to throw.
-              </div>
+              <button
+                type="button"
+                disabled={throwsLeft <= 0 || !!activeFlight}
+                onMouseDown={beginCharge}
+                onMouseUp={endCharge}
+                onMouseLeave={() => {
+                  if (isCharging) endCharge();
+                }}
+                onTouchStart={(e) => {
+                  e.preventDefault();
+                  beginCharge();
+                }}
+                onTouchEnd={(e) => {
+                  e.preventDefault();
+                  endCharge();
+                }}
+                style={{
+                  height: 56,
+                  padding: "0 18px",
+                  borderRadius: 14,
+                  border: "1px solid rgba(255,214,150,0.26)",
+                  background:
+                    throwsLeft <= 0 || !!activeFlight
+                      ? "rgba(255,255,255,0.08)"
+                      : "linear-gradient(180deg, rgba(122,78,38,0.96), rgba(84,52,28,0.96))",
+                  color: "rgba(255,247,233,0.96)",
+                  fontWeight: 900,
+                  cursor: throwsLeft <= 0 || !!activeFlight ? "not-allowed" : "pointer",
+                  boxShadow: throwsLeft <= 0 || !!activeFlight ? "none" : "0 16px 30px rgba(0,0,0,0.32)",
+                }}
+              >
+                {activeFlight ? "In Flight..." : isCharging ? "Release" : "Hold To Throw"}
+              </button>
+
+              <button
+                type="button"
+                onClick={onExit}
+                style={{
+                  height: 56,
+                  padding: "0 18px",
+                  borderRadius: 14,
+                  border: "1px solid rgba(255,255,255,0.14)",
+                  background: "rgba(10,10,10,0.52)",
+                  color: "rgba(255,247,233,0.92)",
+                  fontWeight: 800,
+                  cursor: "pointer",
+                }}
+              >
+                Back To Tavern
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div
+          style={{
+            display: "grid",
+            gap: 12,
+            alignContent: "start",
+          }}
+        >
+          <div
+            style={{
+              padding: 14,
+              borderRadius: 14,
+              background: "rgba(255,255,255,0.04)",
+              border: "1px solid rgba(255,255,255,0.08)",
+            }}
+          >
+            <div style={{ fontSize: 11, opacity: 0.68, textTransform: "uppercase", letterSpacing: 0.7 }}>
+              Aim Height
+            </div>
+            <div style={{ marginTop: 6, fontSize: 18, fontWeight: 900 }}>{aimPercent}%</div>
+          </div>
+
+          <div
+            style={{
+              padding: 14,
+              borderRadius: 14,
+              background: "rgba(255,255,255,0.04)",
+              border: "1px solid rgba(255,255,255,0.08)",
+              display: "grid",
+              gap: 12,
+              justifyItems: "center",
+            }}
+          >
+            <div style={{ fontSize: 11, opacity: 0.68, textTransform: "uppercase", letterSpacing: 0.7 }}>
+              Aim Control
             </div>
 
-            <button
-              type="button"
-              disabled={throwsLeft <= 0 || !!activeFlight}
-              onMouseDown={beginCharge}
-              onMouseUp={endCharge}
-              onMouseLeave={() => {
-                if (isCharging) endCharge();
-              }}
-              onTouchStart={(e) => {
-                e.preventDefault();
-                beginCharge();
-              }}
-              onTouchEnd={(e) => {
-                e.preventDefault();
-                endCharge();
-              }}
+            <input
+              type="range"
+              min={AIM_MIN}
+              max={AIM_MAX}
+              step={1}
+              value={aimOffsetY}
+              onChange={(e) => setAimOffsetY(Number(e.target.value))}
               style={{
-                height: 56,
-                padding: "0 18px",
-                borderRadius: 14,
-                border: "1px solid rgba(255,214,150,0.26)",
-                background:
-                  throwsLeft <= 0 || !!activeFlight
-                    ? "rgba(255,255,255,0.08)"
-                    : "linear-gradient(180deg, rgba(122,78,38,0.96), rgba(84,52,28,0.96))",
-                color: "rgba(255,247,233,0.96)",
-                fontWeight: 900,
-                cursor: throwsLeft <= 0 || !!activeFlight ? "not-allowed" : "pointer",
-                boxShadow: throwsLeft <= 0 || !!activeFlight ? "none" : "0 16px 30px rgba(0,0,0,0.32)",
-              }}
-            >
-              {activeFlight ? "In Flight..." : isCharging ? "Release" : "Hold To Throw"}
-            </button>
-
-            <button
-              type="button"
-              onClick={onExit}
-              style={{
-                height: 56,
-                padding: "0 18px",
-                borderRadius: 14,
-                border: "1px solid rgba(255,255,255,0.14)",
-                background: "rgba(10,10,10,0.52)",
-                color: "rgba(255,247,233,0.92)",
-                fontWeight: 800,
+                writingMode: "vertical-lr",
+                WebkitAppearance: "slider-vertical",
+                width: 28,
+                height: 240,
                 cursor: "pointer",
-              }}
-            >
-              Back To Tavern
-            </button>
+              } as React.CSSProperties}
+            />
+
+            <div style={{ fontSize: 12, opacity: 0.72, textAlign: "center", lineHeight: 1.5 }}>
+              Slide up or down to set the throw line before charging.
+            </div>
           </div>
         </div>
       </div>
