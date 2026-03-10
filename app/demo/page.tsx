@@ -9,6 +9,7 @@ import AmbientBackground from "./components/AmbientBackground";
 import InitialTableSection from "./components/InitialTableSection";
 import HeroOnboarding from "./components/HeroOnboarding";
 import PartySetupSection from "./components/PartySetupSection";
+import TavernHub from "./components/TavernHub";
 import GameplayViewport from "./components/GameplayViewport";
 
 import { anchorId, scrollToSection } from "./demoUtils";
@@ -225,8 +226,51 @@ export default function DemoPage() {
     scrollToSection(nextKey);
   }
 
-  const showChronicleOnly =
-    demo.presentationPhase === "chronicle";
+  function advancePreludeFlow() {
+    if (demo.presentationPhase === "chronicle") {
+      demo.setActiveSection("table");
+      queueMicrotask(() => scrollToSection("table"));
+      return;
+    }
+
+    if (!demo.showInitialTable) {
+      demo.setActiveSection("table");
+      queueMicrotask(() => scrollToSection("table"));
+      return;
+    }
+
+    if (!demo.tableAccepted) {
+      demo.setActiveSection("table");
+      queueMicrotask(() => scrollToSection("table"));
+      return;
+    }
+
+    if (!demo.partyCanonicalExists || !demo.partyLocked) {
+      demo.setActiveSection("party");
+      queueMicrotask(() => scrollToSection("party"));
+      return;
+    }
+
+    const tavernAnchor = document.getElementById("echoes-tavern-anchor");
+    if (tavernAnchor) {
+      tavernAnchor.scrollIntoView({ behavior: "smooth", block: "start" });
+      return;
+    }
+
+    demo.setActiveSection("party");
+    queueMicrotask(() => scrollToSection("party"));
+  }
+
+  const showChronicleOnly = demo.presentationPhase === "chronicle";
+
+  const shouldShowTavern =
+    !showChronicleOnly &&
+    demo.showInitialTable &&
+    demo.tableAccepted &&
+    demo.partyCanonicalExists &&
+    demo.partyLocked &&
+    !demo.showGameplay &&
+    !demo.enteredDungeon;
 
   return (
     <AmbientBackground>
@@ -439,7 +483,7 @@ export default function DemoPage() {
                       demo.setActiveSection("mode");
                       demo.setPartyDraft((prev: any) => prev ?? null);
                     }}
-                    onEnter={demo.enterDungeon}
+                    onEnter={advancePreludeFlow}
                     canEnter={demo.dmMode !== null}
                     heroImageSrc={demo.HERO_IMAGE_SRC}
                     heroImageOk={demo.heroImageOk}
@@ -469,7 +513,7 @@ export default function DemoPage() {
                       demo.setActiveSection("mode");
                       demo.setPartyDraft((prev: any) => prev ?? null);
                     }}
-                    onEnter={demo.enterDungeon}
+                    onEnter={advancePreludeFlow}
                     canEnter={demo.dmMode !== null}
                     heroImageSrc={demo.HERO_IMAGE_SRC}
                     heroImageOk={demo.heroImageOk}
@@ -488,7 +532,10 @@ export default function DemoPage() {
             )}
 
             {demo.showInitialTable && (
-              <div id={anchorId("table")} style={{ scrollMarginTop: 90, marginTop: showChronicleOnly ? 0 : 16 }}>
+              <div
+                id={anchorId("table")}
+                style={{ scrollMarginTop: 90, marginTop: showChronicleOnly ? 0 : 16 }}
+              >
                 <InitialTableSection
                   dmMode={demo.dmMode}
                   initialTable={demo.initialTable}
@@ -519,6 +566,23 @@ export default function DemoPage() {
                   unlockedPartySlots={demo.progression.party.unlockedSlots}
                   maxPartySlots={demo.progression.party.maxSlots}
                   completionRequiresFullFellowship={demo.progression.campaign.completionRequiresFullParty}
+                />
+              </div>
+            )}
+
+            {shouldShowTavern && (
+              <div id="echoes-tavern-anchor" style={{ scrollMarginTop: 90, marginTop: 16 }}>
+                <TavernHub
+                  onBeginDescent={() => {
+                    demo.enterDungeon();
+                    demo.setGameplayFocusStep("pressure");
+                    queueMicrotask(() => {
+                      const gameplayAnchor = document.getElementById(anchorId("pressure"));
+                      if (gameplayAnchor) {
+                        gameplayAnchor.scrollIntoView({ behavior: "smooth", block: "start" });
+                      }
+                    });
+                  }}
                 />
               </div>
             )}
