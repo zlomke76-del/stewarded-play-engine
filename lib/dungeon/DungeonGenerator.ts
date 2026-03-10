@@ -35,6 +35,12 @@ import type {
   DungeonRoom,
 } from "@/lib/dungeon/FloorState";
 import {
+  chooseWeightedDungeonTrap,
+  type DungeonTheme,
+  type DungeonTrapDefinition,
+  type DungeonTrapRoomType,
+} from "@/lib/dungeon/traps/DungeonTrapRegistry";
+import {
   getCacheGuardCandidatesForTheme,
   getEnemiesByEncounterTheme,
   getKeyCarrierCandidatesForTheme,
@@ -90,7 +96,7 @@ function pickManyUnique<T>(rng: () => number, items: readonly T[], count: number
   return out;
 }
 
-function makeFloorId(floorIndex: number) {
+function makeFloorId(floorIndex: number): FloorId {
   return `floor_${floorIndex + 1}`;
 }
 
@@ -154,7 +160,7 @@ function defaultFeaturesForRoomType(roomType: RoomType) {
   const taxonomy = ROOM_TYPE_DEFINITIONS[roomType];
   return taxonomy.defaultFeatures.map((kind) => ({
     kind,
-    discoveredByDefault: kind === "stairs" ? false : false,
+    discoveredByDefault: false,
     note: null,
   }));
 }
@@ -256,14 +262,130 @@ function buildConnectionsForRoomPlan(
   return connections;
 }
 
+function mapFloorThemeToTrapTheme(theme: DungeonFloorTheme): DungeonTheme {
+  switch (theme) {
+    case "ruined_outpost":
+      return "abandoned_keep";
+    case "forgotten_crypt":
+      return "forgotten_catacomb";
+    case "cult_temple":
+      return "cult_temple";
+    case "arcane_forge":
+      return "dwarven_ruin";
+    case "ancient_vault":
+      return "burial_tomb";
+    default:
+      return "generic_stone_dungeon";
+  }
+}
+
+function mapRoomTypeToTrapRoomType(roomType: RoomType): DungeonTrapRoomType | null {
+  switch (roomType) {
+    case "entrance":
+      return "antechamber";
+    case "corridor":
+      return "corridor";
+    case "hall":
+      return "hall";
+    case "passage":
+      return "passage";
+    case "chokepoint":
+      return "chokepoint";
+    case "chamber":
+      return "chamber";
+    case "crypt":
+      return "crypt";
+    case "tomb":
+      return "tomb";
+    case "ossuary":
+      return "ossuary";
+    case "shrine":
+      return "shrine";
+    case "ritual_chamber":
+      return "ritual";
+    case "treasure_room":
+      return "treasure";
+    case "relic_vault":
+      return "vault";
+    case "armory":
+      return "armory";
+    case "prison":
+      return "prison";
+    case "stairs_up":
+    case "stairs_down":
+      return "stair";
+    default:
+      return null;
+  }
+}
+
+function canRoomHostTrap(roomType: RoomType): boolean {
+  switch (roomType) {
+    case "entrance":
+    case "stairs_up":
+    case "stairs_down":
+      return false;
+    default:
+      return true;
+  }
+}
+
+function buildTrapStoryHint(trap: DungeonTrapDefinition): string {
+  return [
+    `trap:${trap.id}`,
+    `name:${trap.name}`,
+    `danger:${trap.danger}`,
+    `asset:${trap.assetPath}`,
+  ].join(" | ");
+}
+
+function chooseTrapForRoom(
+  rng: () => number,
+  roomType: RoomType,
+  theme: DungeonFloorTheme
+): DungeonTrapDefinition | null {
+  if (!canRoomHostTrap(roomType)) return null;
+
+  const mappedRoomType = mapRoomTypeToTrapRoomType(roomType);
+  const mappedTheme = mapFloorThemeToTrapTheme(theme);
+
+  if (!mappedRoomType) return null;
+
+  // Keep trap density meaningful rather than saturating every room.
+  const trapChance =
+    mappedRoomType === "corridor" ||
+    mappedRoomType === "hall" ||
+    mappedRoomType === "chokepoint" ||
+    mappedRoomType === "passage"
+      ? 0.55
+      : mappedRoomType === "shrine" || mappedRoomType === "ritual"
+      ? 0.45
+      : mappedRoomType === "treasure" || mappedRoomType === "vault"
+      ? 0.5
+      : 0.28;
+
+  if (rng() > trapChance) return null;
+
+  return chooseWeightedDungeonTrap(
+    {
+      roomType: mappedRoomType,
+      theme: mappedTheme,
+    },
+    rng
+  );
+}
+
 function buildRoomsForPlan(
+  rng: () => number,
   floorId: FloorId,
   floorIndex: number,
+  floorTheme: DungeonFloorTheme,
   roomPlan: RoomType[]
 ): DungeonRoom[] {
   return roomPlan.map((roomType, roomIndex) => {
     const roomId = makeRoomId(floorIndex, roomIndex);
     const encounterSeed = inferEncounterSeedForRoom(roomType);
+    const trap = chooseTrapForRoom(rng, roomType, floorTheme);
 
     const lootHint =
       roomType === "relic_vault"
@@ -274,6 +396,26 @@ function buildRoomsForPlan(
         ? "supplies"
         : null;
 
+    const features = defaultFeaturesForRoomType(roomType).map((feature) => {
+      if (!trap) return feature;
+      if (feature.kind !== "hazard") return feature;
+
+      return {
+        ...feature,
+        note: trap.id,
+      };
+    });
+
+    const storyHintParts: string[] = [];
+
+    if (trap) {
+      storyHintParts.push(buildTrapStoryHint(trap));
+    }
+
+    if (lootHint) {
+      storyHintParts.push(`loot:${lootHint}`);
+    }
+
     return {
       id: roomId,
       floorId,
@@ -281,10 +423,10 @@ function buildRoomsForPlan(
       label: buildRoomLabel(roomType),
       discoverable: roomIndex !== 0,
       discoveredByDefault: roomIndex === 0,
-      features: defaultFeaturesForRoomType(roomType),
+      features,
       encounterSeed,
       lootHint,
-      storyHint: null,
+      storyHint: storyHintParts.length > 0 ? storyHintParts.join(" || ") : null,
     };
   });
 }
@@ -304,7 +446,7 @@ function buildFloor(
     floorIndex === floorCount - 1
   );
 
-  const rooms = buildRoomsForPlan(floorId, floorIndex, roomPlan);
+  const rooms = buildRoomsForPlan(rng, floorId, floorIndex, theme, roomPlan);
   const roomIds = rooms.map((r) => r.id);
   const roomTypes = rooms.map((r) => r.roomType);
   const connections = buildConnectionsForRoomPlan(floorIndex, roomIds, roomTypes);
