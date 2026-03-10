@@ -94,14 +94,20 @@ export type CombatEncounterContext = {
 
 type MusicMode = "none" | "intro" | "ambient" | "combat";
 
-const STARTER_CLASS_PLANS: Record<1 | 2 | 3 | 4 | 5 | 6, readonly string[]> = {
-  1: ["Warrior"],
-  2: ["Warrior", "Cleric"],
-  3: ["Warrior", "Rogue", "Mage"],
-  4: ["Warrior", "Rogue", "Mage", "Cleric"],
-  5: ["Warrior", "Rogue", "Mage", "Cleric", "Ranger"],
-  6: ["Warrior", "Rogue", "Mage", "Cleric", "Ranger", "Paladin"],
+type ProgressionState = {
+  heroLevel: number;
+  heroUpgradePoints: number;
+  heroUpgrades: string[];
+  unlockedPartySlots: number;
+  activePartySize: number;
+  maxPartySlots: number;
+  recruitedCompanionIds: string[];
+  fullFellowshipAssembled: boolean;
+  completionRequiresFullFellowship: boolean;
+  campaignCompletionBlocked: boolean;
 };
+
+const SOLO_STARTER_CLASS: "Warrior" = "Warrior";
 
 const STARTER_SPECIES_PLAN = [
   "Human",
@@ -134,10 +140,8 @@ export function displayName(m: PartyMember, i1: number) {
   return n.length > 0 ? n : `Player ${i1}`;
 }
 
-function buildStarterMember(slotIndex: number, partyCount: number): PartyMember {
-  const count = clampInt(partyCount, 1, 6) as 1 | 2 | 3 | 4 | 5 | 6;
-  const classPlan = STARTER_CLASS_PLANS[count];
-  const className = classPlan[Math.min(slotIndex, classPlan.length - 1)] ?? "Warrior";
+function buildStarterMember(slotIndex: number): PartyMember {
+  const className = SOLO_STARTER_CLASS;
   const species = STARTER_SPECIES_PLAN[slotIndex % STARTER_SPECIES_PLAN.length] ?? "Human";
   const portrait = STARTER_PORTRAIT_PLAN[slotIndex % STARTER_PORTRAIT_PLAN.length] ?? "Male";
 
@@ -210,11 +214,10 @@ function buildStarterMember(slotIndex: number, partyCount: number): PartyMember 
   };
 }
 
-function defaultParty(count: number): PartyDeclaredPayload {
-  const n = clampInt(count, 1, 6);
+function defaultParty(): PartyDeclaredPayload {
   return {
     partyId: crypto.randomUUID(),
-    members: Array.from({ length: n }, (_, i) => buildStarterMember(i, n)),
+    members: [buildStarterMember(0)],
   };
 }
 
@@ -224,7 +227,11 @@ function deriveLatestParty(events: readonly any[]): PartyDeclaredPayload | null 
     if (e?.type !== "PARTY_DECLARED") continue;
     const p = e?.payload as PartyDeclaredPayload;
     if (!p || !Array.isArray(p.members)) continue;
-    return p;
+
+    return {
+      ...p,
+      members: p.members.slice(0, 1),
+    };
   }
   return null;
 }
@@ -413,13 +420,44 @@ export function useDemoRuntime() {
       return;
     }
 
-    setPartyDraft((prev) => prev ?? defaultParty(4));
+    setPartyDraft((prev) => {
+      if (prev) {
+        return {
+          ...prev,
+          members: (prev.members ?? []).slice(0, 1).length > 0
+            ? (prev.members ?? []).slice(0, 1)
+            : defaultParty().members,
+        };
+      }
+
+      return defaultParty();
+    });
   }, [dmMode, partyCanonical?.partyId]);
 
   const partyEffective: PartyDeclaredPayload | null = partyCanonical ?? partyDraft;
-  const partyMembers = partyEffective?.members ?? [];
-  const partySize = clampInt(partyMembers.length || 4, 1, 6);
+  const partyMembers = (partyEffective?.members ?? []).slice(0, 1);
+  const partySize = 1;
   const effectivePlayerNames = useMemo(() => partyMembers.map((m, idx) => displayName(m, idx + 1)), [partyMembers]);
+
+  const progressionState: ProgressionState = useMemo(() => {
+    const activePartySize = Math.max(1, Math.min(6, partyMembers.length || 1));
+    const maxPartySlots = 6;
+    const unlockedPartySlots = 1;
+    const fullFellowshipAssembled = activePartySize >= maxPartySlots;
+
+    return {
+      heroLevel: 1,
+      heroUpgradePoints: 0,
+      heroUpgrades: [],
+      unlockedPartySlots,
+      activePartySize,
+      maxPartySlots,
+      recruitedCompanionIds: [],
+      fullFellowshipAssembled,
+      completionRequiresFullFellowship: true,
+      campaignCompletionBlocked: !fullFellowshipAssembled,
+    };
+  }, [partyMembers.length]);
 
   useEffect(() => {
     if (!partyMembers.length) {
@@ -614,30 +652,15 @@ export function useDemoRuntime() {
     }
   }, [enteredDungeon, tableAccepted, combatActive]);
 
-  function setPartySize(nextCount: number) {
-    const n = clampInt(nextCount, 1, 6);
-
-    if (!partyDraft && !partyCanonical) {
-      setPartyDraft(defaultParty(n));
-      return;
-    }
-
+  function setPartySize(_nextCount: number) {
     setPartyDraft((prev) => {
-      const base = prev ?? defaultParty(n);
-      const members = [...(base.members || [])];
+      const base = prev ?? defaultParty();
+      const first = (base.members ?? [buildStarterMember(0)])[0] ?? buildStarterMember(0);
 
-      if (members.length === n) return base;
-
-      if (members.length > n) {
-        return { ...base, members: members.slice(0, n) };
-      }
-
-      const startIdx = members.length;
-      for (let i = startIdx; i < n; i++) {
-        members.push(buildStarterMember(i, n));
-      }
-
-      return { ...base, members };
+      return {
+        ...base,
+        members: [{ ...first }],
+      };
     });
   }
 
@@ -647,21 +670,18 @@ export function useDemoRuntime() {
     setPartyDraft((prev) => {
       if (!prev) return prev;
 
-      const used = new Set<string>(prev.members.map((m) => normalizeName(m.name || "").toLowerCase()).filter(Boolean));
-      const next: PartyDeclaredPayload = { ...prev, members: prev.members.map((m) => ({ ...m })) };
+      const next: PartyDeclaredPayload = {
+        ...prev,
+        members: (prev.members ?? []).slice(0, 1).map((m) => ({ ...m })),
+      };
 
-      for (let i = 0; i < next.members.length; i++) {
-        const current = normalizeName(next.members[i].name || "");
-        if (current) continue;
+      if (!next.members[0]) {
+        next.members = [buildStarterMember(0)];
+      }
 
-        let tries = 0;
-        let name = randomName();
-        while (used.has(name.toLowerCase()) && tries < 12) {
-          name = randomName();
-          tries++;
-        }
-        used.add(name.toLowerCase());
-        next.members[i].name = name;
+      const current = normalizeName(next.members[0].name || "");
+      if (!current) {
+        next.members[0].name = randomName();
       }
 
       return next;
@@ -672,30 +692,30 @@ export function useDemoRuntime() {
     if (!partyDraft) return;
     if (partyLocked) return;
 
+    const onlyMember = (partyDraft.members || [buildStarterMember(0)]).slice(0, 1);
+
     const cleaned: PartyDeclaredPayload = {
       partyId: partyDraft.partyId || crypto.randomUUID(),
-      members: (partyDraft.members || [])
-        .slice(0, 6)
-        .map((m, idx) => {
-          const i1 = idx + 1;
-          const id = normalizeName(m.id || `player_${i1}`) || `player_${i1}`;
-          const hpMax = safeInt(m.hpMax, 12, 1, 999);
-          const hpCurrent = safeInt(m.hpCurrent, hpMax, 0, 999);
+      members: onlyMember.map((m, idx) => {
+        const i1 = idx + 1;
+        const id = normalizeName(m.id || `player_${i1}`) || `player_${i1}`;
+        const hpMax = safeInt(m.hpMax, 12, 1, 999);
+        const hpCurrent = safeInt(m.hpCurrent, hpMax, 0, 999);
 
-          return {
-            id,
-            name: normalizeName(m.name || ""),
-            species: String(m.species || "").trim() || "Human",
-            className: normalizeName(m.className || ""),
-            portrait: (m as any).portrait === "Female" ? "Female" : "Male",
-            skills: Array.isArray((m as any).skills) ? (m as any).skills : [],
-            traits: Array.isArray((m as any).traits) ? (m as any).traits : [],
-            ac: safeInt(m.ac, 14, 1, 40),
-            hpMax,
-            hpCurrent: Math.min(hpCurrent, hpMax),
-            initiativeMod: safeInt(m.initiativeMod, 1, -10, 20),
-          };
-        }),
+        return {
+          id,
+          name: normalizeName(m.name || ""),
+          species: String(m.species || "").trim() || "Human",
+          className: normalizeName(m.className || "") || SOLO_STARTER_CLASS,
+          portrait: (m as any).portrait === "Female" ? "Female" : "Male",
+          skills: Array.isArray((m as any).skills) ? (m as any).skills : [],
+          traits: Array.isArray((m as any).traits) ? (m as any).traits : [],
+          ac: safeInt(m.ac, 14, 1, 40),
+          hpMax,
+          hpCurrent: Math.min(hpCurrent, hpMax),
+          initiativeMod: safeInt(m.initiativeMod, 1, -10, 20),
+        };
+      }),
     };
 
     setState((prev) =>
@@ -1197,9 +1217,9 @@ export function useDemoRuntime() {
     setActiveSection("canon");
   }
 
-  const canEnterDungeon = dmMode !== null && partySize > 0;
+  const canEnterDungeon = dmMode !== null;
   const partyCanonicalExists = !!partyCanonical;
-  const showInitialTable = enteredDungeon && dmMode !== null && partySize > 0;
+  const showInitialTable = enteredDungeon && dmMode !== null;
 
   const chapterState = useMemo(() => {
     const doneMode = dmMode !== null;
@@ -1459,6 +1479,14 @@ export function useDemoRuntime() {
     partyMembers,
     partySize,
     effectivePlayerNames,
+
+    progressionState,
+    unlockedPartySlots: progressionState.unlockedPartySlots,
+    activePartySize: progressionState.activePartySize,
+    maxPartySlots: progressionState.maxPartySlots,
+    fullFellowshipAssembled: progressionState.fullFellowshipAssembled,
+    completionRequiresFullFellowship: progressionState.completionRequiresFullFellowship,
+    campaignCompletionBlocked: progressionState.campaignCompletionBlocked,
 
     dungeon,
     location,
