@@ -38,6 +38,16 @@ import {
   runRoomPuzzleAttempt as runRoomPuzzleAttemptRuntime,
 } from "@/lib/dungeon/puzzles/PuzzleRuntime";
 import type { PuzzleCanonRecord, PuzzleResolution } from "@/lib/dungeon/puzzles/PuzzleState";
+import {
+  deriveProgressionEvolution,
+  type SessionEvent as ProgressionSessionEvent,
+} from "@/lib/progression/ProgressionEvolution";
+import type { ProgressionState as CampaignProgressionState } from "@/lib/progression/ProgressionTypes";
+import {
+  formatCompactProgressionBanner,
+  formatProgressionInspectorReport,
+  inspectProgressionState,
+} from "@/lib/debug/ProgressionInspector";
 import type { DMMode, DemoSectionId, DiceMode, InitialTable, RollSource } from "../demoTypes";
 import {
   clampInt,
@@ -100,19 +110,6 @@ export type CombatEncounterContext = {
 };
 
 type MusicMode = "none" | "intro" | "ambient" | "combat";
-
-type ProgressionState = {
-  heroLevel: number;
-  heroUpgradePoints: number;
-  heroUpgrades: string[];
-  unlockedPartySlots: number;
-  activePartySize: number;
-  maxPartySlots: number;
-  recruitedCompanionIds: string[];
-  fullFellowshipAssembled: boolean;
-  completionRequiresFullFellowship: boolean;
-  campaignCompletionBlocked: boolean;
-};
 
 const SOLO_STARTER_CLASS: "Warrior" = "Warrior";
 
@@ -517,25 +514,42 @@ export function useDemoRuntime() {
   const partySize = 1;
   const effectivePlayerNames = useMemo(() => partyMembers.map((m, idx) => displayName(m, idx + 1)), [partyMembers]);
 
-  const progressionState: ProgressionState = useMemo(() => {
-    const activePartySize = Math.max(1, Math.min(6, partyMembers.length || 1));
-    const maxPartySlots = 6;
-    const unlockedPartySlots = 1;
-    const fullFellowshipAssembled = activePartySize >= maxPartySlots;
+  const progressionEvents = useMemo(
+    () => state.events as unknown as readonly ProgressionSessionEvent[],
+    [state.events]
+  );
 
-    return {
-      heroLevel: 1,
-      heroUpgradePoints: 0,
-      heroUpgrades: [],
-      unlockedPartySlots,
-      activePartySize,
-      maxPartySlots,
-      recruitedCompanionIds: [],
-      fullFellowshipAssembled,
-      completionRequiresFullFellowship: true,
-      campaignCompletionBlocked: !fullFellowshipAssembled,
-    };
-  }, [partyMembers.length]);
+  const progressionState: CampaignProgressionState = useMemo(() => {
+    return deriveProgressionEvolution({
+      events: progressionEvents,
+    });
+  }, [progressionEvents]);
+
+  const progressionInspectorSummary = useMemo(() => {
+    return inspectProgressionState({
+      state: progressionState,
+      events: progressionEvents,
+    });
+  }, [progressionState, progressionEvents]);
+
+  const progressionInspectorReport = useMemo(() => {
+    return formatProgressionInspectorReport({
+      state: progressionState,
+      events: progressionEvents,
+    });
+  }, [progressionState, progressionEvents]);
+
+  const progressionInspectorBanner = useMemo(() => {
+    return formatCompactProgressionBanner({
+      state: progressionState,
+    });
+  }, [progressionState]);
+
+  useEffect(() => {
+    if (process.env.NODE_ENV !== "development") return;
+    // eslint-disable-next-line no-console
+    console.debug(progressionInspectorReport);
+  }, [progressionInspectorReport]);
 
   useEffect(() => {
     if (!partyMembers.length) {
@@ -1700,37 +1714,64 @@ export function useDemoRuntime() {
     effectivePlayerNames,
 
     progressionState,
+    progressionInspectorSummary,
+    progressionInspectorReport,
+    progressionInspectorBanner,
     progression: {
       hero: {
-        level: progressionState.heroLevel,
-        upgradePoints: progressionState.heroUpgradePoints,
-        upgrades: progressionState.heroUpgrades,
+        level: progressionState.hero.level,
+        experience: progressionState.hero.experience,
+        legacyRank: progressionState.hero.legacyRank,
+        upgradePoints: progressionState.hero.upgradePoints,
+        upgrades: progressionState.hero.upgrades,
+        masteryUnlocked: progressionState.hero.masteryUnlocked,
       },
       party: {
-        activeSlots: progressionState.activePartySize,
-        unlockedSlots: progressionState.unlockedPartySlots,
-        maxSlots: progressionState.maxPartySlots,
+        activeSlots: progressionState.party.activeSlots,
+        unlockedSlots: progressionState.party.unlockedSlots,
+        maxSlots: progressionState.party.maxSlots,
+        livingMembers: progressionState.party.livingMembers,
+        fallenMembers: progressionState.party.fallenMembers,
+      },
+      inventory: {
+        totalSlots: progressionState.inventory.totalSlots,
+        usedSlots: progressionState.inventory.usedSlots,
+        freeSlots: progressionState.inventory.freeSlots,
       },
       campaign: {
-        fullFellowshipAssembled: progressionState.fullFellowshipAssembled,
+        fullFellowshipAssembled: progressionState.campaign.fullFellowshipAssembled,
         completionRequiresFullFellowship:
-          progressionState.completionRequiresFullFellowship,
+          progressionState.campaign.completionRequiresFullFellowship,
         completionRequiresFullParty:
-          progressionState.completionRequiresFullFellowship,
-        completionBlocked: progressionState.campaignCompletionBlocked,
+          progressionState.campaign.completionRequiresFullFellowship,
+        completionBlocked: progressionState.campaign.completionBlocked,
+        cryptFullyCleared: progressionState.campaign.cryptFullyCleared,
+        finalDescentUnlocked: progressionState.campaign.finalDescentUnlocked,
       },
       companions: {
-        recruited: progressionState.recruitedCompanionIds,
+        recruited: progressionState.companions.recruited,
+        available: progressionState.companions.available,
+        declined: progressionState.companions.declined,
+        lost: progressionState.companions.lost,
+        extinctCombinations: progressionState.companions.extinctCombinations,
+      },
+      relics: {
+        equippedByHero: progressionState.relics.equippedByHero,
+        equippedByCompanion: progressionState.relics.equippedByCompanion,
+        stored: progressionState.relics.storedRelics,
+        carried: progressionState.relics.carriedRelics,
+        lost: progressionState.relics.lostRelics,
+        activePool: progressionState.relics.activePool,
       },
     },
 
-    unlockedPartySlots: progressionState.unlockedPartySlots,
-    activePartySize: progressionState.activePartySize,
-    maxPartySlots: progressionState.maxPartySlots,
-    fullFellowshipAssembled: progressionState.fullFellowshipAssembled,
+    unlockedPartySlots: progressionState.party.unlockedSlots,
+    activePartySize: progressionState.party.activeSlots,
+    maxPartySlots: progressionState.party.maxSlots,
+    fullFellowshipAssembled: progressionState.campaign.fullFellowshipAssembled,
     completionRequiresFullFellowship:
-      progressionState.completionRequiresFullFellowship,
-    campaignCompletionBlocked: progressionState.campaignCompletionBlocked,
+      progressionState.campaign.completionRequiresFullFellowship,
+    campaignCompletionBlocked: progressionState.campaign.completionBlocked,
 
     dungeon,
     location,
