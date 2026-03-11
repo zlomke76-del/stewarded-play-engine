@@ -97,17 +97,6 @@ function ProgressionBanner(props: { demo: any }) {
       }}
     >
       <div
-        aria-hidden
-        style={{
-          position: "absolute",
-          inset: 0,
-          background:
-            "linear-gradient(135deg, rgba(255,255,255,0.04), transparent 22%, transparent 78%, rgba(255,255,255,0.03))",
-          pointerEvents: "none",
-        }}
-      />
-
-      <div
         style={{
           position: "relative",
           display: "grid",
@@ -305,13 +294,81 @@ function ProgressionBanner(props: { demo: any }) {
   );
 }
 
+function SceneAdvanceBar(props: {
+  label: string;
+  hint?: string;
+  onClick: () => void;
+}) {
+  const { label, hint, onClick } = props;
+
+  return (
+    <div
+      style={{
+        display: "flex",
+        justifyContent: "space-between",
+        alignItems: "center",
+        gap: 12,
+        flexWrap: "wrap",
+        padding: "14px 16px",
+        borderTop: "1px solid rgba(255,255,255,0.06)",
+        background:
+          "linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01))",
+      }}
+    >
+      <div style={{ display: "grid", gap: 4 }}>
+        <div
+          style={{
+            fontSize: 11,
+            letterSpacing: 0.8,
+            textTransform: "uppercase",
+            opacity: 0.58,
+          }}
+        >
+          Next Step
+        </div>
+        {hint ? (
+          <div
+            style={{
+              fontSize: 12,
+              lineHeight: 1.5,
+              color: "rgba(228,232,240,0.72)",
+            }}
+          >
+            {hint}
+          </div>
+        ) : null}
+      </div>
+
+      <button
+        type="button"
+        onClick={onClick}
+        style={{
+          padding: "11px 14px",
+          borderRadius: 12,
+          border: "1px solid rgba(214,188,120,0.24)",
+          background:
+            "linear-gradient(180deg, rgba(214,188,120,0.16), rgba(214,188,120,0.06))",
+          color: "rgba(245,236,216,0.96)",
+          fontWeight: 800,
+          cursor: "pointer",
+          boxShadow: "0 10px 24px rgba(0,0,0,0.18)",
+          whiteSpace: "nowrap",
+        }}
+      >
+        {label}
+      </button>
+    </div>
+  );
+}
+
 function SceneFrame(props: {
   title: string;
   eyebrow: string;
   description: string;
   children: React.ReactNode;
+  footer?: React.ReactNode;
 }) {
-  const { title, eyebrow, description, children } = props;
+  const { title, eyebrow, description, children, footer } = props;
 
   return (
     <div
@@ -370,6 +427,7 @@ function SceneFrame(props: {
       </div>
 
       <div style={{ padding: 16 }}>{children}</div>
+      {footer ? footer : null}
     </div>
   );
 }
@@ -391,27 +449,13 @@ function PuzzleRoomPanel(props: {
   const puzzleResult =
     demo.puzzleResolution ?? demo.activePuzzleResolution ?? null;
 
-  const canRunPuzzle =
-    typeof demo.runRoomPuzzleAttempt === "function" ||
-    typeof demo.runActivePuzzleAttempt === "function";
-
-  const title = activePuzzle?.title ?? activePuzzle?.label ?? "Puzzle Chamber";
-  const description =
-    activePuzzle?.description ??
-    activePuzzle?.shortDescription ??
-    "This chamber holds a deterministic trial.";
-  const prompt =
-    activePuzzle?.prompt ?? "Describe how your hero attempts the puzzle.";
-  const hint = activePuzzle?.hint ?? null;
-  const puzzleId = activePuzzle?.puzzleId ?? null;
-
   if (!activePuzzle) return null;
 
   return (
     <div id={anchorId("puzzle")} style={{ scrollMarginTop: 90 }}>
       <SceneFrame
         eyebrow="Chamber Trial"
-        title={title}
+        title={activePuzzle?.title ?? activePuzzle?.label ?? "Puzzle Chamber"}
         description="The trial is now the entire focal point. Solve it before the route regains the stage."
       >
         <div style={{ display: "grid", gap: 14 }}>
@@ -428,24 +472,14 @@ function PuzzleRoomPanel(props: {
           >
             <div
               style={{
-                fontSize: 11,
-                letterSpacing: 0.9,
-                textTransform: "uppercase",
-                opacity: 0.58,
-              }}
-            >
-              Puzzle Room
-              {puzzleId ? ` · ${String(puzzleId).replaceAll("_", " ")}` : ""}
-            </div>
-
-            <div
-              style={{
                 fontSize: 16,
                 lineHeight: 1.65,
                 color: "rgba(244, 238, 225, 0.96)",
               }}
             >
-              {description}
+              {activePuzzle?.description ??
+                activePuzzle?.shortDescription ??
+                "This chamber holds a deterministic trial."}
             </div>
 
             <div
@@ -468,10 +502,12 @@ function PuzzleRoomPanel(props: {
               >
                 Prompt
               </div>
-              <div style={{ lineHeight: 1.6 }}>{prompt}</div>
+              <div style={{ lineHeight: 1.6 }}>
+                {activePuzzle?.prompt ?? "Describe how your hero attempts the puzzle."}
+              </div>
             </div>
 
-            {hint ? (
+            {activePuzzle?.hint ? (
               <div
                 style={{
                   padding: "11px 13px",
@@ -483,7 +519,7 @@ function PuzzleRoomPanel(props: {
                   lineHeight: 1.55,
                 }}
               >
-                <strong style={{ fontWeight: 700 }}>Hint:</strong> {hint}
+                <strong style={{ fontWeight: 700 }}>Hint:</strong> {activePuzzle.hint}
               </div>
             ) : null}
           </div>
@@ -536,97 +572,18 @@ function PuzzleRoomPanel(props: {
             >
               <div
                 style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  gap: 12,
-                  flexWrap: "wrap",
+                  fontSize: 11,
+                  letterSpacing: 0.8,
+                  textTransform: "uppercase",
+                  opacity: 0.58,
                 }}
               >
-                <div
-                  style={{
-                    fontSize: 11,
-                    letterSpacing: 0.8,
-                    textTransform: "uppercase",
-                    opacity: 0.58,
-                  }}
-                >
-                  Resolution
-                </div>
-                <div
-                  style={{
-                    fontSize: 11,
-                    fontWeight: 800,
-                    letterSpacing: 0.8,
-                    textTransform: "uppercase",
-                    color:
-                      puzzleResult.success === true
-                        ? "rgba(165, 225, 178, 0.94)"
-                        : "rgba(235, 173, 173, 0.94)",
-                  }}
-                >
-                  {puzzleResult.success === true ? "Success" : "Failure"}
-                </div>
+                Resolution
               </div>
 
               {puzzleResult.summary ? (
                 <div style={{ lineHeight: 1.65, fontWeight: 700 }}>
                   {puzzleResult.summary}
-                </div>
-              ) : null}
-
-              {Array.isArray(puzzleResult.narration) &&
-              puzzleResult.narration.length > 0 ? (
-                <div style={{ display: "grid", gap: 8 }}>
-                  {puzzleResult.narration.map((line: string, idx: number) => (
-                    <p key={`${idx}-${line.slice(0, 24)}`} style={{ margin: 0, lineHeight: 1.7 }}>
-                      {line}
-                    </p>
-                  ))}
-                </div>
-              ) : null}
-
-              {Array.isArray(puzzleResult.effects) &&
-              puzzleResult.effects.length > 0 ? (
-                <div style={{ display: "grid", gap: 8 }}>
-                  <div
-                    style={{
-                      fontSize: 11,
-                      letterSpacing: 0.7,
-                      textTransform: "uppercase",
-                      opacity: 0.58,
-                    }}
-                  >
-                    Effects
-                  </div>
-
-                  <div style={{ display: "grid", gap: 8 }}>
-                    {puzzleResult.effects.map((effect: any, idx: number) => (
-                      <div
-                        key={`${idx}-${effect.kind ?? "effect"}`}
-                        style={{
-                          padding: "10px 12px",
-                          borderRadius: 12,
-                          background: "rgba(255,255,255,0.04)",
-                          border: "1px solid rgba(255,255,255,0.08)",
-                          lineHeight: 1.55,
-                        }}
-                      >
-                        <div style={{ fontWeight: 700, marginBottom: 2 }}>
-                          {effect.label ?? effect.kind ?? "Effect"}
-                        </div>
-                        <div style={{ opacity: 0.84 }}>
-                          {effect.description ?? "A puzzle effect was applied."}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ) : null}
-
-              {!canRunPuzzle ? (
-                <div style={{ fontSize: 12, opacity: 0.64, lineHeight: 1.5 }}>
-                  Puzzle runtime is not connected yet. The chamber presentation is
-                  active, but puzzle submission still needs runtime wiring.
                 </div>
               ) : null}
             </div>
@@ -703,19 +660,39 @@ export default function GameplayViewport({ demo }: Props) {
     };
   }, [activeScene, demo.currentRoomTitle, hasPuzzleRoom]);
 
+  function advanceToMap() {
+    demo.setGameplayFocusStep("map");
+    demo.setActiveSection("map");
+  }
+
+  function advanceToPuzzleOrAction() {
+    if (hasPuzzleRoom) {
+      demo.setGameplayFocusStep("puzzle");
+      demo.setActiveSection("puzzle");
+    } else {
+      demo.setGameplayFocusStep("action");
+      demo.setActiveSection("action");
+    }
+  }
+
+  function advanceToAction() {
+    demo.setGameplayFocusStep("action");
+    demo.setActiveSection("action");
+  }
+
   return (
     <div style={{ display: "grid", gap: 18 }}>
       <ProgressionBanner demo={demo} />
 
-      <div
-        style={{
-          position: "relative",
-          display: "grid",
-          gap: 18,
-        }}
-      >
+      <div style={{ position: "relative", display: "grid", gap: 18 }}>
         <div
-          id={anchorId(activeScene === "pressure" ? "pressure" : activeScene === "map" ? "map" : activeScene)}
+          id={anchorId(
+            activeScene === "pressure"
+              ? "pressure"
+              : activeScene === "map"
+                ? "map"
+                : activeScene
+          )}
           style={{ scrollMarginTop: 90 }}
         >
           {activeScene === "pressure" ? (
@@ -723,6 +700,13 @@ export default function GameplayViewport({ demo }: Props) {
               eyebrow={sceneIntro.eyebrow}
               title={sceneIntro.title}
               description={sceneIntro.description}
+              footer={
+                <SceneAdvanceBar
+                  label="Continue to Chamber"
+                  hint="Danger first. Space second. Action third."
+                  onClick={advanceToMap}
+                />
+              }
             >
               {demo.gameplayAllowsPressure ? (
                 <GameStateAdvisoryPanel
@@ -742,6 +726,17 @@ export default function GameplayViewport({ demo }: Props) {
               eyebrow={sceneIntro.eyebrow}
               title={sceneIntro.title}
               description={sceneIntro.description}
+              footer={
+                <SceneAdvanceBar
+                  label={hasPuzzleRoom ? "Face the Trial" : "Issue Command"}
+                  hint={
+                    hasPuzzleRoom
+                      ? "This chamber wants more than movement. It wants an answer."
+                      : "The room is resolved. The next decisive act belongs to the hero."
+                  }
+                  onClick={advanceToPuzzleOrAction}
+                />
+              }
             >
               {demo.gameplayAllowsMap ? (
                 <RoomTopologyPanel
@@ -785,6 +780,15 @@ export default function GameplayViewport({ demo }: Props) {
               eyebrow={sceneIntro.eyebrow}
               title={sceneIntro.title}
               description={sceneIntro.description}
+              footer={
+                !demo.combatActive ? (
+                  <SceneAdvanceBar
+                    label="Return to Command"
+                    hint="Battlefield pressure has passed. Resume chamber command."
+                    onClick={advanceToAction}
+                  />
+                ) : undefined
+              }
             >
               <GameplayCombatPanel demo={demo} />
               <div style={{ marginTop: 14 }}>
