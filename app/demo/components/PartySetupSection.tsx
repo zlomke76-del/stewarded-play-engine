@@ -1542,7 +1542,7 @@ export default function PartySetupSection(props: {
                     <div style={helperCardStyle}>
                       <div style={{ fontSize: 13, fontWeight: 800 }}>Current Build Summary</div>
                       <div style={{ fontSize: 13, opacity: 0.82, lineHeight: 1.6 }}>
-                        <strong>{resolvedSpecies}</strong> {resolvedClass} · <strong>{BUILD_FOCUS_META[currentFocus].label ?? ""}</strong>
+                        <strong>{resolvedSpecies}</strong> {resolvedClass} · <strong>{BUILD_FOCUS_OPTIONS.find((x) => x.id === currentFocus)?.label ?? ""}</strong>
                       </div>
                       <div style={{ fontSize: 12, opacity: 0.76, lineHeight: 1.6 }}>
                         {resolvedSpeciesMeta.bestFor} · {resolvedClassMeta.role} · {resolvedFocusMeta.bestFor}
