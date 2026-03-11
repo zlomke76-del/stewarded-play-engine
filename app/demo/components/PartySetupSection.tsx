@@ -648,7 +648,13 @@ function RitualChoiceCard({
         <img
           src={imageSrc}
           alt={title}
-          style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+          style={{
+  width: "100%",
+  height: "100%",
+  objectFit: "cover",
+  objectPosition: "center 18%",
+  display: "block",
+}}
         />
       </div>
 
@@ -1665,7 +1671,13 @@ export default function PartySetupSection(props: {
                     <img
                       src={portraitPath}
                       alt={`${display} portrait`}
-                      style={{ width: "100%", height: 400, objectFit: "cover", display: "block" }}
+                      style={{
+  width: "100%",
+  height: 400,
+  objectFit: "cover",
+  objectPosition: "center 14%",
+  display: "block",
+}}
                       onError={(e) => {
                         const img = e.currentTarget;
                         img.onerror = null;
@@ -1910,7 +1922,13 @@ export default function PartySetupSection(props: {
                       <img
                         src={portraitPath}
                         alt={`${display} portrait`}
-                        style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+                        style={{
+  width: "100%",
+  height: 320,
+  objectFit: "cover",
+  objectPosition: "center 16%",
+  display: "block",
+}}
                         onError={(e) => {
                           const img = e.currentTarget;
                           img.onerror = null;
