@@ -17,18 +17,6 @@ import {
 import { deriveExplorationDiscoveryDrafts } from "@/lib/dungeon/ExplorationDiscovery";
 import { deriveDungeonEvolution } from "@/lib/dungeon/DungeonEvolution";
 import {
-  resolveRoomImage,
-  resolveTransitionImage,
-} from "@/lib/dungeon/DungeonVisualResolver";
-import {
-  describeRoomEntry,
-  describeRoomExits,
-  describeRoomFeatures,
-  describeRoomSummary,
-  type OpeningChronicleSeed,
-} from "@/lib/dungeon/DungeonNarration";
-import type { DungeonDefinition, DungeonRoom } from "@/lib/dungeon/FloorState";
-import {
   buildPuzzlePresentationBlock,
   resolveActiveRoomPuzzle,
   runRoomPuzzleAttempt as runRoomPuzzleAttemptRuntime,
@@ -46,24 +34,15 @@ import {
 } from "@/lib/debug/ProgressionInspector";
 import type { DMMode, DemoSectionId, DiceMode, InitialTable, RollSource } from "../demoTypes";
 import {
-  clampInt,
   normalizeName,
   randomName,
   generateInitialTable,
   renderInitialTableNarration,
-  inferOptionKind,
   isCombatEndedForId,
+  inferPressureTier,
 } from "../demoUtils";
 import {
-  currentRoomFeatureLite,
   extractOpeningChronicleSeed,
-  inferLockState,
-  inferObjective,
-  inferPressureTier,
-  inferRewardHint,
-  summarizeRoomTitle,
-  toNarrationExits,
-  toNarrationFeatures,
 } from "../lib/demoNarration";
 import {
   type CombatEncounterContext,
@@ -89,7 +68,6 @@ import {
   stopAmbience,
 } from "./runtime/demoRuntimeAudio";
 import {
-  commitDungeonTraversalBundle,
   mapStateEventsToPuzzleCanon,
 } from "./runtime/demoRuntimeTraversal";
 import {
@@ -99,6 +77,15 @@ import {
   deriveRoomInteractionMode,
 } from "./runtime/demoRuntimeFlow";
 import { appendEventToState, hasDungeonInitialized, safeInt } from "./runtime/demoRuntimeUtils";
+import {
+  buildCombatEncounterContext,
+  buildRoomConnectionsView,
+  buildRoomViewModel,
+} from "./runtime/demoRuntimeDerived";
+import {
+  commitOutcomeOnlyToState,
+  commitResolvedActionToState,
+} from "./runtime/demoRuntimeResolution";
 
 export { displayName };
 export type { PartyDeclaredPayload, PartyMember };
@@ -205,6 +192,7 @@ export function useDemoRuntime() {
   const partyEffective: PartyDeclaredPayload | null = partyCanonical ?? partyDraft;
   const partyMembers = (partyEffective?.members ?? []).slice(0, 1);
   const partySize = 1;
+
   const effectivePlayerNames = useMemo(
     () => partyMembers.map((m, idx) => displayName(m, idx + 1)),
     [partyMembers]
@@ -253,7 +241,6 @@ export function useDemoRuntime() {
     }
     const exists = partyMembers.some((m) => String(m.id) === String(actingPlayerId));
     if (exists) return;
-
     setActingPlayerId(String(partyMembers[0].id ?? "player_1"));
   }, [partyMembers, actingPlayerId]);
 
@@ -476,7 +463,7 @@ export function useDemoRuntime() {
     return renderInitialTableNarration(initialTable);
   }, [initialTable]);
 
-  const chronicleSeed: OpeningChronicleSeed | null = useMemo(
+  const chronicleSeed = useMemo(
     () => extractOpeningChronicleSeed(initialTable),
     [initialTable]
   );
@@ -606,72 +593,28 @@ export function useDemoRuntime() {
     [state.events, location.floorId, location.roomId, nearbyRoomIds, dungeon]
   );
 
-  const currentFeatures = useMemo(() => currentRoomFeatureLite(currentRoom), [currentRoom]);
-  const narrationFeatures = useMemo(() => toNarrationFeatures(currentFeatures), [currentFeatures]);
-  const currentRoomTitle = useMemo(() => summarizeRoomTitle(currentRoom), [currentRoom]);
-  const currentRoomVisualKey = `${location.floorId}:${location.roomId}`;
-
-  const roomImage = useMemo(() => {
-    return resolveRoomImage({
-      dungeonSeed: dungeon.seed,
-      floorTheme: currentFloor.theme,
-      room: currentRoom,
-    });
-  }, [dungeon.seed, currentFloor.theme, currentRoom]);
-
-  const roomConnectionsView = useMemo(() => {
-    const allRooms = dungeon.floors.flatMap((f) => f.rooms);
-
-    return reachableConnections.map((connection) => {
-      const targetRoomId =
-        connection.fromRoomId === currentRoom.id ? connection.toRoomId : connection.fromRoomId;
-
-      const targetFloor =
-        dungeon.floors.find((floor) =>
-          floor.rooms.some((room) => room.id === targetRoomId)
-        ) ?? null;
-
-      const targetRoom =
-        currentFloor.rooms.find((r) => r.id === targetRoomId) ??
-        allRooms.find((r) => r.id === targetRoomId) ??
-        null;
-
-      const previewImage =
-        connection.type === "stairs"
-          ? resolveTransitionImage({
-              dungeonSeed: dungeon.seed,
-              fromFloorTheme: currentFloor.theme,
-              toFloorTheme: targetFloor?.theme ?? currentFloor.theme,
-              direction: connection.note === "up" ? "up" : "down",
-            })
-          : resolveRoomImage({
-              dungeonSeed: dungeon.seed,
-              floorTheme: targetFloor?.theme ?? currentFloor.theme,
-              room: targetRoom,
-            });
-
-      return {
-        id: connection.id,
-        type: connection.type,
-        targetRoomId,
-        targetLabel: targetRoom?.label ?? targetRoomId,
-        targetType: targetRoom?.roomType ?? "unknown",
-        locked: connection.locked === true || connection.type === "locked_door",
-        note: connection.note ?? null,
-        previewImage,
-      };
-    });
-  }, [reachableConnections, currentRoom.id, currentFloor.rooms, currentFloor.theme, dungeon.floors, dungeon.seed]);
-
-  const narrationExits = useMemo(
+  const roomView = useMemo(
     () =>
-      toNarrationExits({
+      buildRoomViewModel({
+        dungeon,
+        currentFloor,
         currentRoom,
-        currentFloorRooms: currentFloor.rooms,
-        allDungeonRooms: dungeon.floors.flatMap((floor) => floor.rooms),
-        connections: reachableConnections,
+        reachableConnections,
+        chronicleSeed,
+        dungeonEvolutionSignals: dungeonEvolution.signals,
       }),
-    [currentRoom, currentFloor.rooms, dungeon.floors, reachableConnections]
+    [dungeon, currentFloor, currentRoom, reachableConnections, chronicleSeed, dungeonEvolution.signals]
+  );
+
+  const roomConnectionsView = useMemo(
+    () =>
+      buildRoomConnectionsView({
+        reachableConnections,
+        currentRoom,
+        currentFloor,
+        dungeon,
+      }),
+    [reachableConnections, currentRoom, currentFloor, dungeon]
   );
 
   const puzzleCanon = useMemo(
@@ -784,70 +727,21 @@ export function useDemoRuntime() {
     audit: string[];
   }) {
     const selectedText = selectedOption?.description ?? "";
-    const combinedText = `${playerInput}\n${selectedText}`.trim();
-    const kind = inferOptionKind(combinedText.length ? combinedText : selectedText);
 
-    setState((prev) => {
-      const success =
-        Number.isFinite(Number(payload?.dice?.roll)) &&
-        Number.isFinite(Number(payload?.dice?.dc))
-          ? Number(payload.dice.roll) >= Number(payload.dice.dc)
-          : false;
-
-      const enrichedOutcome = {
-        ...payload,
-        meta: {
-          ...(payload as any)?.meta,
-          optionKind: kind,
-          optionDescription: selectedText,
-          intent: playerInput,
-          floorId: location.floorId,
-          roomId: location.roomId,
-          success,
-        },
-      };
-
-      let next = appendEventToState(prev, "OUTCOME", enrichedOutcome as any);
-
-      const pressureDelta =
-        kind === "contested" ? (success ? 5 : 11) :
-        kind === "risky" ? (success ? 4 : 9) :
-        kind === "environmental" ? (success ? 3 : 7) :
-        success ? 2 : 5;
-
-      const awarenessDelta =
-        kind === "contested" ? (success ? 7 : 14) :
-        kind === "risky" ? (success ? 5 : 11) :
-        kind === "environmental" ? (success ? 2 : 6) :
-        success ? 1 : 4;
-
-      next = appendEventToState(next, "LOCATION_PRESSURE_CHANGED", {
-        floorId: location.floorId,
-        roomId: location.roomId,
-        delta: pressureDelta,
-      });
-
-      next = appendEventToState(next, "LOCATION_AWARENESS_CHANGED", {
-        floorId: location.floorId,
-        roomId: location.roomId,
-        delta: awarenessDelta,
-      });
-
-      next = commitDungeonTraversalBundle({
-        prevState: next,
-        success,
-        selectedText: combinedText,
+    setState((prev) =>
+      commitResolvedActionToState({
+        prevState: prev,
+        payload,
+        playerInput,
+        selectedOptionDescription: selectedText,
+        location,
         currentRoom,
         reachableConnections,
         dungeon,
-        floorId: location.floorId,
-        roomId: location.roomId,
         openedDoorIds,
         unlockedDoorIds,
-      });
-
-      return next;
-    });
+      })
+    );
 
     setPlayerInput("");
     setParsed(null);
@@ -862,38 +756,13 @@ export function useDemoRuntime() {
     dice: { mode: DiceMode; roll: number; dc: number; source: RollSource };
     audit: string[];
   }) {
-    setState((prev) => {
-      const roll = Number(payload?.dice?.roll ?? 0);
-      const dc = Number(payload?.dice?.dc ?? 0);
-      const success = Number.isFinite(roll) && Number.isFinite(dc) ? roll >= dc : false;
-
-      const enrichedOutcome = {
-        ...payload,
-        meta: {
-          ...(payload as any)?.meta,
-          optionKind: "contested",
-          floorId: location.floorId,
-          roomId: location.roomId,
-          success,
-        },
-      };
-
-      let next = appendEventToState(prev, "OUTCOME", enrichedOutcome as any);
-
-      next = appendEventToState(next, "LOCATION_PRESSURE_CHANGED", {
-        floorId: location.floorId,
-        roomId: location.roomId,
-        delta: success ? 5 : 11,
-      });
-
-      next = appendEventToState(next, "LOCATION_AWARENESS_CHANGED", {
-        floorId: location.floorId,
-        roomId: location.roomId,
-        delta: success ? 7 : 14,
-      });
-
-      return next;
-    });
+    setState((prev) =>
+      commitOutcomeOnlyToState({
+        prevState: prev,
+        payload,
+        location,
+      })
+    );
 
     setGameplayFocusStep("action");
     setActiveSection("canon");
@@ -977,85 +846,6 @@ export function useDemoRuntime() {
     [dmMode, tableAccepted, partyCanonicalExists, showInitialTable, dungeonDescentConfirmed]
   );
 
-  const roomNarrative = useMemo(() => {
-    return describeRoomEntry({
-      dungeonSeed: dungeon.seed,
-      floorTheme: currentFloor.theme,
-      roomType: currentRoom.roomType,
-      roomLabel: currentRoom.label,
-      features: narrationFeatures,
-      exits: narrationExits,
-      lootHint: currentRoom.lootHint ?? null,
-      storyHint: currentRoom.storyHint ?? null,
-      chronicle: chronicleSeed,
-    });
-  }, [
-    dungeon.seed,
-    currentFloor.theme,
-    currentRoom.roomType,
-    currentRoom.label,
-    currentRoom.lootHint,
-    currentRoom.storyHint,
-    narrationFeatures,
-    narrationExits,
-    chronicleSeed,
-  ]);
-
-  const roomFeatureNarrative = useMemo(() => {
-    const lines = describeRoomFeatures({
-      dungeonSeed: dungeon.seed,
-      floorTheme: currentFloor.theme,
-      roomType: currentRoom.roomType,
-      roomLabel: currentRoom.label,
-      features: narrationFeatures,
-      chronicle: chronicleSeed,
-    });
-
-    if (dungeonEvolution.signals.length > 0) {
-      return [...lines, ...dungeonEvolution.signals].slice(0, 6);
-    }
-
-    return lines;
-  }, [
-    dungeon.seed,
-    currentFloor.theme,
-    currentRoom.roomType,
-    currentRoom.label,
-    narrationFeatures,
-    chronicleSeed,
-    dungeonEvolution.signals,
-  ]);
-
-  const roomExitNarrative = useMemo(() => {
-    return describeRoomExits({
-      dungeonSeed: dungeon.seed,
-      roomType: currentRoom.roomType,
-      exits: narrationExits,
-    });
-  }, [dungeon.seed, currentRoom.roomType, narrationExits]);
-
-  const roomSummary = useMemo(() => {
-    return describeRoomSummary({
-      dungeonSeed: dungeon.seed,
-      floorTheme: currentFloor.theme,
-      roomType: currentRoom.roomType,
-      roomLabel: currentRoom.label,
-      features: narrationFeatures,
-      lootHint: currentRoom.lootHint ?? null,
-      chronicle: chronicleSeed,
-      encounterTheme: currentRoom.encounterSeed?.theme ?? null,
-    });
-  }, [
-    dungeon.seed,
-    currentFloor.theme,
-    currentRoom.roomType,
-    currentRoom.label,
-    narrationFeatures,
-    currentRoom.lootHint,
-    currentRoom.encounterSeed?.theme,
-    chronicleSeed,
-  ]);
-
   const resolutionMovement = useMemo<{
     from?: { x: number; y: number } | null;
     to?: { x: number; y: number } | null;
@@ -1078,48 +868,18 @@ export function useDemoRuntime() {
     } as const;
   }, [combatActive, activeEnemyOverlayName, enemyTelegraphHint, activeCombatantSpec, isEnemyTurn]);
 
-  const combatEncounterContext = useMemo<CombatEncounterContext>(() => {
-    const roomTheme = currentRoom?.encounterSeed?.theme ?? null;
-    const lockState = inferLockState({
-      room: currentRoom,
-      reachableConnections,
-      playerInput,
-      selectedOptionDescription: selectedOption?.description ?? "",
-    });
-
-    const rewardHint = inferRewardHint({
-      room: currentRoom,
-      playerInput,
-      selectedOptionDescription: selectedOption?.description ?? "",
-    });
-
-    const objective = inferObjective({
-      room: currentRoom,
-      lockState,
-      rewardHint,
-    });
-
-    const enemyNames = currentRoom?.encounterSeed?.enemyNames ?? [];
-    const firstEnemy = enemyNames[0] ?? null;
-
-    return {
-      zoneId: `${location.floorId}:${location.roomId}`,
-      zoneTheme: roomTheme,
-      objective,
-      lockState,
-      rewardHint,
-      keyEnemyName: currentRoom?.encounterSeed?.canCarryKey ? firstEnemy : null,
-      relicEnemyName: currentRoom?.encounterSeed?.canCarryRelic ? firstEnemy : null,
-      cacheGuardEnemyName: currentRoom?.encounterSeed?.canGuardCache ? firstEnemy : null,
-    };
-  }, [
-    currentRoom,
-    reachableConnections,
-    playerInput,
-    selectedOption?.description,
-    location.floorId,
-    location.roomId,
-  ]);
+  const combatEncounterContext = useMemo<CombatEncounterContext>(
+    () =>
+      buildCombatEncounterContext({
+        currentRoom,
+        reachableConnections,
+        playerInput,
+        selectedOptionDescription: selectedOption?.description ?? "",
+        floorId: location.floorId,
+        roomId: location.roomId,
+      }),
+    [currentRoom, reachableConnections, playerInput, selectedOption?.description, location.floorId, location.roomId]
+  );
 
   function enterDungeon() {
     if (!canEnterDungeon) return;
@@ -1248,8 +1008,8 @@ export function useDemoRuntime() {
     location,
     currentFloor,
     currentRoom,
-    currentRoomTitle,
-    currentRoomVisualKey,
+    currentRoomTitle: roomView.currentRoomTitle,
+    currentRoomVisualKey: roomView.currentRoomVisualKey,
 
     reachableConnections,
     nearbyRoomIds,
@@ -1257,10 +1017,10 @@ export function useDemoRuntime() {
     unlockedDoorIds,
     dungeonEvolution,
 
-    currentFeatures,
-    narrationFeatures,
-    narrationExits,
-    roomImage,
+    currentFeatures: roomView.currentFeatures,
+    narrationFeatures: roomView.narrationFeatures,
+    narrationExits: roomView.narrationExits,
+    roomImage: roomView.roomImage,
     roomConnectionsView,
 
     activeRoomPuzzle,
@@ -1268,10 +1028,10 @@ export function useDemoRuntime() {
     runRoomPuzzleAttempt,
 
     chronicleSeed,
-    roomNarrative,
-    roomFeatureNarrative,
-    roomExitNarrative,
-    roomSummary,
+    roomNarrative: roomView.roomNarrative,
+    roomFeatureNarrative: roomView.roomFeatureNarrative,
+    roomExitNarrative: roomView.roomExitNarrative,
+    roomSummary: roomView.roomSummary,
 
     latestCombatId,
     derivedCombat,
