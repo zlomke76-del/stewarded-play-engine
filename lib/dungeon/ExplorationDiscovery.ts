@@ -6,6 +6,7 @@
 // - Derive deterministic room/floor discovery drafts from dungeon structure
 // - Emit canon drafts only when truths become newly visible
 // - Replace tile-hash discovery with room/connection/feature discovery
+// - Surface richer environment / puzzle / signature context when first seen
 //
 // Notes:
 // - Pure module: no mutation, no IDs, no timestamps
@@ -82,10 +83,6 @@ function isStairsDiscoveredDraft(
   return draft.type === "STAIRS_DISCOVERED";
 }
 
-function safeStr(x: unknown): string | null {
-  return typeof x === "string" && x.trim() ? x.trim() : null;
-}
-
 function isRecord(x: unknown): x is Record<string, unknown> {
   return !!x && typeof x === "object";
 }
@@ -140,7 +137,8 @@ function alreadyHasFeatureRevealed(
   events: readonly SessionLikeEvent[],
   floorId: FloorId,
   roomId: RoomId,
-  featureKind: string
+  featureKind: string,
+  note?: string | null
 ) {
   return events.some((e) => {
     if (e?.type !== "ROOM_FEATURE_REVEALED") return false;
@@ -148,7 +146,8 @@ function alreadyHasFeatureRevealed(
     return (
       p.floorId === floorId &&
       p.roomId === roomId &&
-      p.featureKind === featureKind
+      p.featureKind === featureKind &&
+      (p.note ?? null) === (note ?? null)
     );
   });
 }
@@ -181,6 +180,7 @@ function inferDiscoveredVia(args: {
 
 function buildRoomRevealDraft(
   floorId: FloorId,
+  floor: DungeonFloor,
   room: DungeonRoom,
   enteredViaConnectionId?: string | null
 ): RoomRevealedDraft {
@@ -189,11 +189,23 @@ function buildRoomRevealDraft(
     roomId: room.id,
     roomType: room.roomType,
     discoveredVia: inferDiscoveredVia({ room, enteredViaConnectionId }),
+    floorDepth: floor.depth,
+    environmentPressure: room.environment?.pressure ?? floor.environmentPressure,
+    requiresTorchlight:
+      room.environment?.requiresTorchlight ?? floor.requiresTorchlight,
+    requiresWarmth:
+      room.environment?.requiresWarmth ?? floor.requiresWarmth,
+    routeRole: room.routeRole ?? null,
+    puzzleId: room.puzzleId ?? null,
+    trapId: room.trapId ?? null,
+    isSignature: room.isSignature === true,
+    setpieceId: room.setpieceId ?? null,
   });
 }
 
 function buildRoomEnterDraft(args: {
   floorId: FloorId;
+  floor: DungeonFloor;
   room: DungeonRoom;
   fromRoomId?: string | null;
   viaConnectionId?: string | null;
@@ -206,6 +218,12 @@ function buildRoomEnterDraft(args: {
     fromRoomId: args.fromRoomId ?? null,
     viaConnectionId: args.viaConnectionId ?? null,
     viaConnectionType: (args.viaConnectionType as any) ?? null,
+    floorDepth: args.floor.depth,
+    routeRole: args.room.routeRole ?? null,
+    puzzleId: args.room.puzzleId ?? null,
+    trapId: args.room.trapId ?? null,
+    setpieceId: args.room.setpieceId ?? null,
+    isSafeRefuge: args.room.environment?.isRefuge === true,
   });
 }
 
@@ -242,8 +260,8 @@ function buildDoorDiscoveryDraft(
   });
 }
 
-function buildFeatureDrafts(
-  floorId: FloorId,
+function buildStructuredFeatureDrafts(
+  floor: DungeonFloor,
   room: DungeonRoom
 ): Array<RoomFeatureRevealedDraft | StairsDiscoveredDraft> {
   const out: Array<RoomFeatureRevealedDraft | StairsDiscoveredDraft> = [];
@@ -254,10 +272,11 @@ function buildFeatureDrafts(
 
       out.push(
         makeDungeonEventDraft("STAIRS_DISCOVERED", {
-          floorId,
+          floorId: floor.id,
           roomId: room.id,
           direction,
           targetFloorId: null,
+          floorDepth: floor.depth,
         })
       );
       continue;
@@ -265,10 +284,65 @@ function buildFeatureDrafts(
 
     out.push(
       makeDungeonEventDraft("ROOM_FEATURE_REVEALED", {
-        floorId,
+        floorId: floor.id,
         roomId: room.id,
         featureKind: feature.kind,
         note: feature.note ?? null,
+      })
+    );
+  }
+
+  if (room.puzzleId) {
+    out.push(
+      makeDungeonEventDraft("ROOM_FEATURE_REVEALED", {
+        floorId: floor.id,
+        roomId: room.id,
+        featureKind: "hazard",
+        note: `puzzle:${room.puzzleId}`,
+      })
+    );
+  }
+
+  if (room.trapId) {
+    out.push(
+      makeDungeonEventDraft("ROOM_FEATURE_REVEALED", {
+        floorId: floor.id,
+        roomId: room.id,
+        featureKind: "hazard",
+        note: `trap:${room.trapId}`,
+      })
+    );
+  }
+
+  if (room.environment?.hasFireSource) {
+    out.push(
+      makeDungeonEventDraft("ROOM_FEATURE_REVEALED", {
+        floorId: floor.id,
+        roomId: room.id,
+        featureKind: "warmth",
+        note: "fire_source",
+      })
+    );
+  }
+
+  if (room.supportsTorchRefill) {
+    out.push(
+      makeDungeonEventDraft("ROOM_FEATURE_REVEALED", {
+        floorId: floor.id,
+        roomId: room.id,
+        featureKind: "torch_sconce",
+        note: "torch_refill",
+      })
+    );
+  }
+
+  if (room.setpieceId) {
+    out.push(
+      makeDungeonEventDraft("ROOM_FEATURE_REVEALED", {
+        floorId: floor.id,
+        roomId: room.id,
+        featureKind: "relic",
+        note: `setpiece:${room.setpieceId}`,
       })
     );
   }
@@ -285,7 +359,9 @@ function buildCurrentRoomDiscoveryDrafts(
   const events = ctx.events;
 
   if (!alreadyHasRoomRevealed(events, ctx.floorId, ctx.roomId)) {
-    drafts.push(buildRoomRevealDraft(ctx.floorId, room, ctx.enteredViaConnectionId));
+    drafts.push(
+      buildRoomRevealDraft(ctx.floorId, floor, room, ctx.enteredViaConnectionId)
+    );
   }
 
   if (!alreadyHasRoomEntered(events, ctx.floorId, ctx.roomId)) {
@@ -297,6 +373,7 @@ function buildCurrentRoomDiscoveryDrafts(
     drafts.push(
       buildRoomEnterDraft({
         floorId: ctx.floorId,
+        floor,
         room,
         fromRoomId: ctx.enteredFromRoomId ?? null,
         viaConnectionId: ctx.enteredViaConnectionId ?? null,
@@ -317,10 +394,14 @@ function buildCurrentRoomDiscoveryDrafts(
     }
   }
 
-  for (const featureDraft of buildFeatureDrafts(ctx.floorId, room)) {
+  for (const featureDraft of buildStructuredFeatureDrafts(floor, room)) {
     if (isRoomFeatureRevealedDraft(featureDraft)) {
       const kind = featureDraft.payload.featureKind;
-      if (alreadyHasFeatureRevealed(events, ctx.floorId, room.id, kind)) continue;
+      const note =
+        typeof featureDraft.payload.note === "string"
+          ? featureDraft.payload.note
+          : null;
+      if (alreadyHasFeatureRevealed(events, ctx.floorId, room.id, kind, note)) continue;
     }
 
     if (isStairsDiscoveredDraft(featureDraft)) {
@@ -331,6 +412,16 @@ function buildCurrentRoomDiscoveryDrafts(
   }
 
   return drafts;
+}
+
+function shouldAdjacentRoomAutoReveal(
+  connection: DungeonConnection,
+  nextRoom: DungeonRoom
+): boolean {
+  if (nextRoom.discoverable === false) return false;
+  if (nextRoom.routeRole === "dead_end" && connection.type === "secret") return false;
+  if (connection.type === "corridor" || connection.discoveredByDefault) return true;
+  return false;
 }
 
 function buildAdjacentRevealDrafts(
@@ -349,18 +440,28 @@ function buildAdjacentRevealDrafts(
     const nextRoom = getRoomById(ctx.dungeon, ctx.floorId, nextRoomId);
     if (!nextRoom) continue;
     if (alreadyHasRoomRevealed(events, ctx.floorId, nextRoomId)) continue;
-    if (nextRoom.discoverable === false) continue;
+    if (!shouldAdjacentRoomAutoReveal(connection, nextRoom)) continue;
 
-    if (connection.type === "corridor" || connection.discoveredByDefault) {
-      drafts.push(
-        makeDungeonEventDraft("ROOM_REVEALED", {
-          floorId: ctx.floorId,
-          roomId: nextRoom.id,
-          roomType: nextRoom.roomType,
-          discoveredVia: "entry",
-        })
-      );
-    }
+    drafts.push(
+      makeDungeonEventDraft("ROOM_REVEALED", {
+        floorId: ctx.floorId,
+        roomId: nextRoom.id,
+        roomType: nextRoom.roomType,
+        discoveredVia: "entry",
+        floorDepth: floor.depth,
+        environmentPressure:
+          nextRoom.environment?.pressure ?? floor.environmentPressure,
+        requiresTorchlight:
+          nextRoom.environment?.requiresTorchlight ?? floor.requiresTorchlight,
+        requiresWarmth:
+          nextRoom.environment?.requiresWarmth ?? floor.requiresWarmth,
+        routeRole: nextRoom.routeRole ?? null,
+        puzzleId: nextRoom.puzzleId ?? null,
+        trapId: nextRoom.trapId ?? null,
+        isSignature: nextRoom.isSignature === true,
+        setpieceId: nextRoom.setpieceId ?? null,
+      })
+    );
   }
 
   return drafts;
@@ -384,7 +485,13 @@ function makeDraftKey(draft: DungeonEventDraft): string {
   }
 
   if (isRoomFeatureRevealedDraft(draft)) {
-    return `${draft.type}:${draft.payload.floorId}:${draft.payload.roomId}:${draft.payload.featureKind}`;
+    return [
+      draft.type,
+      draft.payload.floorId,
+      draft.payload.roomId,
+      draft.payload.featureKind,
+      draft.payload.note ?? "",
+    ].join(":");
   }
 
   if (isStairsDiscoveredDraft(draft)) {
