@@ -1,12 +1,11 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { createSession, recordEvent, type SessionState } from "@/lib/session/SessionState";
+import { createSession, type SessionState } from "@/lib/session/SessionState";
 import { parseAction } from "@/lib/parser/ActionParser";
 import { generateOptions, type Option } from "@/lib/options/OptionGenerator";
 import { exportCanon } from "@/lib/export/exportCanon";
 import { deriveCombatState, findLatestCombatId, nextTurnPointer } from "@/lib/combat/CombatState";
-import { resolvePartyLoadout } from "@/lib/skills/loadoutResolver";
 import { generateDungeon } from "@/lib/dungeon/DungeonGenerator";
 import {
   deriveCurrentDungeonLocation,
@@ -14,8 +13,6 @@ import {
   deriveReachableConnections,
   deriveUnlockedDoorIds,
   inferNeighborRoomIds,
-  resolveTraversal,
-  buildRoomExitPayload,
 } from "@/lib/dungeon/DungeonNavigation";
 import { deriveExplorationDiscoveryDrafts } from "@/lib/dungeon/ExplorationDiscovery";
 import { deriveDungeonEvolution } from "@/lib/dungeon/DungeonEvolution";
@@ -30,8 +27,7 @@ import {
   describeRoomSummary,
   type OpeningChronicleSeed,
 } from "@/lib/dungeon/DungeonNarration";
-import type { DungeonConnection, DungeonDefinition, DungeonRoom } from "@/lib/dungeon/FloorState";
-import type { EnemyEncounterTheme } from "@/lib/game/EnemyDatabase";
+import type { DungeonDefinition, DungeonRoom } from "@/lib/dungeon/FloorState";
 import {
   buildPuzzlePresentationBlock,
   resolveActiveRoomPuzzle,
@@ -69,363 +65,52 @@ import {
   toNarrationExits,
   toNarrationFeatures,
 } from "../lib/demoNarration";
+import {
+  type CombatEncounterContext,
+  type GameplayFocusStep,
+  type MusicMode,
+  type PartyDeclaredPayload,
+  type PartyMember,
+} from "./runtime/demoRuntimeTypes";
+import {
+  buildStarterMember,
+  cleanCommittedSoloParty,
+  defaultParty,
+  deriveInjuryStacksForPlayer,
+  deriveLatestParty,
+  displayName,
+} from "./runtime/demoRuntimeParty";
+import {
+  playIntroTheme,
+  pauseIntroTheme,
+  startAmbientTheme,
+  startCombatTheme,
+  stopAllMusic,
+  stopAmbience,
+} from "./runtime/demoRuntimeAudio";
+import {
+  commitDungeonTraversalBundle,
+  mapStateEventsToPuzzleCanon,
+} from "./runtime/demoRuntimeTraversal";
+import {
+  deriveChapterState,
+  deriveGameplayPermissions,
+  derivePresentationPhase,
+  deriveRoomInteractionMode,
+} from "./runtime/demoRuntimeFlow";
+import { appendEventToState, hasDungeonInitialized, safeInt } from "./runtime/demoRuntimeUtils";
 
-export type PartyMember = {
-  id: string;
-  name: string;
-  species?: string;
-  className: string;
-  portrait: "Male" | "Female";
-  skills?: string[];
-  traits?: string[];
-  ac: number;
-  hpMax: number;
-  hpCurrent: number;
-  initiativeMod: number;
+export { displayName };
+export type { PartyDeclaredPayload, PartyMember };
+
+type MusicRefs = {
+  introAudioRef: React.MutableRefObject<HTMLAudioElement | null>;
+  bgmAudioRef: React.MutableRefObject<HTMLAudioElement | null>;
+  ambienceAudioRef: React.MutableRefObject<HTMLAudioElement | null>;
+  currentMusicModeRef: React.MutableRefObject<MusicMode>;
+  lastAmbientIndexRef: React.MutableRefObject<number>;
+  lastCombatIndexRef: React.MutableRefObject<number>;
 };
-
-export type PartyDeclaredPayload = {
-  partyId: string;
-  members: PartyMember[];
-};
-
-export type PresentationPhase =
-  | "onboarding"
-  | "chronicle"
-  | "party-declaration"
-  | "tavern"
-  | "gameplay";
-
-export type GameplayFocusStep = "pressure" | "map" | "puzzle" | "action";
-
-export type CombatEncounterContext = {
-  zoneId?: string | null;
-  zoneTheme?: EnemyEncounterTheme | null;
-  objective?: string | null;
-  lockState?: string | null;
-  rewardHint?: string | null;
-  keyEnemyName?: string | null;
-  relicEnemyName?: string | null;
-  cacheGuardEnemyName?: string | null;
-};
-
-type MusicMode = "none" | "intro" | "ambient" | "combat";
-
-const SOLO_STARTER_CLASS: "Warrior" = "Warrior";
-
-const STARTER_SPECIES_PLAN = [
-  "Human",
-  "Elf",
-  "Dwarf",
-  "Tiefling",
-  "Halfling",
-  "Dragonborn",
-] as const;
-
-const STARTER_PORTRAIT_PLAN: ReadonlyArray<"Male" | "Female"> = [
-  "Male",
-  "Female",
-  "Male",
-  "Female",
-  "Male",
-  "Female",
-];
-
-const AMBIENT_TRACKS = ["/audio/music/dungeon_ambient1.mp3", "/audio/music/dungeon_ambient2.mp3"] as const;
-const COMBAT_TRACKS = ["/audio/music/combat_theme1.mp3", "/audio/music/combat_theme2.mp3"] as const;
-
-function safeInt(n: unknown, fallback: number, lo: number, hi: number) {
-  const x = Number.isFinite(Number(n)) ? Math.trunc(Number(n)) : fallback;
-  return Math.max(lo, Math.min(hi, x));
-}
-
-export function displayName(m: PartyMember, i1: number) {
-  const n = normalizeName(m.name || "");
-  return n.length > 0 ? n : `Player ${i1}`;
-}
-
-function buildStarterMember(slotIndex: number): PartyMember {
-  const className = SOLO_STARTER_CLASS;
-  const species = STARTER_SPECIES_PLAN[slotIndex % STARTER_SPECIES_PLAN.length] ?? "Human";
-  const portrait = STARTER_PORTRAIT_PLAN[slotIndex % STARTER_PORTRAIT_PLAN.length] ?? "Male";
-
-  const canonical = resolvePartyLoadout(className, species);
-
-  const hpBaseByClass: Record<string, number> = {
-    Warrior: 14,
-    Paladin: 14,
-    Barbarian: 15,
-    Cleric: 12,
-    Ranger: 12,
-    Rogue: 11,
-    Monk: 11,
-    Artificer: 11,
-    Bard: 10,
-    Druid: 10,
-    Mage: 9,
-    Sorcerer: 9,
-    Warlock: 10,
-  };
-
-  const acBaseByClass: Record<string, number> = {
-    Warrior: 14,
-    Paladin: 15,
-    Barbarian: 13,
-    Cleric: 13,
-    Ranger: 13,
-    Rogue: 13,
-    Monk: 13,
-    Artificer: 13,
-    Bard: 12,
-    Druid: 12,
-    Mage: 11,
-    Sorcerer: 11,
-    Warlock: 12,
-  };
-
-  const initBaseByClass: Record<string, number> = {
-    Warrior: 1,
-    Paladin: 0,
-    Barbarian: 1,
-    Cleric: 0,
-    Ranger: 2,
-    Rogue: 3,
-    Monk: 3,
-    Artificer: 1,
-    Bard: 2,
-    Druid: 1,
-    Mage: 1,
-    Sorcerer: 2,
-    Warlock: 1,
-  };
-
-  const hpMax = hpBaseByClass[className] ?? 12;
-  const ac = acBaseByClass[className] ?? 14;
-  const initiativeMod = initBaseByClass[className] ?? 1;
-
-  return {
-    id: `player_${slotIndex + 1}`,
-    name: "",
-    species,
-    className,
-    portrait,
-    skills: canonical.skillIds,
-    traits: canonical.traitIds,
-    ac,
-    hpMax,
-    hpCurrent: hpMax,
-    initiativeMod,
-  };
-}
-
-function defaultParty(): PartyDeclaredPayload {
-  return {
-    partyId: crypto.randomUUID(),
-    members: [buildStarterMember(0)],
-  };
-}
-
-function deriveLatestParty(events: readonly any[]): PartyDeclaredPayload | null {
-  for (let i = events.length - 1; i >= 0; i--) {
-    const e = events[i];
-    if (e?.type !== "PARTY_DECLARED") continue;
-    const p = e?.payload as PartyDeclaredPayload;
-    if (!p || !Array.isArray(p.members)) continue;
-
-    return {
-      ...p,
-      members: p.members.slice(0, 1),
-    };
-  }
-  return null;
-}
-
-function deriveInjuryStacksForPlayer(events: readonly any[], playerId: string): number {
-  const pid = String(playerId ?? "").trim();
-  if (!pid) return 0;
-
-  let stacks = 0;
-
-  for (let i = 0; i < events.length; i++) {
-    const e = events[i];
-    const t = e?.type;
-    const p = e?.payload ?? {};
-
-    if (t === "INJURY_APPLIED") {
-      const ppid = String(p?.playerId ?? "");
-      if (ppid === pid) {
-        if (Number.isFinite(Number(p?.stacks))) stacks = Math.max(0, Math.trunc(Number(p.stacks)));
-        else if (Number.isFinite(Number(p?.delta))) stacks = Math.max(0, stacks + Math.trunc(Number(p.delta)));
-        else stacks = Math.max(0, stacks + 1);
-      }
-      continue;
-    }
-
-    if (t === "INJURY_STACK_CHANGED") {
-      const ppid = String(p?.playerId ?? "");
-      if (ppid === pid) {
-        const d = Number.isFinite(Number(p?.delta)) ? Math.trunc(Number(p.delta)) : 0;
-        stacks = Math.max(0, stacks + d);
-      }
-      continue;
-    }
-
-    if (t === "PLAYER_DOWNED") {
-      const ppid = String(p?.playerId ?? "");
-      if (ppid === pid) stacks = Math.max(0, stacks + 1);
-      continue;
-    }
-
-    if (t === "DAMAGE_APPLIED") {
-      const targetId = String(p?.targetId ?? "");
-      if (targetId === pid && p?.downed === true) stacks = Math.max(0, stacks + 1);
-      continue;
-    }
-  }
-
-  return stacks;
-}
-
-function appendEventToState(prev: SessionState, type: string, payload: any): SessionState {
-  return recordEvent(prev, {
-    id: crypto.randomUUID(),
-    timestamp: Date.now(),
-    actor: "arbiter",
-    type,
-    payload,
-  });
-}
-
-function hasDungeonInitialized(events: readonly any[]) {
-  return events.some((e) => e?.type === "DUNGEON_INITIALIZED");
-}
-
-function chooseNextTrack(tracks: readonly string[], lastIndexRef: React.MutableRefObject<number>): string {
-  if (tracks.length <= 1) {
-    lastIndexRef.current = 0;
-    return tracks[0] ?? "";
-  }
-
-  let nextIndex = Math.floor(Math.random() * tracks.length);
-  if (nextIndex === lastIndexRef.current) {
-    nextIndex = (nextIndex + 1) % tracks.length;
-  }
-
-  lastIndexRef.current = nextIndex;
-  return tracks[nextIndex];
-}
-
-function inferConnectionChoiceFromText(
-  room: DungeonRoom | null,
-  connections: DungeonConnection[],
-  dungeon: DungeonDefinition,
-  floorId: string,
-  text: string
-): DungeonConnection | null {
-  if (!room || connections.length === 0) return null;
-
-  const t = String(text || "").toLowerCase();
-
-  const scored = connections.map((connection) => {
-    const floor = dungeon.floors.find((f) => f.id === floorId) ?? null;
-    const targetRoomId =
-      connection.fromRoomId === room.id ? connection.toRoomId : connection.fromRoomId;
-    const targetRoom =
-      floor?.rooms.find((r) => r.id === targetRoomId) ?? null;
-
-    let score = 0;
-
-    if (/stairs|descend|down|deeper|lower/i.test(t) && connection.type === "stairs") score += 50;
-    if (/up|ascend|retreat/i.test(t) && connection.type === "stairs" && connection.note === "up") score += 50;
-    if (/door|open|push|threshold|archway|gate|enter/i.test(t) && (connection.type === "door" || connection.type === "locked_door")) score += 35;
-    if (/locked|barred|sealed|key|unlock|force/i.test(t) && connection.type === "locked_door") score += 40;
-    if (/secret|hidden/i.test(t) && connection.type === "secret") score += 40;
-    if (connection.type === "corridor") score += 10;
-
-    if (targetRoom) {
-      const label = `${targetRoom.label} ${targetRoom.roomType}`.toLowerCase();
-      if (label.includes("shrine") && /shrine|altar|ritual|pray/i.test(t)) score += 45;
-      if (label.includes("crypt") && /crypt|bone|grave|dead/i.test(t)) score += 45;
-      if (label.includes("armory") && /armory|weapon|gear|supplies/i.test(t)) score += 40;
-      if (label.includes("storage") && /cache|storage|supplies|loot/i.test(t)) score += 40;
-      if (label.includes("relic") && /relic|vault|artifact|treasure/i.test(t)) score += 48;
-      if (label.includes("boss") && /boss|leader|captain|warlord|priest/i.test(t)) score += 48;
-      if (label.includes("beast") && /beast|den|nest|predator/i.test(t)) score += 40;
-      if (label.includes("arcane") && /arcane|construct|sentinel|magic/i.test(t)) score += 40;
-    }
-
-    return { connection, score };
-  });
-
-  scored.sort((a, b) => b.score - a.score);
-  return scored[0]?.connection ?? connections[0] ?? null;
-}
-
-function mapStateEventsToPuzzleCanon(events: readonly any[]): PuzzleCanonRecord[] {
-  const out: PuzzleCanonRecord[] = [];
-
-  for (const event of events) {
-    const type = String(event?.type ?? "");
-    const payload = event?.payload ?? {};
-
-    if (type === "PUZZLE_RESOLVED") {
-      const puzzleId = String(payload?.puzzleId ?? "").trim();
-      const floorId = String(payload?.floorId ?? "").trim();
-      const roomId = String(payload?.roomId ?? "").trim();
-      if (!puzzleId || !floorId || !roomId) continue;
-
-      out.push({
-        type: "puzzle_resolved",
-        puzzleId: puzzleId as any,
-        floorId,
-        roomId,
-        success: Boolean(payload?.success),
-        timestamp: Number.isFinite(Number(event?.timestamp)) ? Number(event.timestamp) : undefined,
-        details: payload,
-      });
-      continue;
-    }
-
-    if (type === "PUZZLE_REWARD_GRANTED") {
-      const effect = payload?.effect ?? {};
-      if (effect?.kind === "grant_trait" && effect?.traitId && effect?.label) {
-        out.push({
-          type: "trait_gained",
-          traitId: String(effect.traitId),
-          label: String(effect.label),
-          details: effect,
-        });
-      }
-      continue;
-    }
-
-    if (type === "PUZZLE_CONSEQUENCE_APPLIED") {
-      const effect = payload?.effect ?? {};
-
-      if (effect?.kind === "lock_companion_path" && effect?.companionTag) {
-        out.push({
-          type: "companion_lock",
-          companionTag: String(effect.companionTag),
-          reason: String(effect.description ?? "Puzzle consequence"),
-          details: effect,
-        });
-        continue;
-      }
-
-      if (effect?.kind === "apply_penalty" && effect?.penaltyId && effect?.label) {
-        out.push({
-          type: "trait_lost",
-          traitId: String(effect.penaltyId),
-          label: String(effect.label),
-          details: effect,
-        });
-        continue;
-      }
-    }
-  }
-
-  return out;
-}
 
 export function useDemoRuntime() {
   const role: "arbiter" = "arbiter";
@@ -467,13 +152,21 @@ export function useDemoRuntime() {
 
   const [puzzleResolution, setPuzzleResolution] = useState<PuzzleResolution | null>(null);
 
-  const outcomesCount = useMemo(() => state.events.filter((e: any) => e?.type === "OUTCOME").length, [state.events]);
+  const outcomesCount = useMemo(
+    () => state.events.filter((e: any) => e?.type === "OUTCOME").length,
+    [state.events]
+  );
+
   const canonCount = useMemo(
     () => state.events.filter((e: any) => e?.type && e?.type !== "OUTCOME").length,
     [state.events]
   );
 
-  const partyCanonical = useMemo(() => deriveLatestParty(state.events as any[]) ?? null, [state.events]);
+  const partyCanonical = useMemo(
+    () => deriveLatestParty(state.events as any[]) ?? null,
+    [state.events]
+  );
+
   const [partyDraft, setPartyDraft] = useState<PartyDeclaredPayload | null>(null);
 
   const dungeon = useMemo(
@@ -512,7 +205,10 @@ export function useDemoRuntime() {
   const partyEffective: PartyDeclaredPayload | null = partyCanonical ?? partyDraft;
   const partyMembers = (partyEffective?.members ?? []).slice(0, 1);
   const partySize = 1;
-  const effectivePlayerNames = useMemo(() => partyMembers.map((m, idx) => displayName(m, idx + 1)), [partyMembers]);
+  const effectivePlayerNames = useMemo(
+    () => partyMembers.map((m, idx) => displayName(m, idx + 1)),
+    [partyMembers]
+  );
 
   const progressionEvents = useMemo(
     () => state.events as unknown as readonly ProgressionSessionEvent[],
@@ -547,7 +243,6 @@ export function useDemoRuntime() {
 
   useEffect(() => {
     if (process.env.NODE_ENV !== "development") return;
-    // eslint-disable-next-line no-console
     console.debug(progressionInspectorReport);
   }, [progressionInspectorReport]);
 
@@ -562,7 +257,10 @@ export function useDemoRuntime() {
     setActingPlayerId(String(partyMembers[0].id ?? "player_1"));
   }, [partyMembers, actingPlayerId]);
 
-  const latestCombatId = useMemo(() => findLatestCombatId(state.events as any) ?? null, [state.events]);
+  const latestCombatId = useMemo(
+    () => findLatestCombatId(state.events as any) ?? null,
+    [state.events]
+  );
 
   const derivedCombat = useMemo(() => {
     if (!latestCombatId) return null;
@@ -614,108 +312,14 @@ export function useDemoRuntime() {
     }
   };
 
-  function pauseIntroTheme(resetTime = true) {
-    const intro = introAudioRef.current;
-    if (!intro) return;
-
-    try {
-      intro.pause();
-      if (resetTime) intro.currentTime = 0;
-    } catch {
-      // fail silently
-    }
-  }
-
-  function pauseBackgroundTheme() {
-    const bgm = bgmAudioRef.current;
-    if (!bgm) return;
-
-    try {
-      bgm.pause();
-      bgm.currentTime = 0;
-      bgm.removeAttribute("src");
-      bgm.load();
-    } catch {
-      // fail silently
-    }
-  }
-
-  function stopAmbience() {
-    const ambience = ambienceAudioRef.current;
-    if (!ambience) return;
-
-    try {
-      ambience.pause();
-      ambience.currentTime = 0;
-    } catch {
-      // fail silently
-    }
-  }
-
-  function stopAllMusic() {
-    pauseIntroTheme(true);
-    pauseBackgroundTheme();
-    stopAmbience();
-    currentMusicModeRef.current = "none";
-  }
-
-  function startLoopingTrack(src: string, volume: number, mode: Exclude<MusicMode, "none" | "intro">) {
-    const bgm = bgmAudioRef.current;
-    if (!bgm || !src) return;
-
-    try {
-      pauseIntroTheme(true);
-
-      const sameSrc = bgm.getAttribute("src") === src;
-      bgm.loop = true;
-      bgm.volume = volume;
-
-      if (!sameSrc) {
-        bgm.src = src;
-        bgm.load();
-      }
-
-      currentMusicModeRef.current = mode;
-      const playPromise = bgm.play();
-      if (playPromise && typeof playPromise.catch === "function") {
-        playPromise.catch(() => {});
-      }
-    } catch {
-      // fail silently
-    }
-  }
-
-  function startAmbientTheme() {
-    const src = chooseNextTrack(AMBIENT_TRACKS, lastAmbientIndexRef);
-    startLoopingTrack(src, 0.36, "ambient");
-  }
-
-  function startCombatTheme() {
-    const src = chooseNextTrack(COMBAT_TRACKS, lastCombatIndexRef);
-    startLoopingTrack(src, 0.72, "combat");
-  }
-
-  function playIntroTheme(loop = false) {
-    const intro = introAudioRef.current;
-    if (!intro) return;
-
-    try {
-      pauseBackgroundTheme();
-
-      intro.pause();
-      intro.currentTime = 0;
-      intro.loop = loop;
-      intro.volume = 0.72;
-      currentMusicModeRef.current = "intro";
-
-      const playPromise = intro.play();
-      if (playPromise && typeof playPromise.catch === "function") {
-        playPromise.catch(() => {});
-      }
-    } catch {
-      // fail silently
-    }
-  }
+  const audioRefs: MusicRefs = {
+    introAudioRef,
+    bgmAudioRef,
+    ambienceAudioRef,
+    currentMusicModeRef,
+    lastAmbientIndexRef,
+    lastCombatIndexRef,
+  };
 
   function setEnteredDungeon(next: boolean) {
     setEnteredDungeonState(next);
@@ -743,7 +347,7 @@ export function useDemoRuntime() {
 
   useEffect(() => {
     if (dungeonAudioActive) return;
-    stopAllMusic();
+    stopAllMusic(audioRefs);
   }, [dungeonAudioActive]);
 
   useEffect(() => {
@@ -754,7 +358,7 @@ export function useDemoRuntime() {
 
   useEffect(() => {
     if (!dungeonAudioActive) {
-      stopAmbience();
+      stopAmbience(ambienceAudioRef);
       return;
     }
 
@@ -782,24 +386,34 @@ export function useDemoRuntime() {
 
     if (!tableAccepted) {
       if (currentMusicModeRef.current !== "intro" || !introIsPlaying) {
-        playIntroTheme(true);
+        playIntroTheme({ introAudioRef, bgmAudioRef, currentMusicModeRef, loop: true });
       }
       return;
     }
 
     if (introIsPlaying) {
-      pauseIntroTheme(true);
+      pauseIntroTheme(introAudioRef, true);
     }
 
     if (combatActive) {
       if (currentMusicModeRef.current !== "combat") {
-        startCombatTheme();
+        startCombatTheme({
+          introAudioRef,
+          bgmAudioRef,
+          currentMusicModeRef,
+          lastCombatIndexRef,
+        });
       }
       return;
     }
 
     if (currentMusicModeRef.current !== "ambient") {
-      startAmbientTheme();
+      startAmbientTheme({
+        introAudioRef,
+        bgmAudioRef,
+        currentMusicModeRef,
+        lastAmbientIndexRef,
+      });
     }
   }, [dungeonAudioActive, tableAccepted, combatActive]);
 
@@ -843,35 +457,8 @@ export function useDemoRuntime() {
     if (!partyDraft) return;
     if (partyLocked) return;
 
-    const onlyMember = (partyDraft.members || [buildStarterMember(0)]).slice(0, 1);
-
-    const cleaned: PartyDeclaredPayload = {
-      partyId: partyDraft.partyId || crypto.randomUUID(),
-      members: onlyMember.map((m, idx) => {
-        const i1 = idx + 1;
-        const id = normalizeName(m.id || `player_${i1}`) || `player_${i1}`;
-        const hpMax = safeInt(m.hpMax, 12, 1, 999);
-        const hpCurrent = safeInt(m.hpCurrent, hpMax, 0, 999);
-
-        return {
-          id,
-          name: normalizeName(m.name || ""),
-          species: String(m.species || "").trim() || "Human",
-          className: normalizeName(m.className || "") || SOLO_STARTER_CLASS,
-          portrait: (m as any).portrait === "Female" ? "Female" : "Male",
-          skills: Array.isArray((m as any).skills) ? (m as any).skills : [],
-          traits: Array.isArray((m as any).traits) ? (m as any).traits : [],
-          ac: safeInt(m.ac, 14, 1, 40),
-          hpMax,
-          hpCurrent: Math.min(hpCurrent, hpMax),
-          initiativeMod: safeInt(m.initiativeMod, 1, -10, 20),
-        };
-      }),
-    };
-
-    setState((prev) =>
-      appendEventToState(prev, "PARTY_DECLARED", cleaned as any)
-    );
+    const cleaned = cleanCommittedSoloParty(partyDraft);
+    setState((prev) => appendEventToState(prev, "PARTY_DECLARED", cleaned as any));
 
     if (tableAccepted) {
       setGameplayFocusStep("pressure");
@@ -953,10 +540,7 @@ export function useDemoRuntime() {
     if (combatEnded) return;
 
     const payload = nextTurnPointer(derivedCombat);
-
-    setState((prev) =>
-      appendEventToState(prev, "TURN_ADVANCED", payload as any)
-    );
+    setState((prev) => appendEventToState(prev, "TURN_ADVANCED", payload as any));
   }
 
   function endCombat() {
@@ -1091,7 +675,7 @@ export function useDemoRuntime() {
   );
 
   const puzzleCanon = useMemo(
-    () => mapStateEventsToPuzzleCanon(state.events as any[]),
+    () => mapStateEventsToPuzzleCanon(state.events as any[]) as PuzzleCanonRecord[],
     [state.events]
   );
 
@@ -1179,11 +763,9 @@ export function useDemoRuntime() {
     if (result.suggestedEvents.length > 0) {
       setState((prev) => {
         let next = prev;
-
         for (const event of result.suggestedEvents) {
           next = appendEventToState(next, event.type, event.payload as any);
         }
-
         return next;
       });
     }
@@ -1194,127 +776,6 @@ export function useDemoRuntime() {
     }
 
     return result;
-  }
-
-  function commitDungeonTraversalBundle(args: {
-    success: boolean;
-    selectedText: string;
-  }) {
-    const combinedText = args.selectedText;
-    const chosenConnection = inferConnectionChoiceFromText(
-      currentRoom,
-      reachableConnections,
-      dungeon,
-      location.floorId,
-      combinedText
-    );
-
-    setState((prev) => {
-      let next = prev;
-
-      if (!chosenConnection) {
-        const discoveryDrafts = deriveExplorationDiscoveryDrafts({
-          dungeon,
-          events: next.events as any[],
-          floorId: location.floorId,
-          roomId: location.roomId,
-          enteredViaConnectionId: null,
-          enteredFromRoomId: null,
-        });
-
-        for (const draft of discoveryDrafts) {
-          next = appendEventToState(next, draft.type, draft.payload as any);
-        }
-
-        return next;
-      }
-
-      const resolved = resolveTraversal(dungeon, {
-        floorId: location.floorId,
-        roomId: location.roomId,
-        connectionId: chosenConnection.id,
-        openedDoorIds,
-        unlockedDoorIds,
-      });
-
-      if (!args.success || !resolved.ok) {
-        const discoveryDrafts = deriveExplorationDiscoveryDrafts({
-          dungeon,
-          events: next.events as any[],
-          floorId: location.floorId,
-          roomId: location.roomId,
-          enteredViaConnectionId: null,
-          enteredFromRoomId: null,
-        });
-
-        for (const draft of discoveryDrafts) {
-          next = appendEventToState(next, draft.type, draft.payload as any);
-        }
-
-        return next;
-      }
-
-      next = appendEventToState(next, "ROOM_EXITED", buildRoomExitPayload({
-        floorId: location.floorId,
-        roomId: location.roomId,
-        toRoomId: resolved.toRoom.id,
-        viaConnectionId: resolved.connection.id,
-      }));
-
-      if (resolved.connection.doorId && resolved.connection.type === "locked_door") {
-        if (!unlockedDoorIds.includes(resolved.connection.doorId)) {
-          next = appendEventToState(next, "DOOR_UNLOCKED", {
-            floorId: location.floorId,
-            roomId: location.roomId,
-            doorId: resolved.connection.doorId,
-            connectionId: resolved.connection.id,
-            method: "force",
-          });
-        }
-      }
-
-      if (resolved.connection.doorId) {
-        next = appendEventToState(next, "DOOR_OPENED", {
-          floorId: location.floorId,
-          roomId: location.roomId,
-          doorId: resolved.connection.doorId,
-          connectionId: resolved.connection.id,
-          revealedRoomId: resolved.toRoom.id,
-        });
-      }
-
-      if (resolved.usedStairs && resolved.floorChanged) {
-        next = appendEventToState(next, "PLAYER_USED_STAIRS", {
-          fromFloorId: location.floorId,
-          fromRoomId: location.roomId,
-          toFloorId: resolved.nextFloorId,
-          toRoomId: resolved.toRoom.id,
-          direction: resolved.connection.note === "up" ? "up" : "down",
-        });
-
-        next = appendEventToState(next, "FLOOR_CHANGED", {
-          fromFloorId: location.floorId,
-          toFloorId: resolved.nextFloorId,
-          fromRoomId: location.roomId,
-          toRoomId: resolved.toRoom.id,
-        });
-      }
-
-      const discoveryDrafts = deriveExplorationDiscoveryDrafts({
-        dungeon,
-        events: next.events as any[],
-        floorId: resolved.nextFloorId,
-        roomId: resolved.toRoom.id,
-        enteredViaConnectionId: resolved.connection.id,
-        enteredFromRoomId: location.roomId,
-      });
-
-      for (const draft of discoveryDrafts) {
-        next = appendEventToState(next, draft.type, draft.payload as any);
-      }
-
-      return next;
-    });
   }
 
   function handleRecord(payload: {
@@ -1372,16 +833,20 @@ export function useDemoRuntime() {
         delta: awarenessDelta,
       });
 
-      return next;
-    });
+      next = commitDungeonTraversalBundle({
+        prevState: next,
+        success,
+        selectedText: combinedText,
+        currentRoom,
+        reachableConnections,
+        dungeon,
+        floorId: location.floorId,
+        roomId: location.roomId,
+        openedDoorIds,
+        unlockedDoorIds,
+      });
 
-    commitDungeonTraversalBundle({
-      success:
-        Number.isFinite(Number(payload?.dice?.roll)) &&
-        Number.isFinite(Number(payload?.dice?.dc))
-          ? Number(payload.dice.roll) >= Number(payload.dice.dc)
-          : false,
-      selectedText: combinedText,
+      return next;
     });
 
     setPlayerInput("");
@@ -1438,39 +903,17 @@ export function useDemoRuntime() {
   const partyCanonicalExists = !!partyCanonical;
   const showInitialTable = enteredDungeon && dmMode !== null;
 
-  const chapterState = useMemo(() => {
-    const doneMode = dmMode !== null;
-    const doneTable = tableAccepted;
-    const doneParty = partyCanonicalExists;
-    const doneDescent = dungeonDescentConfirmed;
-
-    return {
-      mode: doneMode ? ("done" as const) : ("next" as const),
-      party: doneParty ? ("done" as const) : doneTable ? ("next" as const) : ("locked" as const),
-      table: doneTable
-        ? ("done" as const)
-        : showInitialTable
-          ? ("next" as const)
-          : doneMode
-            ? ("next" as const)
-            : ("locked" as const),
-      pressure: doneTable && doneParty && doneDescent ? ("open" as const) : ("locked" as const),
-      map: doneTable && doneParty && doneDescent ? ("open" as const) : ("locked" as const),
-      combat: doneTable && doneParty && doneDescent ? ("open" as const) : ("locked" as const),
-      action: doneTable && doneParty && doneDescent ? ("open" as const) : ("locked" as const),
-      resolution: doneTable && doneParty && doneDescent ? ("open" as const) : ("locked" as const),
-      canon: doneTable && doneParty && doneDescent ? ("open" as const) : ("locked" as const),
-      ledger: doneTable && doneParty && doneDescent ? ("open" as const) : ("locked" as const),
-    };
-  }, [dmMode, tableAccepted, partyCanonicalExists, showInitialTable, dungeonDescentConfirmed]);
-
-  const presentationPhase: PresentationPhase = useMemo(() => {
-    if (dmMode === null || !enteredDungeon) return "onboarding";
-    if (!tableAccepted) return "chronicle";
-    if (!partyCanonicalExists) return "party-declaration";
-    if (!dungeonDescentConfirmed) return "tavern";
-    return "gameplay";
-  }, [dmMode, enteredDungeon, tableAccepted, partyCanonicalExists, dungeonDescentConfirmed]);
+  const presentationPhase = useMemo(
+    () =>
+      derivePresentationPhase({
+        dmMode,
+        enteredDungeon,
+        tableAccepted,
+        partyCanonicalExists,
+        dungeonDescentConfirmed,
+      }),
+    [dmMode, enteredDungeon, tableAccepted, partyCanonicalExists, dungeonDescentConfirmed]
+  );
 
   const showFullHero = presentationPhase === "onboarding";
   const showCompactHero = presentationPhase !== "onboarding";
@@ -1489,7 +932,10 @@ export function useDemoRuntime() {
     !!activeEnemyOverlayName &&
     !!activeEnemyOverlayId;
 
-  const resolutionDmMode = useMemo(() => (dmMode === "solace-neutral" ? "solace_neutral" : "human"), [dmMode]);
+  const resolutionDmMode = useMemo(
+    () => (dmMode === "solace-neutral" ? "solace_neutral" : "human"),
+    [dmMode]
+  );
 
   const allowGameplay =
     dmMode !== null &&
@@ -1497,11 +943,39 @@ export function useDemoRuntime() {
     partyCanonicalExists &&
     dungeonDescentConfirmed;
 
-  const gameplayAllowsPressure = showGameplay && allowGameplay;
-  const gameplayAllowsMap =
-    gameplayAllowsPressure &&
-    (gameplayFocusStep === "map" || gameplayFocusStep === "puzzle" || gameplayFocusStep === "action");
-  const gameplayAllowsAction = gameplayAllowsPressure && gameplayFocusStep === "action";
+  const roomInteractionMode = useMemo(
+    () =>
+      deriveRoomInteractionMode({
+        combatActive,
+        gameplayFocusStep,
+        hasActivePuzzle: !!activeRoomPuzzle,
+        puzzleResolved: !!puzzleResolution?.success,
+      }),
+    [combatActive, gameplayFocusStep, activeRoomPuzzle, puzzleResolution?.success]
+  );
+
+  const { gameplayAllowsPressure, gameplayAllowsMap, gameplayAllowsAction } = useMemo(
+    () =>
+      deriveGameplayPermissions({
+        showGameplay,
+        allowGameplay,
+        gameplayFocusStep,
+        roomInteractionMode,
+      }),
+    [showGameplay, allowGameplay, gameplayFocusStep, roomInteractionMode]
+  );
+
+  const chapterState = useMemo(
+    () =>
+      deriveChapterState({
+        dmMode,
+        tableAccepted,
+        partyCanonicalExists,
+        showInitialTable,
+        dungeonDescentConfirmed,
+      }),
+    [dmMode, tableAccepted, partyCanonicalExists, showInitialTable, dungeonDescentConfirmed]
+  );
 
   const roomNarrative = useMemo(() => {
     return describeRoomEntry({
@@ -1649,7 +1123,7 @@ export function useDemoRuntime() {
 
   function enterDungeon() {
     if (!canEnterDungeon) return;
-    playIntroTheme(true);
+    playIntroTheme({ introAudioRef, bgmAudioRef, currentMusicModeRef, loop: true });
     setEnteredDungeonState(true);
     setDungeonDescentConfirmed(false);
     setActiveSection("table");
@@ -1740,10 +1214,8 @@ export function useDemoRuntime() {
       },
       campaign: {
         fullFellowshipAssembled: progressionState.campaign.fullFellowshipAssembled,
-        completionRequiresFullFellowship:
-          progressionState.campaign.completionRequiresFullFellowship,
-        completionRequiresFullParty:
-          progressionState.campaign.completionRequiresFullFellowship,
+        completionRequiresFullFellowship: progressionState.campaign.completionRequiresFullFellowship,
+        completionRequiresFullParty: progressionState.campaign.completionRequiresFullFellowship,
         completionBlocked: progressionState.campaign.completionBlocked,
         cryptFullyCleared: progressionState.campaign.cryptFullyCleared,
         finalDescentUnlocked: progressionState.campaign.finalDescentUnlocked,
@@ -1769,8 +1241,7 @@ export function useDemoRuntime() {
     activePartySize: progressionState.party.activeSlots,
     maxPartySlots: progressionState.party.maxSlots,
     fullFellowshipAssembled: progressionState.campaign.fullFellowshipAssembled,
-    completionRequiresFullFellowship:
-      progressionState.campaign.completionRequiresFullFellowship,
+    completionRequiresFullFellowship: progressionState.campaign.completionRequiresFullFellowship,
     campaignCompletionBlocked: progressionState.campaign.completionBlocked,
 
     dungeon,
@@ -1788,12 +1259,7 @@ export function useDemoRuntime() {
 
     currentFeatures,
     narrationFeatures,
-    narrationExits: toNarrationExits({
-      currentRoom,
-      currentFloorRooms: currentFloor.rooms,
-      allDungeonRooms: dungeon.floors.flatMap((floor) => floor.rooms),
-      connections: reachableConnections,
-    }),
+    narrationExits,
     roomImage,
     roomConnectionsView,
 
@@ -1837,6 +1303,9 @@ export function useDemoRuntime() {
     showFullHero,
     showCompactHero,
     showGameplay,
+
+    roomInteractionMode,
+
     showInitialTable,
 
     activeEnemyOverlayName,
