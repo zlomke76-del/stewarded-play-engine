@@ -250,15 +250,17 @@ const CLASS_META: Record<string, ClassMeta> = {
     tradeoff: "Less stable than safer support builds.",
   },
 };
+
 const BUILD_FOCUS_OPTIONS: Array<{
   id: BuildFocus;
   label: string;
   hint: string;
+  icon: string;
 }> = [
-  { id: "balanced", label: "Balanced", hint: "Steady all-around profile." },
-  { id: "guardian", label: "Guardian", hint: "Higher AC, lower speed." },
-  { id: "swift", label: "Swift", hint: "Higher initiative, lighter defense." },
-  { id: "hardy", label: "Hardy", hint: "More vitality for longer fights." },
+  { id: "balanced", label: "Balanced", hint: "Steady all-around profile.", icon: "⚖" },
+  { id: "guardian", label: "Guardian", hint: "Higher AC, lower speed.", icon: "🛡" },
+  { id: "swift", label: "Swift", hint: "Higher initiative, lighter defense.", icon: "⚡" },
+  { id: "hardy", label: "Hardy", hint: "More vitality for longer fights.", icon: "♥" },
 ];
 
 const BUILD_FOCUS_META: Record<BuildFocus, FocusMeta> = {
@@ -312,12 +314,6 @@ function normalizeClassValue(v: string) {
 
 function normalizeSpeciesValue(v: string) {
   return (v ?? "").trim();
-}
-
-function isKnownValue(value: string, allowed: readonly string[]) {
-  const normalized = value.trim().toLowerCase();
-  if (!normalized) return false;
-  return allowed.some((x) => x.toLowerCase() === normalized);
 }
 
 function getResolvedSpecies(value?: string) {
@@ -404,6 +400,56 @@ function inferBuildFocus(row: PartyMember, resolvedClass: string): BuildFocus {
   if (row.hpMax >= base.hpMax + 2) return "hardy";
   if (row.ac >= base.ac + 1 && row.initiativeMod <= base.initiativeMod - 1) return "guardian";
   return "balanced";
+}
+
+function getPortraitObjectPosition(kind: "intro" | "card" | "name" | "oath" | "thumb") {
+  if (kind === "intro") return "center 12%";
+  if (kind === "oath") return "center 14%";
+  if (kind === "name") return "center 16%";
+  if (kind === "thumb") return "center 16%";
+  return "center 18%";
+}
+
+function getFocusPalette(focus: BuildFocus, active: boolean) {
+  const palettes: Record<BuildFocus, { border: string; background: string; shadow: string }> = {
+    balanced: {
+      border: active ? "1px solid rgba(160,180,210,0.42)" : "1px solid rgba(160,180,210,0.22)",
+      background: active
+        ? "linear-gradient(180deg, rgba(140,165,200,0.16), rgba(255,255,255,0.03))"
+        : "linear-gradient(180deg, rgba(140,165,200,0.08), rgba(255,255,255,0.02))",
+      shadow: active ? "0 12px 28px rgba(120,145,180,0.16)" : "none",
+    },
+    guardian: {
+      border: active ? "1px solid rgba(255,196,118,0.44)" : "1px solid rgba(255,196,118,0.24)",
+      background: active
+        ? "linear-gradient(180deg, rgba(255,190,90,0.16), rgba(255,255,255,0.03))"
+        : "linear-gradient(180deg, rgba(255,180,80,0.09), rgba(255,255,255,0.02))",
+      shadow: active ? "0 12px 28px rgba(255,170,60,0.18)" : "none",
+    },
+    swift: {
+      border: active ? "1px solid rgba(98,210,220,0.44)" : "1px solid rgba(98,210,220,0.24)",
+      background: active
+        ? "linear-gradient(180deg, rgba(70,200,215,0.15), rgba(255,255,255,0.03))"
+        : "linear-gradient(180deg, rgba(70,200,215,0.08), rgba(255,255,255,0.02))",
+      shadow: active ? "0 12px 28px rgba(60,180,200,0.16)" : "none",
+    },
+    hardy: {
+      border: active ? "1px solid rgba(220,110,110,0.42)" : "1px solid rgba(220,110,110,0.22)",
+      background: active
+        ? "linear-gradient(180deg, rgba(170,70,70,0.16), rgba(255,255,255,0.03))"
+        : "linear-gradient(180deg, rgba(170,70,70,0.08), rgba(255,255,255,0.02))",
+      shadow: active ? "0 12px 28px rgba(140,50,50,0.16)" : "none",
+    },
+  };
+
+  return palettes[focus];
+}
+
+function getFocusTitleColor(focus: BuildFocus) {
+  if (focus === "guardian") return "rgba(255,214,140,0.96)";
+  if (focus === "swift") return "rgba(150,235,245,0.96)";
+  if (focus === "hardy") return "rgba(235,150,150,0.96)";
+  return "rgba(220,228,240,0.96)";
 }
 
 function SectionPill({
@@ -557,9 +603,10 @@ function RitualFrame({
           "radial-gradient(circle at top, rgba(255,188,112,0.08), transparent 28%), linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.02))",
         padding: 22,
         boxShadow: "inset 0 1px 0 rgba(255,255,255,0.03)",
-        maxWidth: 1050,
+        maxWidth: 1150,
         margin: "0 auto",
         width: "100%",
+        overflow: "hidden",
       }}
     >
       <div style={{ display: "grid", gap: 18 }}>
@@ -615,11 +662,15 @@ function RitualChoiceCard({
   disabled?: boolean;
   details?: React.ReactNode;
 }) {
+  const [hovered, setHovered] = useState(false);
+
   return (
     <button
       type="button"
       onClick={onClick}
       disabled={disabled}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
       style={{
         width: "100%",
         textAlign: "left",
@@ -634,7 +685,12 @@ function RitualChoiceCard({
           : "linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.02))",
         cursor: disabled ? "not-allowed" : "pointer",
         opacity: disabled ? 0.58 : 1,
-        boxShadow: selected ? "0 16px 38px rgba(255,145,42,0.12)" : "none",
+        boxShadow: selected
+          ? "0 16px 38px rgba(255,145,42,0.12)"
+          : hovered
+            ? "0 12px 28px rgba(0,0,0,0.28)"
+            : "none",
+        transform: hovered && !disabled ? "translateY(-3px)" : "translateY(0)",
         transition: "transform 140ms ease, filter 140ms ease, box-shadow 140ms ease, border-color 140ms ease",
       }}
     >
@@ -649,12 +705,12 @@ function RitualChoiceCard({
           src={imageSrc}
           alt={title}
           style={{
-  width: "100%",
-  height: "100%",
-  objectFit: "cover",
-  objectPosition: "center 18%",
-  display: "block",
-}}
+            width: "100%",
+            height: "100%",
+            objectFit: "cover",
+            objectPosition: getPortraitObjectPosition("card"),
+            display: "block",
+          }}
         />
       </div>
 
@@ -735,8 +791,11 @@ export default function PartySetupSection(props: {
     classConfirmed: false,
     focusConfirmed: false,
   });
+  const [canonFlashVisible, setCanonFlashVisible] = useState(false);
 
   const heroSelectionAudioRef = useRef<HTMLAudioElement | null>(null);
+  const canonFlashTimeoutRef = useRef<number | null>(null);
+  const commitDelayTimeoutRef = useRef<number | null>(null);
 
   const editable = !partyLocked && !!partyDraft;
   const sourceHero = (partyDraft?.members?.[0] ?? partyMembersFallback?.[0]) as PartyMember | undefined;
@@ -817,8 +876,27 @@ export default function PartySetupSection(props: {
     return () => {
       stopHeroSelectionLoop(true);
       heroSelectionAudioRef.current = null;
+
+      if (canonFlashTimeoutRef.current) {
+        window.clearTimeout(canonFlashTimeoutRef.current);
+      }
+      if (commitDelayTimeoutRef.current) {
+        window.clearTimeout(commitDelayTimeoutRef.current);
+      }
     };
   }, []);
+
+  function triggerCanonFlash() {
+    setCanonFlashVisible(true);
+
+    if (canonFlashTimeoutRef.current) {
+      window.clearTimeout(canonFlashTimeoutRef.current);
+    }
+
+    canonFlashTimeoutRef.current = window.setTimeout(() => {
+      setCanonFlashVisible(false);
+    }, 180);
+  }
 
   function setHeroField(patch: Partial<PartyMember>) {
     setPartyDraft((prev) => {
@@ -898,6 +976,14 @@ export default function PartySetupSection(props: {
     boxShadow:
       "inset 0 1px 0 rgba(255,255,255,0.04), 0 20px 44px rgba(0,0,0,0.24)",
     padding: 18,
+    overflowX: "hidden",
+    position: "relative",
+  };
+
+  const ritualStageStyle: React.CSSProperties = {
+    transition: "opacity 260ms ease, transform 260ms ease",
+    opacity: 1,
+    transform: "translateY(0)",
   };
 
   const controlButtonBase: React.CSSProperties = {
@@ -1008,7 +1094,7 @@ export default function PartySetupSection(props: {
     switch (heroCreationStep) {
       case "intro":
         return (
-          <div key="ritual-intro" style={{ transition: "opacity 260ms ease", opacity: 1 }}>
+          <div key="ritual-intro" style={ritualStageStyle}>
             <RitualFrame
               title="Echoes of Fate"
               subtitle={
@@ -1063,22 +1149,39 @@ export default function PartySetupSection(props: {
                 >
                   <div
                     style={{
-                      width: "min(100%, 720px)",
+                      width: "min(100%, 760px)",
                       borderRadius: 20,
                       overflow: "hidden",
                       border: "1px solid rgba(255,255,255,0.10)",
                       background: "rgba(255,255,255,0.03)",
                       boxShadow: "0 18px 46px rgba(0,0,0,0.24)",
+                      position: "relative",
                     }}
                   >
                     <img
                       src="/assets/V3/Tavern/tavern_01.png"
                       alt="The tavern grows quiet"
-                      style={{ width: "100%", height: 300, objectFit: "cover", display: "block" }}
+                      style={{
+                        width: "100%",
+                        height: 320,
+                        objectFit: "cover",
+                        objectPosition: getPortraitObjectPosition("intro"),
+                        display: "block",
+                      }}
                       onError={(e) => {
                         const img = e.currentTarget;
                         img.onerror = null;
                         img.src = fallbackPortraitPath;
+                        img.style.objectPosition = getPortraitObjectPosition("intro");
+                      }}
+                    />
+                    <div
+                      style={{
+                        position: "absolute",
+                        inset: 0,
+                        background:
+                          "linear-gradient(to bottom, rgba(0,0,0,0.08) 18%, rgba(0,0,0,0.22) 60%, rgba(0,0,0,0.52) 100%)",
+                        pointerEvents: "none",
                       }}
                     />
                   </div>
@@ -1094,7 +1197,7 @@ export default function PartySetupSection(props: {
 
       case "sex":
         return (
-          <div key="ritual-sex" style={{ transition: "opacity 260ms ease", opacity: 1 }}>
+          <div key="ritual-sex" style={ritualStageStyle}>
             <RitualFrame
               title="Choose a Form"
               subtitle="Set the first face of your hero. This determines which portrait line follows through the ritual."
@@ -1175,7 +1278,7 @@ export default function PartySetupSection(props: {
 
       case "species":
         return (
-          <div key="ritual-species" style={{ transition: "opacity 260ms ease", opacity: 1 }}>
+          <div key="ritual-species" style={ritualStageStyle}>
             <RitualFrame
               title="Choose a Species"
               subtitle="Identity begins with lineage. Here the player should understand not just the fantasy, but the practical shape of the build."
@@ -1263,7 +1366,7 @@ export default function PartySetupSection(props: {
 
       case "class":
         return (
-          <div key="ritual-class" style={{ transition: "opacity 260ms ease", opacity: 1 }}>
+          <div key="ritual-class" style={ritualStageStyle}>
             <RitualFrame
               title="Choose a Class"
               subtitle="This should tell the player how the hero fights, how difficult the role is, and which focus pairings make sense."
@@ -1357,7 +1460,7 @@ export default function PartySetupSection(props: {
 
       case "focus":
         return (
-          <div key="ritual-focus" style={{ transition: "opacity 260ms ease", opacity: 1 }}>
+          <div key="ritual-focus" style={ritualStageStyle}>
             <RitualFrame
               title="Choose a Focus"
               subtitle="This is the stance your hero carries into danger. The player should understand the exact gains and the exact cost."
@@ -1398,6 +1501,7 @@ export default function PartySetupSection(props: {
                   {BUILD_FOCUS_OPTIONS.map((option) => {
                     const active = currentFocus === option.id;
                     const meta = BUILD_FOCUS_META[option.id];
+                    const palette = getFocusPalette(option.id, active);
 
                     return (
                       <button
@@ -1420,20 +1524,20 @@ export default function PartySetupSection(props: {
                           textAlign: "left",
                           padding: 18,
                           borderRadius: 18,
-                          border: active
-                            ? "1px solid rgba(255,205,126,0.32)"
-                            : "1px solid rgba(255,255,255,0.10)",
-                          background: active
-                            ? "linear-gradient(180deg, rgba(255,205,126,0.08), rgba(255,255,255,0.03))"
-                            : "linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.02))",
+                          border: palette.border,
+                          background: palette.background,
+                          boxShadow: palette.shadow,
                           color: "inherit",
                           cursor: editable ? "pointer" : "not-allowed",
                           opacity: editable ? 1 : 0.6,
                           display: "grid",
                           gap: 10,
+                          transition: "transform 140ms ease, box-shadow 140ms ease, border-color 140ms ease",
                         }}
                       >
-                        <div style={{ fontSize: 18, fontWeight: 900 }}>{option.label}</div>
+                        <div style={{ fontSize: 18, fontWeight: 900, color: getFocusTitleColor(option.id) }}>
+                          {option.icon} {option.label}
+                        </div>
                         <div style={{ fontSize: 13, opacity: 0.82, lineHeight: 1.6 }}>{meta.hint}</div>
                         <div style={{ fontSize: 12, opacity: 0.88, lineHeight: 1.5 }}>
                           <strong>Shift:</strong> {renderFocusDeltaSummary(option.id)}
@@ -1458,7 +1562,7 @@ export default function PartySetupSection(props: {
 
       case "name":
         return (
-          <div key="ritual-name" style={{ transition: "opacity 260ms ease", opacity: 1 }}>
+          <div key="ritual-name" style={ritualStageStyle}>
             <RitualFrame
               title="Name the Hero"
               subtitle="A name binds memory to fate. This is the first voice the Chronicle will remember."
@@ -1548,7 +1652,8 @@ export default function PartySetupSection(props: {
                     <div style={helperCardStyle}>
                       <div style={{ fontSize: 13, fontWeight: 800 }}>Current Build Summary</div>
                       <div style={{ fontSize: 13, opacity: 0.82, lineHeight: 1.6 }}>
-                        <strong>{resolvedSpecies}</strong> {resolvedClass} · <strong>{BUILD_FOCUS_OPTIONS.find((x) => x.id === currentFocus)?.label ?? ""}</strong>
+                        <strong>{resolvedSpecies}</strong> {resolvedClass} ·{" "}
+                        <strong>{BUILD_FOCUS_OPTIONS.find((x) => x.id === currentFocus)?.label ?? ""}</strong>
                       </div>
                       <div style={{ fontSize: 12, opacity: 0.76, lineHeight: 1.6 }}>
                         {resolvedSpeciesMeta.bestFor} · {resolvedClassMeta.role} · {resolvedFocusMeta.bestFor}
@@ -1567,11 +1672,18 @@ export default function PartySetupSection(props: {
                     <img
                       src={portraitPath}
                       alt={`${display} portrait`}
-                      style={{ width: "100%", height: 320, objectFit: "cover", display: "block" }}
+                      style={{
+                        width: "100%",
+                        height: 320,
+                        objectFit: "cover",
+                        objectPosition: getPortraitObjectPosition("name"),
+                        display: "block",
+                      }}
                       onError={(e) => {
                         const img = e.currentTarget;
                         img.onerror = null;
                         img.src = fallbackPortraitPath;
+                        img.style.objectPosition = getPortraitObjectPosition("name");
                       }}
                     />
                   </div>
@@ -1583,7 +1695,7 @@ export default function PartySetupSection(props: {
 
       case "confirm":
         return (
-          <div key="ritual-confirm" style={{ transition: "opacity 260ms ease", opacity: 1 }}>
+          <div key="ritual-confirm" style={ritualStageStyle}>
             <RitualFrame
               title="The Oath"
               subtitle="A new name enters the Chronicle."
@@ -1613,8 +1725,16 @@ export default function PartySetupSection(props: {
                           return;
                         }
                         stopHeroSelectionLoop(true);
+                        triggerCanonFlash();
                         playSfx(SFX.arbiterCanonRecord, 0.78);
-                        commitParty();
+
+                        if (commitDelayTimeoutRef.current) {
+                          window.clearTimeout(commitDelayTimeoutRef.current);
+                        }
+
+                        commitDelayTimeoutRef.current = window.setTimeout(() => {
+                          commitParty();
+                        }, 120);
                       }}
                       disabled={!canEnterChronicle || partyLocked || !partyDraft}
                       style={{
@@ -1665,23 +1785,24 @@ export default function PartySetupSection(props: {
                       overflow: "hidden",
                       border: "1px solid rgba(255,255,255,0.10)",
                       background: "rgba(255,255,255,0.03)",
-                      boxShadow: "0 18px 40px rgba(0,0,0,0.24)",
+                      boxShadow: "0 0 40px rgba(255,180,80,0.18), 0 18px 40px rgba(0,0,0,0.24)",
                     }}
                   >
                     <img
                       src={portraitPath}
                       alt={`${display} portrait`}
                       style={{
-  width: "100%",
-  height: 400,
-  objectFit: "cover",
-  objectPosition: "center 14%",
-  display: "block",
-}}
+                        width: "100%",
+                        height: 400,
+                        objectFit: "cover",
+                        objectPosition: getPortraitObjectPosition("oath"),
+                        display: "block",
+                      }}
                       onError={(e) => {
                         const img = e.currentTarget;
                         img.onerror = null;
                         img.src = fallbackPortraitPath;
+                        img.style.objectPosition = getPortraitObjectPosition("oath");
                       }}
                     />
                   </div>
@@ -1713,9 +1834,18 @@ export default function PartySetupSection(props: {
                         gap: 10,
                       }}
                     >
-                      <StatChip label="AC" value={`${row?.ac ?? baseStats.ac}${focusDeltaAc ? ` (${focusDeltaAc > 0 ? `+${focusDeltaAc}` : focusDeltaAc})` : ""}`} />
-                      <StatChip label="HP Max" value={`${row?.hpMax ?? baseStats.hpMax}${focusDeltaHp ? ` (${focusDeltaHp > 0 ? `+${focusDeltaHp}` : focusDeltaHp})` : ""}`} />
-                      <StatChip label="Init" value={`${row?.initiativeMod ?? baseStats.initiativeMod}${focusDeltaInit ? ` (${focusDeltaInit > 0 ? `+${focusDeltaInit}` : focusDeltaInit})` : ""}`} />
+                      <StatChip
+                        label="AC"
+                        value={`${row?.ac ?? baseStats.ac}${focusDeltaAc ? ` (${focusDeltaAc > 0 ? `+${focusDeltaAc}` : focusDeltaAc})` : ""}`}
+                      />
+                      <StatChip
+                        label="HP Max"
+                        value={`${row?.hpMax ?? baseStats.hpMax}${focusDeltaHp ? ` (${focusDeltaHp > 0 ? `+${focusDeltaHp}` : focusDeltaHp})` : ""}`}
+                      />
+                      <StatChip
+                        label="Init"
+                        value={`${row?.initiativeMod ?? baseStats.initiativeMod}${focusDeltaInit ? ` (${focusDeltaInit > 0 ? `+${focusDeltaInit}` : focusDeltaInit})` : ""}`}
+                      />
                     </div>
 
                     <div style={helperCardStyle}>
@@ -1761,7 +1891,20 @@ export default function PartySetupSection(props: {
   }
 
   return (
-    <div style={{ scrollMarginTop: 90 }}>
+    <div style={{ scrollMarginTop: 90, overflowX: "hidden", position: "relative" }}>
+      {canonFlashVisible ? (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            pointerEvents: "none",
+            background:
+              "radial-gradient(circle at center, rgba(255,220,160,0.18), rgba(255,200,120,0.08) 35%, rgba(255,255,255,0) 70%)",
+            zIndex: 40,
+          }}
+        />
+      ) : null}
+
       <section style={shellStyle}>
         <div style={{ display: "grid", gap: 16 }}>
           <div
@@ -1795,9 +1938,7 @@ export default function PartySetupSection(props: {
                   <SectionPill>
                     <strong>{heroSummary.resolvedSpecies}</strong> Lineage
                   </SectionPill>
-                  <SectionPill>
-                    {partyCanonicalExists ? "Hero canonized" : "Draft hero only"}
-                  </SectionPill>
+                  <SectionPill>{partyCanonicalExists ? "Hero canonized" : "Draft hero only"}</SectionPill>
                   {partyLockedByCombat ? <SectionPill tone="warn">Combat lock active</SectionPill> : null}
                 </div>
               )}
@@ -1923,16 +2064,17 @@ export default function PartySetupSection(props: {
                         src={portraitPath}
                         alt={`${display} portrait`}
                         style={{
-  width: "100%",
-  height: 320,
-  objectFit: "cover",
-  objectPosition: "center 16%",
-  display: "block",
-}}
+                          width: "100%",
+                          height: "100%",
+                          objectFit: "cover",
+                          objectPosition: getPortraitObjectPosition("thumb"),
+                          display: "block",
+                        }}
                         onError={(e) => {
                           const img = e.currentTarget;
                           img.onerror = null;
                           img.src = fallbackPortraitPath;
+                          img.style.objectPosition = getPortraitObjectPosition("thumb");
                         }}
                       />
                     </div>
@@ -2063,6 +2205,8 @@ export default function PartySetupSection(props: {
                       <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
                         {BUILD_FOCUS_OPTIONS.map((option) => {
                           const active = currentFocus === option.id;
+                          const palette = getFocusPalette(option.id, active);
+
                           return (
                             <button
                               key={option.id}
@@ -2080,18 +2224,15 @@ export default function PartySetupSection(props: {
                                 ...controlButtonBase,
                                 padding: "8px 10px",
                                 fontSize: 12,
-                                border: active
-                                  ? "1px solid rgba(138,180,255,0.42)"
-                                  : "1px solid rgba(255,255,255,0.12)",
-                                background: active
-                                  ? "rgba(138,180,255,0.12)"
-                                  : "rgba(255,255,255,0.04)",
-                                color: "inherit",
+                                border: palette.border,
+                                background: palette.background,
+                                boxShadow: palette.shadow,
+                                color: getFocusTitleColor(option.id),
                                 opacity: editable ? 1 : 0.6,
                                 cursor: editable ? "pointer" : "not-allowed",
                               }}
                             >
-                              {option.label}
+                              {option.icon} {option.label}
                             </button>
                           );
                         })}
