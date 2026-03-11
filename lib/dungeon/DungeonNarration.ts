@@ -300,10 +300,136 @@ function inferSensoryLine(floorTheme: string, roomType: string, seed: string): s
   return pickDeterministic(key, [...(themePool[slugKey(floorTheme)] ?? []), ...pool], pool[0]);
 }
 
+function isMetadataLikeNote(note: string): boolean {
+  const text = normalizeText(note);
+  if (!text) return false;
+
+  const metadataPatterns = [
+    /\b(?:id|name|danger|asset|trap|type)\s*:/i,
+    /\b\/?assets?\//i,
+    /\b\/v\d+\//i,
+    /\.(?:png|jpg|jpeg|webp|gif)\b/i,
+    /\btrap_[a-z0-9_]+\b/i,
+    /\b[a-z0-9_]+\s*\|\s*[a-z0-9_]+:/i,
+  ];
+
+  return metadataPatterns.some((pattern) => pattern.test(text));
+}
+
+function parseMetadataFields(note: string): Record<string, string> {
+  const text = normalizeText(note);
+  if (!text) return {};
+
+  const result: Record<string, string> = {};
+
+  for (const rawPart of text.split("|")) {
+    const part = rawPart.trim();
+    if (!part) continue;
+
+    const idx = part.indexOf(":");
+    if (idx <= 0) continue;
+
+    const key = slugKey(part.slice(0, idx));
+    const value = normalizeText(part.slice(idx + 1));
+    if (!key || !value) continue;
+
+    result[key] = value;
+  }
+
+  return result;
+}
+
+function inferTrapClueLine(kind: string, note: string, seed: string): string | null {
+  const fields = parseMetadataFields(note);
+  const trapId = slugKey(fields.trap || fields.id || "");
+  const trapName = normalizeText(fields.name || "");
+  const danger = slugKey(fields.danger || "");
+
+  const fallbackKey = `${kind}:${trapId}:${trapName}:${danger}:${seed}`;
+
+  const genericHazardLines = [
+    "The room shows signs of a built danger waiting for the wrong movement.",
+    "Something about the chamber suggests a mechanism designed to punish haste.",
+    "The space feels engineered to turn ordinary movement into a mistake.",
+  ];
+
+  if (!trapId && !trapName && !danger) {
+    return pickDeterministic(fallbackKey, genericHazardLines, genericHazardLines[0]);
+  }
+
+  if (trapId.includes("crushing_walls") || /crushing walls/i.test(trapName)) {
+    const pool = [
+      "Scrape marks along the stone and the shape of the corridor suggest the walls themselves may not stay still.",
+      "The chamber bears the kind of scars left by stone forced inward more than once.",
+      "Flattened damage and grinding marks imply the room can close against whatever lingers inside it.",
+    ];
+    return pickDeterministic(fallbackKey, pool, pool[0]);
+  }
+
+  if (trapId.includes("swinging_blade") || trapId.includes("blade_corridor") || /blade/i.test(trapName)) {
+    const pool = [
+      "Grooves in the stone and old impact scoring suggest something heavy sweeps through this space.",
+      "The corridor carries the geometry of a path that punishes bad timing.",
+      "Marks overhead and along the walls imply a moving edge crosses here when triggered.",
+    ];
+    return pickDeterministic(fallbackKey, pool, pool[0]);
+  }
+
+  if (trapId.includes("poison_dart") || trapId.includes("dart_wall") || /dart/i.test(trapName)) {
+    const pool = [
+      "Tiny punctures and suspicious wall openings suggest the room answers intrusion at range.",
+      "The stonework is patterned with holes too deliberate to ignore.",
+      "The chamber gives the impression of concealed launch points waiting for a careless step.",
+    ];
+    return pickDeterministic(fallbackKey, pool, pool[0]);
+  }
+
+  if (trapId.includes("gas") || /gas/i.test(trapName)) {
+    const pool = [
+      "Residue in the room suggests the air itself may become part of the threat.",
+      "The chamber feels sealed in a way that makes breathing seem less trustworthy.",
+      "Staining and still air imply the room can turn hostile without anything visible crossing it.",
+    ];
+    return pickDeterministic(fallbackKey, pool, pool[0]);
+  }
+
+  if (trapId.includes("falling") || trapId.includes("stone_block") || /falling|block/i.test(trapName)) {
+    const pool = [
+      "Cracks overhead and fresh stone dust suggest the ceiling cannot be trusted.",
+      "The room carries the warning of weight suspended above the wrong step.",
+      "Damage patterns imply the threat here falls rather than advances.",
+    ];
+    return pickDeterministic(fallbackKey, pool, pool[0]);
+  }
+
+  if (danger === "deadly") {
+    const pool = [
+      "The room radiates the kind of built danger that can end a careless approach quickly.",
+      "Everything about the chamber suggests the mechanism here was made to do more than warn.",
+      "This place feels less trapped than sentenced.",
+    ];
+    return pickDeterministic(fallbackKey, pool, pool[0]);
+  }
+
+  return pickDeterministic(fallbackKey, genericHazardLines, genericHazardLines[0]);
+}
+
+function normalizeNarrativeNote(kind: string, rawNote: string, seed: string): string | null {
+  const note = normalizeText(rawNote);
+  if (!note) return null;
+
+  if (isMetadataLikeNote(note)) {
+    return inferTrapClueLine(kind, note, seed);
+  }
+
+  return note.replace(/[.]+$/g, "");
+}
+
 function inferFeatureLine(feature: NarrationFeature, floorTheme: string, roomType: string, seed: string): string {
   const kind = slugKey(feature.kind) as RoomFeatureKind;
-  const note = normalizeText(feature.note ?? "");
-  const key = `${slugKey(floorTheme)}:${slugKey(roomType)}:${kind}:${seed}:${note}`;
+  const rawNote = normalizeText(feature.note ?? "");
+  const narrativeNote = normalizeNarrativeNote(kind, rawNote, seed);
+  const key = `${slugKey(floorTheme)}:${slugKey(roomType)}:${kind}:${seed}:${narrativeNote ?? ""}`;
 
   const generic: Record<string, string[]> = {
     door: [
@@ -347,8 +473,8 @@ function inferFeatureLine(feature: NarrationFeature, floorTheme: string, roomTyp
   const pool = generic[kind] ?? ["The room contains a notable feature."];
   const base = pickDeterministic(key, pool, pool[0]);
 
-  if (!note) return base;
-  return `${base} (${note}.)`.replace("..", ".");
+  if (!narrativeNote) return base;
+  return `${base} (${narrativeNote}.)`.replace("..", ".");
 }
 
 function inferLootLine(lootHint: string | null | undefined, seed: string): string | null {
