@@ -4,15 +4,26 @@
 // ------------------------------------------------------------
 // Purpose:
 // - Provide a deterministic, read-only dungeon state interpreter
-// - Derive local pressure, awareness, danger mood, and apex pacing
+// - Derive local pressure, awareness, danger mood, apex pacing,
+//   and environment stress
 // - Reuse the strong pattern of the older world-native evolution layer
 // - Shift ontology from tile-zones to room/floor locations
+//
+// Current design alignment:
+// - Fixed 3-floor structure: 0 / -1 / -2
+// - Supports darkness on Floor -1
+// - Supports darkness + cold on Floor -2
+// - Supports richer room metadata (puzzles, traps, signature rooms,
+//   refuge rooms, fire-source rooms)
 // ------------------------------------------------------------
 
+import type { FloorId, RoomId } from "@/lib/dungeon/DungeonEvents";
 import type {
-  FloorId,
-  RoomId,
-} from "@/lib/dungeon/DungeonEvents";
+  DungeonDefinition,
+  DungeonRoom,
+  FloorDepth,
+} from "@/lib/dungeon/FloorState";
+import { getFloorById, getRoomById } from "@/lib/dungeon/FloorState";
 
 export type SessionEvent = {
   id: string;
@@ -24,14 +35,23 @@ export type SessionEvent = {
 export type DungeonCondition = "Stable" | "Disturbed" | "Unstable" | "Warped";
 export type ApexPresence = "None" | "Suspected" | "Present" | "Imminent";
 
+export type EnvironmentStress = {
+  darknessPressure: number;
+  coldPressure: number;
+  refugeAvailable: boolean;
+  fireSourceAvailable: boolean;
+};
+
 export type DungeonEvolution = {
   condition: DungeonCondition;
   apex: ApexPresence;
   signals: string[];
   nextTriggerHints: string[];
+  environment: EnvironmentStress;
   debug: {
     floorId: string;
     roomId: string;
+    floorDepth: FloorDepth | null;
     roomPressure: number;
     roomAwareness: number;
     nearbyPressureMax: number;
@@ -40,6 +60,10 @@ export type DungeonEvolution = {
     recentFailures: number;
     recentViolence: number;
     outcomesInRoom: number;
+    darknessPressure: number;
+    coldPressure: number;
+    refugeAvailable: boolean;
+    fireSourceAvailable: boolean;
     score: number;
   };
 };
@@ -153,7 +177,19 @@ function classifyOutcome(e: SessionEvent) {
     text.includes("charge") ||
     text.includes("smash");
 
-  const kindWeight =
+  const loud =
+    text.includes("shout") ||
+    text.includes("roar") ||
+    text.includes("slam") ||
+    text.includes("explode") ||
+    text.includes("blast") ||
+    text.includes("thunder") ||
+    text.includes("crash") ||
+    text.includes("break") ||
+    text.includes("force") ||
+    text.includes("kick");
+
+  const optionKindWeight =
     optionKind === "contested"
       ? 3
       : optionKind === "risky"
@@ -164,7 +200,8 @@ function classifyOutcome(e: SessionEvent) {
 
   const failWeight = success === false ? 3 : 0;
   const violenceWeight = violence ? 2 : 0;
-  const loudness = kindWeight + failWeight + violenceWeight;
+  const loudWeight = loud ? 2 : 0;
+  const loudness = optionKindWeight + failWeight + violenceWeight + loudWeight;
 
   return {
     floorId,
@@ -176,26 +213,93 @@ function classifyOutcome(e: SessionEvent) {
   };
 }
 
+function classifyDirectSignal(e: SessionEvent) {
+  const payload = e?.payload ?? {};
+  const floorId = safeStr(payload?.floorId);
+  const roomId = safeStr(payload?.roomId);
+  if (!floorId || !roomId) return null;
+
+  switch (e?.type) {
+    case "TRAP_TRIGGERED":
+      return {
+        floorId,
+        roomId,
+        loud: 2,
+        failure: 1,
+        violence: 0,
+      };
+    case "COMBAT_STARTED":
+      return {
+        floorId,
+        roomId,
+        loud: 2,
+        failure: 0,
+        violence: 2,
+      };
+    case "COMBAT_ENDED":
+      return {
+        floorId,
+        roomId,
+        loud: 1,
+        failure: 0,
+        violence: 1,
+      };
+    case "DOOR_FORCED":
+      return {
+        floorId,
+        roomId,
+        loud: 2,
+        failure: 0,
+        violence: 1,
+      };
+    case "PUZZLE_FAILED":
+      return {
+        floorId,
+        roomId,
+        loud: 1,
+        failure: 2,
+        violence: 0,
+      };
+    case "PUZZLE_SOLVED":
+      return {
+        floorId,
+        roomId,
+        loud: 0,
+        failure: 0,
+        violence: 0,
+      };
+    default:
+      return null;
+  }
+}
+
 function countRecentSignals(
   events: readonly SessionEvent[],
   floorId: string,
   roomId: string
 ) {
-  const recent = lastN(events, 30);
+  const recent = lastN(events, 40);
   let recentLoudEvents = 0;
   let recentFailures = 0;
   let recentViolence = 0;
   let outcomesInRoom = 0;
 
   for (const e of recent) {
-    const o = classifyOutcome(e);
-    if (!o) continue;
-    if (o.floorId !== floorId || o.roomId !== roomId) continue;
+    const outcome = classifyOutcome(e);
+    if (outcome && outcome.floorId === floorId && outcome.roomId === roomId) {
+      outcomesInRoom += 1;
+      if (outcome.loudness >= 4) recentLoudEvents += 1;
+      if (outcome.success === false) recentFailures += 1;
+      if (outcome.violence) recentViolence += 1;
+      continue;
+    }
 
-    outcomesInRoom += 1;
-    if (o.loudness >= 4) recentLoudEvents += 1;
-    if (o.success === false) recentFailures += 1;
-    if (o.violence) recentViolence += 1;
+    const signal = classifyDirectSignal(e);
+    if (signal && signal.floorId === floorId && signal.roomId === roomId) {
+      if (signal.loud > 0) recentLoudEvents += signal.loud;
+      if (signal.failure > 0) recentFailures += signal.failure;
+      if (signal.violence > 0) recentViolence += signal.violence;
+    }
   }
 
   return {
@@ -230,6 +334,65 @@ function apexFromScore(
   return "Present";
 }
 
+function deriveEnvironmentStress(args: {
+  dungeon?: DungeonDefinition;
+  floorId: FloorId;
+  roomId: RoomId;
+}): {
+  floorDepth: FloorDepth | null;
+  room: DungeonRoom | null;
+  darknessPressure: number;
+  coldPressure: number;
+  refugeAvailable: boolean;
+  fireSourceAvailable: boolean;
+} {
+  const { dungeon, floorId, roomId } = args;
+  if (!dungeon) {
+    return {
+      floorDepth: null,
+      room: null,
+      darknessPressure: 0,
+      coldPressure: 0,
+      refugeAvailable: false,
+      fireSourceAvailable: false,
+    };
+  }
+
+  const floor = getFloorById(dungeon, floorId);
+  const room = getRoomById(dungeon, floorId, roomId);
+
+  if (!floor || !room) {
+    return {
+      floorDepth: null,
+      room: null,
+      darknessPressure: 0,
+      coldPressure: 0,
+      refugeAvailable: false,
+      fireSourceAvailable: false,
+    };
+  }
+
+  const environment = room.environment ?? {
+    pressure: floor.environmentPressure,
+    requiresTorchlight: floor.requiresTorchlight,
+    requiresWarmth: floor.requiresWarmth,
+    isRefuge: false,
+    hasFireSource: false,
+  };
+
+  const darknessPressure = environment.requiresTorchlight ? 20 : 0;
+  const coldPressure = environment.requiresWarmth ? 20 : 0;
+
+  return {
+    floorDepth: floor.depth,
+    room,
+    darknessPressure,
+    coldPressure,
+    refugeAvailable: environment.isRefuge === true,
+    fireSourceAvailable: environment.hasFireSource === true,
+  };
+}
+
 function buildSignals(input: {
   condition: DungeonCondition;
   apex: ApexPresence;
@@ -240,6 +403,12 @@ function buildSignals(input: {
   recentLoudEvents: number;
   recentFailures: number;
   recentViolence: number;
+  darknessPressure: number;
+  coldPressure: number;
+  refugeAvailable: boolean;
+  fireSourceAvailable: boolean;
+  floorDepth: FloorDepth | null;
+  room: DungeonRoom | null;
 }): string[] {
   const {
     condition,
@@ -251,6 +420,12 @@ function buildSignals(input: {
     recentLoudEvents,
     recentFailures,
     recentViolence,
+    darknessPressure,
+    coldPressure,
+    refugeAvailable,
+    fireSourceAvailable,
+    floorDepth,
+    room,
   } = input;
 
   const out: string[] = [];
@@ -288,6 +463,29 @@ function buildSignals(input: {
     out.push("Violence has left a pattern behind.");
   }
 
+  if (darknessPressure > 0) {
+    out.push("Darkness thickens the room. Without light, caution costs less than confidence.");
+  }
+  if (coldPressure > 0) {
+    out.push("The cold here is active, not passive. Lingering feels expensive.");
+  }
+  if (refugeAvailable) {
+    out.push("This place offers a moment of shelter, if you are disciplined enough to use it.");
+  }
+  if (fireSourceAvailable && floorDepth === -2) {
+    out.push("A workable heat source matters here. Fire is not comfort — it is survival.");
+  }
+
+  if (room?.puzzleId) {
+    out.push("The room carries a deliberate pattern. It feels designed to test rather than merely obstruct.");
+  }
+  if (room?.trapId) {
+    out.push("The space punishes carelessness. Something here was meant to catch the unwary.");
+  }
+  if (room?.isSignature) {
+    out.push("This chamber has more narrative weight than the others around it.");
+  }
+
   if (apex === "Suspected") {
     out.push("There are signs of something larger moving through the dungeon's logic.");
   }
@@ -302,13 +500,32 @@ function buildSignals(input: {
   return out.filter((line) => (seen.has(line) ? false : (seen.add(line), true)));
 }
 
-function buildNextTriggerHints(): string[] {
-  return [
+function buildNextTriggerHints(input: {
+  floorDepth: FloorDepth | null;
+  darknessPressure: number;
+  coldPressure: number;
+  refugeAvailable: boolean;
+}): string[] {
+  const out = [
     "Repeated loud actions raise attention quickly, especially when they fail.",
     "Violence hardens a room faster than cautious exploration does.",
     "Lingering in a hot room invites escalation even without moving deeper.",
     "If the dungeon feels apex-touched, conserve resources and reduce noise.",
   ];
+
+  if (input.darknessPressure > 0) {
+    out.push("Dark floors reward preparation. Entering blind turns ordinary rooms into risk multipliers.");
+  }
+
+  if (input.coldPressure > 0) {
+    out.push("Deep cold punishes delay. Preserve warmth or route through rooms that can sustain it.");
+  }
+
+  if (input.refugeAvailable) {
+    out.push("Refuge rooms are strongest when used deliberately before escalation, not after collapse.");
+  }
+
+  return out;
 }
 
 export function deriveDungeonEvolution(args: {
@@ -316,12 +533,14 @@ export function deriveDungeonEvolution(args: {
   floorId: FloorId;
   roomId: RoomId;
   nearbyRoomIds?: readonly RoomId[];
+  dungeon?: DungeonDefinition;
 }): DungeonEvolution {
   const {
     events,
     floorId,
     roomId,
     nearbyRoomIds = [],
+    dungeon,
   } = args;
 
   const pressureAgg = aggregateLocationPressure(events);
@@ -354,13 +573,33 @@ export function deriveDungeonEvolution(args: {
     outcomesInRoom,
   } = countRecentSignals(events, floorId, roomId);
 
+  const {
+    floorDepth,
+    room,
+    darknessPressure,
+    coldPressure,
+    refugeAvailable,
+    fireSourceAvailable,
+  } = deriveEnvironmentStress({
+    dungeon,
+    floorId,
+    roomId,
+  });
+
+  const refugeModifier = refugeAvailable ? -8 : 0;
+  const fireSourceModifier = fireSourceAvailable ? -5 : 0;
+
   const score =
-    roomPressure * 0.45 +
-    roomAwareness * 0.45 +
-    clamp(recentLoudEvents, 0, 6) * 3 +
-    clamp(recentFailures, 0, 6) * 2 +
-    clamp(recentViolence, 0, 6) * 2 +
-    Math.max(nearbyPressureMax, nearbyAwarenessMax) * 0.1;
+    roomPressure * 0.4 +
+    roomAwareness * 0.4 +
+    clamp(recentLoudEvents, 0, 8) * 3 +
+    clamp(recentFailures, 0, 8) * 2 +
+    clamp(recentViolence, 0, 8) * 2 +
+    Math.max(nearbyPressureMax, nearbyAwarenessMax) * 0.12 +
+    darknessPressure * 0.35 +
+    coldPressure * 0.4 +
+    refugeModifier +
+    fireSourceModifier;
 
   const normalizedScore = clamp(Math.round(score), 0, 100);
   const condition = conditionFromScore(normalizedScore);
@@ -376,16 +615,34 @@ export function deriveDungeonEvolution(args: {
     recentLoudEvents,
     recentFailures,
     recentViolence,
+    darknessPressure,
+    coldPressure,
+    refugeAvailable,
+    fireSourceAvailable,
+    floorDepth,
+    room,
   });
 
   return {
     condition,
     apex,
     signals,
-    nextTriggerHints: buildNextTriggerHints(),
+    nextTriggerHints: buildNextTriggerHints({
+      floorDepth,
+      darknessPressure,
+      coldPressure,
+      refugeAvailable,
+    }),
+    environment: {
+      darknessPressure,
+      coldPressure,
+      refugeAvailable,
+      fireSourceAvailable,
+    },
     debug: {
       floorId,
       roomId,
+      floorDepth,
       roomPressure: Math.round(roomPressure),
       roomAwareness: Math.round(roomAwareness),
       nearbyPressureMax: Math.round(nearbyPressureMax),
@@ -394,6 +651,10 @@ export function deriveDungeonEvolution(args: {
       recentFailures,
       recentViolence,
       outcomesInRoom,
+      darknessPressure,
+      coldPressure,
+      refugeAvailable,
+      fireSourceAvailable,
       score: normalizedScore,
     },
   };
