@@ -14,6 +14,8 @@ type Props = {
 
 export default function GameplayActionColumn({ demo }: Props) {
   const [inlineResult, setInlineResult] = useState<any | null>(null);
+  const [isRecording, setIsRecording] = useState(false);
+
   const isPuzzleMode = demo.actionMode === "puzzle";
   const hasInlineSubmit = typeof demo.onInlineSubmit === "function";
 
@@ -48,6 +50,42 @@ export default function GameplayActionColumn({ demo }: Props) {
     const result = await demo.onInlineSubmit?.();
     if (result) {
       setInlineResult(result);
+    }
+  }
+
+  async function handleRecordAndReturn(payload: any) {
+    if (isRecording) return;
+
+    setIsRecording(true);
+    try {
+      await Promise.resolve(demo.handleRecord?.(payload));
+
+      if (typeof demo.setSelectedOption === "function") {
+        demo.setSelectedOption(null);
+      }
+
+      if (typeof demo.setPlayerInput === "function") {
+        demo.setPlayerInput("");
+      }
+
+      if (typeof demo.setGameplayFocusStep === "function") {
+        demo.setGameplayFocusStep("map");
+      }
+
+      if (typeof demo.setActiveSection === "function") {
+        demo.setActiveSection("map");
+      }
+
+      window.requestAnimationFrame(() => {
+        const mapAnchor = document.getElementById(anchorId("map"));
+        if (mapAnchor) {
+          mapAnchor.scrollIntoView({ behavior: "smooth", block: "start" });
+        } else {
+          actionRootRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+        }
+      });
+    } finally {
+      setIsRecording(false);
     }
   }
 
@@ -228,7 +266,8 @@ export default function GameplayActionColumn({ demo }: Props) {
                 ? `Injury stacks: ${demo.actingPlayerInjuryStacks}`
                 : null
             }
-            onRecord={demo.handleRecord}
+            onRecord={handleRecordAndReturn}
+            isBusy={isRecording}
           />
         </div>
       ) : null}
