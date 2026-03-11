@@ -41,6 +41,7 @@ export type DemoSectionId =
   | "table"
   | "pressure"
   | "map"
+  | "puzzle"
   | "combat"
   | "action"
   | "resolution"
