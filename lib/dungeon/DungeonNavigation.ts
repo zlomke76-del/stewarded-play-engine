@@ -7,11 +7,14 @@
 // - Resolve room-to-room traversal through graph connections
 // - Keep navigation deterministic and read-only
 // - Provide orchestration helpers without mutating canon
+//
+// Current design alignment:
+// - Supports fixed 3-floor structure: 0 / -1 / -2
+// - Uses floor depth semantics instead of only sequence assumptions
+// - Exposes environment-aware helpers for darkness / warmth / refuge
 // ------------------------------------------------------------
 
-import type {
-  ConnectionType,
-} from "@/lib/dungeon/RoomTypes";
+import type { ConnectionType } from "@/lib/dungeon/RoomTypes";
 import type {
   ConnectionId,
   DoorId,
@@ -25,12 +28,18 @@ import type {
 import {
   getConnectedRoomId,
   getConnectionsForRoom,
+  getFloorByDepth,
   getFloorById,
   getRoomById,
+  isRoomSafeRefuge,
+  roomRequiresTorchlight,
+  roomRequiresWarmth,
   type DungeonConnection,
   type DungeonDefinition,
   type DungeonFloor,
   type DungeonRoom,
+  type DungeonRoomEnvironment,
+  type FloorDepth,
   type RuntimeLocation,
 } from "@/lib/dungeon/FloorState";
 
@@ -60,6 +69,7 @@ export type TraversalResolution =
       usedStairs: boolean;
       floorChanged: boolean;
       nextFloorId: FloorId;
+      nextDepth: FloorDepth;
     }
   | {
       ok: false;
@@ -71,6 +81,14 @@ export type TraversalResolution =
         | "locked-door"
         | "stairs-target-missing";
     };
+
+export type DerivedLocationEnvironment = DungeonRoomEnvironment & {
+  floorDepth: FloorDepth;
+  floorId: FloorId;
+  roomId: RoomId;
+  roomType: DungeonRoom["roomType"];
+  isSafeRefuge: boolean;
+};
 
 function safeStr(x: unknown): string | null {
   return typeof x === "string" && x.trim() ? x.trim() : null;
@@ -171,7 +189,9 @@ export function deriveDiscoveredRoomIds(events: readonly SessionLikeEvent[]): Ro
   return Array.from(out);
 }
 
-export function deriveDiscoveredConnectionIds(events: readonly SessionLikeEvent[]): ConnectionId[] {
+export function deriveDiscoveredConnectionIds(
+  events: readonly SessionLikeEvent[]
+): ConnectionId[] {
   const out = new Set<ConnectionId>();
 
   for (const e of events) {
@@ -233,9 +253,7 @@ export function findConnectionForRoom(
   roomId: RoomId,
   connectionId: ConnectionId
 ): DungeonConnection | null {
-  return (
-    getConnectionsForRoom(floor, roomId).find((c) => c.id === connectionId) ?? null
-  );
+  return getConnectionsForRoom(floor, roomId).find((c) => c.id === connectionId) ?? null;
 }
 
 export function deriveReachableConnections(
@@ -259,27 +277,34 @@ export function inferNeighborRoomIds(
     .filter((id): id is RoomId => !!id);
 }
 
-function inferStairsTargetFloorId(
-  dungeon: DungeonDefinition,
+function inferStairsTargetDepth(
   floor: DungeonFloor,
   connection: DungeonConnection
-): FloorId | null {
-  if (connection.type !== "stairs") return floor.id;
+): FloorDepth | null {
+  if (connection.type !== "stairs") return floor.depth;
 
-  const nextFloorIndex =
-    connection.note === "up"
-      ? floor.floorIndex - 1
-      : floor.floorIndex + 1;
+  if (connection.note === "up") {
+    if (floor.depth === -2) return -1;
+    if (floor.depth === -1) return 0;
+    return null;
+  }
 
-  const targetFloor = dungeon.floors.find((f) => f.floorIndex === nextFloorIndex) ?? null;
-  return targetFloor?.id ?? null;
+  if (connection.note === "down") {
+    if (floor.depth === 0) return -1;
+    if (floor.depth === -1) return -2;
+    return null;
+  }
+
+  // Default deterministic assumption if note is missing.
+  if (floor.depth === 0) return -1;
+  if (floor.depth === -1) return -2;
+  return null;
 }
 
 function deriveFloorEntryRoomId(targetFloor: DungeonFloor, direction: "up" | "down"): RoomId {
   const preferredType = direction === "down" ? "stairs_up" : "stairs_down";
   const room =
-    targetFloor.rooms.find((r) => r.roomType === preferredType) ??
-    targetFloor.rooms[0];
+    targetFloor.rooms.find((r) => r.roomType === preferredType) ?? targetFloor.rooms[0];
   return room.id;
 }
 
@@ -317,8 +342,7 @@ export function resolveTraversal(
 
   const doorId = connection.doorId ?? null;
   const locked =
-    connection.locked === true &&
-    (!doorId || !unlockedDoorIds.includes(doorId));
+    connection.locked === true && (!doorId || !unlockedDoorIds.includes(doorId));
 
   if (connection.type === "locked_door" && locked) {
     return { ok: false, reason: "locked-door" };
@@ -338,15 +362,16 @@ export function resolveTraversal(
       usedStairs: false,
       floorChanged: false,
       nextFloorId: floorId,
+      nextDepth: floor.depth,
     };
   }
 
-  const targetFloorId = inferStairsTargetFloorId(dungeon, floor, connection);
-  if (!targetFloorId) {
+  const targetDepth = inferStairsTargetDepth(floor, connection);
+  if (targetDepth == null) {
     return { ok: false, reason: "stairs-target-missing" };
   }
 
-  const targetFloor = findFloor(dungeon, targetFloorId);
+  const targetFloor = getFloorByDepth(dungeon, targetDepth);
   if (!targetFloor) {
     return { ok: false, reason: "stairs-target-missing" };
   }
@@ -368,6 +393,88 @@ export function resolveTraversal(
     usedStairs: true,
     floorChanged: targetFloor.id !== floorId,
     nextFloorId: targetFloor.id,
+    nextDepth: targetFloor.depth,
+  };
+}
+
+export function deriveLocationEnvironment(
+  dungeon: DungeonDefinition,
+  location: RuntimeLocation
+): DerivedLocationEnvironment | null {
+  const floor = findFloor(dungeon, location.floorId);
+  const room = findRoom(dungeon, location.floorId, location.roomId);
+
+  if (!floor || !room) return null;
+
+  const environment =
+    room.environment ?? {
+      pressure: floor.environmentPressure,
+      requiresTorchlight: floor.requiresTorchlight,
+      requiresWarmth: floor.requiresWarmth,
+      isRefuge: false,
+      hasFireSource: false,
+    };
+
+  return {
+    ...environment,
+    floorDepth: floor.depth,
+    floorId: floor.id,
+    roomId: room.id,
+    roomType: room.roomType,
+    isSafeRefuge: isRoomSafeRefuge(dungeon, location.floorId, location.roomId),
+  };
+}
+
+export function doesLocationRequireTorchlight(
+  dungeon: DungeonDefinition,
+  location: RuntimeLocation
+): boolean {
+  return roomRequiresTorchlight(dungeon, location.floorId, location.roomId);
+}
+
+export function doesLocationRequireWarmth(
+  dungeon: DungeonDefinition,
+  location: RuntimeLocation
+): boolean {
+  return roomRequiresWarmth(dungeon, location.floorId, location.roomId);
+}
+
+export function isLocationSafeRefuge(
+  dungeon: DungeonDefinition,
+  location: RuntimeLocation
+): boolean {
+  return isRoomSafeRefuge(dungeon, location.floorId, location.roomId);
+}
+
+export function deriveTraversalPreview(args: {
+  dungeon: DungeonDefinition;
+  location: RuntimeLocation;
+  connectionId: ConnectionId;
+  openedDoorIds?: readonly DoorId[];
+  unlockedDoorIds?: readonly DoorId[];
+}) {
+  const resolution = resolveTraversal(args.dungeon, {
+    floorId: args.location.floorId,
+    roomId: args.location.roomId,
+    connectionId: args.connectionId,
+    openedDoorIds: args.openedDoorIds,
+    unlockedDoorIds: args.unlockedDoorIds,
+  });
+
+  if (!resolution.ok) return null;
+
+  const targetEnvironment = deriveLocationEnvironment(args.dungeon, {
+    floorId: resolution.nextFloorId,
+    roomId: resolution.toRoom.id,
+  });
+
+  return {
+    floorChanged: resolution.floorChanged,
+    nextFloorId: resolution.nextFloorId,
+    nextDepth: resolution.nextDepth,
+    nextRoomId: resolution.toRoom.id,
+    nextRoomLabel: resolution.toRoom.label,
+    targetEnvironment,
   };
 }
 
@@ -377,6 +484,8 @@ export function buildTraversalNarrativeContext(args: {
   toRoomLabel: string;
   usedStairs: boolean;
   floorChanged: boolean;
+  fromDepth?: FloorDepth | null;
+  toDepth?: FloorDepth | null;
 }): string {
   const {
     connectionType,
@@ -384,10 +493,21 @@ export function buildTraversalNarrativeContext(args: {
     toRoomLabel,
     usedStairs,
     floorChanged,
+    fromDepth = null,
+    toDepth = null,
   } = args;
 
   if (usedStairs && floorChanged) {
-    return `You leave ${fromRoomLabel} and descend into ${toRoomLabel}.`;
+    if (fromDepth != null && toDepth != null) {
+      if (toDepth < fromDepth) {
+        return `You leave ${fromRoomLabel} and descend from Floor ${fromDepth} into ${toRoomLabel} on Floor ${toDepth}.`;
+      }
+      if (toDepth > fromDepth) {
+        return `You leave ${fromRoomLabel} and climb from Floor ${fromDepth} into ${toRoomLabel} on Floor ${toDepth}.`;
+      }
+    }
+
+    return `You leave ${fromRoomLabel} and pass by stairs into ${toRoomLabel}.`;
   }
 
   if (connectionType === "locked_door") {
