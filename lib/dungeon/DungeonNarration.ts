@@ -14,8 +14,12 @@
 // - Tone should feel authored, not generic
 // ------------------------------------------------------------
 
-import type { DungeonFloorTheme, RoomFeatureKind, RoomType } from "@/lib/dungeon/RoomTypes";
-import type { ConnectionType } from "@/lib/dungeon/RoomTypes";
+import type {
+  ConnectionType,
+  DungeonFloorTheme,
+  RoomFeatureKind,
+  RoomType,
+} from "@/lib/dungeon/RoomTypes";
 import type { EnemyEncounterTheme } from "@/lib/game/EnemyDatabase";
 
 export type OpeningChronicleSeed = {
@@ -98,14 +102,8 @@ function pickDeterministic<T>(seed: string, items: readonly T[], fallback: T): T
   return items[idx] ?? fallback;
 }
 
-function clamp(n: number, min: number, max: number) {
-  return Math.max(min, Math.min(max, n));
-}
-
 function featureKinds(features: NarrationFeature[]) {
-  return features
-    .map((f) => slugKey(f.kind))
-    .filter(Boolean);
+  return features.map((f) => slugKey(f.kind)).filter(Boolean);
 }
 
 function hasFeature(features: NarrationFeature[], kind: RoomFeatureKind | string) {
@@ -133,6 +131,7 @@ function inferThemeLabel(floorTheme: string) {
 
   const map: Record<DungeonFloorTheme, string> = {
     ruined_outpost: "a ruined military outpost",
+    deep_warrens: "a dark, contested underways level",
     forgotten_crypt: "an old crypt level",
     cult_temple: "a temple warped by ritual practice",
     arcane_forge: "an arcane forge complex",
@@ -153,6 +152,11 @@ function inferAmbientLine(floorTheme: string, roomType: string, seed: string): s
       "Torchlight breaks across damaged stone and old defensive scars.",
       "Broken fortification lines still shape the room, even in ruin.",
       "The stone here remembers order, but not safety.",
+    ],
+    deep_warrens: [
+      "Darkness and pressure gather together here, as though the dungeon has learned how to wait.",
+      "The room feels contested, unstable, and too aware of movement through it.",
+      "The stone here no longer feels abandoned; it feels occupied by competing intentions.",
     ],
     forgotten_crypt: [
       "Cold air hangs low, carrying dust, bone, and a silence that feels preserved.",
@@ -254,6 +258,50 @@ function inferAmbientLine(floorTheme: string, roomType: string, seed: string): s
       "The room feels briefly survivable, which in this place is its own kind of rarity.",
       "Someone once believed this was the least dangerous place nearby.",
     ],
+    barracks: [
+      "The room still reads as somewhere people once slept armed and lightly.",
+      "Even in ruin, the chamber carries the discipline of shared readiness.",
+    ],
+    breach_chamber: [
+      "The room feels like the memory of impact made permanent.",
+      "This space was not gently lost; it was taken.",
+    ],
+    watchtower: [
+      "The room suggests observation first, comfort never.",
+      "Everything here feels arranged around sightlines and warning.",
+    ],
+    flooded_chamber: [
+      "Water changes the room from shelter into uncertainty.",
+      "The chamber feels unstable because the floor itself no longer tells the truth cleanly.",
+    ],
+    ossuary: [
+      "This room treats remains as architecture.",
+      "Bone has become part of the chamber's design, not just its history.",
+    ],
+    collapsed_passage: [
+      "The room feels like a route caught in the act of failing.",
+      "Stone and obstruction compete here with the memory of movement.",
+    ],
+    gate_hall: [
+      "The room exists to decide who passes and who does not.",
+      "This chamber feels less like a room than an argument about permission.",
+    ],
+    trial_chamber: [
+      "The room feels built to weigh intent, not merely trespass.",
+      "Everything here suggests judgment made spatial.",
+    ],
+    relic_chamber: [
+      "The room gathers significance around what it keeps.",
+      "This chamber feels organized around memory made object.",
+    ],
+    crypt_vault: [
+      "The room keeps its dead and its secrets under the same logic.",
+      "Whatever was protected here was meant to outlive grief, theft, and time alike.",
+    ],
+    forge_chamber: [
+      "The room feels like heat once taught the stone how to remember force.",
+      "Even quiet, the chamber carries the aftermath of making.",
+    ],
   };
 
   const roomLines = byRoom[roomKey] ?? [];
@@ -275,6 +323,10 @@ function inferSensoryLine(floorTheme: string, roomType: string, seed: string): s
   ];
 
   const themePool: Record<string, string[]> = {
+    deep_warrens: [
+      "Darkness sits in the room like a participant rather than an absence.",
+      "The air carries damp stone, old strain, and the suggestion of routes used by things that prefer not to be seen.",
+    ],
     forgotten_crypt: [
       "The air is colder than it should be, and the stone seems to keep that cold on purpose.",
       "Dust lies thick, but the room still feels inhabited by memory.",
@@ -414,9 +466,126 @@ function inferTrapClueLine(kind: string, note: string, seed: string): string | n
   return pickDeterministic(fallbackKey, genericHazardLines, genericHazardLines[0]);
 }
 
+function inferStructuredNoteLine(kind: string, note: string, seed: string): string | null {
+  const text = normalizeText(note);
+  if (!text) return null;
+
+  const key = `${kind}:${text}:${seed}`;
+  const lower = slugKey(text);
+
+  if (lower.startsWith("puzzle:whispering_anvil")) {
+    const pool = [
+      "The room carries the stillness of a test that wants a word, not just a weapon.",
+      "Something here feels designed to bind intent into consequence.",
+    ];
+    return pickDeterministic(key, pool, pool[0]);
+  }
+
+  if (lower.startsWith("puzzle:singing_chains")) {
+    const pool = [
+      "The chamber feels arranged around sound, pattern, and the risk of getting either wrong.",
+      "There is a musical logic here that could become either passage or punishment.",
+    ];
+    return pickDeterministic(key, pool, pool[0]);
+  }
+
+  if (lower.startsWith("puzzle:mirror_of_regrets")) {
+    const pool = [
+      "The room suggests reflection with teeth — something here wants truth more than comfort.",
+      "This place feels built to turn memory into judgment.",
+    ];
+    return pickDeterministic(key, pool, pool[0]);
+  }
+
+  if (lower.startsWith("puzzle:pressure_gauges")) {
+    const pool = [
+      "The chamber feels like it expects coordination, timing, and more bodies than carelessness usually leaves standing.",
+      "Something here was built to measure action under pressure, not merely block a path.",
+    ];
+    return pickDeterministic(key, pool, pool[0]);
+  }
+
+  if (lower.startsWith("puzzle:vault_of_unchosen_paths")) {
+    const pool = [
+      "The room carries the mood of a choice that will outlast the moment it is made.",
+      "This place feels structured around loss disguised as selection.",
+    ];
+    return pickDeterministic(key, pool, pool[0]);
+  }
+
+  if (lower.startsWith("puzzle:oathbound_gate")) {
+    const pool = [
+      "The chamber feels like a threshold that wants a vow before it grants passage.",
+      "This place reads like judgment made architectural: someone must mean what they choose here.",
+    ];
+    return pickDeterministic(key, pool, pool[0]);
+  }
+
+  if (lower.startsWith("setpiece:breach_chamber")) {
+    return "The room still feels like the memory of a line that broke under force.";
+  }
+
+  if (lower.startsWith("setpiece:last_barracks")) {
+    return "The chamber carries the human fatigue of people who expected one more order and never received it.";
+  }
+
+  if (lower.startsWith("setpiece:failed_shrine")) {
+    return "Whatever sanctity held here feels interrupted rather than fully lost.";
+  }
+
+  if (lower.startsWith("setpiece:watchtower_stairwell")) {
+    return "The room feels made for warning, oversight, and the realization that both came too late.";
+  }
+
+  if (lower.startsWith("setpiece:oathbound_gate")) {
+    return "The chamber seems to want a binding act before it allows the deeper dark to be entered.";
+  }
+
+  if (lower.startsWith("setpiece:ossuary")) {
+    return "Bone here has been ordered with enough intent to feel doctrinal.";
+  }
+
+  if (lower.startsWith("setpiece:flooded_chamber")) {
+    return "Water has changed the room from architecture into a test of uncertainty.";
+  }
+
+  if (lower.startsWith("setpiece:collapsed_passage")) {
+    return "The chamber feels caught between route and ruin.";
+  }
+
+  if (lower.startsWith("setpiece:pre_gate_hall")) {
+    return "This room feels like the last place meant for hesitation before commitment.";
+  }
+
+  if (lower.startsWith("setpiece:witness_antechamber")) {
+    return "The chamber feels like a place where memory becomes formal.";
+  }
+
+  if (lower.startsWith("setpiece:crypt_rite_hall")) {
+    return "Something here was arranged to make ritual feel inevitable.";
+  }
+
+  if (lower.startsWith("setpiece:bone_vault")) {
+    return "The room keeps its remains with the pride of a treasury.";
+  }
+
+  if (lower === "torch_refill") {
+    return "The room offers the means to restore light, which here matters as much as courage.";
+  }
+
+  if (lower === "fire_source") {
+    return "There is a workable source of heat here, and deeper below that matters more than comfort.";
+  }
+
+  return null;
+}
+
 function normalizeNarrativeNote(kind: string, rawNote: string, seed: string): string | null {
   const note = normalizeText(rawNote);
   if (!note) return null;
+
+  const structured = inferStructuredNoteLine(kind, note, seed);
+  if (structured) return structured.replace(/[.]+$/g, "");
 
   if (isMetadataLikeNote(note)) {
     return inferTrapClueLine(kind, note, seed);
@@ -467,6 +636,18 @@ function inferFeatureLine(feature: NarrationFeature, floorTheme: string, roomTyp
     patrol_signs: [
       "Signs of movement suggest the room is not outside the dungeon's notice.",
       "The chamber carries evidence of recent traffic and watchfulness.",
+    ],
+    warmth: [
+      "The room offers heat enough to matter, especially where the deeper cold stops being incidental.",
+      "Warmth here feels strategic rather than generous.",
+    ],
+    torch_sconce: [
+      "There are signs the room can sustain or restore light.",
+      "The chamber offers a small argument against being swallowed by the dark.",
+    ],
+    ritual_focus: [
+      "The room's design converges on a focal point meant to concentrate intention.",
+      "Something here was built to make ritual feel mechanically real.",
     ],
   };
 
@@ -528,6 +709,8 @@ function buildChronicleEchoes(
       echoes.push("Every shift of weight feels like it answers itself a beat too late.");
     } else if (/whisper/i.test(oddity)) {
       echoes.push("The edges of the room seem ready to carry speech that does not belong to the party.");
+    } else if (/lantern|flame|light/i.test(oddity) && ["deep_warrens", "forgotten_crypt"].includes(themeKey)) {
+      echoes.push("The behavior of light here feels too important to ignore.");
     } else if (/lantern/i.test(oddity) || /flame/i.test(oddity)) {
       echoes.push("The light here feels unstable enough to be read as a warning.");
     } else if (/absorb sound/i.test(oddity)) {
@@ -536,9 +719,9 @@ function buildChronicleEchoes(
   }
 
   if (dormantHook) {
-    if (/name scratched into stone/i.test(dormantHook) && ["crypt", "ritual_chamber", "relic_vault", "boss_chamber", "corridor"].includes(roomKey)) {
+    if (/name scratched into stone/i.test(dormantHook) && ["crypt", "ritual_chamber", "relic_vault", "boss_chamber", "corridor", "relic_chamber", "crypt_vault"].includes(roomKey)) {
       echoes.push("Marks in the stone feel less like damage and more like repetition with intent.");
-    } else if (/sealed door/i.test(dormantHook) && ["guard_post", "relic_vault", "treasure_room"].includes(roomKey)) {
+    } else if (/sealed door|sealed gate/i.test(dormantHook) && ["guard_post", "relic_vault", "treasure_room", "gate_hall", "trial_chamber"].includes(roomKey)) {
       echoes.push("The room feels tied to a threshold someone wanted disturbed as little as possible.");
     } else if (/missing/i.test(dormantHook)) {
       echoes.push("The place carries the mood of a story interrupted before it was finished.");
@@ -556,7 +739,7 @@ function buildChronicleEchoes(
     }
   }
 
-  if (factionNames.length > 0 && ["guard_post", "ritual_chamber", "shrine", "relic_vault", "boss_chamber"].includes(roomKey)) {
+  if (factionNames.length > 0 && ["guard_post", "ritual_chamber", "shrine", "relic_vault", "boss_chamber", "gate_hall", "trial_chamber", "ossuary"].includes(roomKey)) {
     const faction = pickDeterministic(`${seed}:${roomKey}:${themeKey}:faction`, factionNames, factionNames[0]);
     echoes.push(`The chamber feels like a place where traces of ${faction} could surface more clearly.`);
   }
@@ -654,6 +837,38 @@ function inferEncounterTone(features: NarrationFeature[], roomType: string, loot
   return null;
 }
 
+function inferEnvironmentLine(floorTheme: string, features: NarrationFeature[], seed: string): string | null {
+  const theme = slugKey(floorTheme);
+  const kinds = featureKinds(features);
+  const key = `${theme}:${kinds.join(",")}:${seed}:environment`;
+
+  if (theme === "deep_warrens") {
+    const pool = [
+      "Without dependable light, the room feels like it would grow more dangerous by the second.",
+      "The dark here is practical, not poetic; it changes what the room is willing to reveal.",
+    ];
+    return pickDeterministic(key, pool, pool[0]);
+  }
+
+  if (theme === "forgotten_crypt") {
+    if (hasFeature(features, "warmth")) {
+      const pool = [
+        "Even a little heat matters here; deeper cold makes comfort indistinguishable from survival.",
+        "Warmth changes the room from merely oppressive to briefly workable.",
+      ];
+      return pickDeterministic(key, pool, pool[0]);
+    }
+
+    const pool = [
+      "The cold here feels active enough to become part of the room's threat profile.",
+      "This chamber does not merely contain cold; it seems to preserve it.",
+    ];
+    return pickDeterministic(key, pool, pool[0]);
+  }
+
+  return null;
+}
+
 function buildEntryParagraphs(args: DescribeRoomEntryArgs): string[] {
   const roomType = slugKey(args.roomType) as RoomType;
   const floorTheme = slugKey(args.floorTheme) as DungeonFloorTheme;
@@ -685,6 +900,11 @@ function buildEntryParagraphs(args: DescribeRoomEntryArgs): string[] {
 
   if (featureLines.length > 0) {
     paragraphs.push(featureLines.join(" "));
+  }
+
+  const environmentLine = inferEnvironmentLine(floorTheme, args.features, `${seedBase}:environment`);
+  if (environmentLine) {
+    paragraphs.push(environmentLine);
   }
 
   const lootLine = inferLootLine(lootHint, seedBase);
@@ -747,6 +967,10 @@ export function describeRoomFeatures(args: DescribeRoomFeaturesArgs): string[] {
 
   if (hasFeature(features, "locked_door") && hasFeature(features, "relic")) {
     lines.push("The room is structured like something valuable was meant to remain protected behind intention, not merely stone.");
+  }
+
+  if (hasFeature(features, "torch_sconce") && hasFeature(features, "warmth")) {
+    lines.push("Light and heat together make the room feel unusually survivable for where it sits.");
   }
 
   const chronicleEchoes = buildChronicleEchoes(args.chronicle, roomType, floorTheme, seed);
@@ -812,6 +1036,13 @@ export function describeRoomSummary(args: {
       lines.push(`Known features include ${featureNames.join(", ")}.`);
     }
   }
+
+  const environmentLine = inferEnvironmentLine(
+    String(args.floorTheme),
+    args.features ?? [],
+    `${args.dungeonSeed}:summary:environment`
+  );
+  if (environmentLine) lines.push(environmentLine);
 
   const lootLine = inferLootLine(args.lootHint, `${args.dungeonSeed}:summary:loot`);
   if (lootLine) lines.push(lootLine);
