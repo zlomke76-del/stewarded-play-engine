@@ -250,6 +250,16 @@ const CLASS_META: Record<string, ClassMeta> = {
     tradeoff: "Less stable than safer support builds.",
   },
 };
+const BUILD_FOCUS_OPTIONS: Array<{
+  id: BuildFocus;
+  label: string;
+  hint: string;
+}> = [
+  { id: "balanced", label: "Balanced", hint: "Steady all-around profile." },
+  { id: "guardian", label: "Guardian", hint: "Higher AC, lower speed." },
+  { id: "swift", label: "Swift", hint: "Higher initiative, lighter defense." },
+  { id: "hardy", label: "Hardy", hint: "More vitality for longer fights." },
+];
 
 const BUILD_FOCUS_META: Record<BuildFocus, FocusMeta> = {
   balanced: {
