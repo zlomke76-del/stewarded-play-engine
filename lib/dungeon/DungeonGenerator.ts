@@ -35,6 +35,7 @@ import type {
   DungeonFloor,
   DungeonRoom,
   DungeonRoomEnvironment,
+  DungeonRoomFeature,
   FloorDepth,
   PuzzleId,
   RoomRouteRole,
@@ -316,13 +317,17 @@ function buildRoomLabel(roomType: RoomType): string {
   return ROOM_TYPE_DEFINITIONS[roomType].label;
 }
 
-function defaultFeaturesForRoomType(roomType: RoomType) {
+function defaultFeaturesForRoomType(
+  roomType: RoomType
+): DungeonRoomFeature[] {
   const taxonomy = ROOM_TYPE_DEFINITIONS[roomType];
-  return taxonomy.defaultFeatures.map((kind) => ({
-    kind,
-    discoveredByDefault: false,
-    note: null,
-  }));
+  return taxonomy.defaultFeatures.map(
+    (kind): DungeonRoomFeature => ({
+      kind,
+      discoveredByDefault: false,
+      note: null,
+    })
+  );
 }
 
 function inferEncounterSeedForRoom(roomType: RoomType): DungeonEncounterSeed | null {
