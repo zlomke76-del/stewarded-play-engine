@@ -45,8 +45,10 @@ type BarmaidTopic = "dungeon" | "people" | "you" | null;
 const LANE_BG_SRC = "/assets/V3/Dungeon/Tavern/Axe_Throwing/target_01.png";
 const AXE_SRC = "/assets/V3/Dungeon/Tavern/Axe_Throwing/axe_01.png";
 
-const BARMAID_SRC_SOFT = "/assets/V3/Dungeon/Tavern/bar_maid_01.png";
-const BARMAID_SRC_WARM = "/assets/V3/Dungeon/Tavern/bar_maid_02.png";
+const BARMAID_IMAGES = [
+  "/assets/V3/Dungeon/Tavern/bar_maid_01.png",
+  "/assets/V3/Dungeon/Tavern/bar_maid_02.png",
+] as const;
 
 const HIT_SFX = "/assets/audio/sfx_axe_hit_01.mp3";
 const MISS_SFX = "/assets/audio/sfx_axe_miss_01.mp3";
@@ -62,20 +64,15 @@ const START_Y = 1165;
 
 const AXE_W = 240;
 const AXE_H = 430;
-
-// tighter blade-tip approximation
 const AXE_TIP_X = AXE_W * 0.735;
 const AXE_TIP_Y = AXE_H * 0.155;
 
-// aim slider range
 const AIM_MIN = -150;
 const AIM_MAX = 150;
 
-// power gating
 const MIN_STICK_POWER = 0.28;
 const MAX_STICK_POWER = 0.84;
 
-// floor miss landing spots
 const FLOOR_MISS_LOW_Y = 1210;
 const FLOOR_MISS_HIGH_Y = 980;
 const FLOOR_MISS_X = 420;
@@ -196,6 +193,7 @@ export default function TavernAxeThrow({
 
   const [showBarmaid, setShowBarmaid] = useState(false);
   const [barmaidTopic, setBarmaidTopic] = useState<BarmaidTopic>(null);
+  const [barmaidImageIndex, setBarmaidImageIndex] = useState(0);
 
   const [axe, setAxe] = useState<AxeVisualState>({
     x: START_X,
@@ -211,7 +209,8 @@ export default function TavernAxeThrow({
   const throwsUsed = useMemo(() => initialThrows - throwsLeft, [initialThrows, throwsLeft]);
   const isRoundOver = throwsLeft <= 0 && !activeFlight && !isCharging;
   const barmaidUnlocked = totalScore > 30;
-  const barmaidPortrait = totalScore >= 60 ? BARMAID_SRC_WARM : BARMAID_SRC_SOFT;
+  const barmaidOnlyMode = barmaidUnlocked && isRoundOver;
+  const currentBarmaidImage = BARMAID_IMAGES[barmaidImageIndex % BARMAID_IMAGES.length]!;
   const aimPercent = Math.round(((aimOffsetY - AIM_MIN) / (AIM_MAX - AIM_MIN)) * 100);
   const aimMarkerY = clamp(
     TARGET_CENTER_Y + aimOffsetY,
@@ -283,7 +282,13 @@ export default function TavernAxeThrow({
     });
   }, [isRoundOver, onRoundComplete, totalScore, throwsUsed, bestThrow]);
 
+  useEffect(() => {
+    if (!barmaidOnlyMode) return;
+    setShowBarmaid(true);
+  }, [barmaidOnlyMode]);
+
   function beginCharge() {
+    if (barmaidOnlyMode) return;
     if (activeFlight || throwsLeft <= 0) return;
     if (isCharging) return;
 
@@ -303,6 +308,7 @@ export default function TavernAxeThrow({
   }
 
   function endCharge() {
+    if (barmaidOnlyMode) return;
     if (!isCharging || activeFlight || throwsLeft <= 0) return;
 
     setIsCharging(false);
@@ -477,6 +483,10 @@ export default function TavernAxeThrow({
     }
   }
 
+  function cycleBarmaidImage() {
+    setBarmaidImageIndex((prev) => (prev + 1) % BARMAID_IMAGES.length);
+  }
+
   function resetRound() {
     setThrowsLeft(initialThrows);
     setTotalScore(0);
@@ -487,6 +497,7 @@ export default function TavernAxeThrow({
     setActiveFlight(null);
     setShowBarmaid(false);
     setBarmaidTopic(null);
+    setBarmaidImageIndex(0);
     setAxe({
       x: START_X,
       y: START_Y,
@@ -507,528 +518,658 @@ export default function TavernAxeThrow({
       }}
     >
       <div style={{ display: "grid", gap: 8 }}>
-        <div style={{ fontSize: 24, fontWeight: 900 }}>Tavern Axe Lane</div>
+        <div style={{ fontSize: 24, fontWeight: 900 }}>
+          {barmaidOnlyMode ? "The Barmaid" : "Tavern Axe Lane"}
+        </div>
         <div style={{ fontSize: 14, opacity: 0.78, lineHeight: 1.55 }}>
-          Warm up before the descent. Three throws. A steady hand earns more than applause.
+          {barmaidOnlyMode
+            ? "The lane goes quiet. Steel gives way to conversation, rumor, and whatever the tavern chooses to reveal."
+            : "Warm up before the descent. Three throws. A steady hand earns more than applause."}
         </div>
       </div>
 
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "minmax(0, 560px) 180px",
-          gap: 16,
-          alignItems: "stretch",
-        }}
-      >
-        <div
-          style={{
-            position: "relative",
-            width: "100%",
-            maxWidth: 560,
-            aspectRatio: `${SCENE_W} / ${SCENE_H}`,
-            borderRadius: 20,
-            overflow: "hidden",
-            border: "1px solid rgba(255,255,255,0.12)",
-            boxShadow: "0 30px 80px rgba(0,0,0,0.45)",
-            background: "#120b07",
-            userSelect: "none",
-          }}
-        >
-          <img
-            src={LANE_BG_SRC}
-            alt="Tavern axe lane"
-            draggable={false}
-            style={{
-              position: "absolute",
-              inset: 0,
-              width: "100%",
-              height: "100%",
-              objectFit: "cover",
-              transform: boardShake ? "translateX(1px)" : "translateX(0px)",
-              transition: "transform 120ms ease-out",
-              filter: impactFlash ? "brightness(1.08)" : "brightness(1)",
-            }}
-          />
-
+      {!barmaidOnlyMode && (
+        <>
           <div
             style={{
-              position: "absolute",
-              left: `${((TARGET_CENTER_X - 160) / SCENE_W) * 100}%`,
-              top: `${(aimMarkerY / SCENE_H) * 100}%`,
-              width: `${(320 / SCENE_W) * 100}%`,
-              height: 2,
-              background: "rgba(255, 244, 214, 0.24)",
-              boxShadow: "0 0 12px rgba(255, 220, 140, 0.22)",
-              pointerEvents: "none",
-            }}
-          />
-
-          {axe.visible ? (
-            <img
-              src={AXE_SRC}
-              alt="Throwing axe"
-              draggable={false}
-              style={{
-                position: "absolute",
-                left: `${(axe.x / SCENE_W) * 100}%`,
-                top: `${(axe.y / SCENE_H) * 100}%`,
-                width: `${(AXE_W / SCENE_W) * 100}%`,
-                height: `${(AXE_H / SCENE_H) * 100}%`,
-                objectFit: "contain",
-                pointerEvents: "none",
-                transform: `rotate(${axe.rotation}deg)`,
-                transformOrigin: "62% 34%",
-                filter: axe.flying
-                  ? "drop-shadow(0 20px 18px rgba(0,0,0,0.35))"
-                  : axe.embedded
-                    ? "drop-shadow(0 8px 12px rgba(0,0,0,0.32))"
-                    : "drop-shadow(0 12px 12px rgba(0,0,0,0.32))",
-                transition: axe.flying
-                  ? "none"
-                  : "transform 140ms ease-out, left 140ms ease-out, top 140ms ease-out",
-              }}
-            />
-          ) : null}
-
-          <div
-            style={{
-              position: "absolute",
-              inset: 0,
-              pointerEvents: "none",
-              background: impactFlash
-                ? "radial-gradient(circle at 50% 31%, rgba(255,210,140,0.16), rgba(255,255,255,0) 24%)"
-                : "transparent",
-              transition: "background 120ms ease-out",
-            }}
-          />
-
-          <div
-            style={{
-              position: "absolute",
-              left: 16,
-              right: 16,
-              top: 16,
-              display: "flex",
-              justifyContent: "space-between",
-              gap: 12,
-              flexWrap: "wrap",
-            }}
-          >
-            <div
-              style={{
-                padding: "10px 12px",
-                borderRadius: 12,
-                background: "rgba(8,8,8,0.52)",
-                border: "1px solid rgba(255,255,255,0.12)",
-                backdropFilter: "blur(6px)",
-              }}
-            >
-              <div style={{ fontSize: 11, opacity: 0.68, textTransform: "uppercase", letterSpacing: 0.7 }}>
-                Throws Left
-              </div>
-              <div style={{ fontSize: 24, fontWeight: 900 }}>{throwsLeft}</div>
-            </div>
-
-            <div
-              style={{
-                padding: "10px 12px",
-                borderRadius: 12,
-                background: "rgba(8,8,8,0.52)",
-                border: "1px solid rgba(255,255,255,0.12)",
-                backdropFilter: "blur(6px)",
-                minWidth: 140,
-              }}
-            >
-              <div style={{ fontSize: 11, opacity: 0.68, textTransform: "uppercase", letterSpacing: 0.7 }}>
-                Tavern Score
-              </div>
-              <div style={{ fontSize: 24, fontWeight: 900 }}>{totalScore}</div>
-            </div>
-          </div>
-
-          <div
-            style={{
-              position: "absolute",
-              left: 16,
-              right: 16,
-              bottom: 16,
               display: "grid",
-              gap: 12,
+              gridTemplateColumns: "minmax(0, 560px) 180px",
+              gap: 16,
+              alignItems: "stretch",
             }}
           >
             <div
               style={{
-                padding: "12px 14px",
-                borderRadius: 14,
-                background: "rgba(8,8,8,0.56)",
+                position: "relative",
+                width: "100%",
+                maxWidth: 560,
+                aspectRatio: `${SCENE_W} / ${SCENE_H}`,
+                borderRadius: 20,
+                overflow: "hidden",
                 border: "1px solid rgba(255,255,255,0.12)",
-                backdropFilter: "blur(6px)",
+                boxShadow: "0 30px 80px rgba(0,0,0,0.45)",
+                background: "#120b07",
+                userSelect: "none",
               }}
             >
-              <div style={{ fontSize: 11, opacity: 0.68, textTransform: "uppercase", letterSpacing: 0.7 }}>
-                Lane Read
+              <img
+                src={LANE_BG_SRC}
+                alt="Tavern axe lane"
+                draggable={false}
+                style={{
+                  position: "absolute",
+                  inset: 0,
+                  width: "100%",
+                  height: "100%",
+                  objectFit: "cover",
+                  transform: boardShake ? "translateX(1px)" : "translateX(0px)",
+                  transition: "transform 120ms ease-out",
+                  filter: impactFlash ? "brightness(1.08)" : "brightness(1)",
+                }}
+              />
+
+              <div
+                style={{
+                  position: "absolute",
+                  left: `${((TARGET_CENTER_X - 160) / SCENE_W) * 100}%`,
+                  top: `${(aimMarkerY / SCENE_H) * 100}%`,
+                  width: `${(320 / SCENE_W) * 100}%`,
+                  height: 2,
+                  background: "rgba(255, 244, 214, 0.24)",
+                  boxShadow: "0 0 12px rgba(255, 220, 140, 0.22)",
+                  pointerEvents: "none",
+                }}
+              />
+
+              {axe.visible ? (
+                <img
+                  src={AXE_SRC}
+                  alt="Throwing axe"
+                  draggable={false}
+                  style={{
+                    position: "absolute",
+                    left: `${(axe.x / SCENE_W) * 100}%`,
+                    top: `${(axe.y / SCENE_H) * 100}%`,
+                    width: `${(AXE_W / SCENE_W) * 100}%`,
+                    height: `${(AXE_H / SCENE_H) * 100}%`,
+                    objectFit: "contain",
+                    pointerEvents: "none",
+                    transform: `rotate(${axe.rotation}deg)`,
+                    transformOrigin: "62% 34%",
+                    filter: axe.flying
+                      ? "drop-shadow(0 20px 18px rgba(0,0,0,0.35))"
+                      : axe.embedded
+                        ? "drop-shadow(0 8px 12px rgba(0,0,0,0.32))"
+                        : "drop-shadow(0 12px 12px rgba(0,0,0,0.32))",
+                    transition: axe.flying
+                      ? "none"
+                      : "transform 140ms ease-out, left 140ms ease-out, top 140ms ease-out",
+                  }}
+                />
+              ) : null}
+
+              <div
+                style={{
+                  position: "absolute",
+                  inset: 0,
+                  pointerEvents: "none",
+                  background: impactFlash
+                    ? "radial-gradient(circle at 50% 31%, rgba(255,210,140,0.16), rgba(255,255,255,0) 24%)"
+                    : "transparent",
+                  transition: "background 120ms ease-out",
+                }}
+              />
+
+              <div
+                style={{
+                  position: "absolute",
+                  left: 16,
+                  right: 16,
+                  top: 16,
+                  display: "flex",
+                  justifyContent: "space-between",
+                  gap: 12,
+                  flexWrap: "wrap",
+                }}
+              >
+                <div
+                  style={{
+                    padding: "10px 12px",
+                    borderRadius: 12,
+                    background: "rgba(8,8,8,0.52)",
+                    border: "1px solid rgba(255,255,255,0.12)",
+                    backdropFilter: "blur(6px)",
+                  }}
+                >
+                  <div
+                    style={{
+                      fontSize: 11,
+                      opacity: 0.68,
+                      textTransform: "uppercase",
+                      letterSpacing: 0.7,
+                    }}
+                  >
+                    Throws Left
+                  </div>
+                  <div style={{ fontSize: 24, fontWeight: 900 }}>{throwsLeft}</div>
+                </div>
+
+                <div
+                  style={{
+                    padding: "10px 12px",
+                    borderRadius: 12,
+                    background: "rgba(8,8,8,0.52)",
+                    border: "1px solid rgba(255,255,255,0.12)",
+                    backdropFilter: "blur(6px)",
+                    minWidth: 140,
+                  }}
+                >
+                  <div
+                    style={{
+                      fontSize: 11,
+                      opacity: 0.68,
+                      textTransform: "uppercase",
+                      letterSpacing: 0.7,
+                    }}
+                  >
+                    Tavern Score
+                  </div>
+                  <div style={{ fontSize: 24, fontWeight: 900 }}>{totalScore}</div>
+                </div>
               </div>
-              <div style={{ marginTop: 6, fontSize: 14, lineHeight: 1.5 }}>{roundMessage}</div>
+
+              <div
+                style={{
+                  position: "absolute",
+                  left: 16,
+                  right: 16,
+                  bottom: 16,
+                  display: "grid",
+                  gap: 12,
+                }}
+              >
+                <div
+                  style={{
+                    padding: "12px 14px",
+                    borderRadius: 14,
+                    background: "rgba(8,8,8,0.56)",
+                    border: "1px solid rgba(255,255,255,0.12)",
+                    backdropFilter: "blur(6px)",
+                  }}
+                >
+                  <div
+                    style={{
+                      fontSize: 11,
+                      opacity: 0.68,
+                      textTransform: "uppercase",
+                      letterSpacing: 0.7,
+                    }}
+                  >
+                    Lane Read
+                  </div>
+                  <div style={{ marginTop: 6, fontSize: 14, lineHeight: 1.5 }}>
+                    {roundMessage}
+                  </div>
+                </div>
+
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "1fr auto auto",
+                    gap: 12,
+                    alignItems: "end",
+                  }}
+                >
+                  <div
+                    style={{
+                      padding: "12px 14px",
+                      borderRadius: 14,
+                      background: "rgba(8,8,8,0.56)",
+                      border: "1px solid rgba(255,255,255,0.12)",
+                      backdropFilter: "blur(6px)",
+                    }}
+                  >
+                    <div
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        gap: 12,
+                        fontSize: 12,
+                        opacity: 0.76,
+                      }}
+                    >
+                      <span>Power</span>
+                      <span>{Math.round(chargePower * 100)}%</span>
+                    </div>
+
+                    <div
+                      style={{
+                        marginTop: 8,
+                        height: 12,
+                        borderRadius: 999,
+                        overflow: "hidden",
+                        background: "rgba(255,255,255,0.10)",
+                        border: "1px solid rgba(255,255,255,0.08)",
+                      }}
+                    >
+                      <div
+                        style={{
+                          width: `${Math.round(chargePower * 100)}%`,
+                          height: "100%",
+                          background:
+                            chargePower < MIN_STICK_POWER || chargePower > MAX_STICK_POWER
+                              ? "linear-gradient(90deg, rgba(160,70,70,0.92), rgba(220,110,90,0.92))"
+                              : chargePower >= 0.74
+                                ? "linear-gradient(90deg, rgba(196,176,122,0.92), rgba(255,189,92,0.92))"
+                                : "linear-gradient(90deg, rgba(128,148,182,0.92), rgba(196,176,122,0.92))",
+                          transition: isCharging ? "none" : "width 140ms ease-out",
+                        }}
+                      />
+                    </div>
+
+                    <div style={{ marginTop: 8, fontSize: 12, opacity: 0.7 }}>
+                      Red zones will miss completely.
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    disabled={throwsLeft <= 0 || !!activeFlight}
+                    onMouseDown={beginCharge}
+                    onMouseUp={endCharge}
+                    onMouseLeave={() => {
+                      if (isCharging) endCharge();
+                    }}
+                    onTouchStart={(e) => {
+                      e.preventDefault();
+                      beginCharge();
+                    }}
+                    onTouchEnd={(e) => {
+                      e.preventDefault();
+                      endCharge();
+                    }}
+                    style={{
+                      height: 56,
+                      padding: "0 18px",
+                      borderRadius: 14,
+                      border: "1px solid rgba(255,214,150,0.26)",
+                      background:
+                        throwsLeft <= 0 || !!activeFlight
+                          ? "rgba(255,255,255,0.08)"
+                          : "linear-gradient(180deg, rgba(122,78,38,0.96), rgba(84,52,28,0.96))",
+                      color: "rgba(255,247,233,0.96)",
+                      fontWeight: 900,
+                      cursor: throwsLeft <= 0 || !!activeFlight ? "not-allowed" : "pointer",
+                      boxShadow:
+                        throwsLeft <= 0 || !!activeFlight ? "none" : "0 16px 30px rgba(0,0,0,0.32)",
+                    }}
+                  >
+                    {activeFlight ? "In Flight..." : isCharging ? "Release" : "Hold To Throw"}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={onExit}
+                    style={{
+                      height: 56,
+                      padding: "0 18px",
+                      borderRadius: 14,
+                      border: "1px solid rgba(255,255,255,0.14)",
+                      background: "rgba(10,10,10,0.52)",
+                      color: "rgba(255,247,233,0.92)",
+                      fontWeight: 800,
+                      cursor: "pointer",
+                    }}
+                  >
+                    Back To Tavern
+                  </button>
+                </div>
+              </div>
             </div>
 
             <div
               style={{
                 display: "grid",
-                gridTemplateColumns: "1fr auto auto",
                 gap: 12,
-                alignItems: "end",
+                alignContent: "start",
               }}
             >
               <div
                 style={{
-                  padding: "12px 14px",
+                  padding: 14,
                   borderRadius: 14,
-                  background: "rgba(8,8,8,0.56)",
-                  border: "1px solid rgba(255,255,255,0.12)",
-                  backdropFilter: "blur(6px)",
+                  background: "rgba(255,255,255,0.04)",
+                  border: "1px solid rgba(255,255,255,0.08)",
                 }}
               >
                 <div
                   style={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    gap: 12,
-                    fontSize: 12,
-                    opacity: 0.76,
+                    fontSize: 11,
+                    opacity: 0.68,
+                    textTransform: "uppercase",
+                    letterSpacing: 0.7,
                   }}
                 >
-                  <span>Power</span>
-                  <span>{Math.round(chargePower * 100)}%</span>
+                  Aim Height
                 </div>
-
-                <div
-                  style={{
-                    marginTop: 8,
-                    height: 12,
-                    borderRadius: 999,
-                    overflow: "hidden",
-                    background: "rgba(255,255,255,0.10)",
-                    border: "1px solid rgba(255,255,255,0.08)",
-                  }}
-                >
-                  <div
-                    style={{
-                      width: `${Math.round(chargePower * 100)}%`,
-                      height: "100%",
-                      background:
-                        chargePower < MIN_STICK_POWER || chargePower > MAX_STICK_POWER
-                          ? "linear-gradient(90deg, rgba(160,70,70,0.92), rgba(220,110,90,0.92))"
-                          : chargePower >= 0.74
-                            ? "linear-gradient(90deg, rgba(196,176,122,0.92), rgba(255,189,92,0.92))"
-                            : "linear-gradient(90deg, rgba(128,148,182,0.92), rgba(196,176,122,0.92))",
-                      transition: isCharging ? "none" : "width 140ms ease-out",
-                    }}
-                  />
-                </div>
-
-                <div style={{ marginTop: 8, fontSize: 12, opacity: 0.7 }}>
-                  Red zones will miss completely.
+                <div style={{ marginTop: 6, fontSize: 18, fontWeight: 900 }}>
+                  {aimPercent}%
                 </div>
               </div>
 
-              <button
-                type="button"
-                disabled={throwsLeft <= 0 || !!activeFlight}
-                onMouseDown={beginCharge}
-                onMouseUp={endCharge}
-                onMouseLeave={() => {
-                  if (isCharging) endCharge();
-                }}
-                onTouchStart={(e) => {
-                  e.preventDefault();
-                  beginCharge();
-                }}
-                onTouchEnd={(e) => {
-                  e.preventDefault();
-                  endCharge();
-                }}
+              <div
                 style={{
-                  height: 56,
-                  padding: "0 18px",
+                  padding: 14,
                   borderRadius: 14,
-                  border: "1px solid rgba(255,214,150,0.26)",
-                  background:
-                    throwsLeft <= 0 || !!activeFlight
-                      ? "rgba(255,255,255,0.08)"
-                      : "linear-gradient(180deg, rgba(122,78,38,0.96), rgba(84,52,28,0.96))",
-                  color: "rgba(255,247,233,0.96)",
-                  fontWeight: 900,
-                  cursor: throwsLeft <= 0 || !!activeFlight ? "not-allowed" : "pointer",
-                  boxShadow: throwsLeft <= 0 || !!activeFlight ? "none" : "0 16px 30px rgba(0,0,0,0.32)",
+                  background: "rgba(255,255,255,0.04)",
+                  border: "1px solid rgba(255,255,255,0.08)",
+                  display: "grid",
+                  gap: 12,
+                  justifyItems: "center",
                 }}
               >
-                {activeFlight ? "In Flight..." : isCharging ? "Release" : "Hold To Throw"}
-              </button>
+                <div
+                  style={{
+                    fontSize: 11,
+                    opacity: 0.68,
+                    textTransform: "uppercase",
+                    letterSpacing: 0.7,
+                  }}
+                >
+                  Aim Control
+                </div>
 
+                <input
+                  type="range"
+                  min={AIM_MIN}
+                  max={AIM_MAX}
+                  step={1}
+                  value={aimOffsetY}
+                  onChange={(e) => setAimOffsetY(Number(e.target.value))}
+                  style={
+                    {
+                      writingMode: "vertical-lr",
+                      WebkitAppearance: "slider-vertical",
+                      width: 28,
+                      height: 240,
+                      cursor: "pointer",
+                    } as React.CSSProperties
+                  }
+                />
+
+                <div
+                  style={{
+                    fontSize: 12,
+                    opacity: 0.72,
+                    textAlign: "center",
+                    lineHeight: 1.5,
+                  }}
+                >
+                  Slide up or down to set the throw line before charging.
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+              gap: 12,
+            }}
+          >
+            <div
+              style={{
+                padding: 14,
+                borderRadius: 14,
+                background: "rgba(255,255,255,0.04)",
+                border: "1px solid rgba(255,255,255,0.08)",
+              }}
+            >
+              <div
+                style={{
+                  fontSize: 11,
+                  opacity: 0.68,
+                  textTransform: "uppercase",
+                  letterSpacing: 0.7,
+                }}
+              >
+                Best Throw
+              </div>
+              <div style={{ marginTop: 6, fontSize: 18, fontWeight: 900 }}>
+                {bestThrow ? `${bestThrow.label} · ${bestThrow.score}` : "—"}
+              </div>
+            </div>
+
+            <div
+              style={{
+                padding: 14,
+                borderRadius: 14,
+                background: "rgba(255,255,255,0.04)",
+                border: "1px solid rgba(255,255,255,0.08)",
+              }}
+            >
+              <div
+                style={{
+                  fontSize: 11,
+                  opacity: 0.68,
+                  textTransform: "uppercase",
+                  letterSpacing: 0.7,
+                }}
+              >
+                Throws Used
+              </div>
+              <div style={{ marginTop: 6, fontSize: 18, fontWeight: 900 }}>{throwsUsed}</div>
+            </div>
+
+            <div
+              style={{
+                padding: 14,
+                borderRadius: 14,
+                background: "rgba(255,255,255,0.04)",
+                border: "1px solid rgba(255,255,255,0.08)",
+              }}
+            >
+              <div
+                style={{
+                  fontSize: 11,
+                  opacity: 0.68,
+                  textTransform: "uppercase",
+                  letterSpacing: 0.7,
+                }}
+              >
+                Round
+              </div>
+              <div style={{ marginTop: 6, fontSize: 18, fontWeight: 900 }}>
+                {isRoundOver ? "Complete" : "Active"}
+              </div>
+            </div>
+          </div>
+
+          <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+            <button
+              type="button"
+              onClick={resetRound}
+              style={{
+                height: 48,
+                padding: "0 16px",
+                borderRadius: 12,
+                border: "1px solid rgba(255,255,255,0.12)",
+                background: "rgba(255,255,255,0.05)",
+                color: "rgba(255,247,233,0.92)",
+                fontWeight: 800,
+                cursor: "pointer",
+              }}
+            >
+              Reset Round
+            </button>
+
+            {onExit ? (
               <button
                 type="button"
                 onClick={onExit}
                 style={{
-                  height: 56,
-                  padding: "0 18px",
-                  borderRadius: 14,
-                  border: "1px solid rgba(255,255,255,0.14)",
-                  background: "rgba(10,10,10,0.52)",
+                  height: 48,
+                  padding: "0 16px",
+                  borderRadius: 12,
+                  border: "1px solid rgba(255,255,255,0.12)",
+                  background: "rgba(255,255,255,0.05)",
                   color: "rgba(255,247,233,0.92)",
                   fontWeight: 800,
                   cursor: "pointer",
                 }}
               >
-                Back To Tavern
+                Leave Lane
               </button>
-            </div>
-          </div>
-        </div>
+            ) : null}
 
-        <div
-          style={{
-            display: "grid",
-            gap: 12,
-            alignContent: "start",
-          }}
-        >
-          <div
-            style={{
-              padding: 14,
-              borderRadius: 14,
-              background: "rgba(255,255,255,0.04)",
-              border: "1px solid rgba(255,255,255,0.08)",
-            }}
-          >
-            <div style={{ fontSize: 11, opacity: 0.68, textTransform: "uppercase", letterSpacing: 0.7 }}>
-              Aim Height
-            </div>
-            <div style={{ marginTop: 6, fontSize: 18, fontWeight: 900 }}>{aimPercent}%</div>
-          </div>
-
-          <div
-            style={{
-              padding: 14,
-              borderRadius: 14,
-              background: "rgba(255,255,255,0.04)",
-              border: "1px solid rgba(255,255,255,0.08)",
-              display: "grid",
-              gap: 12,
-              justifyItems: "center",
-            }}
-          >
-            <div style={{ fontSize: 11, opacity: 0.68, textTransform: "uppercase", letterSpacing: 0.7 }}>
-              Aim Control
-            </div>
-
-            <input
-              type="range"
-              min={AIM_MIN}
-              max={AIM_MAX}
-              step={1}
-              value={aimOffsetY}
-              onChange={(e) => setAimOffsetY(Number(e.target.value))}
-              style={
-                {
-                  writingMode: "vertical-lr",
-                  WebkitAppearance: "slider-vertical",
-                  width: 28,
-                  height: 240,
+            {barmaidUnlocked && (
+              <button
+                type="button"
+                onClick={() => {
+                  setShowBarmaid((prev) => !prev);
+                  if (showBarmaid) {
+                    setBarmaidTopic(null);
+                  }
+                }}
+                style={{
+                  height: 48,
+                  padding: "0 16px",
+                  borderRadius: 12,
+                  border: "1px solid rgba(255,212,160,0.18)",
+                  background: "linear-gradient(180deg, rgba(98,66,34,0.95), rgba(72,46,24,0.95))",
+                  color: "rgba(255,247,233,0.96)",
+                  fontWeight: 800,
                   cursor: "pointer",
-                } as React.CSSProperties
-              }
-            />
-
-            <div style={{ fontSize: 12, opacity: 0.72, textAlign: "center", lineHeight: 1.5 }}>
-              Slide up or down to set the throw line before charging.
-            </div>
+                }}
+              >
+                {showBarmaid ? "Close Barmaid" : "Speak to the Barmaid"}
+              </button>
+            )}
           </div>
-        </div>
-      </div>
-
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
-          gap: 12,
-        }}
-      >
-        <div
-          style={{
-            padding: 14,
-            borderRadius: 14,
-            background: "rgba(255,255,255,0.04)",
-            border: "1px solid rgba(255,255,255,0.08)",
-          }}
-        >
-          <div style={{ fontSize: 11, opacity: 0.68, textTransform: "uppercase", letterSpacing: 0.7 }}>
-            Best Throw
-          </div>
-          <div style={{ marginTop: 6, fontSize: 18, fontWeight: 900 }}>
-            {bestThrow ? `${bestThrow.label} · ${bestThrow.score}` : "—"}
-          </div>
-        </div>
-
-        <div
-          style={{
-            padding: 14,
-            borderRadius: 14,
-            background: "rgba(255,255,255,0.04)",
-            border: "1px solid rgba(255,255,255,0.08)",
-          }}
-        >
-          <div style={{ fontSize: 11, opacity: 0.68, textTransform: "uppercase", letterSpacing: 0.7 }}>
-            Throws Used
-          </div>
-          <div style={{ marginTop: 6, fontSize: 18, fontWeight: 900 }}>{throwsUsed}</div>
-        </div>
-
-        <div
-          style={{
-            padding: 14,
-            borderRadius: 14,
-            background: "rgba(255,255,255,0.04)",
-            border: "1px solid rgba(255,255,255,0.08)",
-          }}
-        >
-          <div style={{ fontSize: 11, opacity: 0.68, textTransform: "uppercase", letterSpacing: 0.7 }}>
-            Round
-          </div>
-          <div style={{ marginTop: 6, fontSize: 18, fontWeight: 900 }}>
-            {isRoundOver ? "Complete" : "Active"}
-          </div>
-        </div>
-      </div>
-
-      <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
-        <button
-          type="button"
-          onClick={resetRound}
-          style={{
-            height: 48,
-            padding: "0 16px",
-            borderRadius: 12,
-            border: "1px solid rgba(255,255,255,0.12)",
-            background: "rgba(255,255,255,0.05)",
-            color: "rgba(255,247,233,0.92)",
-            fontWeight: 800,
-            cursor: "pointer",
-          }}
-        >
-          Reset Round
-        </button>
-
-        {onExit ? (
-          <button
-            type="button"
-            onClick={onExit}
-            style={{
-              height: 48,
-              padding: "0 16px",
-              borderRadius: 12,
-              border: "1px solid rgba(255,255,255,0.12)",
-              background: "rgba(255,255,255,0.05)",
-              color: "rgba(255,247,233,0.92)",
-              fontWeight: 800,
-              cursor: "pointer",
-            }}
-          >
-            Leave Lane
-          </button>
-        ) : null}
-
-        {barmaidUnlocked && (
-          <button
-            type="button"
-            onClick={() => {
-              setShowBarmaid((prev) => !prev);
-              if (showBarmaid) {
-                setBarmaidTopic(null);
-              }
-            }}
-            style={{
-              height: 48,
-              padding: "0 16px",
-              borderRadius: 12,
-              border: "1px solid rgba(255,212,160,0.18)",
-              background: "linear-gradient(180deg, rgba(98,66,34,0.95), rgba(72,46,24,0.95))",
-              color: "rgba(255,247,233,0.96)",
-              fontWeight: 800,
-              cursor: "pointer",
-            }}
-          >
-            {showBarmaid ? "Close Barmaid" : "Speak to the Barmaid"}
-          </button>
-        )}
-      </div>
+        </>
+      )}
 
       {barmaidUnlocked && showBarmaid && (
         <div
           style={{
             display: "grid",
-            gap: 14,
-            padding: 18,
-            borderRadius: 18,
+            gap: 18,
+            padding: barmaidOnlyMode ? 22 : 18,
+            borderRadius: 20,
             border: "1px solid rgba(255,255,255,0.10)",
-            background:
-              "linear-gradient(180deg, rgba(28,18,12,0.92), rgba(14,10,8,0.94))",
+            background: "linear-gradient(180deg, rgba(28,18,12,0.94), rgba(14,10,8,0.96))",
             boxShadow: "0 20px 50px rgba(0,0,0,0.35)",
+            maxWidth: barmaidOnlyMode ? 980 : undefined,
           }}
         >
           <div
             style={{
+              display: "flex",
+              justifyContent: "space-between",
+              gap: 12,
+              alignItems: "center",
+              flexWrap: "wrap",
+            }}
+          >
+            <div>
+              <div
+                style={{
+                  fontSize: 11,
+                  textTransform: "uppercase",
+                  letterSpacing: 0.7,
+                  opacity: 0.65,
+                }}
+              >
+                Tavern Conversation
+              </div>
+              <div style={{ fontSize: barmaidOnlyMode ? 28 : 24, fontWeight: 900, marginTop: 4 }}>
+                The Barmaid
+              </div>
+              <div
+                style={{
+                  marginTop: 8,
+                  fontSize: barmaidOnlyMode ? 16 : 15,
+                  lineHeight: 1.6,
+                  opacity: 0.88,
+                  maxWidth: 760,
+                }}
+              >
+                {getBarmaidGreeting(totalScore)}
+              </div>
+            </div>
+
+            <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+              <button
+                type="button"
+                onClick={cycleBarmaidImage}
+                style={{
+                  height: 44,
+                  padding: "0 14px",
+                  borderRadius: 12,
+                  border: "1px solid rgba(255,255,255,0.12)",
+                  background: "rgba(255,255,255,0.05)",
+                  color: "rgba(255,247,233,0.94)",
+                  fontWeight: 700,
+                  cursor: "pointer",
+                }}
+              >
+                Change Pose
+              </button>
+
+              {!barmaidOnlyMode && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowBarmaid(false);
+                    setBarmaidTopic(null);
+                  }}
+                  style={{
+                    height: 44,
+                    padding: "0 14px",
+                    borderRadius: 12,
+                    border: "1px solid rgba(255,255,255,0.12)",
+                    background: "rgba(255,255,255,0.05)",
+                    color: "rgba(255,247,233,0.94)",
+                    fontWeight: 700,
+                    cursor: "pointer",
+                  }}
+                >
+                  Close
+                </button>
+              )}
+            </div>
+          </div>
+
+          <div
+            style={{
               display: "grid",
-              gridTemplateColumns: "180px minmax(0, 1fr)",
-              gap: 16,
+              gridTemplateColumns: barmaidOnlyMode ? "320px minmax(0, 1fr)" : "180px minmax(0, 1fr)",
+              gap: 18,
               alignItems: "start",
             }}
           >
             <img
-              src={barmaidPortrait}
+              src={currentBarmaidImage}
               alt="Barmaid"
+              onClick={cycleBarmaidImage}
               style={{
                 width: "100%",
-                borderRadius: 14,
+                borderRadius: 16,
                 border: "1px solid rgba(255,255,255,0.10)",
                 objectFit: "cover",
                 boxShadow: "0 12px 30px rgba(0,0,0,0.32)",
+                cursor: "pointer",
               }}
             />
 
-            <div style={{ display: "grid", gap: 12 }}>
-              <div>
-                <div
-                  style={{
-                    fontSize: 11,
-                    textTransform: "uppercase",
-                    letterSpacing: 0.7,
-                    opacity: 0.65,
-                  }}
-                >
-                  Tavern Conversation
-                </div>
-                <div style={{ fontSize: 24, fontWeight: 900, marginTop: 4 }}>
-                  The Barmaid
-                </div>
-                <div
-                  style={{
-                    marginTop: 8,
-                    fontSize: 15,
-                    lineHeight: 1.6,
-                    opacity: 0.88,
-                  }}
-                >
-                  {getBarmaidGreeting(totalScore)}
-                </div>
-              </div>
-
+            <div style={{ display: "grid", gap: 14 }}>
               <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
                 <button
                   type="button"
                   onClick={() => setBarmaidTopic("dungeon")}
                   style={{
-                    height: 42,
+                    height: 44,
                     padding: "0 14px",
                     borderRadius: 12,
                     border: "1px solid rgba(255,255,255,0.12)",
@@ -1048,7 +1189,7 @@ export default function TavernAxeThrow({
                   type="button"
                   onClick={() => setBarmaidTopic("people")}
                   style={{
-                    height: 42,
+                    height: 44,
                     padding: "0 14px",
                     borderRadius: 12,
                     border: "1px solid rgba(255,255,255,0.12)",
@@ -1068,7 +1209,7 @@ export default function TavernAxeThrow({
                   type="button"
                   onClick={() => setBarmaidTopic("you")}
                   style={{
-                    height: 42,
+                    height: 44,
                     padding: "0 14px",
                     borderRadius: 12,
                     border: "1px solid rgba(255,255,255,0.12)",
@@ -1087,13 +1228,13 @@ export default function TavernAxeThrow({
 
               <div
                 style={{
-                  minHeight: 96,
-                  padding: 14,
-                  borderRadius: 14,
+                  minHeight: barmaidOnlyMode ? 170 : 96,
+                  padding: 16,
+                  borderRadius: 16,
                   border: "1px solid rgba(255,255,255,0.08)",
                   background: "rgba(255,255,255,0.04)",
-                  fontSize: 14,
-                  lineHeight: 1.6,
+                  fontSize: barmaidOnlyMode ? 15 : 14,
+                  lineHeight: 1.7,
                   opacity: 0.9,
                 }}
               >
@@ -1103,10 +1244,106 @@ export default function TavernAxeThrow({
                   "She waits with the kind of calm that suggests she has heard many brave promises and watched many of them tested."
                 )}
               </div>
+
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+                  gap: 12,
+                }}
+              >
+                <div
+                  style={{
+                    padding: 14,
+                    borderRadius: 14,
+                    background: "rgba(255,255,255,0.04)",
+                    border: "1px solid rgba(255,255,255,0.08)",
+                  }}
+                >
+                  <div
+                    style={{
+                      fontSize: 11,
+                      opacity: 0.66,
+                      textTransform: "uppercase",
+                      letterSpacing: 0.7,
+                    }}
+                  >
+                    Tavern Score
+                  </div>
+                  <div style={{ marginTop: 6, fontSize: 22, fontWeight: 900 }}>{totalScore}</div>
+                </div>
+
+                <div
+                  style={{
+                    padding: 14,
+                    borderRadius: 14,
+                    background: "rgba(255,255,255,0.04)",
+                    border: "1px solid rgba(255,255,255,0.08)",
+                  }}
+                >
+                  <div
+                    style={{
+                      fontSize: 11,
+                      opacity: 0.66,
+                      textTransform: "uppercase",
+                      letterSpacing: 0.7,
+                    }}
+                  >
+                    Best Throw
+                  </div>
+                  <div style={{ marginTop: 6, fontSize: 18, fontWeight: 900 }}>
+                    {bestThrow ? `${bestThrow.label} · ${bestThrow.score}` : "—"}
+                  </div>
+                </div>
+
+                <div
+                  style={{
+                    padding: 14,
+                    borderRadius: 14,
+                    background: "rgba(255,255,255,0.04)",
+                    border: "1px solid rgba(255,255,255,0.08)",
+                  }}
+                >
+                  <div
+                    style={{
+                      fontSize: 11,
+                      opacity: 0.66,
+                      textTransform: "uppercase",
+                      letterSpacing: 0.7,
+                    }}
+                  >
+                    Tavern Read
+                  </div>
+                  <div style={{ marginTop: 6, fontSize: 14, lineHeight: 1.5, opacity: 0.88 }}>
+                    Earned her attention. The room is listening now.
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         </div>
       )}
+
+      <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+        {onExit ? (
+          <button
+            type="button"
+            onClick={onExit}
+            style={{
+              height: 48,
+              padding: "0 16px",
+              borderRadius: 12,
+              border: "1px solid rgba(255,255,255,0.12)",
+              background: "rgba(255,255,255,0.05)",
+              color: "rgba(255,247,233,0.92)",
+              fontWeight: 800,
+              cursor: "pointer",
+            }}
+          >
+            Back To Tavern
+          </button>
+        ) : null}
+      </div>
     </div>
   );
 }
