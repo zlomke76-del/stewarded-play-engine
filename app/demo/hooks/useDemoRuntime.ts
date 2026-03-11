@@ -32,6 +32,12 @@ import {
 } from "@/lib/dungeon/DungeonNarration";
 import type { DungeonConnection, DungeonDefinition, DungeonRoom } from "@/lib/dungeon/FloorState";
 import type { EnemyEncounterTheme } from "@/lib/game/EnemyDatabase";
+import {
+  buildPuzzlePresentationBlock,
+  resolveActiveRoomPuzzle,
+  runRoomPuzzleAttempt as runRoomPuzzleAttemptRuntime,
+} from "@/lib/dungeon/puzzles/PuzzleRuntime";
+import type { PuzzleCanonRecord, PuzzleResolution } from "@/lib/dungeon/puzzles/PuzzleState";
 import type { DMMode, DemoSectionId, DiceMode, InitialTable, RollSource } from "../demoTypes";
 import {
   clampInt,
@@ -80,7 +86,7 @@ export type PresentationPhase =
   | "tavern"
   | "gameplay";
 
-export type GameplayFocusStep = "pressure" | "map" | "action";
+export type GameplayFocusStep = "pressure" | "map" | "puzzle" | "action";
 
 export type CombatEncounterContext = {
   zoneId?: string | null;
@@ -358,6 +364,72 @@ function inferConnectionChoiceFromText(
   return scored[0]?.connection ?? connections[0] ?? null;
 }
 
+function mapStateEventsToPuzzleCanon(events: readonly any[]): PuzzleCanonRecord[] {
+  const out: PuzzleCanonRecord[] = [];
+
+  for (const event of events) {
+    const type = String(event?.type ?? "");
+    const payload = event?.payload ?? {};
+
+    if (type === "PUZZLE_RESOLVED") {
+      const puzzleId = String(payload?.puzzleId ?? "").trim();
+      const floorId = String(payload?.floorId ?? "").trim();
+      const roomId = String(payload?.roomId ?? "").trim();
+      if (!puzzleId || !floorId || !roomId) continue;
+
+      out.push({
+        type: "puzzle_resolved",
+        puzzleId: puzzleId as any,
+        floorId,
+        roomId,
+        success: Boolean(payload?.success),
+        timestamp: Number.isFinite(Number(event?.timestamp)) ? Number(event.timestamp) : undefined,
+        details: payload,
+      });
+      continue;
+    }
+
+    if (type === "PUZZLE_REWARD_GRANTED") {
+      const effect = payload?.effect ?? {};
+      if (effect?.kind === "grant_trait" && effect?.traitId && effect?.label) {
+        out.push({
+          type: "trait_gained",
+          traitId: String(effect.traitId),
+          label: String(effect.label),
+          details: effect,
+        });
+      }
+      continue;
+    }
+
+    if (type === "PUZZLE_CONSEQUENCE_APPLIED") {
+      const effect = payload?.effect ?? {};
+
+      if (effect?.kind === "lock_companion_path" && effect?.companionTag) {
+        out.push({
+          type: "companion_lock",
+          companionTag: String(effect.companionTag),
+          reason: String(effect.description ?? "Puzzle consequence"),
+          details: effect,
+        });
+        continue;
+      }
+
+      if (effect?.kind === "apply_penalty" && effect?.penaltyId && effect?.label) {
+        out.push({
+          type: "trait_lost",
+          traitId: String(effect.penaltyId),
+          label: String(effect.label),
+          details: effect,
+        });
+        continue;
+      }
+    }
+  }
+
+  return out;
+}
+
 export function useDemoRuntime() {
   const role: "arbiter" = "arbiter";
 
@@ -395,6 +467,8 @@ export function useDemoRuntime() {
     targetName: string;
     attackStyleHint: "volley" | "beam" | "charge" | "unknown";
   } | null>(null);
+
+  const [puzzleResolution, setPuzzleResolution] = useState<PuzzleResolution | null>(null);
 
   const outcomesCount = useMemo(() => state.events.filter((e: any) => e?.type === "OUTCOME").length, [state.events]);
   const canonCount = useMemo(
@@ -929,8 +1003,9 @@ export function useDemoRuntime() {
         floorId: location.floorId,
         roomId: location.roomId,
         nearbyRoomIds,
+        dungeon,
       }),
-    [state.events, location.floorId, location.roomId, nearbyRoomIds]
+    [state.events, location.floorId, location.roomId, nearbyRoomIds, dungeon]
   );
 
   const currentFeatures = useMemo(() => currentRoomFeatureLite(currentRoom), [currentRoom]);
@@ -1001,6 +1076,31 @@ export function useDemoRuntime() {
     [currentRoom, currentFloor.rooms, dungeon.floors, reachableConnections]
   );
 
+  const puzzleCanon = useMemo(
+    () => mapStateEventsToPuzzleCanon(state.events as any[]),
+    [state.events]
+  );
+
+  const activeRoomPuzzle = useMemo(() => {
+    return resolveActiveRoomPuzzle({
+      room: currentRoom,
+      floorId: location.floorId,
+      floorDepth: currentFloor.depth,
+    });
+  }, [currentRoom, location.floorId, currentFloor.depth]);
+
+  const activePuzzleBlock = useMemo(() => {
+    return buildPuzzlePresentationBlock({
+      room: currentRoom,
+      floorId: location.floorId,
+      floorDepth: currentFloor.depth,
+    });
+  }, [currentRoom, location.floorId, currentFloor.depth]);
+
+  useEffect(() => {
+    setPuzzleResolution(null);
+  }, [location.floorId, location.roomId]);
+
   useEffect(() => {
     if (!tableAccepted || !partyCanonical) return;
     if (hasDungeonInitialized(state.events as any[])) return;
@@ -1042,6 +1142,45 @@ export function useDemoRuntime() {
       return next;
     });
   }, [tableAccepted, partyCanonical, state.events, dungeon]);
+
+  async function runRoomPuzzleAttempt(inputText: string) {
+    const trimmed = String(inputText ?? "").trim();
+    if (!trimmed || !activeRoomPuzzle) return null;
+
+    const result = runRoomPuzzleAttemptRuntime({
+      room: currentRoom,
+      floorId: location.floorId,
+      floorDepth: currentFloor.depth,
+      actorId: actingPlayerId,
+      actorName:
+        partyMembers.find((m) => String(m.id) === String(actingPlayerId))?.name ??
+        effectivePlayerNames[0] ??
+        null,
+      inputText: trimmed,
+      knownCanon: puzzleCanon,
+    });
+
+    setPuzzleResolution(result);
+
+    if (result.suggestedEvents.length > 0) {
+      setState((prev) => {
+        let next = prev;
+
+        for (const event of result.suggestedEvents) {
+          next = appendEventToState(next, event.type, event.payload as any);
+        }
+
+        return next;
+      });
+    }
+
+    if (result.success) {
+      setGameplayFocusStep("action");
+      setActiveSection("action");
+    }
+
+    return result;
+  }
 
   function commitDungeonTraversalBundle(args: {
     success: boolean;
@@ -1345,7 +1484,9 @@ export function useDemoRuntime() {
     dungeonDescentConfirmed;
 
   const gameplayAllowsPressure = showGameplay && allowGameplay;
-  const gameplayAllowsMap = gameplayAllowsPressure && (gameplayFocusStep === "map" || gameplayFocusStep === "action");
+  const gameplayAllowsMap =
+    gameplayAllowsPressure &&
+    (gameplayFocusStep === "map" || gameplayFocusStep === "puzzle" || gameplayFocusStep === "action");
   const gameplayAllowsAction = gameplayAllowsPressure && gameplayFocusStep === "action";
 
   const roomNarrative = useMemo(() => {
@@ -1544,6 +1685,9 @@ export function useDemoRuntime() {
     enemyTelegraphHint,
     setEnemyTelegraphHint,
 
+    puzzleResolution,
+    setPuzzleResolution,
+
     outcomesCount,
     canonCount,
 
@@ -1611,6 +1755,10 @@ export function useDemoRuntime() {
     }),
     roomImage,
     roomConnectionsView,
+
+    activeRoomPuzzle,
+    activePuzzleBlock,
+    runRoomPuzzleAttempt,
 
     chronicleSeed,
     roomNarrative,
