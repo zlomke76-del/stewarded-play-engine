@@ -1,106 +1,13 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 
-import CardSection from "@/components/layout/CardSection";
 import GameStateAdvisoryPanel from "./GameStateAdvisoryPanel";
 import RoomTopologyPanel from "./RoomTopologyPanel";
 import GameplayActionColumn from "./GameplayActionColumn";
 import GameplayCombatPanel from "./GameplayCombatPanel";
 import CanonChronicleSection from "./CanonChronicleSection";
-import { anchorId, scrollToSection } from "../demoUtils";
-
-function RitualPromptRow(props: {
-  title: string;
-  body: string;
-  actionLabel: string;
-  hint?: string;
-  onActivate: () => void;
-}) {
-  const { title, body, actionLabel, hint, onActivate } = props;
-
-  return (
-    <CardSection title={title}>
-      <div style={{ display: "grid", gap: 12 }}>
-        <p style={{ margin: 0, lineHeight: 1.65, opacity: 0.9 }}>{body}</p>
-
-        <button
-          type="button"
-          onClick={onActivate}
-          style={{
-            width: "100%",
-            textAlign: "left",
-            padding: "14px 16px",
-            borderRadius: 14,
-            border: "1px solid rgba(214, 188, 120, 0.22)",
-            background:
-              "linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.02))",
-            boxShadow:
-              "inset 0 1px 0 rgba(255,255,255,0.05), 0 10px 28px rgba(0,0,0,0.22)",
-            cursor: "pointer",
-            transition:
-              "border-color 160ms ease, background 160ms ease, transform 160ms ease, box-shadow 160ms ease",
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.borderColor = "rgba(214, 188, 120, 0.38)";
-            e.currentTarget.style.background =
-              "linear-gradient(180deg, rgba(255,255,255,0.07), rgba(255,255,255,0.03))";
-            e.currentTarget.style.transform = "translateY(-1px)";
-            e.currentTarget.style.boxShadow =
-              "inset 0 1px 0 rgba(255,255,255,0.07), 0 14px 34px rgba(0,0,0,0.28)";
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.borderColor = "rgba(214, 188, 120, 0.22)";
-            e.currentTarget.style.background =
-              "linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.02))";
-            e.currentTarget.style.transform = "translateY(0)";
-            e.currentTarget.style.boxShadow =
-              "inset 0 1px 0 rgba(255,255,255,0.05), 0 10px 28px rgba(0,0,0,0.22)";
-          }}
-        >
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16 }}>
-            <div style={{ display: "grid", gap: 4 }}>
-              <span
-                style={{
-                  fontSize: 13,
-                  letterSpacing: 0.8,
-                  textTransform: "uppercase",
-                  opacity: 0.62,
-                }}
-              >
-                Chapter Transition
-              </span>
-              <span
-                style={{
-                  fontSize: 16,
-                  fontWeight: 700,
-                  lineHeight: 1.25,
-                  color: "rgba(245,236,216,0.96)",
-                }}
-              >
-                {actionLabel}
-              </span>
-            </div>
-
-            <span
-              aria-hidden
-              style={{
-                fontSize: 20,
-                opacity: 0.62,
-              }}
-            >
-              →
-            </span>
-          </div>
-        </button>
-
-        {hint ? (
-          <div style={{ fontSize: 12, opacity: 0.68, lineHeight: 1.5 }}>{hint}</div>
-        ) : null}
-      </div>
-    </CardSection>
-  );
-}
+import { anchorId } from "../demoUtils";
 
 function ProgressionBanner(props: { demo: any }) {
   const { demo } = props;
@@ -116,15 +23,25 @@ function ProgressionBanner(props: { demo: any }) {
   if (!banner || !summary || !progression) return null;
 
   const heroLevel = summary.hero?.level ?? progression.hero?.level ?? 1;
-  const masteryUnlocked = Boolean(summary.hero?.masteryUnlocked ?? progression.hero?.masteryUnlocked);
+  const masteryUnlocked = Boolean(
+    summary.hero?.masteryUnlocked ?? progression.hero?.masteryUnlocked
+  );
   const partyActive = summary.party?.activeSlots ?? progression.party?.activeSlots ?? 1;
   const partyMax = summary.party?.maxSlots ?? progression.party?.maxSlots ?? 6;
-  const inventoryUsed = summary.inventory?.usedSlots ?? progression.inventory?.usedSlots ?? 0;
-  const inventoryTotal = summary.inventory?.totalSlots ?? progression.inventory?.totalSlots ?? 0;
-  const cryptCleared = Boolean(summary.campaign?.cryptFullyCleared ?? progression.campaign?.cryptFullyCleared);
-  const finalReady = Boolean(summary.campaign?.finalDescentUnlocked ?? progression.campaign?.finalDescentUnlocked);
+  const inventoryUsed =
+    summary.inventory?.usedSlots ?? progression.inventory?.usedSlots ?? 0;
+  const inventoryTotal =
+    summary.inventory?.totalSlots ?? progression.inventory?.totalSlots ?? 0;
+  const cryptCleared = Boolean(
+    summary.campaign?.cryptFullyCleared ?? progression.campaign?.cryptFullyCleared
+  );
+  const finalReady = Boolean(
+    summary.campaign?.finalDescentUnlocked ??
+      progression.campaign?.finalDescentUnlocked
+  );
   const fullFellowship = Boolean(
-    summary.campaign?.fullFellowshipAssembled ?? progression.campaign?.fullFellowshipAssembled
+    summary.campaign?.fullFellowshipAssembled ??
+      progression.campaign?.fullFellowshipAssembled
   );
   const relicBonded = summary.relics?.bondedCount ?? 0;
   const fallen = summary.party?.fallenMembers ?? progression.party?.fallenMembers ?? 0;
@@ -194,8 +111,8 @@ function ProgressionBanner(props: { demo: any }) {
         style={{
           position: "relative",
           display: "grid",
-          gap: 16,
-          padding: "18px 18px 16px",
+          gap: 14,
+          padding: "16px 16px 14px",
         }}
       >
         <div
@@ -261,7 +178,7 @@ function ProgressionBanner(props: { demo: any }) {
                 fontSize: 13,
                 lineHeight: 1.55,
                 color: "rgba(229, 232, 240, 0.82)",
-                maxWidth: 720,
+                maxWidth: 760,
               }}
             >
               {subtitle}
@@ -270,8 +187,7 @@ function ProgressionBanner(props: { demo: any }) {
 
           <div
             style={{
-              alignSelf: "stretch",
-              minWidth: 200,
+              minWidth: 220,
               padding: "10px 12px",
               borderRadius: 16,
               border: "1px solid rgba(255,255,255,0.08)",
@@ -310,7 +226,7 @@ function ProgressionBanner(props: { demo: any }) {
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))",
+            gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))",
             gap: 10,
           }}
         >
@@ -323,7 +239,10 @@ function ProgressionBanner(props: { demo: any }) {
             {
               label: "Inventory",
               value: `${inventoryUsed}/${inventoryTotal}`,
-              hint: inventoryTotal > 0 ? `${Math.max(0, inventoryTotal - inventoryUsed)} free slots` : "No storage",
+              hint:
+                inventoryTotal > 0
+                  ? `${Math.max(0, inventoryTotal - inventoryUsed)} free slots`
+                  : "No storage",
             },
             {
               label: "Bonded Relics",
@@ -339,7 +258,7 @@ function ProgressionBanner(props: { demo: any }) {
             <div
               key={item.label}
               style={{
-                padding: "12px 14px",
+                padding: "11px 13px",
                 borderRadius: 16,
                 border: "1px solid rgba(255,255,255,0.08)",
                 background:
@@ -386,43 +305,71 @@ function ProgressionBanner(props: { demo: any }) {
   );
 }
 
-function RitualDivider(props: { label: string }) {
+function SceneFrame(props: {
+  title: string;
+  eyebrow: string;
+  description: string;
+  children: React.ReactNode;
+}) {
+  const { title, eyebrow, description, children } = props;
+
   return (
     <div
       style={{
-        display: "flex",
-        alignItems: "center",
-        gap: 12,
-        margin: "10px 0 14px",
+        borderRadius: 24,
+        border: "1px solid rgba(214, 188, 120, 0.16)",
+        background:
+          "linear-gradient(180deg, rgba(16,18,28,0.94), rgba(10,12,20,0.92))",
+        boxShadow:
+          "0 24px 60px rgba(0,0,0,0.28), inset 0 1px 0 rgba(255,255,255,0.04)",
+        overflow: "hidden",
       }}
     >
       <div
         style={{
-          flex: 1,
-          height: 1,
+          padding: "18px 18px 14px",
+          borderBottom: "1px solid rgba(255,255,255,0.06)",
           background:
-            "linear-gradient(90deg, transparent, rgba(214,188,120,0.28), rgba(214,188,120,0.08))",
-        }}
-      />
-      <div
-        style={{
-          fontSize: 11,
-          letterSpacing: 1.2,
-          textTransform: "uppercase",
-          opacity: 0.58,
-          whiteSpace: "nowrap",
+            "linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.015))",
+          display: "grid",
+          gap: 8,
         }}
       >
-        {props.label}
+        <div
+          style={{
+            fontSize: 11,
+            letterSpacing: 1.15,
+            textTransform: "uppercase",
+            opacity: 0.58,
+          }}
+        >
+          {eyebrow}
+        </div>
+
+        <div
+          style={{
+            fontSize: 24,
+            fontWeight: 900,
+            lineHeight: 1.08,
+            color: "rgba(245,236,216,0.98)",
+          }}
+        >
+          {title}
+        </div>
+
+        <div
+          style={{
+            fontSize: 13,
+            lineHeight: 1.6,
+            color: "rgba(227, 231, 239, 0.78)",
+            maxWidth: 860,
+          }}
+        >
+          {description}
+        </div>
       </div>
-      <div
-        style={{
-          flex: 1,
-          height: 1,
-          background:
-            "linear-gradient(90deg, rgba(214,188,120,0.08), rgba(214,188,120,0.28), transparent)",
-        }}
-      />
+
+      <div style={{ padding: 16 }}>{children}</div>
     </div>
   );
 }
@@ -431,10 +378,6 @@ function PuzzleRoomPanel(props: {
   demo: any;
 }) {
   const { demo } = props;
-
-  const [inputText, setInputText] = useState("");
-  const [localResolution, setLocalResolution] = useState<any | null>(null);
-  const [submitting, setSubmitting] = useState(false);
 
   const activePuzzle = useMemo(() => {
     return (
@@ -445,216 +388,140 @@ function PuzzleRoomPanel(props: {
     );
   }, [demo.activePuzzleBlock, demo.activeRoomPuzzle, demo.roomPuzzlePresentation]);
 
+  const puzzleResult =
+    demo.puzzleResolution ?? demo.activePuzzleResolution ?? null;
+
   const canRunPuzzle =
     typeof demo.runRoomPuzzleAttempt === "function" ||
     typeof demo.runActivePuzzleAttempt === "function";
 
-  const puzzleResult =
-    demo.puzzleResolution ??
-    demo.activePuzzleResolution ??
-    localResolution ??
-    null;
+  const title = activePuzzle?.title ?? activePuzzle?.label ?? "Puzzle Chamber";
+  const description =
+    activePuzzle?.description ??
+    activePuzzle?.shortDescription ??
+    "This chamber holds a deterministic trial.";
+  const prompt =
+    activePuzzle?.prompt ?? "Describe how your hero attempts the puzzle.";
+  const hint = activePuzzle?.hint ?? null;
+  const puzzleId = activePuzzle?.puzzleId ?? null;
 
   if (!activePuzzle) return null;
 
-  const title =
-    activePuzzle.title ??
-    activePuzzle.label ??
-    "Puzzle Chamber";
-
-  const description =
-    activePuzzle.description ??
-    activePuzzle.shortDescription ??
-    "This room contains a deterministic trial.";
-
-  const prompt =
-    activePuzzle.prompt ??
-    "Describe how you attempt the puzzle.";
-
-  const hint = activePuzzle.hint ?? null;
-  const puzzleId = activePuzzle.puzzleId ?? null;
-
-  async function handleSubmit() {
-    const trimmed = inputText.trim();
-    if (!trimmed || !canRunPuzzle) return;
-
-    setSubmitting(true);
-    try {
-      let result: any = null;
-
-      if (typeof demo.runRoomPuzzleAttempt === "function") {
-        result = await demo.runRoomPuzzleAttempt(trimmed);
-      } else if (typeof demo.runActivePuzzleAttempt === "function") {
-        result = await demo.runActivePuzzleAttempt(trimmed);
-      }
-
-      if (result) {
-        setLocalResolution(result);
-      }
-    } finally {
-      setSubmitting(false);
-    }
-  }
-
-  const effects: any[] = Array.isArray(puzzleResult?.effects)
-    ? puzzleResult.effects
-    : [];
-
-  const narration: string[] = Array.isArray(puzzleResult?.narration)
-    ? puzzleResult.narration
-    : [];
-
   return (
-    <div id={anchorId("puzzle")} style={{ scrollMarginTop: 90, marginTop: 18 }}>
-      <CardSection title={title}>
+    <div id={anchorId("puzzle")} style={{ scrollMarginTop: 90 }}>
+      <SceneFrame
+        eyebrow="Chamber Trial"
+        title={title}
+        description="The trial is now the entire focal point. Solve it before the route regains the stage."
+      >
         <div style={{ display: "grid", gap: 14 }}>
           <div
             style={{
-              fontSize: 12,
-              letterSpacing: 0.9,
-              textTransform: "uppercase",
-              opacity: 0.62,
-            }}
-          >
-            Puzzle Room
-            {puzzleId ? ` · ${String(puzzleId).replaceAll("_", " ")}` : ""}
-          </div>
-
-          <p style={{ margin: 0, lineHeight: 1.7, opacity: 0.92 }}>{description}</p>
-
-          <div
-            style={{
-              padding: "15px 16px",
-              borderRadius: 16,
-              border: "1px solid rgba(214, 188, 120, 0.18)",
+              padding: "14px 16px",
+              borderRadius: 18,
+              border: "1px solid rgba(214, 188, 120, 0.16)",
               background:
-                "linear-gradient(180deg, rgba(255,255,255,0.045), rgba(255,255,255,0.02))",
-              boxShadow: "inset 0 1px 0 rgba(255,255,255,0.04)",
+                "linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.018))",
+              display: "grid",
+              gap: 10,
             }}
           >
             <div
               style={{
-                fontSize: 12,
-                letterSpacing: 0.75,
+                fontSize: 11,
+                letterSpacing: 0.9,
                 textTransform: "uppercase",
                 opacity: 0.58,
-                marginBottom: 6,
               }}
             >
-              Prompt
+              Puzzle Room
+              {puzzleId ? ` · ${String(puzzleId).replaceAll("_", " ")}` : ""}
             </div>
-            <div style={{ lineHeight: 1.65 }}>{prompt}</div>
-          </div>
 
-          {hint ? (
             <div
               style={{
-                padding: "11px 13px",
+                fontSize: 16,
+                lineHeight: 1.65,
+                color: "rgba(244, 238, 225, 0.96)",
+              }}
+            >
+              {description}
+            </div>
+
+            <div
+              style={{
+                padding: "12px 13px",
                 borderRadius: 14,
-                border: "1px solid rgba(120, 160, 214, 0.16)",
-                background: "linear-gradient(180deg, rgba(120,160,214,0.08), rgba(120,160,214,0.04))",
-                fontSize: 13,
-                lineHeight: 1.55,
-                opacity: 0.92,
-                boxShadow: "inset 0 1px 0 rgba(255,255,255,0.03)",
+                border: "1px solid rgba(255,255,255,0.08)",
+                background: "rgba(255,255,255,0.03)",
+                display: "grid",
+                gap: 6,
               }}
             >
-              <strong style={{ fontWeight: 700 }}>Hint:</strong> {hint}
-            </div>
-          ) : null}
-
-          <div style={{ display: "grid", gap: 10 }}>
-            <label
-              htmlFor="echoes-puzzle-input"
-              style={{
-                fontSize: 12,
-                letterSpacing: 0.75,
-                textTransform: "uppercase",
-                opacity: 0.58,
-              }}
-            >
-              Your Attempt
-            </label>
-
-            <textarea
-              id="echoes-puzzle-input"
-              value={inputText}
-              onChange={(e) => setInputText(e.target.value)}
-              placeholder="Describe exactly how your hero attempts the puzzle..."
-              rows={5}
-              style={{
-                width: "100%",
-                resize: "vertical",
-                borderRadius: 16,
-                border: "1px solid rgba(214, 188, 120, 0.18)",
-                background: "linear-gradient(180deg, rgba(8,10,16,0.88), rgba(10,12,18,0.78))",
-                color: "rgba(245,236,216,0.96)",
-                padding: "14px 16px",
-                lineHeight: 1.6,
-                outline: "none",
-                boxSizing: "border-box",
-                boxShadow: "inset 0 1px 0 rgba(255,255,255,0.03)",
-              }}
-            />
-
-            <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-              <button
-                type="button"
-                disabled={!inputText.trim() || !canRunPuzzle || submitting}
-                onClick={handleSubmit}
+              <div
                 style={{
-                  padding: "12px 16px",
-                  borderRadius: 12,
-                  border: "1px solid rgba(214, 188, 120, 0.24)",
+                  fontSize: 11,
+                  letterSpacing: 0.75,
+                  textTransform: "uppercase",
+                  opacity: 0.58,
+                }}
+              >
+                Prompt
+              </div>
+              <div style={{ lineHeight: 1.6 }}>{prompt}</div>
+            </div>
+
+            {hint ? (
+              <div
+                style={{
+                  padding: "11px 13px",
+                  borderRadius: 14,
+                  border: "1px solid rgba(120, 160, 214, 0.16)",
                   background:
-                    !inputText.trim() || !canRunPuzzle || submitting
-                      ? "rgba(255,255,255,0.05)"
-                      : "linear-gradient(180deg, rgba(214,188,120,0.18), rgba(214,188,120,0.08))",
-                  color: "rgba(245,236,216,0.96)",
-                  cursor:
-                    !inputText.trim() || !canRunPuzzle || submitting
-                      ? "not-allowed"
-                      : "pointer",
-                  fontWeight: 700,
-                  boxShadow:
-                    !inputText.trim() || !canRunPuzzle || submitting
-                      ? "none"
-                      : "0 10px 24px rgba(0,0,0,0.18), inset 0 1px 0 rgba(255,255,255,0.05)",
+                    "linear-gradient(180deg, rgba(120,160,214,0.08), rgba(120,160,214,0.04))",
+                  fontSize: 13,
+                  lineHeight: 1.55,
                 }}
               >
-                {submitting ? "Resolving..." : "Attempt Puzzle"}
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setInputText("")}
-                style={{
-                  padding: "12px 16px",
-                  borderRadius: 12,
-                  border: "1px solid rgba(255,255,255,0.12)",
-                  background: "rgba(255,255,255,0.04)",
-                  color: "rgba(245,236,216,0.88)",
-                  cursor: "pointer",
-                }}
-              >
-                Clear
-              </button>
-            </div>
-
-            {!canRunPuzzle ? (
-              <div style={{ fontSize: 12, opacity: 0.64, lineHeight: 1.5 }}>
-                Puzzle runtime is not connected yet. The room presentation is active, but
-                submission still needs runtime wiring.
+                <strong style={{ fontWeight: 700 }}>Hint:</strong> {hint}
               </div>
             ) : null}
           </div>
 
+          <GameplayActionColumn
+            demo={{
+              ...demo,
+              CanonChronicleSection,
+              actionMode: "puzzle",
+              actionTitle: "Puzzle Attempt",
+              actionEyebrow: "Command",
+              actionDescription:
+                "Describe exactly how the hero studies, tests, or manipulates the chamber.",
+              forceInputPlaceholder:
+                "Describe exactly how your hero attempts the puzzle...",
+              hideParsedByDefault: true,
+              hideChronicleByDefault: true,
+              inlinePuzzleSubmit: true,
+              onInlineSubmit: async () => {
+                const trimmed = String(demo.playerInput ?? "").trim();
+                if (!trimmed) return null;
+
+                if (typeof demo.runRoomPuzzleAttempt === "function") {
+                  return await demo.runRoomPuzzleAttempt(trimmed);
+                }
+                if (typeof demo.runActivePuzzleAttempt === "function") {
+                  return await demo.runActivePuzzleAttempt(trimmed);
+                }
+                return null;
+              },
+            }}
+          />
+
           {puzzleResult ? (
             <div
               style={{
-                marginTop: 6,
-                padding: "16px 16px 14px",
-                borderRadius: 16,
+                padding: "16px",
+                borderRadius: 18,
                 border:
                   puzzleResult.success === true
                     ? "1px solid rgba(118, 188, 132, 0.26)"
@@ -665,13 +532,11 @@ function PuzzleRoomPanel(props: {
                     : "linear-gradient(180deg, rgba(188,118,118,0.10), rgba(188,118,118,0.04))",
                 display: "grid",
                 gap: 10,
-                boxShadow: "inset 0 1px 0 rgba(255,255,255,0.03)",
               }}
             >
               <div
                 style={{
                   display: "flex",
-                  alignItems: "center",
                   justifyContent: "space-between",
                   gap: 12,
                   flexWrap: "wrap",
@@ -679,18 +544,17 @@ function PuzzleRoomPanel(props: {
               >
                 <div
                   style={{
-                    fontSize: 12,
+                    fontSize: 11,
                     letterSpacing: 0.8,
                     textTransform: "uppercase",
-                    opacity: 0.62,
+                    opacity: 0.58,
                   }}
                 >
                   Resolution
                 </div>
-
                 <div
                   style={{
-                    fontSize: 12,
+                    fontSize: 11,
                     fontWeight: 800,
                     letterSpacing: 0.8,
                     textTransform: "uppercase",
@@ -705,14 +569,15 @@ function PuzzleRoomPanel(props: {
               </div>
 
               {puzzleResult.summary ? (
-                <div style={{ lineHeight: 1.65, fontWeight: 600 }}>
+                <div style={{ lineHeight: 1.65, fontWeight: 700 }}>
                   {puzzleResult.summary}
                 </div>
               ) : null}
 
-              {narration.length > 0 ? (
+              {Array.isArray(puzzleResult.narration) &&
+              puzzleResult.narration.length > 0 ? (
                 <div style={{ display: "grid", gap: 8 }}>
-                  {narration.map((line, idx) => (
+                  {puzzleResult.narration.map((line: string, idx: number) => (
                     <p key={`${idx}-${line.slice(0, 24)}`} style={{ margin: 0, lineHeight: 1.7 }}>
                       {line}
                     </p>
@@ -720,11 +585,12 @@ function PuzzleRoomPanel(props: {
                 </div>
               ) : null}
 
-              {effects.length > 0 ? (
+              {Array.isArray(puzzleResult.effects) &&
+              puzzleResult.effects.length > 0 ? (
                 <div style={{ display: "grid", gap: 8 }}>
                   <div
                     style={{
-                      fontSize: 12,
+                      fontSize: 11,
                       letterSpacing: 0.7,
                       textTransform: "uppercase",
                       opacity: 0.58,
@@ -734,7 +600,7 @@ function PuzzleRoomPanel(props: {
                   </div>
 
                   <div style={{ display: "grid", gap: 8 }}>
-                    {effects.map((effect, idx) => (
+                    {puzzleResult.effects.map((effect: any, idx: number) => (
                       <div
                         key={`${idx}-${effect.kind ?? "effect"}`}
                         style={{
@@ -756,10 +622,17 @@ function PuzzleRoomPanel(props: {
                   </div>
                 </div>
               ) : null}
+
+              {!canRunPuzzle ? (
+                <div style={{ fontSize: 12, opacity: 0.64, lineHeight: 1.5 }}>
+                  Puzzle runtime is not connected yet. The chamber presentation is
+                  active, but puzzle submission still needs runtime wiring.
+                </div>
+              ) : null}
             </div>
           ) : null}
         </div>
-      </CardSection>
+      </SceneFrame>
     </div>
   );
 }
@@ -769,97 +642,233 @@ type Props = {
 };
 
 export default function GameplayViewport({ demo }: Props) {
-  const actionDemo = {
-    ...demo,
-    CanonChronicleSection,
-  };
-
   const hasPuzzleRoom = !!(
     demo.activePuzzleBlock ??
     demo.activeRoomPuzzle ??
     demo.roomPuzzlePresentation
   );
 
+  const activeScene = useMemo(() => {
+    if (demo.combatActive) return "combat";
+    if (hasPuzzleRoom && demo.gameplayFocusStep === "puzzle") return "puzzle";
+    if (demo.gameplayFocusStep === "action") return "action";
+    if (demo.gameplayFocusStep === "pressure") return "pressure";
+    return "map";
+  }, [demo.combatActive, demo.gameplayFocusStep, hasPuzzleRoom]);
+
+  const sceneIntro = useMemo(() => {
+    if (activeScene === "pressure") {
+      return {
+        eyebrow: "Threshold State",
+        title: "The Air Tightens",
+        description:
+          "Read the danger state first. This is the mood of the chamber before the chamber itself fully resolves.",
+      };
+    }
+
+    if (activeScene === "map") {
+      return {
+        eyebrow: "Current Chamber",
+        title: demo.currentRoomTitle ?? "The Descent",
+        description:
+          hasPuzzleRoom
+            ? "The room has resolved, but the chamber also contains a visible trial. Read the space, then face the trial."
+            : "The room has resolved. Read the chamber, understand the routes, then choose the next command.",
+      };
+    }
+
+    if (activeScene === "puzzle") {
+      return {
+        eyebrow: "Active Trial",
+        title: demo.currentRoomTitle ?? "Puzzle Chamber",
+        description:
+          "The chamber’s trial is now the center of the experience. Solve it before the route regains priority.",
+      };
+    }
+
+    if (activeScene === "combat") {
+      return {
+        eyebrow: "Combat",
+        title: "Battlefield",
+        description:
+          "The tactical exchange takes over the viewport. Command, timing, and consequence now matter more than route planning.",
+      };
+    }
+
+    return {
+      eyebrow: "Command",
+      title: "Player Action",
+      description:
+        "Issue one clear command. The acting hero, the tactical intent, and the resolution should all remain within one centered surface.",
+    };
+  }, [activeScene, demo.currentRoomTitle, hasPuzzleRoom]);
+
   return (
-    <>
+    <div style={{ display: "grid", gap: 18 }}>
       <ProgressionBanner demo={demo} />
 
-      <RitualDivider label="Threshold State" />
+      <div
+        style={{
+          position: "relative",
+          display: "grid",
+          gap: 18,
+        }}
+      >
+        <div
+          id={anchorId(activeScene === "pressure" ? "pressure" : activeScene === "map" ? "map" : activeScene)}
+          style={{ scrollMarginTop: 90 }}
+        >
+          {activeScene === "pressure" ? (
+            <SceneFrame
+              eyebrow={sceneIntro.eyebrow}
+              title={sceneIntro.title}
+              description={sceneIntro.description}
+            >
+              {demo.gameplayAllowsPressure ? (
+                <GameStateAdvisoryPanel
+                  currentRoomTitle={demo.currentRoomTitle}
+                  currentFloorLabel={demo.currentFloor.label}
+                  floorId={demo.location.floorId}
+                  roomId={demo.location.roomId}
+                  dungeonEvolution={demo.dungeonEvolution}
+                  roomSummary={demo.roomSummary}
+                />
+              ) : null}
+            </SceneFrame>
+          ) : null}
 
-      {demo.gameplayFocusStep === "pressure" && (
-        <RitualPromptRow
-          title="The Air Tightens"
-          body="The party has crossed the threshold. Read the danger state first, then survey the place itself before issuing the first command."
-          actionLabel="Survey the chamber graph"
-          hint="Danger first. Space second. Action third."
-          onActivate={() => {
-            demo.setGameplayFocusStep("map");
-            demo.setActiveSection("map");
-            queueMicrotask(() => scrollToSection("map"));
+          {activeScene === "map" ? (
+            <SceneFrame
+              eyebrow={sceneIntro.eyebrow}
+              title={sceneIntro.title}
+              description={sceneIntro.description}
+            >
+              {demo.gameplayAllowsMap ? (
+                <RoomTopologyPanel
+                  currentRoomVisualKey={demo.currentRoomVisualKey}
+                  currentRoomTitle={demo.currentRoomTitle}
+                  roomImage={demo.roomImage}
+                  roomNarrative={demo.roomNarrative}
+                  roomFeatureNarrative={demo.roomFeatureNarrative}
+                  roomExitNarrative={demo.roomExitNarrative}
+                  roomConnectionsView={demo.roomConnectionsView}
+                  currentFeatures={demo.currentFeatures}
+                />
+              ) : null}
+            </SceneFrame>
+          ) : null}
+
+          {activeScene === "puzzle" ? <PuzzleRoomPanel demo={demo} /> : null}
+
+          {activeScene === "action" ? (
+            <SceneFrame
+              eyebrow={sceneIntro.eyebrow}
+              title={sceneIntro.title}
+              description={sceneIntro.description}
+            >
+              <GameplayActionColumn
+                demo={{
+                  ...demo,
+                  CanonChronicleSection,
+                  actionMode: "standard",
+                  actionTitle: "Player Action",
+                  actionEyebrow: "Command",
+                  actionDescription:
+                    "Give one decisive command. Keep the acting hero, the intended move, and the resulting choice in one focused surface.",
+                }}
+              />
+            </SceneFrame>
+          ) : null}
+
+          {activeScene === "combat" ? (
+            <SceneFrame
+              eyebrow={sceneIntro.eyebrow}
+              title={sceneIntro.title}
+              description={sceneIntro.description}
+            >
+              <GameplayCombatPanel demo={demo} />
+              <div style={{ marginTop: 14 }}>
+                <GameplayActionColumn
+                  demo={{
+                    ...demo,
+                    CanonChronicleSection,
+                    actionMode: "combat",
+                    actionTitle: "Combat Command",
+                    actionEyebrow: "Command",
+                    actionDescription:
+                      "The battlefield is active. Keep action input and combat resolution in the same immediate frame.",
+                  }}
+                />
+              </div>
+            </SceneFrame>
+          ) : null}
+        </div>
+
+        <details
+          style={{
+            borderRadius: 18,
+            border: "1px solid rgba(255,255,255,0.08)",
+            background:
+              "linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.02))",
+            overflow: "hidden",
           }}
-        />
-      )}
+        >
+          <summary
+            style={{
+              cursor: "pointer",
+              padding: "14px 16px",
+              fontSize: 12,
+              letterSpacing: 0.9,
+              textTransform: "uppercase",
+              opacity: 0.72,
+            }}
+          >
+            Supporting Systems
+          </summary>
 
-      <div id={anchorId("pressure")} style={{ scrollMarginTop: 90 }}>
-        {demo.gameplayAllowsPressure && (
-          <GameStateAdvisoryPanel
-            currentRoomTitle={demo.currentRoomTitle}
-            currentFloorLabel={demo.currentFloor.label}
-            floorId={demo.location.floorId}
-            roomId={demo.location.roomId}
-            dungeonEvolution={demo.dungeonEvolution}
-            roomSummary={demo.roomSummary}
-          />
-        )}
+          <div
+            style={{
+              padding: "0 16px 16px",
+              display: "grid",
+              gap: 14,
+            }}
+          >
+            {activeScene !== "pressure" && demo.gameplayAllowsPressure ? (
+              <div id={anchorId("pressure")} style={{ scrollMarginTop: 90 }}>
+                <GameStateAdvisoryPanel
+                  currentRoomTitle={demo.currentRoomTitle}
+                  currentFloorLabel={demo.currentFloor.label}
+                  floorId={demo.location.floorId}
+                  roomId={demo.location.roomId}
+                  dungeonEvolution={demo.dungeonEvolution}
+                  roomSummary={demo.roomSummary}
+                />
+              </div>
+            ) : null}
+
+            {activeScene !== "map" && demo.gameplayAllowsMap ? (
+              <div id={anchorId("map")} style={{ scrollMarginTop: 90 }}>
+                <RoomTopologyPanel
+                  currentRoomVisualKey={demo.currentRoomVisualKey}
+                  currentRoomTitle={demo.currentRoomTitle}
+                  roomImage={demo.roomImage}
+                  roomNarrative={demo.roomNarrative}
+                  roomFeatureNarrative={demo.roomFeatureNarrative}
+                  roomExitNarrative={demo.roomExitNarrative}
+                  roomConnectionsView={demo.roomConnectionsView}
+                  currentFeatures={demo.currentFeatures}
+                />
+              </div>
+            ) : null}
+
+            {activeScene !== "combat" && demo.combatActive ? (
+              <div id={anchorId("combat")} style={{ scrollMarginTop: 90 }}>
+                <GameplayCombatPanel demo={demo} />
+              </div>
+            ) : null}
+          </div>
+        </details>
       </div>
-
-      {demo.gameplayFocusStep === "map" && (
-        <RitualPromptRow
-          title="The Place Resolves"
-          body="The dungeon is no longer a field of tiles. It is a set of places, routes, and thresholds. Read the room and its exits before acting."
-          actionLabel={
-            hasPuzzleRoom ? "Face the chamber's trial" : "Let the first move take shape"
-          }
-          hint={
-            hasPuzzleRoom
-              ? "Some rooms want more than movement. They want an answer."
-              : "Rooms create decisions. Doors create tension. Stairs create commitment."
-          }
-          onActivate={() => {
-            demo.setGameplayFocusStep(hasPuzzleRoom ? "puzzle" : "action");
-            demo.setActiveSection(hasPuzzleRoom ? "puzzle" : "action");
-            queueMicrotask(() => scrollToSection(hasPuzzleRoom ? "puzzle" : "action"));
-          }}
-        />
-      )}
-
-      <div id={anchorId("map")} style={{ scrollMarginTop: 90 }}>
-        {demo.gameplayAllowsMap && (
-          <RoomTopologyPanel
-            currentRoomVisualKey={demo.currentRoomVisualKey}
-            currentRoomTitle={demo.currentRoomTitle}
-            roomImage={demo.roomImage}
-            roomNarrative={demo.roomNarrative}
-            roomFeatureNarrative={demo.roomFeatureNarrative}
-            roomExitNarrative={demo.roomExitNarrative}
-            roomConnectionsView={demo.roomConnectionsView}
-            currentFeatures={demo.currentFeatures}
-          />
-        )}
-      </div>
-
-      {hasPuzzleRoom ? (
-        <>
-          <RitualDivider label="Chamber Trial" />
-          <PuzzleRoomPanel demo={demo} />
-        </>
-      ) : null}
-
-      <RitualDivider label="Command & Consequence" />
-
-      <GameplayActionColumn demo={actionDemo} />
-
-      <GameplayCombatPanel demo={demo} />
-    </>
+    </div>
   );
 }
