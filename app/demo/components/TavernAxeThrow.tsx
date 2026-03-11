@@ -40,8 +40,13 @@ type AxeVisualState = {
   embedded: boolean;
 };
 
+type BarmaidTopic = "dungeon" | "people" | "you" | null;
+
 const LANE_BG_SRC = "/assets/V3/Dungeon/Tavern/Axe_Throwing/target_01.png";
 const AXE_SRC = "/assets/V3/Dungeon/Tavern/Axe_Throwing/axe_01.png";
+
+const BARMAID_SRC_SOFT = "/assets/V3/Dungeon/Tavern/bar_maid_01.png";
+const BARMAID_SRC_WARM = "/assets/V3/Dungeon/Tavern/bar_maid_02.png";
 
 const HIT_SFX = "/assets/audio/sfx_axe_hit_01.mp3";
 const MISS_SFX = "/assets/audio/sfx_axe_miss_01.mp3";
@@ -118,6 +123,52 @@ function finalStickRotation(outcome: ThrowOutcome): number {
   }
 }
 
+function getBarmaidGreeting(score: number): string {
+  if (score >= 100) {
+    return "Well now… that throw will be talked about all night.";
+  }
+  if (score >= 60) {
+    return "You've got a steady hand. Most travelers can't even strike the board clean.";
+  }
+  return "Not bad. The regulars noticed that one.";
+}
+
+function getBarmaidReply(score: number, topic: BarmaidTopic): string {
+  if (!topic) return "";
+
+  if (topic === "dungeon") {
+    if (score >= 100) {
+      return "The stone below does not fear bold hands. It punishes careless ones. If a path feels too quiet, trust the quiet less than the noise.";
+    }
+    if (score >= 60) {
+      return "The first rooms teach before they kill. Read the place before you try to conquer it.";
+    }
+    return "Down below, the place watches longer than most realize. Listen first. Move second.";
+  }
+
+  if (topic === "people") {
+    if (score >= 100) {
+      return "The ones who come back are rarely the loudest. They're the ones who learn what the dark is trying to say.";
+    }
+    if (score >= 60) {
+      return "Every hero thinks they descend alone. Most carry ghosts, debts, or promises with them.";
+    }
+    return "A lot of people go below wanting glory. Fewer come back wanting it.";
+  }
+
+  if (topic === "you") {
+    if (score >= 100) {
+      return "You throw like someone who's already survived worse than wood and iron.";
+    }
+    if (score >= 60) {
+      return "Calm breath. Strong wrist. That kind of focus carries a person farther than bravado ever will.";
+    }
+    return "You've got enough control to be worth watching. That's more than most.";
+  }
+
+  return "";
+}
+
 export default function TavernAxeThrow({
   initialThrows = 3,
   onExit,
@@ -143,6 +194,9 @@ export default function TavernAxeThrow({
   const [impactFlash, setImpactFlash] = useState(false);
   const [boardShake, setBoardShake] = useState(false);
 
+  const [showBarmaid, setShowBarmaid] = useState(false);
+  const [barmaidTopic, setBarmaidTopic] = useState<BarmaidTopic>(null);
+
   const [axe, setAxe] = useState<AxeVisualState>({
     x: START_X,
     y: START_Y,
@@ -156,6 +210,14 @@ export default function TavernAxeThrow({
 
   const throwsUsed = useMemo(() => initialThrows - throwsLeft, [initialThrows, throwsLeft]);
   const isRoundOver = throwsLeft <= 0 && !activeFlight && !isCharging;
+  const barmaidUnlocked = totalScore > 30;
+  const barmaidPortrait = totalScore >= 60 ? BARMAID_SRC_WARM : BARMAID_SRC_SOFT;
+  const aimPercent = Math.round(((aimOffsetY - AIM_MIN) / (AIM_MAX - AIM_MIN)) * 100);
+  const aimMarkerY = clamp(
+    TARGET_CENTER_Y + aimOffsetY,
+    TARGET_CENTER_Y - 180,
+    TARGET_CENTER_Y + 180
+  );
 
   useEffect(() => {
     hitAudioRef.current = new Audio(HIT_SFX);
@@ -230,8 +292,6 @@ export default function TavernAxeThrow({
 
     function tick(now: number) {
       const elapsed = now - startedAt;
-
-      // slowed down from prior version
       const wave = (Math.sin(elapsed / 520) + 1) / 2;
       const power = 0.12 + wave * 0.88;
       setChargePower(power);
@@ -378,7 +438,6 @@ export default function TavernAxeThrow({
       return;
     }
 
-    // stronger embed into board
     const embeddedX = flight.endX - 22;
     const embeddedY = flight.endY - 10;
 
@@ -426,6 +485,8 @@ export default function TavernAxeThrow({
     setChargePower(0.35);
     setIsCharging(false);
     setActiveFlight(null);
+    setShowBarmaid(false);
+    setBarmaidTopic(null);
     setAxe({
       x: START_X,
       y: START_Y,
@@ -436,9 +497,6 @@ export default function TavernAxeThrow({
     });
     setRoundMessage("Set your aim with the slider. Hold the throw button to build power.");
   }
-
-  const aimMarkerY = clamp(TARGET_CENTER_Y + aimOffsetY, TARGET_CENTER_Y - 180, TARGET_CENTER_Y + 180);
-  const aimPercent = Math.round(((aimOffsetY - AIM_MIN) / (AIM_MAX - AIM_MIN)) * 100);
 
   return (
     <div
@@ -526,7 +584,9 @@ export default function TavernAxeThrow({
                   : axe.embedded
                     ? "drop-shadow(0 8px 12px rgba(0,0,0,0.32))"
                     : "drop-shadow(0 12px 12px rgba(0,0,0,0.32))",
-                transition: axe.flying ? "none" : "transform 140ms ease-out, left 140ms ease-out, top 140ms ease-out",
+                transition: axe.flying
+                  ? "none"
+                  : "transform 140ms ease-out, left 140ms ease-out, top 140ms ease-out",
               }}
             />
           ) : null}
@@ -877,7 +937,176 @@ export default function TavernAxeThrow({
             Leave Lane
           </button>
         ) : null}
+
+        {barmaidUnlocked && (
+          <button
+            type="button"
+            onClick={() => {
+              setShowBarmaid((prev) => !prev);
+              if (showBarmaid) {
+                setBarmaidTopic(null);
+              }
+            }}
+            style={{
+              height: 48,
+              padding: "0 16px",
+              borderRadius: 12,
+              border: "1px solid rgba(255,212,160,0.18)",
+              background: "linear-gradient(180deg, rgba(98,66,34,0.95), rgba(72,46,24,0.95))",
+              color: "rgba(255,247,233,0.96)",
+              fontWeight: 800,
+              cursor: "pointer",
+            }}
+          >
+            {showBarmaid ? "Close Barmaid" : "Speak to the Barmaid"}
+          </button>
+        )}
       </div>
+
+      {barmaidUnlocked && showBarmaid && (
+        <div
+          style={{
+            display: "grid",
+            gap: 14,
+            padding: 18,
+            borderRadius: 18,
+            border: "1px solid rgba(255,255,255,0.10)",
+            background:
+              "linear-gradient(180deg, rgba(28,18,12,0.92), rgba(14,10,8,0.94))",
+            boxShadow: "0 20px 50px rgba(0,0,0,0.35)",
+          }}
+        >
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "180px minmax(0, 1fr)",
+              gap: 16,
+              alignItems: "start",
+            }}
+          >
+            <img
+              src={barmaidPortrait}
+              alt="Barmaid"
+              style={{
+                width: "100%",
+                borderRadius: 14,
+                border: "1px solid rgba(255,255,255,0.10)",
+                objectFit: "cover",
+                boxShadow: "0 12px 30px rgba(0,0,0,0.32)",
+              }}
+            />
+
+            <div style={{ display: "grid", gap: 12 }}>
+              <div>
+                <div
+                  style={{
+                    fontSize: 11,
+                    textTransform: "uppercase",
+                    letterSpacing: 0.7,
+                    opacity: 0.65,
+                  }}
+                >
+                  Tavern Conversation
+                </div>
+                <div style={{ fontSize: 24, fontWeight: 900, marginTop: 4 }}>
+                  The Barmaid
+                </div>
+                <div
+                  style={{
+                    marginTop: 8,
+                    fontSize: 15,
+                    lineHeight: 1.6,
+                    opacity: 0.88,
+                  }}
+                >
+                  {getBarmaidGreeting(totalScore)}
+                </div>
+              </div>
+
+              <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                <button
+                  type="button"
+                  onClick={() => setBarmaidTopic("dungeon")}
+                  style={{
+                    height: 42,
+                    padding: "0 14px",
+                    borderRadius: 12,
+                    border: "1px solid rgba(255,255,255,0.12)",
+                    background:
+                      barmaidTopic === "dungeon"
+                        ? "linear-gradient(180deg, rgba(104,72,38,0.95), rgba(74,46,24,0.95))"
+                        : "rgba(255,255,255,0.05)",
+                    color: "rgba(255,247,233,0.96)",
+                    fontWeight: 700,
+                    cursor: "pointer",
+                  }}
+                >
+                  Ask about the dungeon
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setBarmaidTopic("people")}
+                  style={{
+                    height: 42,
+                    padding: "0 14px",
+                    borderRadius: 12,
+                    border: "1px solid rgba(255,255,255,0.12)",
+                    background:
+                      barmaidTopic === "people"
+                        ? "linear-gradient(180deg, rgba(104,72,38,0.95), rgba(74,46,24,0.95))"
+                        : "rgba(255,255,255,0.05)",
+                    color: "rgba(255,247,233,0.96)",
+                    fontWeight: 700,
+                    cursor: "pointer",
+                  }}
+                >
+                  Ask about the people below
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setBarmaidTopic("you")}
+                  style={{
+                    height: 42,
+                    padding: "0 14px",
+                    borderRadius: 12,
+                    border: "1px solid rgba(255,255,255,0.12)",
+                    background:
+                      barmaidTopic === "you"
+                        ? "linear-gradient(180deg, rgba(104,72,38,0.95), rgba(74,46,24,0.95))"
+                        : "rgba(255,255,255,0.05)",
+                    color: "rgba(255,247,233,0.96)",
+                    fontWeight: 700,
+                    cursor: "pointer",
+                  }}
+                >
+                  Ask what she noticed
+                </button>
+              </div>
+
+              <div
+                style={{
+                  minHeight: 96,
+                  padding: 14,
+                  borderRadius: 14,
+                  border: "1px solid rgba(255,255,255,0.08)",
+                  background: "rgba(255,255,255,0.04)",
+                  fontSize: 14,
+                  lineHeight: 1.6,
+                  opacity: 0.9,
+                }}
+              >
+                {barmaidTopic ? (
+                  getBarmaidReply(totalScore, barmaidTopic)
+                ) : (
+                  "She waits with the kind of calm that suggests she has heard many brave promises and watched many of them tested."
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
