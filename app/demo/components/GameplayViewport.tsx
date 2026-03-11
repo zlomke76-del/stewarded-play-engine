@@ -361,14 +361,101 @@ function SceneAdvanceBar(props: {
   );
 }
 
+function StageTabs(props: {
+  activeScene: "pressure" | "chamber" | "puzzle" | "action" | "combat";
+  hasPuzzleRoom: boolean;
+  onSelectPressure: () => void;
+  onSelectChamber: () => void;
+  onSelectPuzzle: () => void;
+  onSelectAction: () => void;
+}) {
+  const {
+    activeScene,
+    hasPuzzleRoom,
+    onSelectPressure,
+    onSelectChamber,
+    onSelectPuzzle,
+    onSelectAction,
+  } = props;
+
+  const tabs = [
+    {
+      key: "pressure",
+      label: "Threshold",
+      onClick: onSelectPressure,
+      visible: true,
+    },
+    {
+      key: "chamber",
+      label: "Chamber",
+      onClick: onSelectChamber,
+      visible: true,
+    },
+    {
+      key: "puzzle",
+      label: "Trial",
+      onClick: onSelectPuzzle,
+      visible: hasPuzzleRoom,
+    },
+    {
+      key: "action",
+      label: "Command",
+      onClick: onSelectAction,
+      visible: true,
+    },
+  ].filter((tab) => tab.visible);
+
+  return (
+    <div
+      style={{
+        display: "flex",
+        gap: 8,
+        flexWrap: "wrap",
+        padding: "0 16px 14px",
+        borderBottom: "1px solid rgba(255,255,255,0.06)",
+      }}
+    >
+      {tabs.map((tab) => {
+        const active = activeScene === tab.key;
+        return (
+          <button
+            key={tab.key}
+            type="button"
+            onClick={tab.onClick}
+            style={{
+              padding: "8px 11px",
+              borderRadius: 999,
+              border: active
+                ? "1px solid rgba(214,188,120,0.28)"
+                : "1px solid rgba(255,255,255,0.10)",
+              background: active
+                ? "rgba(214,188,120,0.10)"
+                : "rgba(255,255,255,0.04)",
+              color: active ? "rgba(245,236,216,0.96)" : "rgba(228,232,240,0.84)",
+              fontSize: 11,
+              fontWeight: active ? 800 : 700,
+              letterSpacing: 0.6,
+              textTransform: "uppercase",
+              cursor: "pointer",
+            }}
+          >
+            {tab.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 function SceneFrame(props: {
   title: string;
   eyebrow: string;
   description: string;
   children: React.ReactNode;
   footer?: React.ReactNode;
+  headerExtra?: React.ReactNode;
 }) {
-  const { title, eyebrow, description, children, footer } = props;
+  const { title, eyebrow, description, children, footer, headerExtra } = props;
 
   return (
     <div
@@ -385,7 +472,7 @@ function SceneFrame(props: {
       <div
         style={{
           padding: "18px 18px 14px",
-          borderBottom: "1px solid rgba(255,255,255,0.06)",
+          borderBottom: headerExtra ? "none" : "1px solid rgba(255,255,255,0.06)",
           background:
             "linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.015))",
           display: "grid",
@@ -426,16 +513,65 @@ function SceneFrame(props: {
         </div>
       </div>
 
+      {headerExtra ? headerExtra : null}
+
       <div style={{ padding: 16 }}>{children}</div>
       {footer ? footer : null}
     </div>
   );
 }
 
+function ChamberScene(props: {
+  demo: any;
+  hasPuzzleRoom: boolean;
+  onAdvanceToPuzzleOrAction: () => void;
+}) {
+  const { demo, hasPuzzleRoom, onAdvanceToPuzzleOrAction } = props;
+
+  return (
+    <div id={anchorId("map")} style={{ scrollMarginTop: 90 }}>
+      <SceneFrame
+        eyebrow="Current Chamber"
+        title={demo.currentRoomTitle ?? "The Descent"}
+        description={
+          hasPuzzleRoom
+            ? "First understand the chamber itself. Then confront the room’s immediate trial before issuing a broader command."
+            : "First understand the chamber itself. Then issue a decisive command from within that understanding."
+        }
+        footer={
+          <SceneAdvanceBar
+            label={hasPuzzleRoom ? "Continue to Trial" : "Continue to Command"}
+            hint={
+              hasPuzzleRoom
+                ? "The room is now resolved. The chamber’s obstacle comes next."
+                : "The room is resolved. The next decisive act belongs to the hero."
+            }
+            onClick={onAdvanceToPuzzleOrAction}
+          />
+        }
+      >
+        {demo.gameplayAllowsMap ? (
+          <RoomTopologyPanel
+            currentRoomVisualKey={demo.currentRoomVisualKey}
+            currentRoomTitle={demo.currentRoomTitle}
+            roomImage={demo.roomImage}
+            roomNarrative={demo.roomNarrative}
+            roomFeatureNarrative={demo.roomFeatureNarrative}
+            roomExitNarrative={demo.roomExitNarrative}
+            roomConnectionsView={demo.roomConnectionsView}
+            currentFeatures={demo.currentFeatures}
+          />
+        ) : null}
+      </SceneFrame>
+    </div>
+  );
+}
+
 function PuzzleRoomPanel(props: {
   demo: any;
+  onAdvanceToAction: () => void;
 }) {
-  const { demo } = props;
+  const { demo, onAdvanceToAction } = props;
 
   const activePuzzle = useMemo(() => {
     return (
@@ -456,7 +592,16 @@ function PuzzleRoomPanel(props: {
       <SceneFrame
         eyebrow="Chamber Trial"
         title={activePuzzle?.title ?? activePuzzle?.label ?? "Puzzle Chamber"}
-        description="The trial is now the entire focal point. Solve it before the route regains the stage."
+        description="The chamber’s immediate obstacle now takes the center. Solve or answer it before returning to broad command."
+        footer={
+          puzzleResult ? (
+            <SceneAdvanceBar
+              label="Continue to Command"
+              hint="The trial has been confronted. Now decide what the hero does next."
+              onClick={onAdvanceToAction}
+            />
+          ) : undefined
+        }
       >
         <div style={{ display: "grid", gap: 14 }}>
           <div
@@ -586,6 +731,17 @@ function PuzzleRoomPanel(props: {
                   {puzzleResult.summary}
                 </div>
               ) : null}
+
+              {Array.isArray(puzzleResult.narration) &&
+              puzzleResult.narration.length > 0 ? (
+                <div style={{ display: "grid", gap: 8 }}>
+                  {puzzleResult.narration.map((line: string, idx: number) => (
+                    <p key={`${idx}-${line.slice(0, 24)}`} style={{ margin: 0, lineHeight: 1.7 }}>
+                      {line}
+                    </p>
+                  ))}
+                </div>
+              ) : null}
             </div>
           ) : null}
         </div>
@@ -610,72 +766,25 @@ export default function GameplayViewport({ demo }: Props) {
     if (hasPuzzleRoom && demo.gameplayFocusStep === "puzzle") return "puzzle";
     if (demo.gameplayFocusStep === "action") return "action";
     if (demo.gameplayFocusStep === "pressure") return "pressure";
-    return "map";
+    return "chamber";
   }, [demo.combatActive, demo.gameplayFocusStep, hasPuzzleRoom]);
 
-  const sceneIntro = useMemo(() => {
-    if (activeScene === "pressure") {
-      return {
-        eyebrow: "Threshold State",
-        title: "The Air Tightens",
-        description:
-          "Read the danger state first. This is the mood of the chamber before the chamber itself fully resolves.",
-      };
-    }
+  function setPressureScene() {
+    demo.setGameplayFocusStep("pressure");
+    demo.setActiveSection("pressure");
+  }
 
-    if (activeScene === "map") {
-      return {
-        eyebrow: "Current Chamber",
-        title: demo.currentRoomTitle ?? "The Descent",
-        description:
-          hasPuzzleRoom
-            ? "The room has resolved, but the chamber also contains a visible trial. Read the space, then face the trial."
-            : "The room has resolved. Read the chamber, understand the routes, then choose the next command.",
-      };
-    }
-
-    if (activeScene === "puzzle") {
-      return {
-        eyebrow: "Active Trial",
-        title: demo.currentRoomTitle ?? "Puzzle Chamber",
-        description:
-          "The chamber’s trial is now the center of the experience. Solve it before the route regains priority.",
-      };
-    }
-
-    if (activeScene === "combat") {
-      return {
-        eyebrow: "Combat",
-        title: "Battlefield",
-        description:
-          "The tactical exchange takes over the viewport. Command, timing, and consequence now matter more than route planning.",
-      };
-    }
-
-    return {
-      eyebrow: "Command",
-      title: "Player Action",
-      description:
-        "Issue one clear command. The acting hero, the tactical intent, and the resolution should all remain within one centered surface.",
-    };
-  }, [activeScene, demo.currentRoomTitle, hasPuzzleRoom]);
-
-  function advanceToMap() {
+  function setChamberScene() {
     demo.setGameplayFocusStep("map");
     demo.setActiveSection("map");
   }
 
-  function advanceToPuzzleOrAction() {
-    if (hasPuzzleRoom) {
-      demo.setGameplayFocusStep("puzzle");
-      demo.setActiveSection("puzzle");
-    } else {
-      demo.setGameplayFocusStep("action");
-      demo.setActiveSection("action");
-    }
+  function setPuzzleScene() {
+    demo.setGameplayFocusStep("puzzle");
+    demo.setActiveSection("puzzle");
   }
 
-  function advanceToAction() {
+  function setActionScene() {
     demo.setGameplayFocusStep("action");
     demo.setActiveSection("action");
   }
@@ -685,26 +794,27 @@ export default function GameplayViewport({ demo }: Props) {
       <ProgressionBanner demo={demo} />
 
       <div style={{ position: "relative", display: "grid", gap: 18 }}>
-        <div
-          id={anchorId(
-            activeScene === "pressure"
-              ? "pressure"
-              : activeScene === "map"
-                ? "map"
-                : activeScene
-          )}
-          style={{ scrollMarginTop: 90 }}
-        >
-          {activeScene === "pressure" ? (
+        {activeScene === "pressure" ? (
+          <div id={anchorId("pressure")} style={{ scrollMarginTop: 90 }}>
             <SceneFrame
-              eyebrow={sceneIntro.eyebrow}
-              title={sceneIntro.title}
-              description={sceneIntro.description}
+              eyebrow="Threshold State"
+              title="The Air Tightens"
+              description="Read the danger state first. This establishes the chamber’s pressure before the chamber itself fully resolves."
+              headerExtra={
+                <StageTabs
+                  activeScene="pressure"
+                  hasPuzzleRoom={hasPuzzleRoom}
+                  onSelectPressure={setPressureScene}
+                  onSelectChamber={setChamberScene}
+                  onSelectPuzzle={setPuzzleScene}
+                  onSelectAction={setActionScene}
+                />
+              }
               footer={
                 <SceneAdvanceBar
                   label="Continue to Chamber"
-                  hint="Danger first. Space second. Action third."
-                  onClick={advanceToMap}
+                  hint="Danger first. Chamber second. Obstacle third. Command last."
+                  onClick={setChamberScene}
                 />
               }
             >
@@ -719,47 +829,37 @@ export default function GameplayViewport({ demo }: Props) {
                 />
               ) : null}
             </SceneFrame>
-          ) : null}
+          </div>
+        ) : null}
 
-          {activeScene === "map" ? (
+        {activeScene === "chamber" ? (
+          <ChamberScene
+            demo={demo}
+            hasPuzzleRoom={hasPuzzleRoom}
+            onAdvanceToPuzzleOrAction={hasPuzzleRoom ? setPuzzleScene : setActionScene}
+          />
+        ) : null}
+
+        {activeScene === "puzzle" ? (
+          <PuzzleRoomPanel demo={demo} onAdvanceToAction={setActionScene} />
+        ) : null}
+
+        {activeScene === "action" ? (
+          <div id={anchorId("action")} style={{ scrollMarginTop: 90 }}>
             <SceneFrame
-              eyebrow={sceneIntro.eyebrow}
-              title={sceneIntro.title}
-              description={sceneIntro.description}
-              footer={
-                <SceneAdvanceBar
-                  label={hasPuzzleRoom ? "Face the Trial" : "Issue Command"}
-                  hint={
-                    hasPuzzleRoom
-                      ? "This chamber wants more than movement. It wants an answer."
-                      : "The room is resolved. The next decisive act belongs to the hero."
-                  }
-                  onClick={advanceToPuzzleOrAction}
+              eyebrow="Command"
+              title="Player Action"
+              description="The chamber and its immediate obstacle are now understood. Give one decisive command."
+              headerExtra={
+                <StageTabs
+                  activeScene="action"
+                  hasPuzzleRoom={hasPuzzleRoom}
+                  onSelectPressure={setPressureScene}
+                  onSelectChamber={setChamberScene}
+                  onSelectPuzzle={setPuzzleScene}
+                  onSelectAction={setActionScene}
                 />
               }
-            >
-              {demo.gameplayAllowsMap ? (
-                <RoomTopologyPanel
-                  currentRoomVisualKey={demo.currentRoomVisualKey}
-                  currentRoomTitle={demo.currentRoomTitle}
-                  roomImage={demo.roomImage}
-                  roomNarrative={demo.roomNarrative}
-                  roomFeatureNarrative={demo.roomFeatureNarrative}
-                  roomExitNarrative={demo.roomExitNarrative}
-                  roomConnectionsView={demo.roomConnectionsView}
-                  currentFeatures={demo.currentFeatures}
-                />
-              ) : null}
-            </SceneFrame>
-          ) : null}
-
-          {activeScene === "puzzle" ? <PuzzleRoomPanel demo={demo} /> : null}
-
-          {activeScene === "action" ? (
-            <SceneFrame
-              eyebrow={sceneIntro.eyebrow}
-              title={sceneIntro.title}
-              description={sceneIntro.description}
             >
               <GameplayActionColumn
                 demo={{
@@ -773,22 +873,15 @@ export default function GameplayViewport({ demo }: Props) {
                 }}
               />
             </SceneFrame>
-          ) : null}
+          </div>
+        ) : null}
 
-          {activeScene === "combat" ? (
+        {activeScene === "combat" ? (
+          <div id={anchorId("combat")} style={{ scrollMarginTop: 90 }}>
             <SceneFrame
-              eyebrow={sceneIntro.eyebrow}
-              title={sceneIntro.title}
-              description={sceneIntro.description}
-              footer={
-                !demo.combatActive ? (
-                  <SceneAdvanceBar
-                    label="Return to Command"
-                    hint="Battlefield pressure has passed. Resume chamber command."
-                    onClick={advanceToAction}
-                  />
-                ) : undefined
-              }
+              eyebrow="Combat"
+              title="Battlefield"
+              description="The tactical exchange takes over the viewport. Battlefield, command, and consequence now belong together."
             >
               <GameplayCombatPanel demo={demo} />
               <div style={{ marginTop: 14 }}>
@@ -805,8 +898,8 @@ export default function GameplayViewport({ demo }: Props) {
                 />
               </div>
             </SceneFrame>
-          ) : null}
-        </div>
+          </div>
+        ) : null}
 
         <details
           style={{
@@ -850,7 +943,7 @@ export default function GameplayViewport({ demo }: Props) {
               </div>
             ) : null}
 
-            {activeScene !== "map" && demo.gameplayAllowsMap ? (
+            {activeScene !== "chamber" && demo.gameplayAllowsMap ? (
               <div id={anchorId("map")} style={{ scrollMarginTop: 90 }}>
                 <RoomTopologyPanel
                   currentRoomVisualKey={demo.currentRoomVisualKey}
