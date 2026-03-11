@@ -45,14 +45,10 @@ type CombatEncounterContext = {
 type Props = {
   events: readonly any[];
   onAppendCanon: (type: string, payload: any) => void;
-
-  // to match app/demo/page.tsx usage
   dmMode: "human" | "solace-neutral";
   partyMembers: PartyMemberLite[];
-  pressureTier: any; // intentionally permissive to avoid type coupling across folders
+  pressureTier: any;
   allowDevControls: boolean;
-
-  // optional ecology-aware encounter context
   encounterContext?: CombatEncounterContext | null;
 };
 
@@ -91,29 +87,41 @@ function computeCombatLocked(events: readonly any[]) {
   return lastStarted !== -1 && lastStarted > lastEnded;
 }
 
+function chipStyle(tone: "neutral" | "info" | "warn" | "accent" = "neutral"): React.CSSProperties {
+  if (tone === "info") {
+    return {
+      border: "1px solid rgba(138,180,255,0.22)",
+      background: "rgba(138,180,255,0.08)",
+    };
+  }
+
+  if (tone === "warn") {
+    return {
+      border: "1px solid rgba(255,200,140,0.22)",
+      background: "rgba(255,200,140,0.08)",
+    };
+  }
+
+  if (tone === "accent") {
+    return {
+      border: "1px solid rgba(180,220,160,0.22)",
+      background: "rgba(180,220,160,0.08)",
+    };
+  }
+
+  return {
+    border: "1px solid rgba(255,255,255,0.10)",
+    background: "rgba(255,255,255,0.04)",
+  };
+}
+
 function Pill({
   children,
   tone = "neutral",
 }: {
   children: React.ReactNode;
-  tone?: "neutral" | "info" | "warn";
+  tone?: "neutral" | "info" | "warn" | "accent";
 }) {
-  const toneStyle =
-    tone === "info"
-      ? {
-          border: "1px solid rgba(138,180,255,0.22)",
-          background: "rgba(138,180,255,0.08)",
-        }
-      : tone === "warn"
-        ? {
-            border: "1px solid rgba(255,200,140,0.22)",
-            background: "rgba(255,200,140,0.08)",
-          }
-        : {
-            border: "1px solid rgba(255,255,255,0.12)",
-            background: "rgba(255,255,255,0.05)",
-          };
-
   return (
     <span
       style={{
@@ -122,7 +130,9 @@ function Pill({
         gap: 8,
         padding: "6px 10px",
         borderRadius: 999,
-        ...toneStyle,
+        fontSize: 12,
+        lineHeight: 1,
+        ...chipStyle(tone),
       }}
     >
       {children}
@@ -130,22 +140,11 @@ function Pill({
   );
 }
 
-function ControlLabel({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-      <span className="muted" style={{ fontSize: 12 }}>
-        {label}
-      </span>
-      {children}
-    </label>
-  );
-}
-
 function selectStyle(disabled?: boolean): React.CSSProperties {
   return {
     minWidth: 160,
     padding: "10px 12px",
-    borderRadius: 10,
+    borderRadius: 12,
     border: "1px solid rgba(255,255,255,0.12)",
     background: disabled ? "rgba(255,255,255,0.04)" : "rgba(0,0,0,0.28)",
     color: "inherit",
@@ -154,10 +153,13 @@ function selectStyle(disabled?: boolean): React.CSSProperties {
   };
 }
 
-function buttonStyle(tone: "primary" | "ghost" | "danger", disabled?: boolean): React.CSSProperties {
+function buttonStyle(
+  tone: "primary" | "ghost" | "danger",
+  disabled?: boolean
+): React.CSSProperties {
   const base: React.CSSProperties = {
     padding: "10px 12px",
-    borderRadius: 10,
+    borderRadius: 12,
     border: "1px solid rgba(255,255,255,0.14)",
     background: "rgba(255,255,255,0.06)",
     color: "inherit",
@@ -188,7 +190,6 @@ function buttonStyle(tone: "primary" | "ghost" | "danger", disabled?: boolean): 
   return { ...base, background: "rgba(255,255,255,0.04)" };
 }
 
-// Small deterministic hash -> [0, 2^32)
 function hash32(s: string): number {
   let h = 2166136261;
   for (let i = 0; i < s.length; i++) {
@@ -206,7 +207,6 @@ function pressureBandFromTier(pressureTier: any): PressureBand {
   return "low";
 }
 
-// Pressure -> mild init mod heuristic
 function inferEnemyInitModFromPressure(pressureTier: any): number {
   const band = pressureBandFromTier(pressureTier);
   if (band === "low") return 0;
@@ -239,11 +239,7 @@ function prettyTheme(v?: string | null) {
 function buildEnemyRoleFactionLabel(enemy: EnemyDefinition) {
   const roleLabel = prettyRole(enemy.role);
   const factionLabel = prettyFaction(enemy.faction);
-
-  if (roleLabel.trim().toLowerCase() === factionLabel.trim().toLowerCase()) {
-    return roleLabel;
-  }
-
+  if (roleLabel.trim().toLowerCase() === factionLabel.trim().toLowerCase()) return roleLabel;
   return `${roleLabel} · ${factionLabel}`;
 }
 
@@ -376,11 +372,17 @@ function filterByRole(items: EnemyDefinition[], roles: string[]): EnemyDefinitio
   return items.filter((e) => roleSet.has(String(e.role).toLowerCase()));
 }
 
-function filterByBehavior(items: EnemyDefinition[], predicate: (enemy: EnemyDefinition) => boolean): EnemyDefinition[] {
+function filterByBehavior(
+  items: EnemyDefinition[],
+  predicate: (enemy: EnemyDefinition) => boolean
+): EnemyDefinition[] {
   return items.filter(predicate);
 }
 
-function filterByEncounterTheme(items: EnemyDefinition[], zoneTheme?: EnemyEncounterTheme | null): EnemyDefinition[] {
+function filterByEncounterTheme(
+  items: EnemyDefinition[],
+  zoneTheme?: EnemyEncounterTheme | null
+): EnemyDefinition[] {
   if (!zoneTheme) return [];
   return items.filter((enemy) => {
     const themes = enemy.ecology?.preferredThemes;
@@ -408,21 +410,10 @@ function getAdaptiveCandidates(band: PressureBand, partyRoleInfo: PartyRoleInfo)
 
   const extras: EnemyDefinition[] = [];
 
-  if (partyRoleInfo.frontliners >= 2) {
-    extras.push(...rangedPressure);
-  }
-
-  if (partyRoleInfo.casters >= 2) {
-    extras.push(...antiBackline);
-  }
-
-  if (partyRoleInfo.healers >= 1) {
-    extras.push(...supportPunish);
-  }
-
-  if (partyRoleInfo.stealthy >= 2) {
-    extras.push(...stealthResponse);
-  }
+  if (partyRoleInfo.frontliners >= 2) extras.push(...rangedPressure);
+  if (partyRoleInfo.casters >= 2) extras.push(...antiBackline);
+  if (partyRoleInfo.healers >= 1) extras.push(...supportPunish);
+  if (partyRoleInfo.stealthy >= 2) extras.push(...stealthResponse);
 
   return dedupeEnemies([...base, ...extras]);
 }
@@ -452,6 +443,7 @@ function buildRecommendedEnemyRoster(
     Math.min(n, primaryPool.length),
     `${seed}::adaptive`
   );
+
   if (pickedAdaptive.length >= n) {
     return pickedAdaptive.slice(0, n);
   }
@@ -464,12 +456,14 @@ function buildRecommendedEnemyRoster(
     Math.min(remainingNeeded, remainingBase.length),
     `${seed}::base_unique`
   );
+
   if (pickedAdaptive.length + uniqueFill.length >= n) {
     return [...pickedAdaptive, ...uniqueFill].slice(0, n);
   }
 
   const stillNeeded = n - pickedAdaptive.length - uniqueFill.length;
-  const repeatPool = primaryPool.length > 0 ? primaryPool : basePool.length > 0 ? basePool : adaptivePool;
+  const repeatPool =
+    primaryPool.length > 0 ? primaryPool : basePool.length > 0 ? basePool : adaptivePool;
   const repeatFill = repeatDeterministic(repeatPool, stillNeeded, `${seed}::base_repeat`);
 
   return [...pickedAdaptive, ...uniqueFill, ...repeatFill].slice(0, n);
@@ -502,37 +496,48 @@ function buildEnemyCardLabel(enemy: EnemyDefinition, all: EnemyDefinition[]) {
   return `${enemy.name} #${idx}`;
 }
 
-function chipStyle(tone: "neutral" | "info" | "warn" | "accent" = "neutral"): React.CSSProperties {
-  if (tone === "info") {
-    return {
-      border: "1px solid rgba(138,180,255,0.22)",
-      background: "rgba(138,180,255,0.08)",
-    };
-  }
-
-  if (tone === "warn") {
-    return {
-      border: "1px solid rgba(255,200,140,0.22)",
-      background: "rgba(255,200,140,0.08)",
-    };
-  }
-
-  if (tone === "accent") {
-    return {
-      border: "1px solid rgba(180,220,160,0.22)",
-      background: "rgba(180,220,160,0.08)",
-    };
-  }
-
-  return {
-    border: "1px solid rgba(255,255,255,0.10)",
-    background: "rgba(255,255,255,0.04)",
-  };
-}
-
 function enemyMatchesName(enemy: EnemyDefinition, name?: string | null) {
   if (!name) return false;
   return normalizeName(enemy.name).toLowerCase() === normalizeName(name).toLowerCase();
+}
+
+function SectionShell(props: {
+  title: string;
+  hint?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div
+      style={{
+        padding: 14,
+        borderRadius: 16,
+        border: "1px solid rgba(255,255,255,0.10)",
+        background: "linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.02))",
+        boxShadow: "inset 0 1px 0 rgba(255,255,255,0.04)",
+        display: "grid",
+        gap: 10,
+      }}
+    >
+      <div style={{ display: "grid", gap: 4 }}>
+        <div
+          style={{
+            fontSize: 11,
+            letterSpacing: 0.8,
+            textTransform: "uppercase",
+            opacity: 0.58,
+          }}
+        >
+          {props.title}
+        </div>
+        {props.hint ? (
+          <div style={{ fontSize: 12, lineHeight: 1.5, color: "rgba(228,232,240,0.74)" }}>
+            {props.hint}
+          </div>
+        ) : null}
+      </div>
+      {props.children}
+    </div>
+  );
 }
 
 function EnemyCard({
@@ -597,7 +602,9 @@ function EnemyCard({
 
       <div style={{ minWidth: 0, flex: 1 }}>
         <div style={{ display: "flex", alignItems: "baseline", gap: 10 }}>
-          <strong style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{label}</strong>
+          <strong style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+            {label}
+          </strong>
         </div>
 
         <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>
@@ -608,7 +615,7 @@ function EnemyCard({
           HP {enemy.defenses.hp}/{enemy.defenses.hp} · AC {enemy.defenses.ac} · {stateLabel}
         </div>
 
-        {(dutyLabel || isKeybearer || isRelicBearer || isCacheGuard) && (
+        {(dutyLabel || isKeybearer || isRelicBearer || isCacheGuard) ? (
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 8 }}>
             {dutyLabel ? (
               <span
@@ -674,7 +681,7 @@ function EnemyCard({
               </span>
             ) : null}
           </div>
-        )}
+        ) : null}
       </div>
     </div>
   );
@@ -690,18 +697,14 @@ export default function CombatSetupPanel({
   encounterContext = null,
 }: Props) {
   const locked = useMemo(() => computeCombatLocked(events), [events]);
-
   const isHuman = dmMode === "human";
   const canEdit = !locked && (isHuman || allowDevControls);
-
   const showBuilderControls = isHuman || allowDevControls;
 
   const INIT_MODS = [-2, -1, 0, 1, 2, 3, 4, 5, 6, 7, 8] as const;
-
   const ENEMY_LIBRARY = useMemo(() => ENEMY_LIST.slice().sort(sortEnemyLibrary), []);
 
   const partySize = useMemo(() => clampInt(partyMembers?.length ?? 0, 0, 6), [partyMembers]);
-
   const partyRoleInfo = useMemo(() => classifyPartyRoles(partyMembers ?? []), [partyMembers]);
 
   const pressureSeed = useMemo(() => {
@@ -710,29 +713,32 @@ export default function CombatSetupPanel({
     const objective = normalizeName(encounterContext?.objective ?? "") || "none";
     const rewardHint = normalizeName(encounterContext?.rewardHint ?? "") || "none";
     return `pressure=${String(pressureTier ?? "unknown")}::outcomes=${outcomes}::party=${partySize}::theme=${zoneTheme}::objective=${objective}::reward=${rewardHint}`;
-  }, [events, partySize, pressureTier, encounterContext?.zoneTheme, encounterContext?.objective, encounterContext?.rewardHint]);
+  }, [
+    events,
+    partySize,
+    pressureTier,
+    encounterContext?.zoneTheme,
+    encounterContext?.objective,
+    encounterContext?.rewardHint,
+  ]);
 
   const [selectedEnemies, setSelectedEnemies] = useState<EnemyDefinition[]>(() =>
     buildRecommendedEnemyRoster(
       "low",
       2,
       "initial",
-      {
-        healers: 0,
-        casters: 0,
-        frontliners: 0,
-        stealthy: 0,
-      },
+      { healers: 0, casters: 0, frontliners: 0, stealthy: 0 },
       null
     )
   );
 
-  const [enemySelectName, setEnemySelectName] = useState<string>(() => ENEMY_LIBRARY[0]?.name ?? "Bandit Archer");
+  const [enemySelectName, setEnemySelectName] = useState<string>(
+    () => ENEMY_LIBRARY[0]?.name ?? "Bandit Archer"
+  );
   const [initModEnemies, setInitModEnemies] = useState<number>(1);
 
   useEffect(() => {
     if (isHuman && !allowDevControls) return;
-
     const inferred = inferEnemyInitModFromPressure(pressureTier);
     setInitModEnemies((prev) => {
       if (isHuman && allowDevControls) return prev;
@@ -756,7 +762,15 @@ export default function CombatSetupPanel({
       if (isHuman && allowDevControls) return prev;
       return roster;
     });
-  }, [partySize, pressureTier, pressureSeed, partyRoleInfo, isHuman, allowDevControls, encounterContext?.zoneTheme]);
+  }, [
+    partySize,
+    pressureTier,
+    pressureSeed,
+    partyRoleInfo,
+    isHuman,
+    allowDevControls,
+    encounterContext?.zoneTheme,
+  ]);
 
   function addEnemyByName(name: string) {
     if (!canEdit) return;
@@ -812,7 +826,6 @@ export default function CombatSetupPanel({
 
     const combatId = crypto.randomUUID();
     const seed = crypto.randomUUID();
-
     const participants: CombatantSpec[] = [];
 
     members.forEach((m, idx) => {
@@ -849,7 +862,6 @@ export default function CombatSetupPanel({
     });
 
     for (const r of initRolls) onAppendCanon("INITIATIVE_ROLLED", r);
-
     onAppendCanon("TURN_ADVANCED", { combatId, round: 1, index: 0 });
   }
 
@@ -872,7 +884,7 @@ export default function CombatSetupPanel({
   const enemyCards = useMemo(() => {
     const n = clampInt(partySize, 0, 6);
     const enemies = selectedEnemies.slice(0, n);
-    const stateLabel = locked ? "In combat" : "Deployed (database-backed)";
+    const stateLabel = locked ? "In combat" : "Deployed";
 
     return enemies.map((enemy, idx, all) => ({
       key: `${enemy.id}_${idx}`,
@@ -937,177 +949,176 @@ export default function CombatSetupPanel({
   }, [encounterContext]);
 
   return (
-    <CardSection title="Combat (Deterministic, Database-Backed Enemies)">
-      <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center", marginTop: 2 }}>
-        <Pill tone="info">Event-sourced turn order</Pill>
-        {locked ? <Pill tone="warn">🔒 Combat active — setup locked</Pill> : <Pill>Setup ready</Pill>}
-        {!isHuman && !allowDevControls && <Pill tone="warn">Solace-owned setup</Pill>}
-      </div>
-
-      <p className="muted" style={{ marginTop: 10 }}>
-        Players roll individually. Enemies roll once per enemy. Turn order is derived from events.
-      </p>
-
-      {(encounterSummary.zoneTheme || encounterSummary.objective || encounterSummary.lockState || encounterSummary.rewardHint) && (
-        <div
-          style={{
-            marginTop: 12,
-            padding: 12,
-            borderRadius: 14,
-            border: "1px solid rgba(255,255,255,0.10)",
-            background: "linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.03))",
-            boxShadow: "inset 0 1px 0 rgba(255,255,255,0.04)",
-            display: "grid",
-            gap: 8,
-          }}
+    <CardSection title="Combat Setup">
+      <div style={{ display: "grid", gap: 14 }}>
+        <SectionShell
+          title="State"
+          hint="Combat setup should stay compact: state first, roster second, controls third."
         >
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-            {encounterSummary.zoneTheme ? <Pill tone="info">Zone Theme: {encounterSummary.zoneTheme}</Pill> : null}
-            {encounterSummary.zoneId ? <Pill>Zone {encounterSummary.zoneId}</Pill> : null}
-            {encounterSummary.lockState ? <Pill tone="warn">Lock State: {encounterSummary.lockState}</Pill> : null}
-            {encounterSummary.rewardHint ? <Pill>Reward Signal: {encounterSummary.rewardHint}</Pill> : null}
+            <Pill tone="info">Event-sourced turn order</Pill>
+            {locked ? <Pill tone="warn">Combat active — setup locked</Pill> : <Pill>Setup ready</Pill>}
+            {!isHuman && !allowDevControls ? <Pill tone="warn">Solace-owned setup</Pill> : null}
+            <Pill>Party size: {partySize}</Pill>
+            <Pill tone="info">Pressure band: {rosterInfo.band}</Pill>
           </div>
 
-          {encounterSummary.objective ? (
-            <div style={{ fontSize: 13, lineHeight: 1.6, opacity: 0.92 }}>
-              <strong>Objective:</strong> {encounterSummary.objective}
+          {(encounterSummary.zoneTheme ||
+            encounterSummary.objective ||
+            encounterSummary.lockState ||
+            encounterSummary.rewardHint ||
+            encounterSummary.zoneId) ? (
+            <div style={{ display: "grid", gap: 8 }}>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                {encounterSummary.zoneTheme ? (
+                  <Pill tone="info">Zone Theme: {encounterSummary.zoneTheme}</Pill>
+                ) : null}
+                {encounterSummary.zoneId ? <Pill>Zone {encounterSummary.zoneId}</Pill> : null}
+                {encounterSummary.lockState ? (
+                  <Pill tone="warn">Lock State: {encounterSummary.lockState}</Pill>
+                ) : null}
+                {encounterSummary.rewardHint ? (
+                  <Pill>Reward Signal: {encounterSummary.rewardHint}</Pill>
+                ) : null}
+              </div>
+
+              {encounterSummary.objective ? (
+                <div style={{ fontSize: 13, lineHeight: 1.6, opacity: 0.92 }}>
+                  <strong>Objective:</strong> {encounterSummary.objective}
+                </div>
+              ) : null}
             </div>
           ) : null}
-        </div>
-      )}
+        </SectionShell>
 
-      <div
-        style={{
-          marginTop: 12,
-          padding: 14,
-          borderRadius: 14,
-          border: "1px solid rgba(255,255,255,0.10)",
-          background: "linear-gradient(180deg, rgba(0,0,0,0.18), rgba(0,0,0,0.10))",
-          boxShadow: "inset 0 1px 0 rgba(255,255,255,0.05)",
-        }}
-      >
-        <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "flex-end" }}>
-          <ControlLabel label="Party size (session truth)">
-            <div
-              style={{
-                ...selectStyle(true),
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-              }}
-            >
-              <span>
-                <strong>{partySize}</strong> {partySize === 1 ? "member" : "members"}
-              </span>
-              <span className="muted" style={{ fontSize: 12 }}>
-                locked
-              </span>
+        <SectionShell
+          title="Roster Logic"
+          hint="The recommended roster is pressure-aware, party-aware, and theme-biased when a zone theme exists."
+        >
+          <div style={{ display: "grid", gap: 8 }}>
+            <div className="muted" style={{ fontSize: 12 }}>
+              Recommended pool: {rosterInfo.factionSummary || "—"}
+              {encounterSummary.zoneTheme ? (
+                <>
+                  {" "}
+                  · Theme bias: <strong>{encounterSummary.zoneTheme}</strong>
+                </>
+              ) : null}
             </div>
-          </ControlLabel>
 
-          <ControlLabel label="Enemy init mod (pressure-derived)">
-            <select
-              value={initModEnemies}
-              disabled={!canEdit}
-              onChange={(e) => setInitModEnemies(Math.trunc(Number(e.target.value)))}
-              style={selectStyle(!canEdit)}
-            >
-              {INIT_MODS.map((n) => (
-                <option key={n} value={n}>
-                  {n >= 0 ? `+${n}` : `${n}`}
-                </option>
-              ))}
-            </select>
-          </ControlLabel>
-
-          {showBuilderControls && (
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "flex-end" }}>
-              <ControlLabel label="Enemy definition (builder)">
-                <select
-                  value={enemySelectName}
-                  disabled={!canEdit}
-                  onChange={(e) => setEnemySelectName(e.target.value)}
-                  style={{ ...selectStyle(!canEdit), minWidth: 260 }}
-                >
-                  {ENEMY_LIBRARY.map((enemy) => (
-                    <option key={enemy.id} value={enemy.name}>
-                      {enemy.name} · {prettyFaction(enemy.faction)} · {prettyRole(enemy.role)}
-                    </option>
-                  ))}
-                </select>
-              </ControlLabel>
-
-              <button
-                onClick={() => addEnemyByName(enemySelectName)}
-                disabled={!canEdit || selectedEnemies.length >= 6}
-                style={buttonStyle("primary", !canEdit || selectedEnemies.length >= 6)}
-                title={!canEdit ? "Solace-owned (or combat locked)" : "Add enemy"}
-              >
-                Add
-              </button>
-
-              <button
-                onClick={clearEnemies}
-                disabled={!canEdit || selectedEnemies.length === 0}
-                style={buttonStyle("ghost", !canEdit || selectedEnemies.length === 0)}
-              >
-                Clear
-              </button>
-
-              <span className="muted" style={{ fontSize: 12, alignSelf: "center" }}>
-                (max 6)
-              </span>
+            <div className="muted" style={{ fontSize: 12 }}>
+              Party profile: <strong>{partyRoleInfo.frontliners}</strong> frontliner
+              {partyRoleInfo.frontliners === 1 ? "" : "s"} · <strong>{partyRoleInfo.healers}</strong> healer
+              {partyRoleInfo.healers === 1 ? "" : "s"} · <strong>{partyRoleInfo.casters}</strong> caster
+              {partyRoleInfo.casters === 1 ? "" : "s"} · <strong>{partyRoleInfo.stealthy}</strong> stealth
+              {partyRoleInfo.stealthy === 1 ? " role" : " roles"}
             </div>
-          )}
-        </div>
+          </div>
+        </SectionShell>
 
-        <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 8 }}>
+        <SectionShell
+          title="Builder"
+          hint="This area is compact by default. It remains editable only when setup is not locked."
+        >
           <div
             style={{
-              display: "flex",
-              alignItems: "baseline",
-              justifyContent: "space-between",
-              gap: 10,
-              flexWrap: "wrap",
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+              gap: 12,
+              alignItems: "end",
             }}
           >
-            <span className="muted" style={{ fontSize: 12 }}>
-              Enemies <span className="muted">(1:1 with party size · real EnemyDatabase definitions)</span>
-            </span>
+            <div style={{ display: "grid", gap: 6 }}>
+              <span className="muted" style={{ fontSize: 12 }}>
+                Party size (session truth)
+              </span>
+              <div
+                style={{
+                  ...selectStyle(true),
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                }}
+              >
+                <span>
+                  <strong>{partySize}</strong> {partySize === 1 ? "member" : "members"}
+                </span>
+                <span className="muted" style={{ fontSize: 12 }}>
+                  locked
+                </span>
+              </div>
+            </div>
 
-            <span className="muted" style={{ fontSize: 12 }}>
-              Pressure tier: <strong>{String(pressureTier ?? "unknown")}</strong> · Band{" "}
-              <strong>{rosterInfo.band}</strong>
-            </span>
-          </div>
+            <div style={{ display: "grid", gap: 6 }}>
+              <span className="muted" style={{ fontSize: 12 }}>
+                Enemy init mod
+              </span>
+              <select
+                value={initModEnemies}
+                disabled={!canEdit}
+                onChange={(e) => setInitModEnemies(Math.trunc(Number(e.target.value)))}
+                style={selectStyle(!canEdit)}
+              >
+                {INIT_MODS.map((n) => (
+                  <option key={n} value={n}>
+                    {n >= 0 ? `+${n}` : `${n}`}
+                  </option>
+                ))}
+              </select>
+            </div>
 
-          <div className="muted" style={{ fontSize: 12 }}>
-            Recommended pool: {rosterInfo.factionSummary || "—"}
-            {encounterSummary.zoneTheme ? (
+            {showBuilderControls ? (
               <>
-                {" "}
-                · Theme bias: <strong>{encounterSummary.zoneTheme}</strong>
+                <div style={{ display: "grid", gap: 6 }}>
+                  <span className="muted" style={{ fontSize: 12 }}>
+                    Enemy definition
+                  </span>
+                  <select
+                    value={enemySelectName}
+                    disabled={!canEdit}
+                    onChange={(e) => setEnemySelectName(e.target.value)}
+                    style={{ ...selectStyle(!canEdit), minWidth: 240 }}
+                  >
+                    {ENEMY_LIBRARY.map((enemy) => (
+                      <option key={enemy.id} value={enemy.name}>
+                        {enemy.name} · {prettyFaction(enemy.faction)} · {prettyRole(enemy.role)}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  <button
+                    onClick={() => addEnemyByName(enemySelectName)}
+                    disabled={!canEdit || selectedEnemies.length >= 6}
+                    style={buttonStyle("primary", !canEdit || selectedEnemies.length >= 6)}
+                  >
+                    Add Enemy
+                  </button>
+
+                  <button
+                    onClick={clearEnemies}
+                    disabled={!canEdit || selectedEnemies.length === 0}
+                    style={buttonStyle("ghost", !canEdit || selectedEnemies.length === 0)}
+                  >
+                    Clear
+                  </button>
+                </div>
               </>
             ) : null}
           </div>
+        </SectionShell>
 
-          <div className="muted" style={{ fontSize: 12 }}>
-            Party profile: <strong>{partyRoleInfo.frontliners}</strong> frontliner
-            {partyRoleInfo.frontliners === 1 ? "" : "s"} · <strong>{partyRoleInfo.healers}</strong> healer
-            {partyRoleInfo.healers === 1 ? "" : "s"} · <strong>{partyRoleInfo.casters}</strong> caster
-            {partyRoleInfo.casters === 1 ? "" : "s"} · <strong>{partyRoleInfo.stealthy}</strong> stealth
-            {partyRoleInfo.stealthy === 1 ? "" : "y"} role
-            {partyRoleInfo.stealthy === 1 ? "" : "s"}
-          </div>
-
+        <SectionShell
+          title="Deployed Roster"
+          hint="Only the deployed enemy list stays expanded. Removal controls remain secondary."
+        >
           {enemyCards.length > 0 ? (
             <div
               style={{
                 display: "grid",
                 gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
                 gap: 10,
-                marginTop: 4,
-                width: "100%",
               }}
             >
               {enemyCards.map((c) => (
@@ -1124,142 +1135,188 @@ export default function CombatSetupPanel({
               ))}
             </div>
           ) : (
-            <div className="muted" style={{ marginTop: 6 }}>
-              No enemies.
+            <div className="muted" style={{ fontSize: 13 }}>
+              No enemies deployed.
             </div>
           )}
 
-          {showBuilderControls && selectedEnemies.length > 0 && (
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8 }}>
-              {selectedEnemies.slice(0, 6).map((enemy, idx) => (
-                <span
-                  key={`${enemy.id}_${idx}`}
-                  style={{
-                    display: "inline-flex",
-                    alignItems: "center",
-                    gap: 8,
-                    padding: "7px 10px",
-                    borderRadius: 999,
-                    border: "1px solid rgba(255,255,255,0.12)",
-                    background: "rgba(255,255,255,0.05)",
-                  }}
-                >
-                  <span>{enemy.name}</span>
-                  <button
-                    onClick={() => removeEnemyAt(idx)}
-                    disabled={!canEdit}
-                    aria-label={`Remove ${enemy.name}`}
+          {showBuilderControls && selectedEnemies.length > 0 ? (
+            <details
+              style={{
+                borderRadius: 14,
+                border: "1px solid rgba(255,255,255,0.08)",
+                background: "rgba(255,255,255,0.03)",
+                overflow: "hidden",
+              }}
+            >
+              <summary
+                style={{
+                  cursor: "pointer",
+                  padding: "11px 12px",
+                  fontSize: 11,
+                  letterSpacing: 0.7,
+                  textTransform: "uppercase",
+                  opacity: 0.62,
+                }}
+              >
+                Roster Tokens
+              </summary>
+
+              <div style={{ padding: "0 12px 12px", display: "flex", gap: 8, flexWrap: "wrap" }}>
+                {selectedEnemies.slice(0, 6).map((enemy, idx) => (
+                  <span
+                    key={`${enemy.id}_${idx}`}
                     style={{
-                      padding: "0 10px",
-                      height: 24,
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: 8,
+                      padding: "7px 10px",
                       borderRadius: 999,
                       border: "1px solid rgba(255,255,255,0.12)",
-                      background: "rgba(0,0,0,0.22)",
-                      color: "inherit",
-                      opacity: !canEdit ? 0.55 : 1,
-                      cursor: !canEdit ? "not-allowed" : "pointer",
+                      background: "rgba(255,255,255,0.05)",
                     }}
                   >
-                    ×
-                  </button>
-                </span>
-              ))}
-            </div>
-          )}
-        </div>
-      </div>
-
-      <div style={{ marginTop: 14, display: "flex", gap: 8, flexWrap: "wrap" }}>
-        <button
-          onClick={startCombatDeterministic}
-          disabled={!canStartCombat || partySize === 0}
-          style={buttonStyle("primary", !canStartCombat || partySize === 0)}
-          title={
-            !canStartCombat && !isHuman && !allowDevControls
-              ? "Combat is derived from pressure + hostile intent (dev controls required to force-start)."
-              : undefined
-          }
-        >
-          Start Combat (Seeded)
-        </button>
-
-        <button onClick={advanceTurn} disabled={!derivedCombat} style={buttonStyle("ghost", !derivedCombat)}>
-          Advance Turn
-        </button>
-
-        <button onClick={endCombat} disabled={!locked} style={buttonStyle("danger", !locked)}>
-          End Combat
-        </button>
-
-        {partySize === 0 && (
-          <span className="muted" style={{ fontSize: 12, alignSelf: "center" }}>
-            Declare party first.
-          </span>
-        )}
-      </div>
-
-      {derivedCombat && (
-        <div style={{ marginTop: 14 }}>
-          <div className="muted">
-            Combat: <strong>{derivedCombat.combatId}</strong> · Round <strong>{derivedCombat.round}</strong>
-          </div>
-
-          <div style={{ marginTop: 10, display: "grid", gridTemplateColumns: "1fr", gap: 8 }}>
-            {derivedCombat.order.map((id: string, idx: number) => {
-              const spec = derivedCombat.participants.find((p: any) => p.id === id) ?? null;
-              const roll = derivedCombat.initiative.find((r: any) => r.combatantId === id) ?? null;
-              const active = derivedCombat.activeCombatantId === id;
-
-              return (
-                <div
-                  key={id}
-                  style={{
-                    padding: "12px 12px",
-                    borderRadius: 12,
-                    border: active ? "1px solid rgba(138,180,255,0.35)" : "1px solid rgba(255,255,255,0.10)",
-                    background: active
-                      ? "linear-gradient(180deg, rgba(138,180,255,0.10), rgba(0,0,0,0.10))"
-                      : "rgba(255,255,255,0.04)",
-                    display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "center",
-                    gap: 10,
-                    boxShadow: active ? "0 10px 22px rgba(0,0,0,0.22)" : "none",
-                  }}
-                >
-                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                    <span
-                      aria-hidden
+                    <span>{enemy.name}</span>
+                    <button
+                      onClick={() => removeEnemyAt(idx)}
+                      disabled={!canEdit}
+                      aria-label={`Remove ${enemy.name}`}
                       style={{
-                        width: 10,
-                        height: 10,
+                        padding: "0 10px",
+                        height: 24,
                         borderRadius: 999,
-                        border: active ? "1px solid rgba(138,180,255,0.60)" : "1px solid rgba(255,255,255,0.16)",
-                        background: active ? "rgba(138,180,255,0.18)" : "rgba(255,255,255,0.05)",
-                        boxShadow: active ? "0 0 14px rgba(138,180,255,0.25)" : "none",
+                        border: "1px solid rgba(255,255,255,0.12)",
+                        background: "rgba(0,0,0,0.22)",
+                        color: "inherit",
+                        opacity: !canEdit ? 0.55 : 1,
+                        cursor: !canEdit ? "not-allowed" : "pointer",
                       }}
-                    />
-                    <div>
-                      <strong>
-                        {idx + 1}. {spec ? formatCombatantLabel(spec) : id}
-                      </strong>
-                      {active && (
-                        <span className="muted" style={{ marginLeft: 8 }}>
-                          ← active
-                        </span>
-                      )}
+                    >
+                      ×
+                    </button>
+                  </span>
+                ))}
+              </div>
+            </details>
+          ) : null}
+        </SectionShell>
+
+        <SectionShell
+          title="Combat Control"
+          hint="The battlefield is seeded here, then managed through events."
+        >
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+            <button
+              onClick={startCombatDeterministic}
+              disabled={!canStartCombat || partySize === 0}
+              style={buttonStyle("primary", !canStartCombat || partySize === 0)}
+              title={
+                !canStartCombat && !isHuman && !allowDevControls
+                  ? "Combat is derived from pressure + hostile intent."
+                  : undefined
+              }
+            >
+              Start Combat (Seeded)
+            </button>
+
+            <button
+              onClick={advanceTurn}
+              disabled={!derivedCombat}
+              style={buttonStyle("ghost", !derivedCombat)}
+            >
+              Advance Turn
+            </button>
+
+            <button
+              onClick={endCombat}
+              disabled={!locked}
+              style={buttonStyle("danger", !locked)}
+            >
+              End Combat
+            </button>
+
+            {partySize === 0 ? (
+              <span className="muted" style={{ fontSize: 12 }}>
+                Declare party first.
+              </span>
+            ) : null}
+          </div>
+        </SectionShell>
+
+        {derivedCombat ? (
+          <SectionShell
+            title="Derived Turn Order"
+            hint="This is the event-derived initiative state, not a manually maintained list."
+          >
+            <div className="muted" style={{ fontSize: 13 }}>
+              Combat: <strong>{derivedCombat.combatId}</strong> · Round{" "}
+              <strong>{derivedCombat.round}</strong>
+            </div>
+
+            <div style={{ display: "grid", gap: 8 }}>
+              {derivedCombat.order.map((id: string, idx: number) => {
+                const spec = derivedCombat.participants.find((p: any) => p.id === id) ?? null;
+                const roll = derivedCombat.initiative.find((r: any) => r.combatantId === id) ?? null;
+                const active = derivedCombat.activeCombatantId === id;
+
+                return (
+                  <div
+                    key={id}
+                    style={{
+                      padding: "12px 12px",
+                      borderRadius: 12,
+                      border: active
+                        ? "1px solid rgba(138,180,255,0.35)"
+                        : "1px solid rgba(255,255,255,0.10)",
+                      background: active
+                        ? "linear-gradient(180deg, rgba(138,180,255,0.10), rgba(0,0,0,0.10))"
+                        : "rgba(255,255,255,0.04)",
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                      gap: 10,
+                      boxShadow: active ? "0 10px 22px rgba(0,0,0,0.22)" : "none",
+                      flexWrap: "wrap",
+                    }}
+                  >
+                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                      <span
+                        aria-hidden
+                        style={{
+                          width: 10,
+                          height: 10,
+                          borderRadius: 999,
+                          border: active
+                            ? "1px solid rgba(138,180,255,0.60)"
+                            : "1px solid rgba(255,255,255,0.16)",
+                          background: active
+                            ? "rgba(138,180,255,0.18)"
+                            : "rgba(255,255,255,0.05)",
+                          boxShadow: active ? "0 0 14px rgba(138,180,255,0.25)" : "none",
+                        }}
+                      />
+                      <div>
+                        <strong>
+                          {idx + 1}. {spec ? formatCombatantLabel(spec) : id}
+                        </strong>
+                        {active ? (
+                          <span className="muted" style={{ marginLeft: 8 }}>
+                            ← active
+                          </span>
+                        ) : null}
+                      </div>
+                    </div>
+
+                    <div className="muted">
+                      {roll ? `Init ${roll.total} (d20 ${roll.natural} + ${roll.modifier})` : "Init —"}
                     </div>
                   </div>
-
-                  <div className="muted">
-                    {roll ? `Init ${roll.total} (d20 ${roll.natural} + ${roll.modifier})` : "Init —"}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
+                );
+              })}
+            </div>
+          </SectionShell>
+        ) : null}
+      </div>
     </CardSection>
   );
 }
