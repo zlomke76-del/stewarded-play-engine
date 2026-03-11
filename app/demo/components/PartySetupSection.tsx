@@ -29,6 +29,12 @@ type PartyDeclaredPayload = {
   members: PartyMember[];
 };
 
+type RitualProgress = {
+  speciesConfirmed: boolean;
+  classConfirmed: boolean;
+  focusConfirmed: boolean;
+};
+
 const SAFE_CLASS_ARCHETYPES = [
   "Warrior",
   "Rogue",
@@ -364,6 +370,9 @@ function RitualFrame({
           "radial-gradient(circle at top, rgba(255,188,112,0.08), transparent 28%), linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.02))",
         padding: 22,
         boxShadow: "inset 0 1px 0 rgba(255,255,255,0.03)",
+        maxWidth: 1050,
+        margin: "0 auto",
+        width: "100%",
       }}
     >
       <div style={{ display: "grid", gap: 18 }}>
@@ -464,10 +473,8 @@ function RitualChoiceCard({
 
 function RitualStepPills({
   currentStep,
-  partyCanonicalExists,
 }: {
   currentStep: HeroCreationStep;
-  partyCanonicalExists: boolean;
 }) {
   const order: HeroCreationStep[] = ["intro", "species", "class", "focus", "name", "confirm"];
   const labels: Record<HeroCreationStep, string> = {
@@ -484,7 +491,7 @@ function RitualStepPills({
     <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
       {order.map((step, idx) => {
         const active = step === currentStep;
-        const complete = idx < currentIndex || partyCanonicalExists;
+        const complete = idx < currentIndex;
 
         return (
           <SectionPill key={step} tone={active ? "warn" : complete ? "good" : "default"}>
@@ -525,6 +532,11 @@ export default function PartySetupSection(props: {
 
   const [showDeclaredEditor, setShowDeclaredEditor] = useState(false);
   const [heroCreationStep, setHeroCreationStep] = useState<HeroCreationStep>("intro");
+  const [ritualProgress, setRitualProgress] = useState<RitualProgress>({
+    speciesConfirmed: false,
+    classConfirmed: false,
+    focusConfirmed: false,
+  });
 
   const editable = !partyLocked && !!partyDraft;
   const sourceHero = (partyDraft?.members?.[0] ?? partyMembersFallback?.[0]) as PartyMember | undefined;
@@ -608,6 +620,15 @@ export default function PartySetupSection(props: {
     });
   }
 
+  function resetRitualFlow() {
+    setHeroCreationStep("intro");
+    setRitualProgress({
+      speciesConfirmed: false,
+      classConfirmed: false,
+      focusConfirmed: false,
+    });
+  }
+
   const shellStyle: React.CSSProperties = {
     borderRadius: 18,
     border: "1px solid rgba(255,255,255,0.10)",
@@ -666,17 +687,15 @@ export default function PartySetupSection(props: {
   const skillLabels = skillIds.map((skillId) => getSkillDefinition(skillId)?.label ?? skillId);
   const traitLabels = traitIds.map((traitId) => getSpeciesTraitDefinition(traitId)?.label ?? traitId);
   const display = row?.name?.trim() || "The Lone Hero";
+  const hasValidHeroName = (row?.name ?? "").trim().length > 0;
 
-  function goToNextStep() {
-    setHeroCreationStep((prev) => {
-      if (prev === "intro") return "species";
-      if (prev === "species") return "class";
-      if (prev === "class") return "focus";
-      if (prev === "focus") return "name";
-      if (prev === "name") return "confirm";
-      return "confirm";
-    });
-  }
+  const canContinueFromName = editable && hasValidHeroName;
+  const canEnterChronicle =
+    editable &&
+    ritualProgress.speciesConfirmed &&
+    ritualProgress.classConfirmed &&
+    ritualProgress.focusConfirmed &&
+    hasValidHeroName;
 
   function goToPreviousStep() {
     setHeroCreationStep((prev) => {
@@ -693,509 +712,577 @@ export default function PartySetupSection(props: {
     switch (heroCreationStep) {
       case "intro":
         return (
-          <RitualFrame
-            title="Echoes of Fate"
-            subtitle={
-              <>
-                The tavern grows quiet.
-                <br />
-                One hero will begin the descent.
-              </>
-            }
-            footer={
-              <div style={{ display: "flex", justifyContent: "center" }}>
-                <button
-                  type="button"
-                  onClick={() => {
-                    playSfx(SFX.buttonClick, 0.6);
-                    setHeroCreationStep("species");
-                  }}
-                  disabled={!editable}
-                  style={{
-                    ...controlButtonBase,
-                    padding: "14px 22px",
-                    border: "1px solid rgba(255,205,126,0.28)",
-                    background: editable
-                      ? "linear-gradient(180deg, rgba(255,201,116,0.98), rgba(218,132,47,0.98))"
-                      : "linear-gradient(180deg, rgba(107,89,69,0.7), rgba(74,55,39,0.74))",
-                    color: editable ? "#2f1606" : "rgba(244,227,201,0.75)",
-                    boxShadow: editable
-                      ? "0 10px 28px rgba(255,145,42,0.18), inset 0 1px 0 rgba(255,244,220,0.72)"
-                      : "none",
-                    opacity: editable ? 1 : 0.62,
-                    cursor: editable ? "pointer" : "not-allowed",
-                    minWidth: 220,
-                  }}
-                >
-                  Begin the Chronicle
-                </button>
-              </div>
-            }
-          >
-            <div
-              style={{
-                display: "grid",
-                justifyItems: "center",
-                gap: 18,
-                padding: "10px 0 6px",
-              }}
-            >
-              <div
-                style={{
-                  width: "min(100%, 540px)",
-                  borderRadius: 20,
-                  overflow: "hidden",
-                  border: "1px solid rgba(255,255,255,0.10)",
-                  background: "rgba(255,255,255,0.03)",
-                  boxShadow: "0 18px 46px rgba(0,0,0,0.24)",
-                }}
-              >
-                <img
-                  src="/assets/V3/Tavern/tavern_01.png"
-                  alt="The tavern grows quiet"
-                  style={{ width: "100%", height: 260, objectFit: "cover", display: "block" }}
-                  onError={(e) => {
-                    const img = e.currentTarget;
-                    img.onerror = null;
-                    img.src = portraitPath;
-                  }}
-                />
-              </div>
-
-              <div style={{ fontSize: 14, opacity: 0.78, maxWidth: 700, textAlign: "center", lineHeight: 1.7 }}>
-                The first name set into canon will carry forward into every future descent. Choose slowly.
-              </div>
-            </div>
-          </RitualFrame>
-        );
-
-      case "species":
-        return (
-          <RitualFrame
-            title="Choose a Species"
-            subtitle="Identity begins with lineage. Select the form your first hero will carry into the Chronicle."
-            footer={
-              <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
-                <button
-                  type="button"
-                  onClick={() => {
-                    playSfx(SFX.buttonClick, 0.54);
-                    goToPreviousStep();
-                  }}
-                  style={{
-                    ...controlButtonBase,
-                    border: "1px solid rgba(255,255,255,0.12)",
-                    background: "rgba(255,255,255,0.05)",
-                    color: "inherit",
-                  }}
-                >
-                  Back
-                </button>
-
-                <div style={{ fontSize: 12, opacity: 0.72, alignSelf: "center" }}>
-                  Selected: <strong>{resolvedSpecies}</strong>
-                </div>
-              </div>
-            }
-          >
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
-                gap: 14,
-              }}
-            >
-              {SAFE_SPECIES.map((species) => {
-                const imageSrc = getPortraitPath(species, resolvedClass, row?.portrait ?? "Male");
-                const selected = resolvedSpecies.toLowerCase() === species.toLowerCase();
-
-                return (
-                  <RitualChoiceCard
-                    key={species}
-                    title={species}
-                    subtitle={SPECIES_DESCRIPTIONS[species] ?? "A path into the dark."}
-                    imageSrc={imageSrc}
-                    selected={selected}
-                    disabled={!editable}
-                    onClick={() => {
-                      if (!editable) {
-                        playSfx(SFX.uiFailure, 0.5);
-                        return;
-                      }
-                      playSfx(SFX.buttonClick, 0.56);
-                      setSpecies(species);
-                      setHeroCreationStep("class");
-                    }}
-                  />
-                );
-              })}
-            </div>
-          </RitualFrame>
-        );
-
-      case "class":
-        return (
-          <RitualFrame
-            title="Choose a Class"
-            subtitle="A hero's role is not just a weapon. It is the shape of their will under pressure."
-            footer={
-              <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
-                <button
-                  type="button"
-                  onClick={() => {
-                    playSfx(SFX.buttonClick, 0.54);
-                    goToPreviousStep();
-                  }}
-                  style={{
-                    ...controlButtonBase,
-                    border: "1px solid rgba(255,255,255,0.12)",
-                    background: "rgba(255,255,255,0.05)",
-                    color: "inherit",
-                  }}
-                >
-                  Back
-                </button>
-
-                <div style={{ fontSize: 12, opacity: 0.72, alignSelf: "center" }}>
-                  Selected: <strong>{resolvedClass}</strong>
-                </div>
-              </div>
-            }
-          >
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
-                gap: 14,
-              }}
-            >
-              {SAFE_CLASS_ARCHETYPES.map((className) => {
-                const imageSrc = getPortraitPath(resolvedSpecies, className, row?.portrait ?? "Male");
-                const selected = resolvedClass.toLowerCase() === className.toLowerCase();
-
-                return (
-                  <RitualChoiceCard
-                    key={className}
-                    title={className}
-                    subtitle={CLASS_DESCRIPTIONS[className] ?? "A calling forged for the depths."}
-                    imageSrc={imageSrc}
-                    selected={selected}
-                    disabled={!editable}
-                    onClick={() => {
-                      if (!editable) {
-                        playSfx(SFX.uiFailure, 0.5);
-                        return;
-                      }
-                      playSfx(SFX.buttonClick, 0.56);
-                      setClass(className);
-                      setHeroCreationStep("focus");
-                    }}
-                  />
-                );
-              })}
-            </div>
-          </RitualFrame>
-        );
-
-      case "focus":
-        return (
-          <RitualFrame
-            title="Choose a Focus"
-            subtitle="This is not raw stat editing. It is the stance your hero carries into danger."
-            footer={
-              <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
-                <button
-                  type="button"
-                  onClick={() => {
-                    playSfx(SFX.buttonClick, 0.54);
-                    goToPreviousStep();
-                  }}
-                  style={{
-                    ...controlButtonBase,
-                    border: "1px solid rgba(255,255,255,0.12)",
-                    background: "rgba(255,255,255,0.05)",
-                    color: "inherit",
-                  }}
-                >
-                  Back
-                </button>
-              </div>
-            }
-          >
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-                gap: 14,
-              }}
-            >
-              {BUILD_FOCUS_OPTIONS.map((option) => {
-                const active = currentFocus === option.id;
-
-                return (
+          <div key="ritual-intro" style={{ transition: "opacity 260ms ease", opacity: 1 }}>
+            <RitualFrame
+              title="Echoes of Fate"
+              subtitle={
+                <>
+                  The tavern grows quiet.
+                  <br />
+                  One hero will begin the descent.
+                  <br />
+                  Their name will enter the Chronicle.
+                </>
+              }
+              footer={
+                <div style={{ display: "flex", justifyContent: "center" }}>
                   <button
-                    key={option.id}
                     type="button"
                     onClick={() => {
-                      if (!editable) {
-                        playSfx(SFX.uiFailure, 0.5);
-                        return;
-                      }
-                      setBuildFocus(option.id);
-                      setHeroCreationStep("name");
+                      playSfx(SFX.buttonClick, 0.6);
+                      setHeroCreationStep("species");
                     }}
                     disabled={!editable}
                     style={{
-                      textAlign: "left",
-                      padding: 18,
-                      borderRadius: 18,
-                      border: active
-                        ? "1px solid rgba(255,205,126,0.32)"
-                        : "1px solid rgba(255,255,255,0.10)",
-                      background: active
-                        ? "linear-gradient(180deg, rgba(255,205,126,0.08), rgba(255,255,255,0.03))"
-                        : "linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.02))",
-                      color: "inherit",
-                      cursor: editable ? "pointer" : "not-allowed",
-                      opacity: editable ? 1 : 0.6,
-                      display: "grid",
-                      gap: 10,
-                    }}
-                  >
-                    <div style={{ fontSize: 18, fontWeight: 900 }}>{option.label}</div>
-                    <div style={{ fontSize: 13, opacity: 0.76, lineHeight: 1.6 }}>{option.hint}</div>
-                  </button>
-                );
-              })}
-            </div>
-          </RitualFrame>
-        );
-
-      case "name":
-        return (
-          <RitualFrame
-            title="Name the Hero"
-            subtitle="A name binds memory to fate. This is the first voice the Chronicle will remember."
-            footer={
-              <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
-                <button
-                  type="button"
-                  onClick={() => {
-                    playSfx(SFX.buttonClick, 0.54);
-                    goToPreviousStep();
-                  }}
-                  style={{
-                    ...controlButtonBase,
-                    border: "1px solid rgba(255,255,255,0.12)",
-                    background: "rgba(255,255,255,0.05)",
-                    color: "inherit",
-                  }}
-                >
-                  Back
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (!editable) {
-                      playSfx(SFX.uiFailure, 0.5);
-                      return;
-                    }
-                    playSfx(SFX.uiSuccess, 0.64);
-                    goToNextStep();
-                  }}
-                  disabled={!editable}
-                  style={{
-                    ...controlButtonBase,
-                    border: "1px solid rgba(255,205,126,0.28)",
-                    background: editable
-                      ? "linear-gradient(180deg, rgba(255,201,116,0.98), rgba(218,132,47,0.98))"
-                      : "linear-gradient(180deg, rgba(107,89,69,0.7), rgba(74,55,39,0.74))",
-                    color: editable ? "#2f1606" : "rgba(244,227,201,0.75)",
-                    opacity: editable ? 1 : 0.62,
-                    cursor: editable ? "pointer" : "not-allowed",
-                    minWidth: 140,
-                  }}
-                >
-                  Continue
-                </button>
-              </div>
-            }
-          >
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "minmax(0, 1fr) minmax(220px, 280px)",
-                gap: 18,
-                alignItems: "start",
-              }}
-            >
-              <div style={{ display: "grid", gap: 10 }}>
-                <TinyLabel>Hero Name</TinyLabel>
-                <input
-                  value={row?.name ?? ""}
-                  disabled={!editable}
-                  onChange={(e) => setHeroField({ name: e.target.value })}
-                  placeholder="The Lone Hero"
-                  style={{
-                    ...inputStyle,
-                    padding: "14px 16px",
-                    fontSize: 18,
-                    borderRadius: 14,
-                  }}
-                />
-                <div style={{ fontSize: 13, opacity: 0.74, lineHeight: 1.6 }}>
-                  Current Chronicle entry: <strong>{display}</strong>
-                </div>
-              </div>
-
-              <div
-                style={{
-                  borderRadius: 18,
-                  overflow: "hidden",
-                  border: "1px solid rgba(255,255,255,0.10)",
-                  background: "rgba(255,255,255,0.03)",
-                }}
-              >
-                <img
-                  src={portraitPath}
-                  alt={`${display} portrait`}
-                  style={{ width: "100%", height: 280, objectFit: "cover", display: "block" }}
-                  onError={(e) => {
-                    const img = e.currentTarget;
-                    img.onerror = null;
-                    img.src = fallbackPortraitPath;
-                  }}
-                />
-              </div>
-            </div>
-          </RitualFrame>
-        );
-
-      case "confirm":
-        return (
-          <RitualFrame
-            title="The Oath"
-            subtitle="A new name enters the Chronicle."
-            footer={
-              <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
-                <button
-                  type="button"
-                  onClick={() => {
-                    playSfx(SFX.buttonClick, 0.54);
-                    goToPreviousStep();
-                  }}
-                  style={{
-                    ...controlButtonBase,
-                    border: "1px solid rgba(255,255,255,0.12)",
-                    background: "rgba(255,255,255,0.05)",
-                    color: "inherit",
-                  }}
-                >
-                  Back
-                </button>
-
-                <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
-                  <button
-                    onClick={() => {
-                      if (partyLocked || !partyDraft) {
-                        playSfx(SFX.uiFailure, 0.5);
-                        return;
-                      }
-                      playSfx(SFX.arbiterCanonRecord, 0.78);
-                      commitParty();
-                    }}
-                    disabled={partyLocked || !partyDraft}
-                    style={{
                       ...controlButtonBase,
+                      padding: "14px 22px",
                       border: "1px solid rgba(255,205,126,0.28)",
                       background: editable
                         ? "linear-gradient(180deg, rgba(255,201,116,0.98), rgba(218,132,47,0.98))"
                         : "linear-gradient(180deg, rgba(107,89,69,0.7), rgba(74,55,39,0.74))",
                       color: editable ? "#2f1606" : "rgba(244,227,201,0.75)",
                       boxShadow: editable
-                        ? "0 10px 28px rgba(255,145,42,0.18), inset 0 1px 0 rgba(255,244,220,0.72)"
+                        ? "0 0 20px rgba(255,160,60,0.35), 0 10px 28px rgba(255,145,42,0.18), inset 0 1px 0 rgba(255,244,220,0.72)"
                         : "none",
                       opacity: editable ? 1 : 0.62,
                       cursor: editable ? "pointer" : "not-allowed",
-                      minWidth: 210,
+                      minWidth: 220,
                     }}
                   >
-                    Enter the Chronicle
+                    Begin the Chronicle
                   </button>
-
-                  <span style={{ fontSize: 12, opacity: 0.72 }}>
-                    {partyCanonicalExists ? "Canonical hero declared ✓" : "Draft hero only · not yet canonical"}
-                    {partyLockedByCombat ? " · Combat lock active" : ""}
-                  </span>
                 </div>
-              </div>
-            }
-          >
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "minmax(220px, 280px) minmax(0, 1fr)",
-                gap: 20,
-                alignItems: "start",
-              }}
+              }
             >
-              <div
-                style={{
-                  borderRadius: 20,
-                  overflow: "hidden",
-                  border: "1px solid rgba(255,255,255,0.10)",
-                  background: "rgba(255,255,255,0.03)",
-                  boxShadow: "0 18px 40px rgba(0,0,0,0.24)",
-                }}
-              >
-                <img
-                  src={portraitPath}
-                  alt={`${display} portrait`}
-                  style={{ width: "100%", height: 360, objectFit: "cover", display: "block" }}
-                  onError={(e) => {
-                    const img = e.currentTarget;
-                    img.onerror = null;
-                    img.src = fallbackPortraitPath;
-                  }}
-                />
-              </div>
-
               <div style={{ display: "grid", gap: 16 }}>
-                <div>
-                  <div style={{ fontSize: 32, fontWeight: 950, lineHeight: 1.05 }}>{display}</div>
-                  <div style={{ marginTop: 8, fontSize: 16, opacity: 0.82 }}>
-                    {resolvedSpecies} {resolvedClass}
-                  </div>
-                </div>
-
-                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                  <SectionPill>
-                    <strong>Focus</strong> {BUILD_FOCUS_OPTIONS.find((x) => x.id === currentFocus)?.label ?? "Balanced"}
-                  </SectionPill>
-                  <SectionPill>
-                    <strong>Portrait</strong> {row?.portrait ?? "Male"}
-                  </SectionPill>
-                </div>
+                <RitualStepPills currentStep={heroCreationStep} />
 
                 <div
                   style={{
-                    padding: "14px 16px",
-                    borderRadius: 16,
-                    border: "1px solid rgba(255,255,255,0.08)",
-                    background: "rgba(255,255,255,0.03)",
-                    fontSize: 14,
-                    opacity: 0.82,
-                    lineHeight: 1.7,
-                    maxWidth: 760,
+                    display: "grid",
+                    justifyItems: "center",
+                    gap: 18,
+                    padding: "10px 0 6px",
                   }}
                 >
-                  Once entered into canon, this hero becomes the beginning of the branch. Future fellowship growth
-                  is earned through the campaign rather than chosen here.
+                  <div
+                    style={{
+                      width: "min(100%, 720px)",
+                      borderRadius: 20,
+                      overflow: "hidden",
+                      border: "1px solid rgba(255,255,255,0.10)",
+                      background: "rgba(255,255,255,0.03)",
+                      boxShadow: "0 18px 46px rgba(0,0,0,0.24)",
+                    }}
+                  >
+                    <img
+                      src="/assets/V3/Tavern/tavern_01.png"
+                      alt="The tavern grows quiet"
+                      style={{ width: "100%", height: 300, objectFit: "cover", display: "block" }}
+                      onError={(e) => {
+                        const img = e.currentTarget;
+                        img.onerror = null;
+                        img.src = fallbackPortraitPath;
+                      }}
+                    />
+                  </div>
+
+                  <div style={{ fontSize: 14, opacity: 0.78, maxWidth: 700, textAlign: "center", lineHeight: 1.7 }}>
+                    The first name set into canon will carry forward into every future descent. Choose slowly.
+                  </div>
                 </div>
               </div>
-            </div>
-          </RitualFrame>
+            </RitualFrame>
+          </div>
+        );
+
+      case "species":
+        return (
+          <div key="ritual-species" style={{ transition: "opacity 260ms ease", opacity: 1 }}>
+            <RitualFrame
+              title="Choose a Species"
+              subtitle="Identity begins with lineage. Select the form your first hero will carry into the Chronicle."
+              footer={
+                <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      playSfx(SFX.buttonClick, 0.54);
+                      goToPreviousStep();
+                    }}
+                    style={{
+                      ...controlButtonBase,
+                      border: "1px solid rgba(255,255,255,0.12)",
+                      background: "rgba(255,255,255,0.05)",
+                      color: "inherit",
+                    }}
+                  >
+                    Back
+                  </button>
+
+                  <div style={{ fontSize: 12, opacity: 0.72, alignSelf: "center" }}>
+                    Select a lineage to continue.
+                  </div>
+                </div>
+              }
+            >
+              <div style={{ display: "grid", gap: 16 }}>
+                <RitualStepPills currentStep={heroCreationStep} />
+
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+                    gap: 14,
+                  }}
+                >
+                  {SAFE_SPECIES.map((species) => {
+                    const imageSrc = getPortraitPath(species, resolvedClass, row?.portrait ?? "Male");
+                    const selected = resolvedSpecies.toLowerCase() === species.toLowerCase();
+
+                    return (
+                      <RitualChoiceCard
+                        key={species}
+                        title={species}
+                        subtitle={SPECIES_DESCRIPTIONS[species] ?? "A path into the dark."}
+                        imageSrc={imageSrc}
+                        selected={selected}
+                        disabled={!editable}
+                        onClick={() => {
+                          if (!editable) {
+                            playSfx(SFX.uiFailure, 0.5);
+                            return;
+                          }
+                          playSfx(SFX.buttonClick, 0.56);
+                          setSpecies(species);
+                          setRitualProgress((prev) => ({
+                            ...prev,
+                            speciesConfirmed: true,
+                          }));
+                          setHeroCreationStep("class");
+                        }}
+                      />
+                    );
+                  })}
+                </div>
+              </div>
+            </RitualFrame>
+          </div>
+        );
+
+      case "class":
+        return (
+          <div key="ritual-class" style={{ transition: "opacity 260ms ease", opacity: 1 }}>
+            <RitualFrame
+              title="Choose a Class"
+              subtitle="A hero's role is not just a weapon. It is the shape of their will under pressure."
+              footer={
+                <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      playSfx(SFX.buttonClick, 0.54);
+                      goToPreviousStep();
+                    }}
+                    style={{
+                      ...controlButtonBase,
+                      border: "1px solid rgba(255,255,255,0.12)",
+                      background: "rgba(255,255,255,0.05)",
+                      color: "inherit",
+                    }}
+                  >
+                    Back
+                  </button>
+
+                  <div style={{ fontSize: 12, opacity: 0.72, alignSelf: "center" }}>
+                    Select a calling to continue.
+                  </div>
+                </div>
+              }
+            >
+              <div style={{ display: "grid", gap: 16 }}>
+                <RitualStepPills currentStep={heroCreationStep} />
+
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+                    gap: 14,
+                  }}
+                >
+                  {SAFE_CLASS_ARCHETYPES.map((className) => {
+                    const imageSrc = getPortraitPath(resolvedSpecies, className, row?.portrait ?? "Male");
+                    const selected = resolvedClass.toLowerCase() === className.toLowerCase();
+
+                    return (
+                      <RitualChoiceCard
+                        key={className}
+                        title={className}
+                        subtitle={CLASS_DESCRIPTIONS[className] ?? "A calling forged for the depths."}
+                        imageSrc={imageSrc}
+                        selected={selected}
+                        disabled={!editable}
+                        onClick={() => {
+                          if (!editable) {
+                            playSfx(SFX.uiFailure, 0.5);
+                            return;
+                          }
+                          playSfx(SFX.buttonClick, 0.56);
+                          setClass(className);
+                          setRitualProgress((prev) => ({
+                            ...prev,
+                            classConfirmed: true,
+                          }));
+                          setHeroCreationStep("focus");
+                        }}
+                      />
+                    );
+                  })}
+                </div>
+              </div>
+            </RitualFrame>
+          </div>
+        );
+
+      case "focus":
+        return (
+          <div key="ritual-focus" style={{ transition: "opacity 260ms ease", opacity: 1 }}>
+            <RitualFrame
+              title="Choose a Focus"
+              subtitle="This is not raw stat editing. It is the stance your hero carries into danger."
+              footer={
+                <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      playSfx(SFX.buttonClick, 0.54);
+                      goToPreviousStep();
+                    }}
+                    style={{
+                      ...controlButtonBase,
+                      border: "1px solid rgba(255,255,255,0.12)",
+                      background: "rgba(255,255,255,0.05)",
+                      color: "inherit",
+                    }}
+                  >
+                    Back
+                  </button>
+
+                  <div style={{ fontSize: 12, opacity: 0.72, alignSelf: "center" }}>
+                    Select a stance to continue.
+                  </div>
+                </div>
+              }
+            >
+              <div style={{ display: "grid", gap: 16 }}>
+                <RitualStepPills currentStep={heroCreationStep} />
+
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+                    gap: 14,
+                  }}
+                >
+                  {BUILD_FOCUS_OPTIONS.map((option) => {
+                    const active = currentFocus === option.id;
+
+                    return (
+                      <button
+                        key={option.id}
+                        type="button"
+                        onClick={() => {
+                          if (!editable) {
+                            playSfx(SFX.uiFailure, 0.5);
+                            return;
+                          }
+                          setBuildFocus(option.id);
+                          setRitualProgress((prev) => ({
+                            ...prev,
+                            focusConfirmed: true,
+                          }));
+                          setHeroCreationStep("name");
+                        }}
+                        disabled={!editable}
+                        style={{
+                          textAlign: "left",
+                          padding: 18,
+                          borderRadius: 18,
+                          border: active
+                            ? "1px solid rgba(255,205,126,0.32)"
+                            : "1px solid rgba(255,255,255,0.10)",
+                          background: active
+                            ? "linear-gradient(180deg, rgba(255,205,126,0.08), rgba(255,255,255,0.03))"
+                            : "linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.02))",
+                          color: "inherit",
+                          cursor: editable ? "pointer" : "not-allowed",
+                          opacity: editable ? 1 : 0.6,
+                          display: "grid",
+                          gap: 10,
+                        }}
+                      >
+                        <div style={{ fontSize: 18, fontWeight: 900 }}>{option.label}</div>
+                        <div style={{ fontSize: 13, opacity: 0.76, lineHeight: 1.6 }}>{option.hint}</div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </RitualFrame>
+          </div>
+        );
+
+      case "name":
+        return (
+          <div key="ritual-name" style={{ transition: "opacity 260ms ease", opacity: 1 }}>
+            <RitualFrame
+              title="Name the Hero"
+              subtitle="A name binds memory to fate. This is the first voice the Chronicle will remember."
+              footer={
+                <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      playSfx(SFX.buttonClick, 0.54);
+                      goToPreviousStep();
+                    }}
+                    style={{
+                      ...controlButtonBase,
+                      border: "1px solid rgba(255,255,255,0.12)",
+                      background: "rgba(255,255,255,0.05)",
+                      color: "inherit",
+                    }}
+                  >
+                    Back
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!canContinueFromName) {
+                        playSfx(SFX.uiFailure, 0.5);
+                        return;
+                      }
+                      playSfx(SFX.uiSuccess, 0.64);
+                      setHeroCreationStep("confirm");
+                    }}
+                    disabled={!canContinueFromName}
+                    style={{
+                      ...controlButtonBase,
+                      border: "1px solid rgba(255,205,126,0.28)",
+                      background: canContinueFromName
+                        ? "linear-gradient(180deg, rgba(255,201,116,0.98), rgba(218,132,47,0.98))"
+                        : "linear-gradient(180deg, rgba(107,89,69,0.7), rgba(74,55,39,0.74))",
+                      color: canContinueFromName ? "#2f1606" : "rgba(244,227,201,0.75)",
+                      opacity: canContinueFromName ? 1 : 0.62,
+                      cursor: canContinueFromName ? "pointer" : "not-allowed",
+                      minWidth: 140,
+                    }}
+                  >
+                    Continue
+                  </button>
+                </div>
+              }
+            >
+              <div style={{ display: "grid", gap: 16 }}>
+                <RitualStepPills currentStep={heroCreationStep} />
+
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "minmax(0, 1fr) minmax(220px, 280px)",
+                    gap: 18,
+                    alignItems: "start",
+                  }}
+                >
+                  <div style={{ display: "grid", gap: 10 }}>
+                    <TinyLabel>Hero Name</TinyLabel>
+                    <input
+                      value={row?.name ?? ""}
+                      disabled={!editable}
+                      onChange={(e) => setHeroField({ name: e.target.value })}
+                      placeholder="The Lone Hero"
+                      style={{
+                        ...inputStyle,
+                        padding: "14px 16px",
+                        fontSize: 18,
+                        borderRadius: 14,
+                      }}
+                    />
+                    <div style={{ fontSize: 13, opacity: 0.74, lineHeight: 1.6 }}>
+                      {(row?.name ?? "").trim().length > 0 ? (
+                        <>
+                          Current Chronicle entry: <strong>{display}</strong>
+                        </>
+                      ) : (
+                        <>Choose a true name before continuing.</>
+                      )}
+                    </div>
+                  </div>
+
+                  <div
+                    style={{
+                      borderRadius: 18,
+                      overflow: "hidden",
+                      border: "1px solid rgba(255,255,255,0.10)",
+                      background: "rgba(255,255,255,0.03)",
+                    }}
+                  >
+                    <img
+                      src={portraitPath}
+                      alt={`${display} portrait`}
+                      style={{ width: "100%", height: 280, objectFit: "cover", display: "block" }}
+                      onError={(e) => {
+                        const img = e.currentTarget;
+                        img.onerror = null;
+                        img.src = fallbackPortraitPath;
+                      }}
+                    />
+                  </div>
+                </div>
+              </div>
+            </RitualFrame>
+          </div>
+        );
+
+      case "confirm":
+        return (
+          <div key="ritual-confirm" style={{ transition: "opacity 260ms ease", opacity: 1 }}>
+            <RitualFrame
+              title="The Oath"
+              subtitle="A new name enters the Chronicle."
+              footer={
+                <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      playSfx(SFX.buttonClick, 0.54);
+                      goToPreviousStep();
+                    }}
+                    style={{
+                      ...controlButtonBase,
+                      border: "1px solid rgba(255,255,255,0.12)",
+                      background: "rgba(255,255,255,0.05)",
+                      color: "inherit",
+                    }}
+                  >
+                    Back
+                  </button>
+
+                  <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+                    <button
+                      onClick={() => {
+                        if (!canEnterChronicle || partyLocked || !partyDraft) {
+                          playSfx(SFX.uiFailure, 0.5);
+                          return;
+                        }
+                        playSfx(SFX.arbiterCanonRecord, 0.78);
+                        commitParty();
+                      }}
+                      disabled={!canEnterChronicle || partyLocked || !partyDraft}
+                      style={{
+                        ...controlButtonBase,
+                        border: "1px solid rgba(255,205,126,0.28)",
+                        background:
+                          canEnterChronicle && !partyLocked && !!partyDraft
+                            ? "linear-gradient(180deg, rgba(255,201,116,0.98), rgba(218,132,47,0.98))"
+                            : "linear-gradient(180deg, rgba(107,89,69,0.7), rgba(74,55,39,0.74))",
+                        color:
+                          canEnterChronicle && !partyLocked && !!partyDraft
+                            ? "#2f1606"
+                            : "rgba(244,227,201,0.75)",
+                        boxShadow:
+                          canEnterChronicle && !partyLocked && !!partyDraft
+                            ? "0 10px 28px rgba(255,145,42,0.18), inset 0 1px 0 rgba(255,244,220,0.72)"
+                            : "none",
+                        opacity: canEnterChronicle && !partyLocked && !!partyDraft ? 1 : 0.62,
+                        cursor: canEnterChronicle && !partyLocked && !!partyDraft ? "pointer" : "not-allowed",
+                        minWidth: 210,
+                      }}
+                    >
+                      Enter the Chronicle
+                    </button>
+
+                    <span style={{ fontSize: 12, opacity: 0.72 }}>
+                      {canEnterChronicle
+                        ? "Ritual complete"
+                        : "Choose species, class, focus, and enter a name to continue"}
+                      {partyLockedByCombat ? " · Combat lock active" : ""}
+                    </span>
+                  </div>
+                </div>
+              }
+            >
+              <div style={{ display: "grid", gap: 16 }}>
+                <RitualStepPills currentStep={heroCreationStep} />
+
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "minmax(220px, 280px) minmax(0, 1fr)",
+                    gap: 20,
+                    alignItems: "start",
+                  }}
+                >
+                  <div
+                    style={{
+                      borderRadius: 20,
+                      overflow: "hidden",
+                      border: "1px solid rgba(255,255,255,0.10)",
+                      background: "rgba(255,255,255,0.03)",
+                      boxShadow: "0 18px 40px rgba(0,0,0,0.24)",
+                    }}
+                  >
+                    <img
+                      src={portraitPath}
+                      alt={`${display} portrait`}
+                      style={{ width: "100%", height: 360, objectFit: "cover", display: "block" }}
+                      onError={(e) => {
+                        const img = e.currentTarget;
+                        img.onerror = null;
+                        img.src = fallbackPortraitPath;
+                      }}
+                    />
+                  </div>
+
+                  <div style={{ display: "grid", gap: 16 }}>
+                    <div>
+                      <div style={{ fontSize: 32, fontWeight: 950, lineHeight: 1.05 }}>{display}</div>
+                      <div style={{ marginTop: 8, fontSize: 16, opacity: 0.82 }}>
+                        {resolvedSpecies} {resolvedClass}
+                      </div>
+                    </div>
+
+                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                      <SectionPill>
+                        <strong>Focus</strong>{" "}
+                        {BUILD_FOCUS_OPTIONS.find((x) => x.id === currentFocus)?.label ?? "Balanced"}
+                      </SectionPill>
+                      <SectionPill>
+                        <strong>Portrait</strong> {row?.portrait ?? "Male"}
+                      </SectionPill>
+                    </div>
+
+                    <div
+                      style={{
+                        padding: "14px 16px",
+                        borderRadius: 16,
+                        border: "1px solid rgba(255,255,255,0.08)",
+                        background: "rgba(255,255,255,0.03)",
+                        fontSize: 14,
+                        opacity: 0.82,
+                        lineHeight: 1.7,
+                        maxWidth: 760,
+                      }}
+                    >
+                      Once entered into canon, this hero becomes the beginning of the branch. Future fellowship growth
+                      is earned through the campaign rather than chosen here.
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </RitualFrame>
+          </div>
         );
 
       default:
@@ -1224,25 +1311,23 @@ export default function PartySetupSection(props: {
                 control panel.
               </div>
 
-              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 12 }}>
-                <RitualStepPills currentStep={heroCreationStep} partyCanonicalExists={partyCanonicalExists} />
-              </div>
-
-              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 12 }}>
-                <SectionPill tone={partyCanonicalExists ? "good" : "default"}>
-                  <strong>1</strong> Starting Hero
-                </SectionPill>
-                <SectionPill>
-                  <strong>{heroSummary.resolvedClass}</strong> Class
-                </SectionPill>
-                <SectionPill>
-                  <strong>{heroSummary.resolvedSpecies}</strong> Lineage
-                </SectionPill>
-                <SectionPill tone={partyCanonicalExists ? "good" : "default"}>
-                  {partyCanonicalExists ? "Hero canonized" : "Draft hero only"}
-                </SectionPill>
-                {partyLockedByCombat ? <SectionPill tone="warn">Combat lock active</SectionPill> : null}
-              </div>
+              {!partyCanonicalExists && (
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 12 }}>
+                  <SectionPill tone={partyCanonicalExists ? "good" : "default"}>
+                    <strong>1</strong> Starting Hero
+                  </SectionPill>
+                  <SectionPill>
+                    <strong>{heroSummary.resolvedClass}</strong> Class
+                  </SectionPill>
+                  <SectionPill>
+                    <strong>{heroSummary.resolvedSpecies}</strong> Lineage
+                  </SectionPill>
+                  <SectionPill tone={partyCanonicalExists ? "good" : "default"}>
+                    {partyCanonicalExists ? "Hero canonized" : "Draft hero only"}
+                  </SectionPill>
+                  {partyLockedByCombat ? <SectionPill tone="warn">Combat lock active</SectionPill> : null}
+                </div>
+              )}
             </div>
 
             {canCollapseToSummary && showFullEditor && (
@@ -1612,6 +1697,27 @@ export default function PartySetupSection(props: {
                 through progression, recruitment, and consequence rather than pre-run roster assembly.
               </div>
             </>
+          )}
+
+          {!partyCanonicalExists && (
+            <div style={{ display: "flex", justifyContent: "center" }}>
+              <button
+                type="button"
+                onClick={() => {
+                  if (partyCanonicalExists) return;
+                  playSfx(SFX.buttonClick, 0.54);
+                  resetRitualFlow();
+                }}
+                style={{
+                  ...controlButtonBase,
+                  border: "1px solid rgba(255,255,255,0.12)",
+                  background: "rgba(255,255,255,0.05)",
+                  color: "inherit",
+                }}
+              >
+                Restart Ritual
+              </button>
+            </div>
           )}
         </div>
       </section>
