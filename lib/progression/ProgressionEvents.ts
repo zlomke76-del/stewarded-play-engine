@@ -15,11 +15,11 @@
 import type {
   CompanionCombinationKey,
   CompanionId,
+  FellowshipGateId,
   HeroUpgradeId,
   ProgressionMilestoneId,
   ProgressionRewardId,
   RelicId,
-  type FellowshipGateId,
 } from "@/lib/progression/ProgressionTypes";
 
 export type ProgressionEventType =
