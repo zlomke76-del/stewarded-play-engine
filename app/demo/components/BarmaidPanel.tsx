@@ -1,70 +1,108 @@
 "use client";
 
-import { useState } from "react";
+import React, { useState } from "react";
 
 type Props = {
   tavernScore: number;
   onClose: () => void;
 };
 
+type Topic = "dungeon" | "people" | "you" | null;
+
 export default function BarmaidPanel({ tavernScore, onClose }: Props) {
-  const [topic, setTopic] = useState<string | null>(null);
+  const [topic, setTopic] = useState<Topic>(null);
 
-  function getGreeting() {
-    if (tavernScore >= 100)
-      return "Well now… that throw will be talked about for a while.";
+  function greeting(): string {
+    if (tavernScore >= 100) {
+      return "Well now… that throw will be talked about all night.";
+    }
 
-    if (tavernScore >= 60)
-      return "You've got a steady hand. Most people miss the board entirely.";
+    if (tavernScore >= 60) {
+      return "You’ve got a steady hand. Most travelers can’t even hit the board.";
+    }
 
-    return "Not bad. The regulars noticed.";
+    if (tavernScore >= 31) {
+      return "Not bad. The regulars noticed that one.";
+    }
+
+    return "Careful with those axes. The floor’s already claimed a few.";
   }
 
-  function getResponse(topic: string) {
-    switch (topic) {
-      case "dungeon":
-        return "The ones who rush down first rarely come back. The ones who listen to the stone… sometimes do.";
+  function response(): string {
+    if (!topic) return "";
 
-      case "people":
-        return "Every hero thinks they are the first to descend. The tavern remembers otherwise.";
-
-      case "you":
-        if (tavernScore >= 100)
-          return "You throw like someone who has already faced worse than a wooden board.";
-
-        if (tavernScore >= 60)
-          return "Steady breath. Calm wrist. You’ll go further than most.";
-
-        return "A little practice goes a long way down there.";
-
-      default:
-        return "";
+    if (topic === "dungeon") {
+      return "The stone below remembers more footsteps than names. The first rooms rarely kill fools quickly — they teach them first.";
     }
+
+    if (topic === "people") {
+      return "Every hero thinks they’re the first one brave enough to descend. They’re not. The tavern remembers the ones who came back.";
+    }
+
+    if (topic === "you") {
+      if (tavernScore >= 100) {
+        return "You throw like someone who’s already faced worse than a wooden target.";
+      }
+
+      if (tavernScore >= 60) {
+        return "Calm breath. Strong wrist. That kind of focus carries a person far below.";
+      }
+
+      return "A little practice goes a long way down there.";
+    }
+
+    return "";
   }
 
   return (
     <div
       style={{
-        background: "rgba(0,0,0,0.85)",
+        marginTop: 24,
+        background: "rgba(20,20,20,0.9)",
         border: "1px solid #6b4a2f",
-        padding: "24px",
-        borderRadius: "8px",
-        marginTop: "16px",
-        maxWidth: "700px",
+        borderRadius: 10,
+        padding: 24,
+        maxWidth: 760,
       }}
     >
-      <div style={{ display: "flex", gap: "20px" }}>
+      <div
+        style={{
+          display: "flex",
+          gap: 20,
+          alignItems: "flex-start",
+        }}
+      >
         <img
           src="/assets/V3/Dungeon/Tavern/bar_maid_01.png"
-          style={{ width: 180, borderRadius: 6 }}
+          alt="Barmaid"
+          style={{
+            width: 180,
+            borderRadius: 6,
+            boxShadow: "0 4px 14px rgba(0,0,0,0.6)",
+          }}
         />
 
         <div style={{ flex: 1 }}>
-          <h3>The Barmaid</h3>
+          <h3 style={{ marginBottom: 8 }}>The Barmaid</h3>
 
-          <p style={{ opacity: 0.9 }}>{getGreeting()}</p>
+          <p
+            style={{
+              opacity: 0.9,
+              marginBottom: 14,
+              lineHeight: 1.4,
+            }}
+          >
+            {greeting()}
+          </p>
 
-          <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+          <div
+            style={{
+              display: "flex",
+              gap: 8,
+              flexWrap: "wrap",
+              marginBottom: 12,
+            }}
+          >
             <button onClick={() => setTopic("dungeon")}>
               Ask about the dungeon
             </button>
@@ -81,19 +119,25 @@ export default function BarmaidPanel({ tavernScore, onClose }: Props) {
           {topic && (
             <div
               style={{
-                marginTop: 14,
-                padding: 12,
                 background: "#1b1b1b",
-                borderRadius: 4,
+                borderRadius: 6,
+                padding: 12,
+                lineHeight: 1.5,
+                marginBottom: 12,
               }}
             >
-              {getResponse(topic)}
+              {response()}
             </div>
           )}
 
-          <div style={{ marginTop: 16 }}>
-            <button onClick={onClose}>Return to Tavern</button>
-          </div>
+          <button
+            onClick={onClose}
+            style={{
+              marginTop: 6,
+            }}
+          >
+            Return to Tavern
+          </button>
         </div>
       </div>
     </div>
