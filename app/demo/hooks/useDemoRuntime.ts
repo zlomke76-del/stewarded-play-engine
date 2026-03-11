@@ -14,7 +14,6 @@ import {
   deriveUnlockedDoorIds,
   inferNeighborRoomIds,
 } from "@/lib/dungeon/DungeonNavigation";
-import { deriveExplorationDiscoveryDrafts } from "@/lib/dungeon/ExplorationDiscovery";
 import { deriveDungeonEvolution } from "@/lib/dungeon/DungeonEvolution";
 import {
   buildPuzzlePresentationBlock,
@@ -41,9 +40,7 @@ import {
   isCombatEndedForId,
   inferPressureTier,
 } from "../demoUtils";
-import {
-  extractOpeningChronicleSeed,
-} from "../lib/demoNarration";
+import { extractOpeningChronicleSeed } from "../lib/demoNarration";
 import {
   type CombatEncounterContext,
   type GameplayFocusStep,
@@ -67,9 +64,7 @@ import {
   stopAllMusic,
   stopAmbience,
 } from "./runtime/demoRuntimeAudio";
-import {
-  mapStateEventsToPuzzleCanon,
-} from "./runtime/demoRuntimeTraversal";
+import { mapStateEventsToPuzzleCanon } from "./runtime/demoRuntimeTraversal";
 import {
   deriveChapterState,
   deriveGameplayPermissions,
@@ -86,6 +81,17 @@ import {
   commitOutcomeOnlyToState,
   commitResolvedActionToState,
 } from "./runtime/demoRuntimeResolution";
+import {
+  createBeginDungeonDescent,
+  createEnterDungeon,
+  createEnteredDungeonSetter,
+  ensureInitialTable,
+  resetChronicleGateForModeChange,
+  setSoloPartySize,
+  syncPartyDraftFromMode,
+  syncRenderedNarrationToDraft,
+} from "./runtime/demoRuntimeCampaign";
+import { bootstrapDungeonState } from "./runtime/demoRuntimeDungeonBootstrap";
 
 export { displayName };
 export type { PartyDeclaredPayload, PartyMember };
@@ -167,25 +173,10 @@ export function useDemoRuntime() {
   );
 
   useEffect(() => {
-    if (dmMode === null) return;
-
-    if (partyCanonical) {
-      setPartyDraft((prev) => prev ?? partyCanonical);
-      return;
-    }
-
-    setPartyDraft((prev) => {
-      if (prev) {
-        return {
-          ...prev,
-          members:
-            (prev.members ?? []).slice(0, 1).length > 0
-              ? (prev.members ?? []).slice(0, 1)
-              : defaultParty().members,
-        };
-      }
-
-      return defaultParty();
+    syncPartyDraftFromMode({
+      dmMode,
+      partyCanonical,
+      setPartyDraft,
     });
   }, [dmMode, partyCanonical?.partyId]);
 
@@ -308,27 +299,46 @@ export function useDemoRuntime() {
     lastCombatIndexRef,
   };
 
-  function setEnteredDungeon(next: boolean) {
-    setEnteredDungeonState(next);
+  const partyCanonicalExists = !!partyCanonical;
+  const canEnterDungeon = dmMode !== null;
+  const showInitialTable = enteredDungeon && dmMode !== null;
 
-    if (!next) {
-      setDungeonDescentConfirmed(false);
-      return;
-    }
+  const setEnteredDungeon = useMemo(
+    () =>
+      createEnteredDungeonSetter({
+        tableAccepted,
+        partyCanonicalExists,
+        setEnteredDungeonState,
+        setDungeonDescentConfirmed,
+        setGameplayFocusStep,
+        setActiveSection,
+      }),
+    [tableAccepted, partyCanonicalExists]
+  );
 
-    if (tableAccepted && partyCanonicalExists) {
-      setDungeonDescentConfirmed(true);
-      setGameplayFocusStep("pressure");
-      setActiveSection("pressure");
-    }
-  }
+  const beginDungeonDescent = useMemo(
+    () =>
+      createBeginDungeonDescent({
+        setEnteredDungeonState,
+        setDungeonDescentConfirmed,
+        setGameplayFocusStep,
+        setActiveSection,
+      }),
+    []
+  );
 
-  function beginDungeonDescent() {
-    setEnteredDungeonState(true);
-    setDungeonDescentConfirmed(true);
-    setGameplayFocusStep("pressure");
-    setActiveSection("pressure");
-  }
+  const enterDungeon = useMemo(
+    () =>
+      createEnterDungeon({
+        canEnterDungeon,
+        playIntro: () =>
+          playIntroTheme({ introAudioRef, bgmAudioRef, currentMusicModeRef, loop: true }),
+        setEnteredDungeonState,
+        setDungeonDescentConfirmed,
+        setActiveSection,
+      }),
+    [canEnterDungeon]
+  );
 
   const dungeonAudioActive = dungeonDescentConfirmed;
 
@@ -404,16 +414,8 @@ export function useDemoRuntime() {
     }
   }, [dungeonAudioActive, tableAccepted, combatActive]);
 
-  function setPartySize(_nextCount: number) {
-    setPartyDraft((prev) => {
-      const base = prev ?? defaultParty();
-      const first = (base.members ?? [buildStarterMember(0)])[0] ?? buildStarterMember(0);
-
-      return {
-        ...base,
-        members: [{ ...first }],
-      };
-    });
+  function setPartySize(nextCount: number) {
+    setSoloPartySize(setPartyDraft, nextCount);
   }
 
   function randomizePartyNames() {
@@ -454,8 +456,11 @@ export function useDemoRuntime() {
   }
 
   useEffect(() => {
-    if (initialTable) return;
-    setInitialTable(generateInitialTable());
+    ensureInitialTable({
+      initialTable,
+      setInitialTable,
+      generateInitialTable,
+    });
   }, [initialTable]);
 
   const renderedTableNarration = useMemo(() => {
@@ -469,16 +474,22 @@ export function useDemoRuntime() {
   );
 
   useEffect(() => {
-    if (!initialTable) return;
-    if (tableDraftText.trim() === "") setTableDraftText(renderedTableNarration);
+    syncRenderedNarrationToDraft({
+      initialTable,
+      renderedTableNarration,
+      tableDraftText,
+      setTableDraftText,
+    });
   }, [initialTable, renderedTableNarration, tableDraftText]);
 
   useEffect(() => {
-    if (dmMode === null) return;
-    setTableAccepted(false);
-    setEnteredDungeonState(false);
-    setDungeonDescentConfirmed(false);
-    setGameplayFocusStep("pressure");
+    resetChronicleGateForModeChange({
+      dmMode,
+      setTableAccepted,
+      setEnteredDungeonState,
+      setDungeonDescentConfirmed,
+      setGameplayFocusStep,
+    });
   }, [dmMode]);
 
   function appendCanon(type: string, payload: any) {
@@ -646,42 +657,12 @@ export function useDemoRuntime() {
     if (!tableAccepted || !partyCanonical) return;
     if (hasDungeonInitialized(state.events as any[])) return;
 
-    setState((prev) => {
-      let next = prev;
-
-      next = appendEventToState(next, "DUNGEON_INITIALIZED", {
-        dungeonId: dungeon.dungeonId,
-        seed: dungeon.seed,
-        floorIds: dungeon.floors.map((f) => f.id),
-        startFloorId: dungeon.startFloorId,
-        startRoomId: dungeon.startRoomId,
-      });
-
-      for (const floor of dungeon.floors) {
-        next = appendEventToState(next, "FLOOR_INITIALIZED", {
-          dungeonId: dungeon.dungeonId,
-          floorId: floor.id,
-          floorIndex: floor.floorIndex,
-          theme: floor.theme,
-          startRoomId: floor.startRoomId,
-        });
-      }
-
-      const drafts = deriveExplorationDiscoveryDrafts({
+    setState((prev) =>
+      bootstrapDungeonState({
+        prev,
         dungeon,
-        events: next.events as any[],
-        floorId: dungeon.startFloorId,
-        roomId: dungeon.startRoomId,
-        enteredViaConnectionId: null,
-        enteredFromRoomId: null,
-      });
-
-      for (const draft of drafts) {
-        next = appendEventToState(next, draft.type, draft.payload as any);
-      }
-
-      return next;
-    });
+      })
+    );
   }, [tableAccepted, partyCanonical, state.events, dungeon]);
 
   async function runRoomPuzzleAttempt(inputText: string) {
@@ -767,10 +748,6 @@ export function useDemoRuntime() {
     setGameplayFocusStep("action");
     setActiveSection("canon");
   }
-
-  const canEnterDungeon = dmMode !== null;
-  const partyCanonicalExists = !!partyCanonical;
-  const showInitialTable = enteredDungeon && dmMode !== null;
 
   const presentationPhase = useMemo(
     () =>
@@ -880,14 +857,6 @@ export function useDemoRuntime() {
       }),
     [currentRoom, reachableConnections, playerInput, selectedOption?.description, location.floorId, location.roomId]
   );
-
-  function enterDungeon() {
-    if (!canEnterDungeon) return;
-    playIntroTheme({ introAudioRef, bgmAudioRef, currentMusicModeRef, loop: true });
-    setEnteredDungeonState(true);
-    setDungeonDescentConfirmed(false);
-    setActiveSection("table");
-  }
 
   return {
     role,
