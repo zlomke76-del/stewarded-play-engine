@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import ResolutionDraftAdvisoryPanel from "@/components/resolution/ResolutionDraftAdvisoryPanel";
 import NextActionHint from "@/components/NextActionHint";
@@ -16,6 +16,9 @@ export default function GameplayActionColumn({ demo }: Props) {
   const [inlineResult, setInlineResult] = useState<any | null>(null);
   const isPuzzleMode = demo.actionMode === "puzzle";
   const hasInlineSubmit = typeof demo.onInlineSubmit === "function";
+
+  const actionRootRef = useRef<HTMLDivElement | null>(null);
+  const resolutionRef = useRef<HTMLDivElement | null>(null);
 
   const actionDemo = useMemo(() => {
     return {
@@ -48,11 +51,23 @@ export default function GameplayActionColumn({ demo }: Props) {
     }
   }
 
-  const renderOptions = demo.gameplayAllowsAction && demo.options && demo.dmMode === "human";
+  const renderOptions =
+    demo.gameplayAllowsAction && demo.options && demo.dmMode === "human";
   const renderResolution = demo.gameplayAllowsAction && demo.selectedOption;
 
+  useEffect(() => {
+    if (!renderOptions && !renderResolution && !inlineResult) return;
+
+    const node = resolutionRef.current;
+    if (!node) return;
+
+    window.requestAnimationFrame(() => {
+      node.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  }, [renderOptions, renderResolution, inlineResult]);
+
   return (
-    <div style={{ display: "grid", gap: 14 }}>
+    <div ref={actionRootRef} style={{ display: "grid", gap: 14 }}>
       {demo.gameplayAllowsAction ? (
         <div id={anchorId("action")} style={{ scrollMarginTop: 90 }}>
           <ActionSection
@@ -73,7 +88,9 @@ export default function GameplayActionColumn({ demo }: Props) {
             isEnemyTurn={demo.isEnemyTurn}
             isWrongPlayerForTurn={demo.isWrongPlayerForTurn}
             activeTurnLabel={demo.activeTurnLabel}
-            showPartyButtons={demo.dmMode === "human" && !demo.partyLocked && !!demo.partyDraft}
+            showPartyButtons={
+              demo.dmMode === "human" && !demo.partyLocked && !!demo.partyDraft
+            }
             onCommitParty={demo.commitParty}
             onRandomNames={demo.randomizePartyNames}
             commitDisabled={demo.partyLocked}
@@ -89,6 +106,7 @@ export default function GameplayActionColumn({ demo }: Props) {
 
       {inlineResult ? (
         <div
+          ref={resolutionRef}
           style={{
             padding: "16px",
             borderRadius: 18,
@@ -111,7 +129,9 @@ export default function GameplayActionColumn({ demo }: Props) {
           </div>
 
           {inlineResult.summary ? (
-            <div style={{ fontWeight: 700, lineHeight: 1.6 }}>{inlineResult.summary}</div>
+            <div style={{ fontWeight: 700, lineHeight: 1.6 }}>
+              {inlineResult.summary}
+            </div>
           ) : null}
 
           {Array.isArray(inlineResult.narration) && inlineResult.narration.length > 0 ? (
@@ -128,6 +148,7 @@ export default function GameplayActionColumn({ demo }: Props) {
 
       {renderOptions ? (
         <div
+          ref={resolutionRef}
           style={{
             padding: "16px",
             borderRadius: 18,
@@ -184,7 +205,11 @@ export default function GameplayActionColumn({ demo }: Props) {
       ) : null}
 
       {renderResolution ? (
-        <div id={anchorId("resolution")} style={{ scrollMarginTop: 90 }}>
+        <div
+          ref={resolutionRef}
+          id={anchorId("resolution")}
+          style={{ scrollMarginTop: 90 }}
+        >
           <ResolutionDraftAdvisoryPanel
             context={{
               optionDescription: demo.selectedOption.description,
