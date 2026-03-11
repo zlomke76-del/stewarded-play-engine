@@ -483,7 +483,8 @@ export default function TavernAxeThrow({
     }
   }
 
-  function cycleBarmaidImage() {
+  function askBarmaid(topic: Exclude<BarmaidTopic, null>) {
+    setBarmaidTopic(topic);
     setBarmaidImageIndex((prev) => (prev + 1) % BARMAID_IMAGES.length);
   }
 
@@ -601,9 +602,10 @@ export default function TavernAxeThrow({
                       : axe.embedded
                         ? "drop-shadow(0 8px 12px rgba(0,0,0,0.32))"
                         : "drop-shadow(0 12px 12px rgba(0,0,0,0.32))",
-                    transition: axe.flying
-                      ? "none"
-                      : "transform 140ms ease-out, left 140ms ease-out, top 140ms ease-out",
+                    transition:
+                      axe.flying
+                        ? "none"
+                        : "transform 140ms ease-out, left 140ms ease-out, top 140ms ease-out",
                   }}
                 />
               ) : null}
@@ -1098,47 +1100,6 @@ export default function TavernAxeThrow({
                 {getBarmaidGreeting(totalScore)}
               </div>
             </div>
-
-            <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-              <button
-                type="button"
-                onClick={cycleBarmaidImage}
-                style={{
-                  height: 44,
-                  padding: "0 14px",
-                  borderRadius: 12,
-                  border: "1px solid rgba(255,255,255,0.12)",
-                  background: "rgba(255,255,255,0.05)",
-                  color: "rgba(255,247,233,0.94)",
-                  fontWeight: 700,
-                  cursor: "pointer",
-                }}
-              >
-                Change Pose
-              </button>
-
-              {!barmaidOnlyMode && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowBarmaid(false);
-                    setBarmaidTopic(null);
-                  }}
-                  style={{
-                    height: 44,
-                    padding: "0 14px",
-                    borderRadius: 12,
-                    border: "1px solid rgba(255,255,255,0.12)",
-                    background: "rgba(255,255,255,0.05)",
-                    color: "rgba(255,247,233,0.94)",
-                    fontWeight: 700,
-                    cursor: "pointer",
-                  }}
-                >
-                  Close
-                </button>
-              )}
-            </div>
           </div>
 
           <div
@@ -1152,14 +1113,12 @@ export default function TavernAxeThrow({
             <img
               src={currentBarmaidImage}
               alt="Barmaid"
-              onClick={cycleBarmaidImage}
               style={{
                 width: "100%",
                 borderRadius: 16,
                 border: "1px solid rgba(255,255,255,0.10)",
                 objectFit: "cover",
                 boxShadow: "0 12px 30px rgba(0,0,0,0.32)",
-                cursor: "pointer",
               }}
             />
 
@@ -1167,7 +1126,7 @@ export default function TavernAxeThrow({
               <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
                 <button
                   type="button"
-                  onClick={() => setBarmaidTopic("dungeon")}
+                  onClick={() => askBarmaid("dungeon")}
                   style={{
                     height: 44,
                     padding: "0 14px",
@@ -1187,7 +1146,7 @@ export default function TavernAxeThrow({
 
                 <button
                   type="button"
-                  onClick={() => setBarmaidTopic("people")}
+                  onClick={() => askBarmaid("people")}
                   style={{
                     height: 44,
                     padding: "0 14px",
@@ -1207,7 +1166,7 @@ export default function TavernAxeThrow({
 
                 <button
                   type="button"
-                  onClick={() => setBarmaidTopic("you")}
+                  onClick={() => askBarmaid("you")}
                   style={{
                     height: 44,
                     padding: "0 14px",
