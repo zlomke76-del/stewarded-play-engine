@@ -13,7 +13,11 @@
 // - No runtime state is mutated here
 // ------------------------------------------------------------
 
-import type { DungeonFloorTheme, RoomType } from "@/lib/dungeon/RoomTypes";
+import type {
+  DungeonFloorTheme,
+  EnvironmentPressure,
+  RoomType,
+} from "@/lib/dungeon/RoomTypes";
 import {
   FLOOR_THEME_DEFINITIONS,
   ROOM_TYPE_DEFINITIONS,
@@ -867,6 +871,19 @@ function buildGraphConnections(args: {
   return connections;
 }
 
+function mapEnvironmentStateToPressure(
+  environment: EnvironmentState
+): EnvironmentPressure {
+  switch (environment) {
+    case "lit":
+      return "normal";
+    case "dark":
+      return "dark";
+    case "cold_dark":
+      return "cold_dark";
+  }
+}
+
 function buildEnvironmentState(
   blueprint: FloorBlueprint,
   roomType: RoomType
@@ -885,7 +902,7 @@ function buildEnvironmentState(
     roomType === "trial_chamber";
 
   return {
-    pressure: blueprint.environment,
+    pressure: mapEnvironmentStateToPressure(blueprint.environment),
     requiresTorchlight: blueprint.environment !== "lit",
     requiresWarmth: blueprint.environment === "cold_dark",
     isRefuge: refuge,
