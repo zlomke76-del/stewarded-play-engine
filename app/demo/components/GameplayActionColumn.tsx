@@ -216,6 +216,7 @@ export default function GameplayActionColumn({ demo }: Props) {
                 onClick={() => {
                   demo.setSelectedOption(opt);
                 }}
+                disabled={isRecording}
                 style={{
                   width: "100%",
                   textAlign: "left",
@@ -230,9 +231,10 @@ export default function GameplayActionColumn({ demo }: Props) {
                       ? "linear-gradient(180deg, rgba(214,188,120,0.10), rgba(255,255,255,0.03))"
                       : "rgba(255,255,255,0.03)",
                   color: "inherit",
-                  cursor: "pointer",
+                  cursor: isRecording ? "not-allowed" : "pointer",
                   lineHeight: 1.55,
                   fontWeight: demo.selectedOption?.id === opt.id ? 800 : 600,
+                  opacity: isRecording ? 0.6 : 1,
                 }}
               >
                 {opt.description}
@@ -267,7 +269,6 @@ export default function GameplayActionColumn({ demo }: Props) {
                 : null
             }
             onRecord={handleRecordAndReturn}
-            isBusy={isRecording}
           />
         </div>
       ) : null}
