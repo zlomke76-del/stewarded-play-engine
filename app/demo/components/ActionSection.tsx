@@ -3,18 +3,11 @@
 // ------------------------------------------------------------
 // ActionSection.tsx
 // ------------------------------------------------------------
-// Player action input surface.
-// Orchestrator passes party + state + callbacks.
-//
-// Upgraded:
-// - replaces acting-player dropdown with party turn cards
-// - renders real portraits in the turn cards
-// - adds HP / AC / Init to party cards
-// - adds turn order rail
-// - adds a stronger active-player header
-// - groups action controls into tactical categories
-// - renames Submit Action -> Resolve Action
-// - preserves all existing action / dictation / turn logic
+// Compressed action cockpit:
+// - keeps active hero identity strong
+// - moves the textarea and resolve action higher
+// - collapses party-turn management + loadout detail
+// - preserves dictation, pass-turn, party buttons, and action chips
 // ------------------------------------------------------------
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
@@ -60,6 +53,13 @@ type Props = {
   onRandomNames?: () => void;
 
   commitDisabled?: boolean;
+
+  title?: string;
+  eyebrow?: string;
+  description?: string;
+  inputPlaceholder?: string;
+  showTurnCards?: boolean;
+  showLoadoutDetails?: boolean;
 };
 
 type SpeechRecognitionLike = {
@@ -93,11 +93,9 @@ function playSfx(src: string, volume = 0.72) {
   try {
     const audio = new Audio(src);
     audio.volume = volume;
-    void audio.play().catch(() => {
-      // fail silently; SFX should never block gameplay
-    });
+    void audio.play().catch(() => {});
   } catch {
-    // fail silently
+    // no-op
   }
 }
 
@@ -153,14 +151,30 @@ function roleLineForMember(member: PartyMemberLite | null) {
 function flavorLineForMember(label: string, skills: string[], traits: string[]) {
   const name = extractDisplayName(label);
 
-  if (skills.includes("arc_bolt")) return `${name} gathers arcane force and watches the field for the right release.`;
-  if (skills.includes("frost_bind")) return `${name} studies movement lanes, waiting to pin the enemy in place.`;
-  if (skills.includes("backstab")) return `${name} searches for the exposed angle and the unguarded flank.`;
-  if (skills.includes("smite")) return `${name} steadies conviction, ready to break the line at the crucial moment.`;
-  if (skills.includes("heal")) return `${name} keeps one eye on the wounded, prepared to restore the faltering.`;
-  if (skills.includes("volley")) return `${name} measures distance and spacing, ready to pressure the whole formation.`;
-  if (traits.includes("elf_keen_senses")) return `${name} listens beyond the torchlight, reading danger before it shows itself.`;
-  if (traits.includes("human_resolve")) return `${name} braces with steady resolve, ready to answer the next threat.`;
+  if (skills.includes("arc_bolt")) {
+    return `${name} gathers arcane force and watches the field for the right release.`;
+  }
+  if (skills.includes("frost_bind")) {
+    return `${name} studies movement lanes, waiting to pin the enemy in place.`;
+  }
+  if (skills.includes("backstab")) {
+    return `${name} searches for the exposed angle and the unguarded flank.`;
+  }
+  if (skills.includes("smite")) {
+    return `${name} steadies conviction, ready to break the line at the crucial moment.`;
+  }
+  if (skills.includes("heal")) {
+    return `${name} keeps one eye on the wounded, prepared to restore the faltering.`;
+  }
+  if (skills.includes("volley")) {
+    return `${name} measures distance and spacing, ready to pressure the whole formation.`;
+  }
+  if (traits.includes("elf_keen_senses")) {
+    return `${name} listens beyond the torchlight, reading danger before it shows itself.`;
+  }
+  if (traits.includes("human_resolve")) {
+    return `${name} braces with steady resolve, ready to answer the next threat.`;
+  }
 
   return `${name} studies the chamber, weighing position, risk, and the next decisive move.`;
 }
@@ -293,7 +307,8 @@ function ActionChipButton(props: {
         lineHeight: 1.1,
         cursor: disabled ? "not-allowed" : "pointer",
         opacity: disabled ? 0.56 : 1,
-        transition: "transform 140ms ease, filter 140ms ease, border-color 140ms ease, background 140ms ease",
+        transition:
+          "transform 140ms ease, filter 140ms ease, border-color 140ms ease, background 140ms ease",
         ...styleByAccent[accent],
       }}
     >
@@ -318,7 +333,9 @@ function StatMiniChip(props: { label: string; value: React.ReactNode }) {
         whiteSpace: "nowrap",
       }}
     >
-      <span style={{ opacity: 0.58, textTransform: "uppercase", letterSpacing: 0.4 }}>{props.label}</span>
+      <span style={{ opacity: 0.58, textTransform: "uppercase", letterSpacing: 0.4 }}>
+        {props.label}
+      </span>
       <strong style={{ fontSize: 11 }}>{props.value}</strong>
     </span>
   );
@@ -339,50 +356,35 @@ function TurnOrderRail(props: {
       : members;
 
   return (
-    <div style={{ display: "grid", gap: 6, marginBottom: 12 }}>
-      <div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: 0.6, opacity: 0.64 }}>
-        Turn Flow
-      </div>
+    <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+      {ordered.map((member, idx) => {
+        const active = member.id === actingPlayerId;
+        const label = extractDisplayName(member.label);
 
-      <div
-        style={{
-          display: "flex",
-          gap: 8,
-          flexWrap: "wrap",
-          alignItems: "center",
-        }}
-      >
-        {ordered.map((member, idx) => {
-          const active = member.id === actingPlayerId;
-          const label = extractDisplayName(member.label);
-
-          return (
-            <React.Fragment key={`turn_${member.id}`}>
-              <div
-                style={{
-                  padding: "7px 10px",
-                  borderRadius: 999,
-                  border: active
-                    ? "1px solid rgba(255,196,118,0.28)"
-                    : "1px solid rgba(255,255,255,0.10)",
-                  background: active
-                    ? "rgba(255,196,118,0.10)"
-                    : "rgba(255,255,255,0.04)",
-                  fontSize: 12,
-                  fontWeight: active ? 800 : 600,
-                  whiteSpace: "nowrap",
-                }}
-              >
-                {idx === 0 ? "Now: " : idx === 1 ? "Next: " : "Then: "}
-                {label}
-              </div>
-              {idx < ordered.length - 1 ? (
-                <span style={{ opacity: 0.36, fontSize: 14 }}>→</span>
-              ) : null}
-            </React.Fragment>
-          );
-        })}
-      </div>
+        return (
+          <React.Fragment key={`turn_${member.id}`}>
+            <div
+              style={{
+                padding: "7px 10px",
+                borderRadius: 999,
+                border: active
+                  ? "1px solid rgba(255,196,118,0.28)"
+                  : "1px solid rgba(255,255,255,0.10)",
+                background: active ? "rgba(255,196,118,0.10)" : "rgba(255,255,255,0.04)",
+                fontSize: 12,
+                fontWeight: active ? 800 : 600,
+                whiteSpace: "nowrap",
+              }}
+            >
+              {idx === 0 ? "Now: " : idx === 1 ? "Next: " : "Then: "}
+              {label}
+            </div>
+            {idx < ordered.length - 1 ? (
+              <span style={{ opacity: 0.36, fontSize: 14 }}>→</span>
+            ) : null}
+          </React.Fragment>
+        );
+      })}
     </div>
   );
 }
@@ -398,16 +400,20 @@ export default function ActionSection({
   combatActive,
   passDisabled,
   onPassTurn,
-
   dmMode,
   isEnemyTurn,
   isWrongPlayerForTurn,
   activeTurnLabel,
-
   showPartyButtons,
   onCommitParty,
   onRandomNames,
   commitDisabled,
+  title = "Player Action",
+  eyebrow = "Command",
+  description = "Issue one clear command.",
+  inputPlaceholder,
+  showTurnCards = true,
+  showLoadoutDetails = true,
 }: Props) {
   const hasParty = partyMembers.length > 0;
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
@@ -528,15 +534,10 @@ export default function ActionSection({
 
     recognition.onerror = (event) => {
       const code = String(event?.error ?? "");
-      if (code === "no-speech") {
-        setSpeechError("No speech detected.");
-      } else if (code === "audio-capture") {
-        setSpeechError("No microphone detected.");
-      } else if (code === "not-allowed") {
-        setSpeechError("Microphone permission was denied.");
-      } else {
-        setSpeechError("Speech recognition error.");
-      }
+      if (code === "no-speech") setSpeechError("No speech detected.");
+      else if (code === "audio-capture") setSpeechError("No microphone detected.");
+      else if (code === "not-allowed") setSpeechError("Microphone permission was denied.");
+      else setSpeechError("Speech recognition error.");
     };
 
     recognition.onresult = (event) => {
@@ -547,11 +548,8 @@ export default function ActionSection({
         const transcript = String(event.results[i]?.[0]?.transcript ?? "").trim();
         if (!transcript) continue;
 
-        if (event.results[i].isFinal) {
-          finalTranscript += `${transcript} `;
-        } else {
-          interimTranscript += `${transcript} `;
-        }
+        if (event.results[i].isFinal) finalTranscript += `${transcript} `;
+        else interimTranscript += `${transcript} `;
       }
 
       speechBufferRef.current = interimTranscript.trim();
@@ -691,629 +689,647 @@ export default function ActionSection({
 
   return (
     <div id="player-action" style={{ scrollMarginTop: 90 }}>
-      <CardSection title="Player Action">
-        <div
-          style={{
-            ...bannerStyle,
-            borderRadius: 16,
-            padding: "12px 14px",
-            marginBottom: 12,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            gap: 14,
-            flexWrap: "wrap",
-          }}
-        >
-          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-            <div style={{ fontSize: 11, letterSpacing: 0.6, textTransform: "uppercase", opacity: 0.68 }}>
-              {combatActive ? "Combat Turn" : "Scene"} · {modeLabel}
-            </div>
-
-            <div style={{ display: "flex", gap: 8, alignItems: "baseline", flexWrap: "wrap" }}>
-              <strong style={{ fontSize: 16 }}>{bannerTitle}</strong>
-
-              {combatActive && activeTurnLabel ? (
-                <span style={{ fontSize: 12, opacity: 0.78 }}>
-                  · Active: <strong>{activeTurnLabel}</strong>
-                </span>
-              ) : null}
-
-              <span style={{ fontSize: 12, opacity: 0.78 }}>
-                · Acting: <strong>{actingDisplayName}</strong>
-              </span>
-            </div>
-
-            {lockReason ? (
-              <div style={{ fontSize: 12, opacity: 0.76 }}>{lockReason}</div>
-            ) : (
-              <div style={{ fontSize: 12, opacity: 0.76 }}>
-                Issue a command with movement, target, and intent. Resolution will follow.
-              </div>
-            )}
-          </div>
-
-          <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-            <button
-              onClick={() => {
-                if (!combatActive || passDisabled) return;
-                playSfx(SFX.buttonClick, 0.66);
-                onPassTurn();
-              }}
-              disabled={!combatActive || passDisabled}
-              title="Advance to the next turn"
-              style={{
-                padding: "9px 12px",
-                borderRadius: 12,
-                border: "1px solid rgba(255,255,255,0.12)",
-                background: "rgba(255,255,255,0.06)",
-                color: "inherit",
-                opacity: !combatActive || passDisabled ? 0.5 : 1,
-                cursor: !combatActive || passDisabled ? "not-allowed" : "pointer",
-              }}
-            >
-              Pass / End Turn
-            </button>
-
-            {showPartyButtons && (
-              <>
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (commitDisabled) return;
-                    playSfx(SFX.arbiterCanonRecord, 0.78);
-                    onCommitParty?.();
-                  }}
-                  disabled={!!commitDisabled}
-                  title="Commit PARTY_DECLARED (canon)"
-                  style={{
-                    padding: "9px 12px",
-                    borderRadius: 12,
-                    border: "1px solid rgba(255,196,118,0.24)",
-                    background: "rgba(255,196,118,0.08)",
-                    color: "inherit",
-                    opacity: commitDisabled ? 0.5 : 0.92,
-                    cursor: commitDisabled ? "not-allowed" : "pointer",
-                  }}
-                >
-                  Commit Party
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    playSfx(SFX.buttonClick, 0.6);
-                    onRandomNames?.();
-                  }}
-                  title="Fill missing party names"
-                  style={{
-                    padding: "9px 12px",
-                    borderRadius: 12,
-                    border: "1px solid rgba(255,255,255,0.10)",
-                    background: "rgba(255,255,255,0.04)",
-                    color: "inherit",
-                    opacity: 0.7,
-                    cursor: "pointer",
-                  }}
-                >
-                  Random Names
-                </button>
-              </>
-            )}
-          </div>
-        </div>
-
-        <TurnOrderRail members={partyMembers} actingPlayerId={actingPlayerId} />
-
-        {hasParty && (
+      <CardSection title={title}>
+        <div style={{ display: "grid", gap: 14 }}>
           <div
             style={{
-              marginBottom: 12,
-              display: "grid",
-              gap: 8,
+              ...bannerStyle,
+              borderRadius: 16,
+              padding: "12px 14px",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: 14,
+              flexWrap: "wrap",
             }}
           >
-            <div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: 0.6, opacity: 0.64 }}>
-              Party Turn Cards
+            <div style={{ display: "grid", gap: 4 }}>
+              <div
+                style={{
+                  fontSize: 11,
+                  letterSpacing: 0.8,
+                  textTransform: "uppercase",
+                  opacity: 0.68,
+                }}
+              >
+                {eyebrow} · {combatActive ? "Combat Turn" : "Scene"} · {modeLabel}
+              </div>
+
+              <div style={{ display: "flex", gap: 8, alignItems: "baseline", flexWrap: "wrap" }}>
+                <strong style={{ fontSize: 16 }}>{bannerTitle}</strong>
+
+                {combatActive && activeTurnLabel ? (
+                  <span style={{ fontSize: 12, opacity: 0.78 }}>
+                    · Active: <strong>{activeTurnLabel}</strong>
+                  </span>
+                ) : null}
+
+                <span style={{ fontSize: 12, opacity: 0.78 }}>
+                  · Acting: <strong>{actingDisplayName}</strong>
+                </span>
+              </div>
+
+              <div style={{ fontSize: 12, opacity: 0.76 }}>
+                {lockReason ?? description}
+              </div>
             </div>
 
+            <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+              <button
+                onClick={() => {
+                  if (!combatActive || passDisabled) return;
+                  playSfx(SFX.buttonClick, 0.66);
+                  onPassTurn();
+                }}
+                disabled={!combatActive || passDisabled}
+                title="Advance to the next turn"
+                style={{
+                  padding: "9px 12px",
+                  borderRadius: 12,
+                  border: "1px solid rgba(255,255,255,0.12)",
+                  background: "rgba(255,255,255,0.06)",
+                  color: "inherit",
+                  opacity: !combatActive || passDisabled ? 0.5 : 1,
+                  cursor: !combatActive || passDisabled ? "not-allowed" : "pointer",
+                }}
+              >
+                Pass / End Turn
+              </button>
+
+              {showPartyButtons ? (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (commitDisabled) return;
+                      playSfx(SFX.arbiterCanonRecord, 0.78);
+                      onCommitParty?.();
+                    }}
+                    disabled={!!commitDisabled}
+                    title="Commit PARTY_DECLARED (canon)"
+                    style={{
+                      padding: "9px 12px",
+                      borderRadius: 12,
+                      border: "1px solid rgba(255,196,118,0.24)",
+                      background: "rgba(255,196,118,0.08)",
+                      color: "inherit",
+                      opacity: commitDisabled ? 0.5 : 0.92,
+                      cursor: commitDisabled ? "not-allowed" : "pointer",
+                    }}
+                  >
+                    Commit Party
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      playSfx(SFX.buttonClick, 0.6);
+                      onRandomNames?.();
+                    }}
+                    title="Fill missing party names"
+                    style={{
+                      padding: "9px 12px",
+                      borderRadius: 12,
+                      border: "1px solid rgba(255,255,255,0.10)",
+                      background: "rgba(255,255,255,0.04)",
+                      color: "inherit",
+                      opacity: 0.7,
+                      cursor: "pointer",
+                    }}
+                  >
+                    Random Names
+                  </button>
+                </>
+              ) : null}
+            </div>
+          </div>
+
+          {hasParty ? (
             <div
               style={{
                 display: "grid",
-                gridTemplateColumns: `repeat(${partyMembers.length}, minmax(0, 1fr))`,
-                gap: 8,
+                gap: 10,
+                padding: "14px",
+                borderRadius: 18,
+                border: "1px solid rgba(255,255,255,0.10)",
+                background:
+                  canSubmit
+                    ? "linear-gradient(180deg, rgba(255,196,118,0.05), rgba(0,0,0,0.28) 24%, rgba(0,0,0,0.24))"
+                    : "rgba(0,0,0,0.24)",
+                boxShadow: canSubmit ? "0 16px 36px rgba(0,0,0,0.22)" : "none",
+                backdropFilter: "blur(10px)",
               }}
             >
-              {partyMembers.map((member) => {
-                const active = member.id === actingPlayerId;
-                const lockedByTurn = actingCardsLocked;
-                const displayName = extractDisplayName(member.label);
-                const meta = extractMetaLabel(member.label);
-                const portraitPath = getPortraitPath(
-                  member.species ?? "Human",
-                  member.className ?? "Warrior",
-                  member.portrait ?? "Male"
-                );
-
-                return (
-                  <button
-                    key={member.id}
-                    type="button"
-                    disabled={lockedByTurn}
-                    onClick={() => {
-                      if (lockedByTurn) return;
-                      playSfx(SFX.buttonClick, 0.56);
-                      onSetActingPlayerId(member.id);
-                    }}
-                    title={
-                      lockedByTurn
-                        ? "Locked during combat (Solace-neutral) to preserve turn integrity."
-                        : `Act as ${displayName}`
-                    }
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "64px 1fr",
+                  gap: 12,
+                  alignItems: "start",
+                }}
+              >
+                <div
+                  style={{
+                    width: 64,
+                    height: 64,
+                    borderRadius: 14,
+                    overflow: "hidden",
+                    border: "1px solid rgba(255,196,118,0.24)",
+                    background: "rgba(255,196,118,0.08)",
+                    boxShadow: canSubmit ? "0 0 0 4px rgba(255,196,118,0.05)" : "none",
+                  }}
+                >
+                  <img
+                    src={actingPortraitPath}
+                    alt={`${actingDisplayName} portrait`}
                     style={{
-                      textAlign: "left",
-                      padding: "10px",
+                      width: "100%",
+                      height: "100%",
+                      objectFit: "cover",
+                      display: "block",
+                    }}
+                    onError={(e) => {
+                      const img = e.currentTarget;
+                      img.onerror = null;
+                      img.src = getPortraitPath("Human", "Warrior", actingMember?.portrait ?? "Male");
+                    }}
+                  />
+                </div>
+
+                <div style={{ minWidth: 0, display: "grid", gap: 5 }}>
+                  <div style={{ display: "flex", alignItems: "baseline", gap: 10, flexWrap: "wrap" }}>
+                    <div style={{ fontSize: 18, fontWeight: 900 }}>{actingDisplayName}</div>
+                    {actingMetaLabel ? (
+                      <div style={{ fontSize: 12, opacity: 0.66 }}>{actingMetaLabel}</div>
+                    ) : null}
+                  </div>
+
+                  <div style={{ fontSize: 12, opacity: 0.68, fontWeight: 700 }}>{actingRoleLine}</div>
+
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                    <StatMiniChip label="HP" value={`${actingMember?.hpCurrent ?? 0}/${actingMember?.hpMax ?? 0}`} />
+                    <StatMiniChip label="AC" value={actingMember?.ac ?? "—"} />
+                    <StatMiniChip label="Init" value={actingMember?.initiativeMod ?? "—"} />
+                  </div>
+
+                  <div style={{ fontSize: 13, opacity: 0.82, lineHeight: 1.55 }}>{actingFlavorLine}</div>
+                </div>
+              </div>
+
+              <div style={{ display: "grid", gap: 8 }}>
+                <TurnOrderRail members={partyMembers} actingPlayerId={actingPlayerId} />
+
+                {showTurnCards ? (
+                  <details
+                    style={{
                       borderRadius: 14,
-                      border: active
-                        ? "1px solid rgba(255,196,118,0.34)"
-                        : "1px solid rgba(255,255,255,0.10)",
-                      background: active
-                        ? "linear-gradient(180deg, rgba(255,196,118,0.10), rgba(255,255,255,0.03))"
-                        : "rgba(255,255,255,0.04)",
-                      color: "inherit",
-                      opacity: lockedByTurn ? 0.7 : 1,
-                      cursor: lockedByTurn ? "not-allowed" : "pointer",
-                      display: "grid",
-                      gridTemplateColumns: "44px 1fr",
+                      border: "1px solid rgba(255,255,255,0.08)",
+                      background: "rgba(0,0,0,0.18)",
+                      overflow: "hidden",
+                    }}
+                  >
+                    <summary
+                      style={{
+                        cursor: "pointer",
+                        padding: "11px 12px",
+                        fontSize: 11,
+                        textTransform: "uppercase",
+                        letterSpacing: 0.6,
+                        opacity: 0.64,
+                      }}
+                    >
+                      Party Turn Cards
+                    </summary>
+
+                    <div
+                      style={{
+                        padding: "0 12px 12px",
+                        display: "grid",
+                        gap: 8,
+                      }}
+                    >
+                      {partyMembers.map((member) => {
+                        const active = member.id === actingPlayerId;
+                        const lockedByTurn = actingCardsLocked;
+                        const displayName = extractDisplayName(member.label);
+                        const meta = extractMetaLabel(member.label);
+                        const portraitPath = getPortraitPath(
+                          member.species ?? "Human",
+                          member.className ?? "Warrior",
+                          member.portrait ?? "Male"
+                        );
+
+                        return (
+                          <button
+                            key={member.id}
+                            type="button"
+                            disabled={lockedByTurn}
+                            onClick={() => {
+                              if (lockedByTurn) return;
+                              playSfx(SFX.buttonClick, 0.56);
+                              onSetActingPlayerId(member.id);
+                            }}
+                            title={
+                              lockedByTurn
+                                ? "Locked during combat (Solace-neutral) to preserve turn integrity."
+                                : `Act as ${displayName}`
+                            }
+                            style={{
+                              textAlign: "left",
+                              padding: "10px",
+                              borderRadius: 14,
+                              border: active
+                                ? "1px solid rgba(255,196,118,0.34)"
+                                : "1px solid rgba(255,255,255,0.10)",
+                              background: active
+                                ? "linear-gradient(180deg, rgba(255,196,118,0.10), rgba(255,255,255,0.03))"
+                                : "rgba(255,255,255,0.04)",
+                              color: "inherit",
+                              opacity: lockedByTurn ? 0.7 : 1,
+                              cursor: lockedByTurn ? "not-allowed" : "pointer",
+                              display: "grid",
+                              gridTemplateColumns: "40px 1fr",
+                              gap: 10,
+                              alignItems: "center",
+                            }}
+                          >
+                            <div
+                              style={{
+                                width: 40,
+                                height: 40,
+                                borderRadius: 10,
+                                overflow: "hidden",
+                                border: active
+                                  ? "1px solid rgba(255,196,118,0.28)"
+                                  : "1px solid rgba(255,255,255,0.10)",
+                                background: "rgba(255,255,255,0.04)",
+                              }}
+                            >
+                              <img
+                                src={portraitPath}
+                                alt={`${displayName} portrait`}
+                                style={{
+                                  width: "100%",
+                                  height: "100%",
+                                  objectFit: "cover",
+                                  display: "block",
+                                }}
+                                onError={(e) => {
+                                  const img = e.currentTarget;
+                                  img.onerror = null;
+                                  img.src = getPortraitPath(
+                                    "Human",
+                                    "Warrior",
+                                    member.portrait ?? "Male"
+                                  );
+                                }}
+                              />
+                            </div>
+
+                            <div style={{ minWidth: 0, display: "grid", gap: 3 }}>
+                              <div
+                                style={{
+                                  fontSize: 13,
+                                  fontWeight: 800,
+                                  lineHeight: 1.2,
+                                  overflow: "hidden",
+                                  textOverflow: "ellipsis",
+                                  whiteSpace: "nowrap",
+                                }}
+                              >
+                                {displayName}
+                              </div>
+
+                              <div
+                                style={{
+                                  fontSize: 11,
+                                  opacity: 0.66,
+                                  overflow: "hidden",
+                                  textOverflow: "ellipsis",
+                                  whiteSpace: "nowrap",
+                                }}
+                              >
+                                {meta || member.id}
+                              </div>
+
+                              <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
+                                <StatMiniChip label="HP" value={`${member.hpCurrent ?? 0}/${member.hpMax ?? 0}`} />
+                                <StatMiniChip label="AC" value={member.ac ?? "—"} />
+                                <StatMiniChip label="Init" value={member.initiativeMod ?? "—"} />
+                              </div>
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </details>
+                ) : null}
+              </div>
+
+              <div style={{ display: "grid", gap: 10 }}>
+                <div style={{ display: "grid", gap: 6 }}>
+                  <div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: 0.5, opacity: 0.6 }}>
+                    Quick Actions
+                  </div>
+
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                    <ActionChipButton
+                      label="🛡 Guard"
+                      disabled={!canSubmit}
+                      title="Insert a cover + posture intent"
+                      onClick={() => {
+                        if (!canSubmit) return;
+                        playSfx(SFX.buttonClick, 0.58);
+                        onSetPlayerInput(
+                          appendIntent(playerInput, "I move to cover and take a guarded stance, watching for openings.")
+                        );
+                      }}
+                    />
+
+                    <ActionChipButton
+                      label="⚔ Strike"
+                      disabled={!canSubmit}
+                      title="Insert an attack intent"
+                      onClick={() => {
+                        if (!canSubmit) return;
+                        playSfx(SFX.buttonClick, 0.58);
+                        onSetPlayerInput(
+                          appendIntent(playerInput, "I attack the nearest threat decisively.")
+                        );
+                      }}
+                    />
+
+                    <ActionChipButton
+                      label="🏃 Reposition"
+                      disabled={!canSubmit}
+                      title="Insert a reposition intent"
+                      onClick={() => {
+                        if (!canSubmit) return;
+                        playSfx(SFX.buttonClick, 0.58);
+                        onSetPlayerInput(
+                          appendIntent(
+                            playerInput,
+                            "I reposition to a better angle and try to draw attention off an ally."
+                          )
+                        );
+                      }}
+                    />
+
+                    <ActionChipButton
+                      label="🤝 Aid Ally"
+                      disabled={!canSubmit}
+                      title="Insert a help/assist intent"
+                      onClick={() => {
+                        if (!canSubmit) return;
+                        playSfx(SFX.buttonClick, 0.58);
+                        onSetPlayerInput(
+                          appendIntent(
+                            playerInput,
+                            "I assist an ally—calling out timing and creating an opening for them."
+                          )
+                        );
+                      }}
+                    />
+
+                    {specialtyButtons.map((skill) => (
+                      <ActionChipButton
+                        key={skill.id}
+                        label={skill.label}
+                        disabled={!canSubmit}
+                        title={`Insert ${skill.label} intent`}
+                        accent="skill"
+                        onClick={() => {
+                          if (!canSubmit) return;
+                          playSfx(SFX.buttonClick, 0.58);
+                          onSetPlayerInput(
+                            appendIntent(playerInput, buildSkillIntent(skill.id, skill.label))
+                          );
+                        }}
+                      />
+                    ))}
+
+                    {speechSupported ? (
+                      <ActionChipButton
+                        label={isListening ? "■ Stop Dictation" : "🎙 Dictate"}
+                        disabled={!canSubmit}
+                        title={isListening ? "Stop microphone dictation" : "Start microphone dictation"}
+                        accent="dictate"
+                        onClick={toggleListening}
+                      />
+                    ) : null}
+
+                    <ActionChipButton
+                      label="Clear"
+                      disabled={!canSubmit}
+                      title="Clear intent text"
+                      accent="clear"
+                      onClick={() => {
+                        if (!canSubmit) return;
+                        playSfx(SFX.buttonClick, 0.54);
+                        onSetPlayerInput("");
+                      }}
+                    />
+                  </div>
+                </div>
+
+                <div style={{ display: "grid", gap: 6 }}>
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "baseline",
                       gap: 10,
-                      alignItems: "center",
-                      boxShadow: active ? "0 10px 24px rgba(0,0,0,0.18)" : "none",
-                      transition: "transform 140ms ease, border-color 140ms ease, background 140ms ease",
+                      flexWrap: "wrap",
                     }}
                   >
                     <div
                       style={{
-                        width: 44,
-                        height: 44,
-                        borderRadius: 10,
-                        overflow: "hidden",
-                        border: active
-                          ? "1px solid rgba(255,196,118,0.28)"
-                          : "1px solid rgba(255,255,255,0.10)",
-                        background: "rgba(255,255,255,0.04)",
-                        boxShadow: active ? "0 0 0 3px rgba(255,196,118,0.06)" : "none",
+                        fontSize: 11,
+                        textTransform: "uppercase",
+                        letterSpacing: 0.5,
+                        opacity: 0.6,
                       }}
                     >
-                      <img
-                        src={portraitPath}
-                        alt={`${displayName} portrait`}
-                        style={{
-                          width: "100%",
-                          height: "100%",
-                          objectFit: "cover",
-                          display: "block",
-                        }}
-                        onError={(e) => {
-                          const img = e.currentTarget;
-                          img.onerror = null;
-                          img.src = getPortraitPath("Human", "Warrior", member.portrait ?? "Male");
-                        }}
-                      />
+                      Command
                     </div>
-
-                    <div style={{ minWidth: 0, display: "grid", gap: 4 }}>
-                      <div
-                        style={{
-                          fontSize: 13,
-                          fontWeight: 800,
-                          lineHeight: 1.2,
-                          overflow: "hidden",
-                          textOverflow: "ellipsis",
-                          whiteSpace: "nowrap",
-                        }}
-                      >
-                        {displayName}
-                      </div>
-
-                      <div
-                        style={{
-                          fontSize: 11,
-                          opacity: 0.66,
-                          overflow: "hidden",
-                          textOverflow: "ellipsis",
-                          whiteSpace: "nowrap",
-                        }}
-                      >
-                        {meta || member.id}
-                      </div>
-
-                      <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
-                        <StatMiniChip label="HP" value={`${member.hpCurrent ?? 0}/${member.hpMax ?? 0}`} />
-                        <StatMiniChip label="AC" value={member.ac ?? "—"} />
-                        <StatMiniChip label="Init" value={member.initiativeMod ?? "—"} />
-                      </div>
-
-                      {active ? (
-                        <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: 0.5, opacity: 0.72 }}>
-                          Acting
-                        </div>
-                      ) : null}
+                    <div style={{ fontSize: 12, opacity: 0.72 }}>
+                      Best commands usually include <strong>movement + target + intent</strong>.
                     </div>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        )}
+                  </div>
 
-        <div
-          style={{
-            borderRadius: 16,
-            border: "1px solid rgba(255,255,255,0.10)",
-            background:
-              canSubmit
-                ? "linear-gradient(180deg, rgba(255,196,118,0.05), rgba(0,0,0,0.28) 24%, rgba(0,0,0,0.24))"
-                : "rgba(0,0,0,0.24)",
-            boxShadow: canSubmit ? "0 16px 36px rgba(0,0,0,0.22)" : "none",
-            backdropFilter: "blur(10px)",
-            padding: 14,
-            marginBottom: 10,
-          }}
-        >
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "64px 1fr",
-              gap: 12,
-              alignItems: "start",
-              marginBottom: 12,
-            }}
-          >
-            <div
-              style={{
-                width: 64,
-                height: 64,
-                borderRadius: 14,
-                overflow: "hidden",
-                border: "1px solid rgba(255,196,118,0.24)",
-                background: "rgba(255,196,118,0.08)",
-                boxShadow: canSubmit ? "0 0 0 4px rgba(255,196,118,0.05)" : "none",
-              }}
-            >
-              <img
-                src={actingPortraitPath}
-                alt={`${actingDisplayName} portrait`}
-                style={{
-                  width: "100%",
-                  height: "100%",
-                  objectFit: "cover",
-                  display: "block",
-                }}
-                onError={(e) => {
-                  const img = e.currentTarget;
-                  img.onerror = null;
-                  img.src = getPortraitPath("Human", "Warrior", actingMember?.portrait ?? "Male");
-                }}
-              />
-            </div>
-
-            <div style={{ minWidth: 0, display: "grid", gap: 4 }}>
-              <div style={{ display: "flex", alignItems: "baseline", gap: 10, flexWrap: "wrap" }}>
-                <div style={{ fontSize: 18, fontWeight: 900 }}>{actingDisplayName}</div>
-                {actingMetaLabel ? (
-                  <div style={{ fontSize: 12, opacity: 0.66 }}>{actingMetaLabel}</div>
-                ) : null}
-              </div>
-
-              <div style={{ fontSize: 12, opacity: 0.68, fontWeight: 700 }}>{actingRoleLine}</div>
-
-              <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                <StatMiniChip label="HP" value={`${actingMember?.hpCurrent ?? 0}/${actingMember?.hpMax ?? 0}`} />
-                <StatMiniChip label="AC" value={actingMember?.ac ?? "—"} />
-                <StatMiniChip label="Init" value={actingMember?.initiativeMod ?? "—"} />
-              </div>
-
-              <div style={{ fontSize: 13, opacity: 0.82, lineHeight: 1.55 }}>{actingFlavorLine}</div>
-            </div>
-          </div>
-
-          {(actingSkillLabels.length > 0 || actingTraitLabels.length > 0) && (
-            <div
-              style={{
-                borderRadius: 14,
-                border: "1px solid rgba(255,255,255,0.10)",
-                background: "rgba(0,0,0,0.18)",
-                padding: "10px 12px",
-                marginBottom: 12,
-                display: "flex",
-                flexDirection: "column",
-                gap: 8,
-              }}
-            >
-              <div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: 0.5, opacity: 0.64 }}>
-                Active Loadout
-              </div>
-
-              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                <div style={{ fontSize: 12, opacity: 0.74 }}>Class Skills</div>
-                <div style={{ display: "flex", gap: 6, flexWrap: "wrap", minHeight: 22 }}>
-                  {actingSkillLabels.length > 0 ? (
-                    actingSkillLabels.map((skill) => (
-                      <span key={skill.id} style={chipStyle} title={skill.id}>
-                        {skill.label}
-                      </span>
-                    ))
-                  ) : (
-                    <span style={{ fontSize: 12, opacity: 0.6 }}>No class skills</span>
-                  )}
-                </div>
-              </div>
-
-              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                <div style={{ fontSize: 12, opacity: 0.74 }}>Species Traits</div>
-                <div style={{ display: "flex", gap: 6, flexWrap: "wrap", minHeight: 22 }}>
-                  {actingTraitLabels.length > 0 ? (
-                    actingTraitLabels.map((trait) => (
-                      <span key={trait.id} style={traitChipStyle} title={trait.id}>
-                        {trait.label}
-                      </span>
-                    ))
-                  ) : (
-                    <span style={{ fontSize: 12, opacity: 0.6 }}>No species traits</span>
-                  )}
-                </div>
-              </div>
-            </div>
-          )}
-
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "baseline",
-              gap: 10,
-              flexWrap: "wrap",
-              marginBottom: 10,
-            }}
-          >
-            <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-              <div style={{ fontSize: 11, letterSpacing: 0.6, textTransform: "uppercase", opacity: 0.64 }}>
-                Command Chamber
-              </div>
-              <div style={{ fontSize: 13, opacity: 0.78 }}>
-                Best commands usually include <strong>movement + target + intent</strong>. Example: “I sprint to the pillar, take cover, then fire at the nearest archer.”
-              </div>
-            </div>
-
-            <div style={{ fontSize: 12, whiteSpace: "nowrap", opacity: 0.72 }}>
-              {combatActive ? "Turn-bound" : "Freeform"} · <strong>{modeLabel}</strong>
-            </div>
-          </div>
-
-          <div style={{ display: "grid", gap: 10, marginBottom: 10 }}>
-            <div style={{ display: "grid", gap: 6 }}>
-              <div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: 0.5, opacity: 0.6 }}>
-                Core Actions
-              </div>
-              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                <ActionChipButton
-                  label="🛡 Guard"
-                  disabled={!canSubmit}
-                  title="Insert a cover + posture intent"
-                  onClick={() => {
-                    if (!canSubmit) return;
-                    playSfx(SFX.buttonClick, 0.58);
-                    onSetPlayerInput(
-                      appendIntent(playerInput, "I move to cover and take a guarded stance, watching for openings.")
-                    );
-                  }}
-                />
-
-                <ActionChipButton
-                  label="⚔ Strike"
-                  disabled={!canSubmit}
-                  title="Insert an attack intent"
-                  onClick={() => {
-                    if (!canSubmit) return;
-                    playSfx(SFX.buttonClick, 0.58);
-                    onSetPlayerInput(appendIntent(playerInput, "I attack the nearest threat decisively."));
-                  }}
-                />
-
-                <ActionChipButton
-                  label="🏃 Reposition"
-                  disabled={!canSubmit}
-                  title="Insert a reposition intent"
-                  onClick={() => {
-                    if (!canSubmit) return;
-                    playSfx(SFX.buttonClick, 0.58);
-                    onSetPlayerInput(
-                      appendIntent(playerInput, "I reposition to a better angle and try to draw attention off an ally.")
-                    );
-                  }}
-                />
-
-                <ActionChipButton
-                  label="🤝 Aid Ally"
-                  disabled={!canSubmit}
-                  title="Insert a help/assist intent"
-                  onClick={() => {
-                    if (!canSubmit) return;
-                    playSfx(SFX.buttonClick, 0.58);
-                    onSetPlayerInput(
-                      appendIntent(playerInput, "I assist an ally—calling out timing and creating an opening for them.")
-                    );
-                  }}
-                />
-              </div>
-            </div>
-
-            <div style={{ display: "grid", gap: 6 }}>
-              <div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: 0.5, opacity: 0.6 }}>
-                Signature Skills
-              </div>
-              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                {specialtyButtons.length > 0 ? (
-                  specialtyButtons.map((skill) => (
-                    <ActionChipButton
-                      key={skill.id}
-                      label={skill.label}
-                      disabled={!canSubmit}
-                      title={`Insert ${skill.label} intent`}
-                      accent="skill"
-                      onClick={() => {
-                        if (!canSubmit) return;
-                        playSfx(SFX.buttonClick, 0.58);
-                        onSetPlayerInput(appendIntent(playerInput, buildSkillIntent(skill.id, skill.label)));
-                      }}
-                    />
-                  ))
-                ) : (
-                  <span style={{ fontSize: 12, opacity: 0.6 }}>No signature skills available.</span>
-                )}
-              </div>
-            </div>
-
-            <div style={{ display: "grid", gap: 6 }}>
-              <div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: 0.5, opacity: 0.6 }}>
-                Voice / Utility
-              </div>
-              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                {speechSupported && (
-                  <ActionChipButton
-                    label={isListening ? "■ Stop Dictation" : "🎙 Dictate"}
+                  <textarea
+                    ref={textareaRef}
+                    value={playerInput}
+                    onChange={(e) => onSetPlayerInput(e.target.value)}
+                    placeholder={
+                      inputPlaceholder ??
+                      (lockReason
+                        ? "Hold position while the current turn resolves…"
+                        : "Describe what your character does…")
+                    }
                     disabled={!canSubmit}
-                    title={isListening ? "Stop microphone dictation" : "Start microphone dictation"}
-                    accent="dictate"
-                    onClick={toggleListening}
+                    style={{
+                      width: "100%",
+                      minHeight: "148px",
+                      resize: "vertical",
+                      boxSizing: "border-box",
+                      lineHeight: 1.55,
+                      borderRadius: 14,
+                      border: canSubmit
+                        ? "1px solid rgba(255,196,118,0.16)"
+                        : "1px solid rgba(255,255,255,0.10)",
+                      background: canSubmit ? "rgba(0,0,0,0.34)" : "rgba(0,0,0,0.22)",
+                      color: "inherit",
+                      padding: "12px 12px",
+                      outline: "none",
+                      opacity: canSubmit ? 1 : 0.86,
+                      boxShadow: canSubmit ? "inset 0 0 0 1px rgba(255,196,118,0.03)" : "none",
+                    }}
                   />
-                )}
+                </div>
 
-                <ActionChipButton
-                  label="Clear"
-                  disabled={!canSubmit}
-                  title="Clear intent text"
-                  accent="clear"
-                  onClick={() => {
-                    if (!canSubmit) return;
-                    playSfx(SFX.buttonClick, 0.54);
-                    onSetPlayerInput("");
-                  }}
-                />
-              </div>
-            </div>
-          </div>
+                {showLoadoutDetails && (actingSkillLabels.length > 0 || actingTraitLabels.length > 0) ? (
+                  <details
+                    style={{
+                      borderRadius: 14,
+                      border: "1px solid rgba(255,255,255,0.10)",
+                      background: "rgba(0,0,0,0.18)",
+                      overflow: "hidden",
+                    }}
+                  >
+                    <summary
+                      style={{
+                        cursor: "pointer",
+                        padding: "11px 12px",
+                        fontSize: 11,
+                        textTransform: "uppercase",
+                        letterSpacing: 0.5,
+                        opacity: 0.64,
+                      }}
+                    >
+                      Active Loadout
+                    </summary>
 
-          {(speechSupported || speechError) && (
-            <div
-              style={{
-                marginBottom: 10,
-                fontSize: 12,
-                display: "flex",
-                gap: 10,
-                flexWrap: "wrap",
-                alignItems: "center",
-                opacity: 0.74,
-              }}
-            >
-              {speechSupported ? (
-                <span
+                    <div
+                      style={{
+                        padding: "0 12px 12px",
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: 10,
+                      }}
+                    >
+                      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                        <div style={{ fontSize: 12, opacity: 0.74 }}>Class Skills</div>
+                        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", minHeight: 22 }}>
+                          {actingSkillLabels.length > 0 ? (
+                            actingSkillLabels.map((skill) => (
+                              <span key={skill.id} style={chipStyle} title={skill.id}>
+                                {skill.label}
+                              </span>
+                            ))
+                          ) : (
+                            <span style={{ fontSize: 12, opacity: 0.6 }}>No class skills</span>
+                          )}
+                        </div>
+                      </div>
+
+                      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                        <div style={{ fontSize: 12, opacity: 0.74 }}>Species Traits</div>
+                        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", minHeight: 22 }}>
+                          {actingTraitLabels.length > 0 ? (
+                            actingTraitLabels.map((trait) => (
+                              <span key={trait.id} style={traitChipStyle} title={trait.id}>
+                                {trait.label}
+                              </span>
+                            ))
+                          ) : (
+                            <span style={{ fontSize: 12, opacity: 0.6 }}>No species traits</span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </details>
+                ) : null}
+
+                <div
                   style={{
-                    display: "inline-flex",
+                    display: "flex",
+                    gap: 10,
+                    flexWrap: "wrap",
                     alignItems: "center",
-                    gap: 8,
-                    padding: "4px 8px",
-                    borderRadius: 999,
-                    border: isListening
-                      ? "1px solid rgba(255,120,120,0.32)"
-                      : "1px solid rgba(255,255,255,0.10)",
-                    background: isListening ? "rgba(255,120,120,0.08)" : "rgba(255,255,255,0.04)",
+                    justifyContent: "space-between",
                   }}
                 >
-                  {isListening ? "Listening..." : "Microphone ready"}
-                </span>
-              ) : null}
+                  <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+                    <button
+                      onClick={handleSubmit}
+                      disabled={!canSubmit}
+                      style={{
+                        padding: "10px 14px",
+                        borderRadius: 12,
+                        border: "1px solid rgba(255,196,118,0.28)",
+                        background: canSubmit
+                          ? "linear-gradient(180deg, rgba(255,201,116,0.98), rgba(218,132,47,0.98))"
+                          : "linear-gradient(180deg, rgba(107,89,69,0.7), rgba(74,55,39,0.74))",
+                        color: canSubmit ? "#2f1606" : "rgba(244,227,201,0.75)",
+                        boxShadow: canSubmit
+                          ? "0 10px 28px rgba(255,145,42,0.16), inset 0 1px 0 rgba(255,244,220,0.72)"
+                          : "none",
+                        fontWeight: 900,
+                        cursor: canSubmit ? "pointer" : "not-allowed",
+                      }}
+                    >
+                      Resolve Action
+                    </button>
 
-              {speechBufferRef.current ? <span>Hearing: “{speechBufferRef.current}”</span> : null}
+                    {speechSupported || speechError ? (
+                      <div
+                        style={{
+                          fontSize: 12,
+                          display: "flex",
+                          gap: 10,
+                          flexWrap: "wrap",
+                          alignItems: "center",
+                          opacity: 0.74,
+                        }}
+                      >
+                        {speechSupported ? (
+                          <span
+                            style={{
+                              display: "inline-flex",
+                              alignItems: "center",
+                              gap: 8,
+                              padding: "4px 8px",
+                              borderRadius: 999,
+                              border: isListening
+                                ? "1px solid rgba(255,120,120,0.32)"
+                                : "1px solid rgba(255,255,255,0.10)",
+                              background: isListening
+                                ? "rgba(255,120,120,0.08)"
+                                : "rgba(255,255,255,0.04)",
+                            }}
+                          >
+                            {isListening ? "Listening..." : "Microphone ready"}
+                          </span>
+                        ) : null}
 
-              {speechError ? <span>{speechError}</span> : null}
+                        {speechBufferRef.current ? <span>Hearing: “{speechBufferRef.current}”</span> : null}
+                        {speechError ? <span>{speechError}</span> : null}
+                      </div>
+                    ) : null}
+                  </div>
+
+                  {!canSubmit && combatActive && dmMode !== "human" ? (
+                    <span style={{ fontSize: 12, opacity: 0.72 }}>
+                      {isEnemyTurn
+                        ? "Enemy turn — watch the battlefield above."
+                        : "Turn locked — wait for the next opening."}
+                    </span>
+                  ) : null}
+                </div>
+              </div>
             </div>
-          )}
-
-          {!speechSupported && (
-            <div style={{ marginBottom: 10, fontSize: 12, opacity: 0.7 }}>
-              Microphone dictation is not available in this browser.
-            </div>
-          )}
-
-          <textarea
-            ref={textareaRef}
-            value={playerInput}
-            onChange={(e) => onSetPlayerInput(e.target.value)}
-            placeholder={lockReason ? "Hold position while the current turn resolves…" : "Describe what your character does…"}
-            disabled={!canSubmit}
-            style={{
-              width: "100%",
-              minHeight: "168px",
-              resize: "vertical",
-              boxSizing: "border-box",
-              lineHeight: 1.55,
-              borderRadius: 14,
-              border: canSubmit
-                ? "1px solid rgba(255,196,118,0.16)"
-                : "1px solid rgba(255,255,255,0.10)",
-              background: canSubmit ? "rgba(0,0,0,0.34)" : "rgba(0,0,0,0.22)",
-              color: "inherit",
-              padding: "12px 12px",
-              outline: "none",
-              opacity: canSubmit ? 1 : 0.86,
-              boxShadow: canSubmit ? "inset 0 0 0 1px rgba(255,196,118,0.03)" : "none",
-            }}
-          />
-
-          <div
-            style={{
-              marginTop: 12,
-              display: "flex",
-              gap: 10,
-              flexWrap: "wrap",
-              alignItems: "center",
-              justifyContent: "space-between",
-            }}
-          >
-            <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-              <button
-                onClick={handleSubmit}
-                disabled={!canSubmit}
-                style={{
-                  padding: "10px 14px",
-                  borderRadius: 12,
-                  border: "1px solid rgba(255,196,118,0.28)",
-                  background: canSubmit
-                    ? "linear-gradient(180deg, rgba(255,201,116,0.98), rgba(218,132,47,0.98))"
-                    : "linear-gradient(180deg, rgba(107,89,69,0.7), rgba(74,55,39,0.74))",
-                  color: canSubmit ? "#2f1606" : "rgba(244,227,201,0.75)",
-                  boxShadow: canSubmit
-                    ? "0 10px 28px rgba(255,145,42,0.16), inset 0 1px 0 rgba(255,244,220,0.72)"
-                    : "none",
-                  fontWeight: 900,
-                  cursor: canSubmit ? "pointer" : "not-allowed",
-                }}
-              >
-                Resolve Action
-              </button>
-
-              <span style={{ fontSize: 12, opacity: 0.7 }}>
-                After you resolve, the page advances to Resolution automatically.
-              </span>
-            </div>
-
-            {!canSubmit && combatActive && dmMode !== "human" ? (
-              <span style={{ fontSize: 12, opacity: 0.72 }}>
-                {isEnemyTurn ? "Enemy turn — watch the battlefield above." : "Turn locked — wait for the next opening."}
-              </span>
-            ) : null}
-          </div>
+          ) : null}
         </div>
       </CardSection>
     </div>
