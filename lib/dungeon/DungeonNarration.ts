@@ -12,6 +12,8 @@
 // - NO canon writes here
 // - Same inputs -> same outputs
 // - Tone should feel authored, not generic
+// - Internal metadata (storyHint tag strings) must never leak directly
+//   into player-facing narration
 // ------------------------------------------------------------
 
 import type {
@@ -363,6 +365,10 @@ function isMetadataLikeNote(note: string): boolean {
     /\.(?:png|jpg|jpeg|webp|gif)\b/i,
     /\btrap_[a-z0-9_]+\b/i,
     /\b[a-z0-9_]+\s*\|\s*[a-z0-9_]+:/i,
+    /\b(?:floor_depth|theme|route|branch_depth|env|loot|setpiece|puzzle|trap):/i,
+    /\brequires:(?:torch|warmth)\b/i,
+    /\brefuge:true\b/i,
+    /\bfire_source:true\b/i,
   ];
 
   return metadataPatterns.some((pattern) => pattern.test(text));
@@ -869,6 +875,58 @@ function inferEnvironmentLine(floorTheme: string, features: NarrationFeature[], 
   return null;
 }
 
+function buildStoryHintEcho(
+  storyHint: string,
+  floorTheme: string,
+  roomType: string,
+  seed: string
+): string | null {
+  const text = normalizeText(storyHint);
+  if (!text) return null;
+
+  // Never leak raw tag bundles.
+  if (isMetadataLikeNote(text)) {
+    const lower = slugKey(text);
+    const key = `${floorTheme}:${roomType}:${lower}:${seed}`;
+
+    if (lower.includes("env:dark") || lower.includes("requires:torch")) {
+      const pool = [
+        "The room feels like the kind of place where entering without light would be a decision, not an accident.",
+        "Shadow here behaves like part of the architecture.",
+      ];
+      return pickDeterministic(key, pool, pool[0]);
+    }
+
+    if (lower.includes("env:cold_dark") || lower.includes("requires:warmth")) {
+      const pool = [
+        "The chamber carries the sort of cold that changes planning into survival.",
+        "This room feels deeper than stone alone should explain.",
+      ];
+      return pickDeterministic(key, pool, pool[0]);
+    }
+
+    if (lower.includes("setpiece:oathbound_gate")) {
+      return "The room feels prepared for a vow, a test, or a binding choice.";
+    }
+
+    if (lower.includes("setpiece:witness_antechamber")) {
+      return "Something about the chamber suggests proximity to a more formal and consequential depth.";
+    }
+
+    if (lower.includes("puzzle:")) {
+      return "The room carries a deliberate pattern, as if it expects to be read as much as crossed.";
+    }
+
+    if (lower.includes("trap:")) {
+      return "The chamber feels like it was built to punish the wrong assumption.";
+    }
+
+    return null;
+  }
+
+  return text;
+}
+
 function buildEntryParagraphs(args: DescribeRoomEntryArgs): string[] {
   const roomType = slugKey(args.roomType) as RoomType;
   const floorTheme = slugKey(args.floorTheme) as DungeonFloorTheme;
@@ -885,8 +943,9 @@ function buildEntryParagraphs(args: DescribeRoomEntryArgs): string[] {
   const sensory = inferSensoryLine(floorTheme, roomType, seedBase);
   paragraphs.push(`${opener} ${sensory}`);
 
-  if (storyHint) {
-    paragraphs.push(storyHint);
+  const interpretedStoryHint = buildStoryHintEcho(storyHint, floorTheme, roomType, `${seedBase}:storyhint`);
+  if (interpretedStoryHint) {
+    paragraphs.push(interpretedStoryHint);
   }
 
   const featureLines = describeRoomFeatures({
