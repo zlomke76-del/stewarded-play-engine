@@ -8,7 +8,7 @@ import { resolvePartyLoadout } from "@/lib/skills/loadoutResolver";
 
 type PortraitType = "Male" | "Female";
 type BuildFocus = "balanced" | "guardian" | "swift" | "hardy";
-type HeroCreationStep = "intro" | "species" | "class" | "focus" | "name" | "confirm";
+type HeroCreationStep = "intro" | "sex" | "species" | "class" | "focus" | "name" | "confirm";
 
 type PartyMember = {
   id: string;
@@ -30,9 +30,33 @@ type PartyDeclaredPayload = {
 };
 
 type RitualProgress = {
+  sexConfirmed: boolean;
   speciesConfirmed: boolean;
   classConfirmed: boolean;
   focusConfirmed: boolean;
+};
+
+type SpeciesMeta = {
+  fantasy: string;
+  strengths: string[];
+  tradeoff: string;
+  bestFor: string;
+};
+
+type ClassMeta = {
+  fantasy: string;
+  role: string;
+  difficulty: "Low" | "Medium" | "High";
+  bestFocus: string;
+  strengths: string[];
+  tradeoff: string;
+};
+
+type FocusMeta = {
+  hint: string;
+  gains: string[];
+  tradeoff: string;
+  bestFor: string;
 };
 
 const SAFE_CLASS_ARCHETYPES = [
@@ -63,44 +87,196 @@ const SAFE_SPECIES = [
   "Dragonborn",
 ] as const;
 
-const CLASS_DESCRIPTIONS: Record<string, string> = {
-  Warrior: "Frontline steel and steady resolve.",
-  Rogue: "Quick hands, sharp instincts, deadly timing.",
-  Mage: "Arcane force shaped through discipline and will.",
-  Cleric: "Faith, protection, and guiding light.",
-  Ranger: "Tracker, scout, and patient hunter.",
-  Paladin: "Oath-bound defender with relentless conviction.",
-  Bard: "Charm, rhythm, and subtle battlefield influence.",
-  Druid: "Nature's keeper, patient and adaptable.",
-  Monk: "Discipline, motion, and controlled force.",
-  Artificer: "Inventive craft turned into battlefield advantage.",
-  Barbarian: "Fury, endurance, and brutal momentum.",
-  Sorcerer: "Raw power carried in the blood.",
-  Warlock: "Dark bargains and dangerous command.",
+const SPECIES_META: Record<string, SpeciesMeta> = {
+  Human: {
+    fantasy: "Adaptable, driven, and steady in the dark.",
+    strengths: ["Flexible with nearly any class", "Reliable starting profile"],
+    tradeoff: "Less specialized than sharper lineages.",
+    bestFor: "All-around or first-time play",
+  },
+  Elf: {
+    fantasy: "Grace, perception, and ancient poise.",
+    strengths: ["Naturally suits quicker reactive builds", "Excellent for precision-oriented heroes"],
+    tradeoff: "Usually less forgiving if you want pure toughness.",
+    bestFor: "Fast, agile, or tactical play",
+  },
+  Dwarf: {
+    fantasy: "Stone-hearted endurance and iron discipline.",
+    strengths: ["Strong survivability foundation", "Excellent for frontline pressure"],
+    tradeoff: "Usually slower and less finesse-oriented.",
+    bestFor: "Durable, safer, steadier runs",
+  },
+  Halfling: {
+    fantasy: "Small frame, steady nerve, uncanny luck.",
+    strengths: ["Naturally slippery and survivable", "Pairs well with clever reactive play"],
+    tradeoff: "Less imposing in direct brute-force builds.",
+    bestFor: "Cautious precision and mobility",
+  },
+  Gnome: {
+    fantasy: "Quick wit, curiosity, and clever hands.",
+    strengths: ["Good for technical or tricky builds", "Fits inventive playstyles well"],
+    tradeoff: "Less naturally suited to pure brute force.",
+    bestFor: "Clever utility and control",
+  },
+  "Half-Elf": {
+    fantasy: "Bridging worlds with charm and versatility.",
+    strengths: ["Flexible across many class choices", "Good for hybrid identities"],
+    tradeoff: "Not as extreme in any one direction.",
+    bestFor: "Balanced hybrid play",
+  },
+  "Half-Orc": {
+    fantasy: "Raw force, grit, and intimidating presence.",
+    strengths: ["Excellent for pressure and durability", "Strong fit for aggressive frontliners"],
+    tradeoff: "Can feel less elegant for finesse-heavy roles.",
+    bestFor: "Direct force and brawler momentum",
+  },
+  Tiefling: {
+    fantasy: "Marked by omen, power, and defiance.",
+    strengths: ["Strong identity for risky or magical builds", "Feels great with high-expression classes"],
+    tradeoff: "Less forgiving if the build leans too fragile.",
+    bestFor: "High-style, risk-forward play",
+  },
+  Dragonborn: {
+    fantasy: "Ancestral pride and draconic bearing.",
+    strengths: ["Naturally commanding presence", "Great for bold martial or power builds"],
+    tradeoff: "Can be less subtle than finesse lineages.",
+    bestFor: "Heroic, dominant play",
+  },
 };
 
-const SPECIES_DESCRIPTIONS: Record<string, string> = {
-  Human: "Adaptable, driven, and stubborn in the dark.",
-  Elf: "Grace, perception, and ancient poise.",
-  Dwarf: "Stone-hearted endurance and iron discipline.",
-  Halfling: "Small frame, steady nerve, uncanny luck.",
-  Gnome: "Quick wit, curiosity, and clever hands.",
-  "Half-Elf": "Bridging worlds with charm and versatility.",
-  "Half-Orc": "Raw force, grit, and intimidating presence.",
-  Tiefling: "Marked by omen, power, and defiance.",
-  Dragonborn: "Ancestral pride and draconic bearing.",
+const CLASS_META: Record<string, ClassMeta> = {
+  Warrior: {
+    fantasy: "Frontline steel and steady resolve.",
+    role: "Frontline bruiser",
+    difficulty: "Low",
+    bestFocus: "Guardian or Balanced",
+    strengths: ["Reliable in direct fights", "Forgiving for early mistakes"],
+    tradeoff: "Less trickery and burst than specialist classes.",
+  },
+  Rogue: {
+    fantasy: "Quick hands, sharp instincts, deadly timing.",
+    role: "Precision striker",
+    difficulty: "Medium",
+    bestFocus: "Swift or Guardian",
+    strengths: ["Acts early and hits clever angles", "Excellent mobility identity"],
+    tradeoff: "Can be punishing if built too fragile.",
+  },
+  Mage: {
+    fantasy: "Arcane force shaped through discipline and will.",
+    role: "Burst / control",
+    difficulty: "High",
+    bestFocus: "Balanced or Swift",
+    strengths: ["High-impact spell identity", "Great battlefield swing potential"],
+    tradeoff: "Usually less forgiving under pressure.",
+  },
+  Cleric: {
+    fantasy: "Faith, protection, and guiding light.",
+    role: "Support anchor",
+    difficulty: "Low",
+    bestFocus: "Guardian or Balanced",
+    strengths: ["Stable and survivable", "Excellent support tone for long runs"],
+    tradeoff: "Less explosive than pure damage classes.",
+  },
+  Ranger: {
+    fantasy: "Tracker, scout, and patient hunter.",
+    role: "Skirmish / ranged pressure",
+    difficulty: "Medium",
+    bestFocus: "Swift or Balanced",
+    strengths: ["Great tempo and positioning feel", "Flexible offensive identity"],
+    tradeoff: "Less durable than heavy frontliners.",
+  },
+  Paladin: {
+    fantasy: "Oath-bound defender with relentless conviction.",
+    role: "Holy frontline",
+    difficulty: "Low",
+    bestFocus: "Guardian",
+    strengths: ["Durable and decisive", "Strong heroic fantasy"],
+    tradeoff: "Less mobile than lighter classes.",
+  },
+  Bard: {
+    fantasy: "Charm, rhythm, and subtle battlefield influence.",
+    role: "Hybrid support",
+    difficulty: "Medium",
+    bestFocus: "Balanced or Swift",
+    strengths: ["Flexible support identity", "Good for expressive play"],
+    tradeoff: "Less straightforward than pure combat classes.",
+  },
+  Druid: {
+    fantasy: "Nature's keeper, patient and adaptable.",
+    role: "Adaptive control",
+    difficulty: "Medium",
+    bestFocus: "Balanced or Hardy",
+    strengths: ["Stable hybrid style", "Good for long-form adaptation"],
+    tradeoff: "Can feel less direct than martial classes.",
+  },
+  Monk: {
+    fantasy: "Discipline, motion, and controlled force.",
+    role: "Mobile striker",
+    difficulty: "Medium",
+    bestFocus: "Swift",
+    strengths: ["Fast and expressive tempo", "Excellent motion-based identity"],
+    tradeoff: "Less forgiving if caught in heavy pressure.",
+  },
+  Artificer: {
+    fantasy: "Inventive craft turned into battlefield advantage.",
+    role: "Utility / control",
+    difficulty: "High",
+    bestFocus: "Balanced or Hardy",
+    strengths: ["Strong clever-build potential", "Great for technical players"],
+    tradeoff: "Less immediate than simple frontline classes.",
+  },
+  Barbarian: {
+    fantasy: "Fury, endurance, and brutal momentum.",
+    role: "Aggressive bruiser",
+    difficulty: "Low",
+    bestFocus: "Hardy or Guardian",
+    strengths: ["Excellent survivability pressure", "Simple, powerful fantasy"],
+    tradeoff: "Less subtle and less tactical than finesse builds.",
+  },
+  Sorcerer: {
+    fantasy: "Raw power carried in the blood.",
+    role: "Burst caster",
+    difficulty: "High",
+    bestFocus: "Swift or Balanced",
+    strengths: ["High-expression magical power", "Excellent dramatic burst identity"],
+    tradeoff: "Can be fragile if built too aggressively.",
+  },
+  Warlock: {
+    fantasy: "Dark bargains and dangerous command.",
+    role: "Pressure caster",
+    difficulty: "Medium",
+    bestFocus: "Balanced or Swift",
+    strengths: ["Strong identity and pressure tools", "Good for risk-forward magic play"],
+    tradeoff: "Less stable than safer support builds.",
+  },
 };
 
-const BUILD_FOCUS_OPTIONS: Array<{
-  id: BuildFocus;
-  label: string;
-  hint: string;
-}> = [
-  { id: "balanced", label: "Balanced", hint: "Steady all-around profile." },
-  { id: "guardian", label: "Guardian", hint: "Higher AC, lower speed." },
-  { id: "swift", label: "Swift", hint: "Higher initiative, lighter defense." },
-  { id: "hardy", label: "Hardy", hint: "More vitality for longer fights." },
-];
+const BUILD_FOCUS_META: Record<BuildFocus, FocusMeta> = {
+  balanced: {
+    hint: "Keeps the class close to its natural shape.",
+    gains: ["No major tradeoff", "Reliable all-around tempo"],
+    tradeoff: "No specialized edge in one direction.",
+    bestFor: "Players who want the class as-designed",
+  },
+  guardian: {
+    hint: "More defense, less speed.",
+    gains: ["+1 AC orientation", "More forgiving under direct pressure"],
+    tradeoff: "Initiative drops by 1.",
+    bestFor: "Safer frontline or cautious play",
+  },
+  swift: {
+    hint: "More speed, lighter defense.",
+    gains: ["+2 initiative orientation", "Acts earlier and pressures faster"],
+    tradeoff: "AC drops by 1.",
+    bestFor: "Tempo, agility, and striking first",
+  },
+  hardy: {
+    hint: "More vitality for longer fights.",
+    gains: ["+2 HP orientation", "Greater survivability in extended encounters"],
+    tradeoff: "No speed gain and less offensive specialization than tempo builds.",
+    bestFor: "Long fights and forgiving endurance",
+  },
+};
 
 const SFX = {
   buttonClick: "/assets/audio/sfx_button_click_01.mp3",
@@ -391,7 +567,7 @@ function RitualFrame({
           </div>
           <div style={{ fontSize: 28, fontWeight: 950, letterSpacing: 0.2 }}>{title}</div>
           {subtitle ? (
-            <div style={{ fontSize: 14, opacity: 0.84, lineHeight: 1.7, maxWidth: 760 }}>{subtitle}</div>
+            <div style={{ fontSize: 14, opacity: 0.84, lineHeight: 1.7, maxWidth: 820 }}>{subtitle}</div>
           ) : null}
         </div>
 
@@ -419,6 +595,7 @@ function RitualChoiceCard({
   onClick,
   selected = false,
   disabled = false,
+  details,
 }: {
   title: string;
   subtitle?: string;
@@ -426,6 +603,7 @@ function RitualChoiceCard({
   onClick: () => void;
   selected?: boolean;
   disabled?: boolean;
+  details?: React.ReactNode;
 }) {
   return (
     <button
@@ -464,9 +642,10 @@ function RitualChoiceCard({
         />
       </div>
 
-      <div style={{ padding: 16, display: "grid", gap: 6 }}>
+      <div style={{ padding: 16, display: "grid", gap: 8 }}>
         <div style={{ fontSize: 18, fontWeight: 900 }}>{title}</div>
-        {subtitle ? <div style={{ fontSize: 13, opacity: 0.76, lineHeight: 1.6 }}>{subtitle}</div> : null}
+        {subtitle ? <div style={{ fontSize: 13, opacity: 0.82, lineHeight: 1.6 }}>{subtitle}</div> : null}
+        {details ? <div style={{ display: "grid", gap: 6 }}>{details}</div> : null}
       </div>
     </button>
   );
@@ -477,9 +656,10 @@ function RitualStepPills({
 }: {
   currentStep: HeroCreationStep;
 }) {
-  const order: HeroCreationStep[] = ["intro", "species", "class", "focus", "name", "confirm"];
+  const order: HeroCreationStep[] = ["intro", "sex", "species", "class", "focus", "name", "confirm"];
   const labels: Record<HeroCreationStep, string> = {
     intro: "Opening",
+    sex: "Sex",
     species: "Species",
     class: "Class",
     focus: "Focus",
@@ -534,13 +714,13 @@ export default function PartySetupSection(props: {
   const [showDeclaredEditor, setShowDeclaredEditor] = useState(false);
   const [heroCreationStep, setHeroCreationStep] = useState<HeroCreationStep>("intro");
   const [ritualProgress, setRitualProgress] = useState<RitualProgress>({
+    sexConfirmed: false,
     speciesConfirmed: false,
     classConfirmed: false,
     focusConfirmed: false,
   });
 
   const heroSelectionAudioRef = useRef<HTMLAudioElement | null>(null);
-  const heroSelectionAudioStartedRef = useRef(false);
 
   const editable = !partyLocked && !!partyDraft;
   const sourceHero = (partyDraft?.members?.[0] ?? partyMembersFallback?.[0]) as PartyMember | undefined;
@@ -585,16 +765,14 @@ export default function PartySetupSection(props: {
       if (!audio) {
         audio = new Audio(SFX.heroSelectionLoop);
         audio.loop = true;
-        audio.volume = 0.58;
+        audio.volume = 0.44;
         audio.preload = "auto";
         heroSelectionAudioRef.current = audio;
       }
 
       if (!audio.paused) return;
 
-      void audio.play().then(() => {
-        heroSelectionAudioStartedRef.current = true;
-      }).catch(() => {});
+      void audio.play().catch(() => {});
     } catch {
       // fail silently
     }
@@ -689,6 +867,7 @@ export default function PartySetupSection(props: {
   function resetRitualFlow() {
     setHeroCreationStep("intro");
     setRitualProgress({
+      sexConfirmed: false,
       speciesConfirmed: false,
       classConfirmed: false,
       focusConfirmed: false,
@@ -744,6 +923,15 @@ export default function PartySetupSection(props: {
     border: "1px solid rgba(120,180,255,0.22)",
   };
 
+  const helperCardStyle: React.CSSProperties = {
+    padding: "12px 14px",
+    borderRadius: 14,
+    border: "1px solid rgba(255,255,255,0.08)",
+    background: "rgba(255,255,255,0.03)",
+    display: "grid",
+    gap: 8,
+  };
+
   if (!enabled || !row) return null;
 
   const { resolvedSpecies, resolvedClass, skillIds, traitIds } = getResolvedLoadout(row);
@@ -755,9 +943,19 @@ export default function PartySetupSection(props: {
   const display = row?.name?.trim() || "The Lone Hero";
   const hasValidHeroName = (row?.name ?? "").trim().length > 0;
 
+  const resolvedSpeciesMeta = SPECIES_META[resolvedSpecies] ?? SPECIES_META.Human;
+  const resolvedClassMeta = CLASS_META[resolvedClass] ?? CLASS_META.Warrior;
+  const resolvedFocusMeta = BUILD_FOCUS_META[currentFocus];
+  const baseStats = getBaseStatsForClass(resolvedClass);
+
+  const focusDeltaAc = (row?.ac ?? baseStats.ac) - baseStats.ac;
+  const focusDeltaHp = (row?.hpMax ?? baseStats.hpMax) - baseStats.hpMax;
+  const focusDeltaInit = (row?.initiativeMod ?? baseStats.initiativeMod) - baseStats.initiativeMod;
+
   const canContinueFromName = editable && hasValidHeroName;
   const canEnterChronicle =
     editable &&
+    ritualProgress.sexConfirmed &&
     ritualProgress.speciesConfirmed &&
     ritualProgress.classConfirmed &&
     ritualProgress.focusConfirmed &&
@@ -769,9 +967,25 @@ export default function PartySetupSection(props: {
       if (prev === "name") return "focus";
       if (prev === "focus") return "class";
       if (prev === "class") return "species";
-      if (prev === "species") return "intro";
+      if (prev === "species") return "sex";
+      if (prev === "sex") return "intro";
       return "intro";
     });
+  }
+
+  function renderFocusDeltaSummary(focus: BuildFocus) {
+    const nextStats = applyBuildFocusToStats(getBaseStatsForClass(resolvedClass), focus);
+    const acDelta = nextStats.ac - baseStats.ac;
+    const hpDelta = nextStats.hpMax - baseStats.hpMax;
+    const initDelta = nextStats.initiativeMod - baseStats.initiativeMod;
+
+    const chips: string[] = [];
+    if (acDelta !== 0) chips.push(`AC ${acDelta > 0 ? `+${acDelta}` : acDelta}`);
+    if (hpDelta !== 0) chips.push(`HP ${hpDelta > 0 ? `+${hpDelta}` : hpDelta}`);
+    if (initDelta !== 0) chips.push(`INIT ${initDelta > 0 ? `+${initDelta}` : initDelta}`);
+    if (chips.length === 0) chips.push("No stat shift");
+
+    return chips.join(" · ");
   }
 
   function renderCreationFlow() {
@@ -796,7 +1010,7 @@ export default function PartySetupSection(props: {
                     type="button"
                     onClick={() => {
                       playSfx(SFX.buttonClick, 0.6);
-                      setHeroCreationStep("species");
+                      setHeroCreationStep("sex");
                     }}
                     disabled={!editable}
                     style={{
@@ -862,12 +1076,93 @@ export default function PartySetupSection(props: {
           </div>
         );
 
+      case "sex":
+        return (
+          <div key="ritual-sex" style={{ transition: "opacity 260ms ease", opacity: 1 }}>
+            <RitualFrame
+              title="Choose a Form"
+              subtitle="Set the first face of your hero. This determines which portrait line follows through the ritual."
+              footer={
+                <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      playSfx(SFX.buttonClick, 0.54);
+                      goToPreviousStep();
+                    }}
+                    style={{
+                      ...controlButtonBase,
+                      border: "1px solid rgba(255,255,255,0.12)",
+                      background: "rgba(255,255,255,0.05)",
+                      color: "inherit",
+                    }}
+                  >
+                    Back
+                  </button>
+                  <div style={{ fontSize: 12, opacity: 0.72, alignSelf: "center" }}>
+                    Select the portrait line to continue.
+                  </div>
+                </div>
+              }
+            >
+              <div style={{ display: "grid", gap: 16 }}>
+                <RitualStepPills currentStep={heroCreationStep} />
+
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
+                    gap: 18,
+                  }}
+                >
+                  {(["Male", "Female"] as const).map((portrait) => {
+                    const selected = row?.portrait === portrait;
+                    const imageSrc = getPortraitPath(resolvedSpecies, resolvedClass, portrait);
+
+                    return (
+                      <RitualChoiceCard
+                        key={portrait}
+                        title={portrait}
+                        subtitle={
+                          portrait === "Male"
+                            ? "A rugged line of portraits for your hero's journey."
+                            : "A fierce line of portraits for your hero's journey."
+                        }
+                        imageSrc={imageSrc}
+                        selected={selected}
+                        disabled={!editable}
+                        details={
+                          <div style={{ fontSize: 12, opacity: 0.72, lineHeight: 1.5 }}>
+                            This choice controls the portrait set shown during species, class, name, and oath.
+                          </div>
+                        }
+                        onClick={() => {
+                          if (!editable) {
+                            playSfx(SFX.uiFailure, 0.5);
+                            return;
+                          }
+                          setPortrait(portrait);
+                          setRitualProgress((prev) => ({
+                            ...prev,
+                            sexConfirmed: true,
+                          }));
+                          setHeroCreationStep("species");
+                        }}
+                      />
+                    );
+                  })}
+                </div>
+              </div>
+            </RitualFrame>
+          </div>
+        );
+
       case "species":
         return (
           <div key="ritual-species" style={{ transition: "opacity 260ms ease", opacity: 1 }}>
             <RitualFrame
               title="Choose a Species"
-              subtitle="Identity begins with lineage. Select the form your first hero will carry into the Chronicle."
+              subtitle="Identity begins with lineage. Here the player should understand not just the fantasy, but the practical shape of the build."
               footer={
                 <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
                   <button
@@ -887,7 +1182,7 @@ export default function PartySetupSection(props: {
                   </button>
 
                   <div style={{ fontSize: 12, opacity: 0.72, alignSelf: "center" }}>
-                    Select a lineage to continue.
+                    Compare strengths, tradeoffs, and playstyle fit.
                   </div>
                 </div>
               }
@@ -898,22 +1193,36 @@ export default function PartySetupSection(props: {
                 <div
                   style={{
                     display: "grid",
-                    gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+                    gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
                     gap: 14,
                   }}
                 >
                   {SAFE_SPECIES.map((species) => {
                     const imageSrc = getPortraitPath(species, resolvedClass, row?.portrait ?? "Male");
                     const selected = resolvedSpecies.toLowerCase() === species.toLowerCase();
+                    const meta = SPECIES_META[species] ?? SPECIES_META.Human;
 
                     return (
                       <RitualChoiceCard
                         key={species}
                         title={species}
-                        subtitle={SPECIES_DESCRIPTIONS[species] ?? "A path into the dark."}
+                        subtitle={meta.fantasy}
                         imageSrc={imageSrc}
                         selected={selected}
                         disabled={!editable}
+                        details={
+                          <>
+                            <div style={{ fontSize: 12, opacity: 0.88, lineHeight: 1.5 }}>
+                              <strong>Strengths:</strong> {meta.strengths.join(" · ")}
+                            </div>
+                            <div style={{ fontSize: 12, opacity: 0.78, lineHeight: 1.5 }}>
+                              <strong>Tradeoff:</strong> {meta.tradeoff}
+                            </div>
+                            <div style={{ fontSize: 12, opacity: 0.72, lineHeight: 1.5 }}>
+                              <strong>Best for:</strong> {meta.bestFor}
+                            </div>
+                          </>
+                        }
                         onClick={() => {
                           if (!editable) {
                             playSfx(SFX.uiFailure, 0.5);
@@ -941,7 +1250,7 @@ export default function PartySetupSection(props: {
           <div key="ritual-class" style={{ transition: "opacity 260ms ease", opacity: 1 }}>
             <RitualFrame
               title="Choose a Class"
-              subtitle="A hero's role is not just a weapon. It is the shape of their will under pressure."
+              subtitle="This should tell the player how the hero fights, how difficult the role is, and which focus pairings make sense."
               footer={
                 <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
                   <button
@@ -961,7 +1270,7 @@ export default function PartySetupSection(props: {
                   </button>
 
                   <div style={{ fontSize: 12, opacity: 0.72, alignSelf: "center" }}>
-                    Select a calling to continue.
+                    Compare role, difficulty, strengths, and synergy.
                   </div>
                 </div>
               }
@@ -972,22 +1281,42 @@ export default function PartySetupSection(props: {
                 <div
                   style={{
                     display: "grid",
-                    gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+                    gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
                     gap: 14,
                   }}
                 >
                   {SAFE_CLASS_ARCHETYPES.map((className) => {
                     const imageSrc = getPortraitPath(resolvedSpecies, className, row?.portrait ?? "Male");
                     const selected = resolvedClass.toLowerCase() === className.toLowerCase();
+                    const meta = CLASS_META[className] ?? CLASS_META.Warrior;
 
                     return (
                       <RitualChoiceCard
                         key={className}
                         title={className}
-                        subtitle={CLASS_DESCRIPTIONS[className] ?? "A calling forged for the depths."}
+                        subtitle={meta.fantasy}
                         imageSrc={imageSrc}
                         selected={selected}
                         disabled={!editable}
+                        details={
+                          <>
+                            <div style={{ fontSize: 12, opacity: 0.88, lineHeight: 1.5 }}>
+                              <strong>Role:</strong> {meta.role}
+                            </div>
+                            <div style={{ fontSize: 12, opacity: 0.88, lineHeight: 1.5 }}>
+                              <strong>Difficulty:</strong> {meta.difficulty}
+                            </div>
+                            <div style={{ fontSize: 12, opacity: 0.84, lineHeight: 1.5 }}>
+                              <strong>Strengths:</strong> {meta.strengths.join(" · ")}
+                            </div>
+                            <div style={{ fontSize: 12, opacity: 0.76, lineHeight: 1.5 }}>
+                              <strong>Tradeoff:</strong> {meta.tradeoff}
+                            </div>
+                            <div style={{ fontSize: 12, opacity: 0.72, lineHeight: 1.5 }}>
+                              <strong>Best focus:</strong> {meta.bestFocus}
+                            </div>
+                          </>
+                        }
                         onClick={() => {
                           if (!editable) {
                             playSfx(SFX.uiFailure, 0.5);
@@ -1015,7 +1344,7 @@ export default function PartySetupSection(props: {
           <div key="ritual-focus" style={{ transition: "opacity 260ms ease", opacity: 1 }}>
             <RitualFrame
               title="Choose a Focus"
-              subtitle="This is not raw stat editing. It is the stance your hero carries into danger."
+              subtitle="This is the stance your hero carries into danger. The player should understand the exact gains and the exact cost."
               footer={
                 <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
                   <button
@@ -1035,7 +1364,7 @@ export default function PartySetupSection(props: {
                   </button>
 
                   <div style={{ fontSize: 12, opacity: 0.72, alignSelf: "center" }}>
-                    Select a stance to continue.
+                    Choose the stat tradeoff that best fits the build.
                   </div>
                 </div>
               }
@@ -1046,12 +1375,13 @@ export default function PartySetupSection(props: {
                 <div
                   style={{
                     display: "grid",
-                    gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+                    gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
                     gap: 14,
                   }}
                 >
                   {BUILD_FOCUS_OPTIONS.map((option) => {
                     const active = currentFocus === option.id;
+                    const meta = BUILD_FOCUS_META[option.id];
 
                     return (
                       <button
@@ -1088,7 +1418,19 @@ export default function PartySetupSection(props: {
                         }}
                       >
                         <div style={{ fontSize: 18, fontWeight: 900 }}>{option.label}</div>
-                        <div style={{ fontSize: 13, opacity: 0.76, lineHeight: 1.6 }}>{option.hint}</div>
+                        <div style={{ fontSize: 13, opacity: 0.82, lineHeight: 1.6 }}>{meta.hint}</div>
+                        <div style={{ fontSize: 12, opacity: 0.88, lineHeight: 1.5 }}>
+                          <strong>Shift:</strong> {renderFocusDeltaSummary(option.id)}
+                        </div>
+                        <div style={{ fontSize: 12, opacity: 0.84, lineHeight: 1.5 }}>
+                          <strong>Gains:</strong> {meta.gains.join(" · ")}
+                        </div>
+                        <div style={{ fontSize: 12, opacity: 0.76, lineHeight: 1.5 }}>
+                          <strong>Tradeoff:</strong> {meta.tradeoff}
+                        </div>
+                        <div style={{ fontSize: 12, opacity: 0.72, lineHeight: 1.5 }}>
+                          <strong>Best for:</strong> {meta.bestFor}
+                        </div>
                       </button>
                     );
                   })}
@@ -1156,33 +1498,45 @@ export default function PartySetupSection(props: {
                 <div
                   style={{
                     display: "grid",
-                    gridTemplateColumns: "minmax(0, 1fr) minmax(220px, 280px)",
-                    gap: 18,
+                    gridTemplateColumns: "minmax(0, 1fr) minmax(260px, 320px)",
+                    gap: 20,
                     alignItems: "start",
                   }}
                 >
-                  <div style={{ display: "grid", gap: 10 }}>
-                    <TinyLabel>Hero Name</TinyLabel>
-                    <input
-                      value={row?.name ?? ""}
-                      disabled={!editable}
-                      onChange={(e) => setHeroField({ name: e.target.value })}
-                      placeholder="The Lone Hero"
-                      style={{
-                        ...inputStyle,
-                        padding: "14px 16px",
-                        fontSize: 18,
-                        borderRadius: 14,
-                      }}
-                    />
-                    <div style={{ fontSize: 13, opacity: 0.74, lineHeight: 1.6 }}>
-                      {(row?.name ?? "").trim().length > 0 ? (
-                        <>
-                          Current Chronicle entry: <strong>{display}</strong>
-                        </>
-                      ) : (
-                        <>Choose a true name before continuing.</>
-                      )}
+                  <div style={{ display: "grid", gap: 14 }}>
+                    <div style={{ display: "grid", gap: 10 }}>
+                      <TinyLabel>Hero Name</TinyLabel>
+                      <input
+                        value={row?.name ?? ""}
+                        disabled={!editable}
+                        onChange={(e) => setHeroField({ name: e.target.value })}
+                        placeholder="The Lone Hero"
+                        style={{
+                          ...inputStyle,
+                          padding: "14px 16px",
+                          fontSize: 18,
+                          borderRadius: 14,
+                        }}
+                      />
+                      <div style={{ fontSize: 13, opacity: 0.74, lineHeight: 1.6 }}>
+                        {(row?.name ?? "").trim().length > 0 ? (
+                          <>
+                            Current Chronicle entry: <strong>{display}</strong>
+                          </>
+                        ) : (
+                          <>Choose a true name before continuing.</>
+                        )}
+                      </div>
+                    </div>
+
+                    <div style={helperCardStyle}>
+                      <div style={{ fontSize: 13, fontWeight: 800 }}>Current Build Summary</div>
+                      <div style={{ fontSize: 13, opacity: 0.82, lineHeight: 1.6 }}>
+                        <strong>{resolvedSpecies}</strong> {resolvedClass} · <strong>{BUILD_FOCUS_META[currentFocus].label ?? ""}</strong>
+                      </div>
+                      <div style={{ fontSize: 12, opacity: 0.76, lineHeight: 1.6 }}>
+                        {resolvedSpeciesMeta.bestFor} · {resolvedClassMeta.role} · {resolvedFocusMeta.bestFor}
+                      </div>
                     </div>
                   </div>
 
@@ -1197,7 +1551,7 @@ export default function PartySetupSection(props: {
                     <img
                       src={portraitPath}
                       alt={`${display} portrait`}
-                      style={{ width: "100%", height: 280, objectFit: "cover", display: "block" }}
+                      style={{ width: "100%", height: 320, objectFit: "cover", display: "block" }}
                       onError={(e) => {
                         const img = e.currentTarget;
                         img.onerror = null;
@@ -1271,9 +1625,7 @@ export default function PartySetupSection(props: {
                     </button>
 
                     <span style={{ fontSize: 12, opacity: 0.72 }}>
-                      {canEnterChronicle
-                        ? "Ritual complete"
-                        : "Choose species, class, focus, and enter a name to continue"}
+                      {canEnterChronicle ? "Ritual complete" : "Complete every choice to continue"}
                       {partyLockedByCombat ? " · Combat lock active" : ""}
                     </span>
                   </div>
@@ -1286,7 +1638,7 @@ export default function PartySetupSection(props: {
                 <div
                   style={{
                     display: "grid",
-                    gridTemplateColumns: "minmax(220px, 280px) minmax(0, 1fr)",
+                    gridTemplateColumns: "minmax(240px, 320px) minmax(0, 1fr)",
                     gap: 20,
                     alignItems: "start",
                   }}
@@ -1303,7 +1655,7 @@ export default function PartySetupSection(props: {
                     <img
                       src={portraitPath}
                       alt={`${display} portrait`}
-                      style={{ width: "100%", height: 360, objectFit: "cover", display: "block" }}
+                      style={{ width: "100%", height: 400, objectFit: "cover", display: "block" }}
                       onError={(e) => {
                         const img = e.currentTarget;
                         img.onerror = null;
@@ -1314,7 +1666,7 @@ export default function PartySetupSection(props: {
 
                   <div style={{ display: "grid", gap: 16 }}>
                     <div>
-                      <div style={{ fontSize: 32, fontWeight: 950, lineHeight: 1.05 }}>{display}</div>
+                      <div style={{ fontSize: 36, fontWeight: 950, lineHeight: 1.05 }}>{display}</div>
                       <div style={{ marginTop: 8, fontSize: 16, opacity: 0.82 }}>
                         {resolvedSpecies} {resolvedClass}
                       </div>
@@ -1322,28 +1674,57 @@ export default function PartySetupSection(props: {
 
                     <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                       <SectionPill>
-                        <strong>Focus</strong>{" "}
-                        {BUILD_FOCUS_OPTIONS.find((x) => x.id === currentFocus)?.label ?? "Balanced"}
+                        <strong>Focus</strong> {BUILD_FOCUS_OPTIONS.find((x) => x.id === currentFocus)?.label ?? "Balanced"}
                       </SectionPill>
                       <SectionPill>
                         <strong>Portrait</strong> {row?.portrait ?? "Male"}
+                      </SectionPill>
+                      <SectionPill tone="warn">
+                        <strong>Role</strong> {resolvedClassMeta.role}
                       </SectionPill>
                     </div>
 
                     <div
                       style={{
-                        padding: "14px 16px",
-                        borderRadius: 16,
-                        border: "1px solid rgba(255,255,255,0.08)",
-                        background: "rgba(255,255,255,0.03)",
-                        fontSize: 14,
-                        opacity: 0.82,
-                        lineHeight: 1.7,
-                        maxWidth: 760,
+                        display: "grid",
+                        gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+                        gap: 10,
                       }}
                     >
-                      Once entered into canon, this hero becomes the beginning of the branch. Future fellowship growth
-                      is earned through the campaign rather than chosen here.
+                      <StatChip label="AC" value={`${row?.ac ?? baseStats.ac}${focusDeltaAc ? ` (${focusDeltaAc > 0 ? `+${focusDeltaAc}` : focusDeltaAc})` : ""}`} />
+                      <StatChip label="HP Max" value={`${row?.hpMax ?? baseStats.hpMax}${focusDeltaHp ? ` (${focusDeltaHp > 0 ? `+${focusDeltaHp}` : focusDeltaHp})` : ""}`} />
+                      <StatChip label="Init" value={`${row?.initiativeMod ?? baseStats.initiativeMod}${focusDeltaInit ? ` (${focusDeltaInit > 0 ? `+${focusDeltaInit}` : focusDeltaInit})` : ""}`} />
+                    </div>
+
+                    <div style={helperCardStyle}>
+                      <div style={{ fontSize: 14, fontWeight: 900 }}>What this build does well</div>
+                      <div style={{ fontSize: 13, opacity: 0.84, lineHeight: 1.65 }}>
+                        • {resolvedSpeciesMeta.strengths[0]}
+                        <br />
+                        • {resolvedClassMeta.strengths[0]}
+                        <br />
+                        • {resolvedFocusMeta.gains[0]}
+                      </div>
+                    </div>
+
+                    <div style={helperCardStyle}>
+                      <div style={{ fontSize: 14, fontWeight: 900 }}>Tradeoffs</div>
+                      <div style={{ fontSize: 13, opacity: 0.8, lineHeight: 1.65 }}>
+                        • {resolvedSpeciesMeta.tradeoff}
+                        <br />
+                        • {resolvedClassMeta.tradeoff}
+                        <br />
+                        • {resolvedFocusMeta.tradeoff}
+                      </div>
+                    </div>
+
+                    <div style={helperCardStyle}>
+                      <div style={{ fontSize: 14, fontWeight: 900 }}>Recommended playstyle</div>
+                      <div style={{ fontSize: 13, opacity: 0.82, lineHeight: 1.65 }}>
+                        This hero fits <strong>{resolvedSpeciesMeta.bestFor.toLowerCase()}</strong>, operates as a{" "}
+                        <strong>{resolvedClassMeta.role.toLowerCase()}</strong>, and is best used for{" "}
+                        <strong>{resolvedFocusMeta.bestFor.toLowerCase()}</strong>.
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -1380,8 +1761,11 @@ export default function PartySetupSection(props: {
 
               {!partyCanonicalExists && (
                 <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 12 }}>
-                  <SectionPill tone={partyCanonicalExists ? "good" : "default"}>
+                  <SectionPill>
                     <strong>1</strong> Starting Hero
+                  </SectionPill>
+                  <SectionPill>
+                    <strong>{row?.portrait ?? "Male"}</strong> Portrait
                   </SectionPill>
                   <SectionPill>
                     <strong>{heroSummary.resolvedClass}</strong> Class
@@ -1389,7 +1773,7 @@ export default function PartySetupSection(props: {
                   <SectionPill>
                     <strong>{heroSummary.resolvedSpecies}</strong> Lineage
                   </SectionPill>
-                  <SectionPill tone={partyCanonicalExists ? "good" : "default"}>
+                  <SectionPill>
                     {partyCanonicalExists ? "Hero canonized" : "Draft hero only"}
                   </SectionPill>
                   {partyLockedByCombat ? <SectionPill tone="warn">Combat lock active</SectionPill> : null}
