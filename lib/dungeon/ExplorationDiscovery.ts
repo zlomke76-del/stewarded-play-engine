@@ -6,11 +6,11 @@
 // - Derive deterministic room/floor discovery drafts from dungeon structure
 // - Emit canon drafts only when truths become newly visible
 // - Replace tile-hash discovery with room/connection/feature discovery
-// - Surface richer environment / puzzle / signature context when first seen
 //
 // Notes:
 // - Pure module: no mutation, no IDs, no timestamps
 // - Reads current canon only to avoid duplicate discovery
+// - Draft payloads remain compatible with current DungeonEvents typing
 // ------------------------------------------------------------
 
 import type {
@@ -180,7 +180,6 @@ function inferDiscoveredVia(args: {
 
 function buildRoomRevealDraft(
   floorId: FloorId,
-  floor: DungeonFloor,
   room: DungeonRoom,
   enteredViaConnectionId?: string | null
 ): RoomRevealedDraft {
@@ -189,23 +188,11 @@ function buildRoomRevealDraft(
     roomId: room.id,
     roomType: room.roomType,
     discoveredVia: inferDiscoveredVia({ room, enteredViaConnectionId }),
-    floorDepth: floor.depth,
-    environmentPressure: room.environment?.pressure ?? floor.environmentPressure,
-    requiresTorchlight:
-      room.environment?.requiresTorchlight ?? floor.requiresTorchlight,
-    requiresWarmth:
-      room.environment?.requiresWarmth ?? floor.requiresWarmth,
-    routeRole: room.routeRole ?? null,
-    puzzleId: room.puzzleId ?? null,
-    trapId: room.trapId ?? null,
-    isSignature: room.isSignature === true,
-    setpieceId: room.setpieceId ?? null,
   });
 }
 
 function buildRoomEnterDraft(args: {
   floorId: FloorId;
-  floor: DungeonFloor;
   room: DungeonRoom;
   fromRoomId?: string | null;
   viaConnectionId?: string | null;
@@ -218,12 +205,6 @@ function buildRoomEnterDraft(args: {
     fromRoomId: args.fromRoomId ?? null,
     viaConnectionId: args.viaConnectionId ?? null,
     viaConnectionType: (args.viaConnectionType as any) ?? null,
-    floorDepth: args.floor.depth,
-    routeRole: args.room.routeRole ?? null,
-    puzzleId: args.room.puzzleId ?? null,
-    trapId: args.room.trapId ?? null,
-    setpieceId: args.room.setpieceId ?? null,
-    isSafeRefuge: args.room.environment?.isRefuge === true,
   });
 }
 
@@ -276,7 +257,6 @@ function buildStructuredFeatureDrafts(
           roomId: room.id,
           direction,
           targetFloorId: null,
-          floorDepth: floor.depth,
         })
       );
       continue;
@@ -359,9 +339,7 @@ function buildCurrentRoomDiscoveryDrafts(
   const events = ctx.events;
 
   if (!alreadyHasRoomRevealed(events, ctx.floorId, ctx.roomId)) {
-    drafts.push(
-      buildRoomRevealDraft(ctx.floorId, floor, room, ctx.enteredViaConnectionId)
-    );
+    drafts.push(buildRoomRevealDraft(ctx.floorId, room, ctx.enteredViaConnectionId));
   }
 
   if (!alreadyHasRoomEntered(events, ctx.floorId, ctx.roomId)) {
@@ -373,7 +351,6 @@ function buildCurrentRoomDiscoveryDrafts(
     drafts.push(
       buildRoomEnterDraft({
         floorId: ctx.floorId,
-        floor,
         room,
         fromRoomId: ctx.enteredFromRoomId ?? null,
         viaConnectionId: ctx.enteredViaConnectionId ?? null,
@@ -448,18 +425,6 @@ function buildAdjacentRevealDrafts(
         roomId: nextRoom.id,
         roomType: nextRoom.roomType,
         discoveredVia: "entry",
-        floorDepth: floor.depth,
-        environmentPressure:
-          nextRoom.environment?.pressure ?? floor.environmentPressure,
-        requiresTorchlight:
-          nextRoom.environment?.requiresTorchlight ?? floor.requiresTorchlight,
-        requiresWarmth:
-          nextRoom.environment?.requiresWarmth ?? floor.requiresWarmth,
-        routeRole: nextRoom.routeRole ?? null,
-        puzzleId: nextRoom.puzzleId ?? null,
-        trapId: nextRoom.trapId ?? null,
-        isSignature: nextRoom.isSignature === true,
-        setpieceId: nextRoom.setpieceId ?? null,
       })
     );
   }
