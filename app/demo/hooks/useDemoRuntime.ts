@@ -38,9 +38,11 @@ import {
   generateInitialTable,
   renderInitialTableNarration,
   isCombatEndedForId,
-  inferPressureTier,
 } from "../demoUtils";
-import { extractOpeningChronicleSeed } from "../lib/demoNarration";
+import {
+  extractOpeningChronicleSeed,
+  inferPressureTier,
+} from "../lib/demoNarration";
 import {
   type CombatEncounterContext,
   type GameplayFocusStep,
