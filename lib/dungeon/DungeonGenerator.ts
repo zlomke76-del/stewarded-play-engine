@@ -6,11 +6,9 @@
 // - Generate a deterministic 3-floor room graph for Echoes of Fate
 // - Support main path + branches instead of a linear chain
 // - Randomize trap and puzzle placement per run while staying seed-stable
-// - Encode floor identity / environment hints for runtime + narration
+// - Write structured room/floor metadata directly into FloorState
 //
-// Current compatibility notes:
-// - This file works within the existing RoomTypes / FloorState types
-// - Richer metadata is encoded into storyHint until dedicated fields exist
+// Notes:
 // - No canon events are emitted here
 // - No runtime state is mutated here
 // ------------------------------------------------------------
@@ -32,7 +30,11 @@ import type {
   DungeonEncounterSeed,
   DungeonFloor,
   DungeonRoom,
-  DungeonRoomFeature,
+  DungeonRoomEnvironment,
+  FloorDepth,
+  PuzzleId,
+  RoomRouteRole,
+  SetpieceId,
 } from "@/lib/dungeon/FloorState";
 import {
   chooseWeightedDungeonTrap,
@@ -56,36 +58,18 @@ type GeneratorArgs = {
 
 type EnvironmentState = "lit" | "dark" | "cold_dark";
 
-type PuzzleId =
-  | "whispering_anvil"
-  | "singing_chains"
-  | "mirror_of_regrets"
-  | "pressure_gauges"
-  | "vault_of_unchosen_paths"
-  | "oathbound_gate";
-
-type RoomRole =
-  | "main_path"
-  | "branch"
-  | "dead_end"
-  | "boss_approach"
-  | "stairs_approach"
-  | "signature"
-  | "resource"
-  | "puzzle";
-
 type RoomNodePlan = {
   roomType: RoomType;
-  routeRole: RoomRole;
+  routeRole: RoomRouteRole;
   branchDepth: number;
   anchorMainIndex?: number;
   forcedLabelHint?: string | null;
-  forcedStoryTags?: string[];
+  setpieceId?: SetpieceId | null;
 };
 
 type FloorBlueprint = {
   theme: DungeonFloorTheme;
-  depthLabel: "0" | "-1" | "-2";
+  depth: FloorDepth;
   environment: EnvironmentState;
   roomCountMin: number;
   roomCountMax: number;
@@ -93,7 +77,7 @@ type FloorBlueprint = {
   branchPool: RoomType[];
   signatureCandidates: Array<{
     roomType: RoomType;
-    tag: string;
+    setpieceId: SetpieceId;
   }>;
   puzzlePool: PuzzleId[];
   puzzleCountMin: number;
@@ -180,7 +164,7 @@ function fixedFloorBlueprints(): FloorBlueprint[] {
   return [
     {
       theme: "ruined_outpost",
-      depthLabel: "0",
+      depth: 0,
       environment: "lit",
       roomCountMin: 10,
       roomCountMax: 14,
@@ -202,13 +186,16 @@ function fixedFloorBlueprints(): FloorBlueprint[] {
         "guard_post",
         "armory",
         "beast_den",
-        "shrine",
+        "barracks",
+        "watchtower",
+        "breach_chamber",
+        "forge_chamber",
       ],
       signatureCandidates: [
-        { roomType: "guard_post", tag: "setpiece:breach_chamber" },
-        { roomType: "storage", tag: "setpiece:last_barracks" },
-        { roomType: "shrine", tag: "setpiece:failed_shrine" },
-        { roomType: "armory", tag: "setpiece:watchtower_stairwell" },
+        { roomType: "breach_chamber", setpieceId: "breach_chamber" },
+        { roomType: "barracks", setpieceId: "last_barracks" },
+        { roomType: "shrine", setpieceId: "failed_shrine" },
+        { roomType: "watchtower", setpieceId: "watchtower_stairwell" },
       ],
       puzzlePool: [
         "whispering_anvil",
@@ -223,8 +210,8 @@ function fixedFloorBlueprints(): FloorBlueprint[] {
       loopChance: 0.25,
     },
     {
-      theme: "wild_depths",
-      depthLabel: "-1",
+      theme: "deep_warrens",
+      depth: -1,
       environment: "dark",
       roomCountMin: 12,
       roomCountMax: 16,
@@ -233,7 +220,7 @@ function fixedFloorBlueprints(): FloorBlueprint[] {
         "corridor",
         "beast_den",
         "sentinel_hall",
-        "ritual_chamber",
+        "trial_chamber",
         "arcane_hall",
         "boss_chamber",
         "stairs_down",
@@ -249,14 +236,17 @@ function fixedFloorBlueprints(): FloorBlueprint[] {
         "arcane_hall",
         "shrine",
         "relic_vault",
-        "bone_pit",
+        "ossuary",
+        "flooded_chamber",
+        "collapsed_passage",
+        "gate_hall",
       ],
       signatureCandidates: [
-        { roomType: "ritual_chamber", tag: "setpiece:oathbound_gate" },
-        { roomType: "bone_pit", tag: "setpiece:ossuary" },
-        { roomType: "storage", tag: "setpiece:flooded_chamber" },
-        { roomType: "corridor", tag: "setpiece:collapsed_passage" },
-        { roomType: "sentinel_hall", tag: "setpiece:pre_gate_hall" },
+        { roomType: "trial_chamber", setpieceId: "oathbound_gate" },
+        { roomType: "ossuary", setpieceId: "ossuary" },
+        { roomType: "flooded_chamber", setpieceId: "flooded_chamber" },
+        { roomType: "collapsed_passage", setpieceId: "collapsed_passage" },
+        { roomType: "gate_hall", setpieceId: "pre_gate_hall" },
       ],
       puzzlePool: [
         "pressure_gauges",
@@ -273,16 +263,16 @@ function fixedFloorBlueprints(): FloorBlueprint[] {
     },
     {
       theme: "forgotten_crypt",
-      depthLabel: "-2",
+      depth: -2,
       environment: "cold_dark",
       roomCountMin: 8,
       roomCountMax: 12,
       mainPathTypes: [
         "stairs_up",
         "crypt",
-        "bone_pit",
-        "crypt",
-        "relic_vault",
+        "ossuary",
+        "crypt_vault",
+        "relic_chamber",
         "boss_chamber",
       ],
       branchPool: [
@@ -293,11 +283,12 @@ function fixedFloorBlueprints(): FloorBlueprint[] {
         "rest_site",
         "treasure_room",
         "shrine",
+        "trial_chamber",
       ],
       signatureCandidates: [
-        { roomType: "relic_vault", tag: "setpiece:witness_antechamber" },
-        { roomType: "ritual_chamber", tag: "setpiece:crypt_rite_hall" },
-        { roomType: "crypt", tag: "setpiece:bone_vault" },
+        { roomType: "relic_chamber", setpieceId: "witness_antechamber" },
+        { roomType: "trial_chamber", setpieceId: "crypt_rite_hall" },
+        { roomType: "crypt_vault", setpieceId: "bone_vault" },
       ],
       puzzlePool: [
         "mirror_of_regrets",
@@ -313,15 +304,15 @@ function fixedFloorBlueprints(): FloorBlueprint[] {
   ];
 }
 
-function buildFloorLabel(theme: DungeonFloorTheme, depthLabel: "0" | "-1" | "-2") {
-  return `${FLOOR_THEME_DEFINITIONS[theme].label} — Floor ${depthLabel}`;
+function buildFloorLabel(theme: DungeonFloorTheme, depth: FloorDepth) {
+  return `${FLOOR_THEME_DEFINITIONS[theme].label} — Floor ${depth}`;
 }
 
 function buildRoomLabel(roomType: RoomType): string {
   return ROOM_TYPE_DEFINITIONS[roomType].label;
 }
 
-function defaultFeaturesForRoomType(roomType: RoomType): DungeonRoomFeature[] {
+function defaultFeaturesForRoomType(roomType: RoomType) {
   const taxonomy = ROOM_TYPE_DEFINITIONS[roomType];
   return taxonomy.defaultFeatures.map((kind) => ({
     kind,
@@ -360,6 +351,8 @@ function mapFloorThemeToTrapTheme(theme: DungeonFloorTheme): DungeonTheme {
       return "abandoned_keep";
     case "forgotten_crypt":
       return "forgotten_catacomb";
+    case "deep_warrens":
+      return "generic_stone_dungeon";
     case "cult_temple":
       return "cult_temple";
     case "arcane_forge":
@@ -392,6 +385,17 @@ const ROOM_TYPE_TO_TRAP_ROOM_TYPE: Partial<Record<RoomType, DungeonTrapRoomType>
   stairs_up: "stair",
   stairs_down: "stair",
   rest_site: "chamber",
+  barracks: "chamber",
+  breach_chamber: "hall",
+  watchtower: "hall",
+  flooded_chamber: "chamber",
+  ossuary: "crypt",
+  collapsed_passage: "passage",
+  gate_hall: "hall",
+  trial_chamber: "ritual",
+  relic_chamber: "vault",
+  crypt_vault: "vault",
+  forge_chamber: "chamber",
 };
 
 function mapRoomTypeToTrapRoomType(roomType: RoomType): DungeonTrapRoomType | null {
@@ -428,32 +432,56 @@ function chooseTrapForRoom(
   );
 }
 
-function buildTrapStoryHint(trap: DungeonTrapDefinition): string[] {
-  return [
-    `trap:${trap.id}`,
-    `trap_name:${trap.name}`,
-    `trap_danger:${trap.danger}`,
-    `trap_asset:${trap.assetPath}`,
+function buildStoryHintParts(args: {
+  depth: FloorDepth;
+  theme: DungeonFloorTheme;
+  routeRole: RoomRouteRole;
+  branchDepth: number;
+  environment: EnvironmentState;
+  puzzleId?: PuzzleId | null;
+  trapId?: string | null;
+  setpieceId?: SetpieceId | null;
+  lootHint?: DungeonRoom["lootHint"];
+  refuge?: boolean;
+  fireSource?: boolean;
+}) {
+  const parts = [
+    `floor_depth:${args.depth}`,
+    `theme:${args.theme}`,
+    `route:${args.routeRole}`,
+    `branch_depth:${args.branchDepth}`,
+    `env:${args.environment}`,
   ];
-}
 
-function stringifyStoryTags(tags: string[]): string | null {
-  const cleaned = tags.map((t) => t.trim()).filter(Boolean);
-  return cleaned.length ? cleaned.join(" || ") : null;
+  if (args.environment === "dark") {
+    parts.push("requires:torch");
+  }
+
+  if (args.environment === "cold_dark") {
+    parts.push("requires:torch");
+    parts.push("requires:warmth");
+  }
+
+  if (args.puzzleId) parts.push(`puzzle:${args.puzzleId}`);
+  if (args.trapId) parts.push(`trap:${args.trapId}`);
+  if (args.setpieceId) parts.push(`setpiece:${args.setpieceId}`);
+  if (args.lootHint) parts.push(`loot:${args.lootHint}`);
+  if (args.refuge) parts.push("refuge:true");
+  if (args.fireSource) parts.push("fire_source:true");
+
+  return parts.join(" || ");
 }
 
 function buildMainPathPlans(blueprint: FloorBlueprint): RoomNodePlan[] {
   return blueprint.mainPathTypes.map((roomType, index, all) => {
-    let routeRole: RoomRole = "main_path";
+    let routeRole: RoomRouteRole = "main_path";
     const isLast = index === all.length - 1;
 
     if (roomType === "boss_chamber") {
-      routeRole = roomType === all[all.length - 1] ? "boss_approach" : "boss_approach";
+      routeRole = "boss_approach";
     } else if (roomType === "stairs_down") {
       routeRole = "stairs_approach";
-    }
-
-    if (isLast && roomType !== "stairs_down") {
+    } else if (isLast) {
       routeRole = "boss_approach";
     }
 
@@ -502,7 +530,7 @@ function buildBranchPlans(
   return plans;
 }
 
-function attachSignatureTags(
+function attachSignature(
   rng: () => number,
   blueprint: FloorBlueprint,
   roomPlans: RoomNodePlan[]
@@ -516,11 +544,12 @@ function attachSignatureTags(
         plan.routeRole !== "boss_approach" &&
         plan.routeRole !== "stairs_approach"
     );
+
     if (!compatible.length) continue;
 
     const chosen = pickOne(rng, compatible);
     chosen.routeRole = "signature";
-    chosen.forcedStoryTags = [...(chosen.forcedStoryTags ?? []), candidate.tag];
+    chosen.setpieceId = candidate.setpieceId;
     return;
   }
 }
@@ -534,7 +563,7 @@ function buildFloorPlans(
   const branchPlans = buildBranchPlans(rng, blueprint, targetRooms, mainPlans.length);
   const allPlans = [...mainPlans, ...branchPlans];
 
-  attachSignatureTags(rng, blueprint, allPlans);
+  attachSignature(rng, blueprint, allPlans);
 
   return allPlans;
 }
@@ -542,17 +571,17 @@ function buildFloorPlans(
 function compatibleRoomTypesForPuzzle(puzzleId: PuzzleId): RoomType[] {
   switch (puzzleId) {
     case "whispering_anvil":
-      return ["armory", "arcane_hall", "storage"];
+      return ["armory", "forge_chamber", "storage"];
     case "singing_chains":
-      return ["corridor", "ritual_chamber", "sentinel_hall"];
+      return ["corridor", "ritual_chamber", "sentinel_hall", "gate_hall"];
     case "mirror_of_regrets":
-      return ["shrine", "rest_site", "ritual_chamber"];
+      return ["shrine", "rest_site", "ritual_chamber", "trial_chamber"];
     case "pressure_gauges":
-      return ["corridor", "guard_post", "sentinel_hall"];
+      return ["corridor", "guard_post", "sentinel_hall", "gate_hall"];
     case "vault_of_unchosen_paths":
-      return ["relic_vault", "treasure_room", "ritual_chamber"];
+      return ["relic_vault", "treasure_room", "trial_chamber", "relic_chamber"];
     case "oathbound_gate":
-      return ["ritual_chamber", "sentinel_hall"];
+      return ["trial_chamber", "gate_hall"];
     default:
       return [];
   }
@@ -571,7 +600,7 @@ function selectPuzzlesForFloor(
   const picked = pickManyUnique(rng, blueprint.puzzlePool, count);
 
   if (
-    blueprint.depthLabel === "-1" &&
+    blueprint.depth === -1 &&
     !picked.includes("oathbound_gate") &&
     rng() < 0.6
   ) {
@@ -643,9 +672,24 @@ function chooseTrapRoomIndexes(
       let weight = 1;
       if (plan.routeRole === "stairs_approach") weight += 2;
       if (plan.routeRole === "dead_end") weight += 1;
-      if (plan.roomType === "corridor" || plan.roomType === "sentinel_hall") weight += 2;
-      if (plan.roomType === "relic_vault" || plan.roomType === "treasure_room") weight += 2;
-      if (plan.roomType === "ritual_chamber") weight += 1;
+      if (
+        plan.roomType === "corridor" ||
+        plan.roomType === "sentinel_hall" ||
+        plan.roomType === "gate_hall"
+      ) {
+        weight += 2;
+      }
+      if (
+        plan.roomType === "relic_vault" ||
+        plan.roomType === "treasure_room" ||
+        plan.roomType === "relic_chamber" ||
+        plan.roomType === "crypt_vault"
+      ) {
+        weight += 2;
+      }
+      if (plan.roomType === "ritual_chamber" || plan.roomType === "trial_chamber") {
+        weight += 1;
+      }
       return { index, weight };
     });
 
@@ -680,7 +724,15 @@ function buildConnectionType(
 ): DungeonConnection["type"] {
   if (toType === "stairs_down" || toType === "stairs_up") return "stairs";
   if (shouldLock) return "locked_door";
-  if (isBranch && (toType === "relic_vault" || toType === "treasure_room")) return "door";
+  if (
+    isBranch &&
+    (toType === "relic_vault" ||
+      toType === "treasure_room" ||
+      toType === "relic_chamber" ||
+      toType === "crypt_vault")
+  ) {
+    return "door";
+  }
   if (fromType === "corridor" && toType === "corridor") return "corridor";
   return "door";
 }
@@ -703,7 +755,6 @@ function buildGraphConnections(args: {
     .filter(({ plan }) => plan.branchDepth === 0)
     .map(({ index }) => index);
 
-  // Main path chain
   for (let i = 0; i < mainPathIndexes.length - 1; i++) {
     const fromIndex = mainPathIndexes[i];
     const toIndex = mainPathIndexes[i + 1];
@@ -712,6 +763,8 @@ function buildGraphConnections(args: {
 
     const shouldLock =
       toType === "relic_vault" ||
+      toType === "relic_chamber" ||
+      toType === "crypt_vault" ||
       (toType === "treasure_room" && rng() < 0.35);
 
     const type = buildConnectionType(fromType, toType, false, shouldLock);
@@ -740,7 +793,6 @@ function buildGraphConnections(args: {
     });
   }
 
-  // Branch chains attached to anchor points
   const branchGroups = new Map<number, number[]>();
 
   roomPlans.forEach((plan, index) => {
@@ -760,7 +812,11 @@ function buildGraphConnections(args: {
     for (const currentIndex of sorted) {
       const fromType = roomPlans[prevIndex].roomType;
       const toType = roomPlans[currentIndex].roomType;
-      const shouldLock = toType === "relic_vault";
+      const shouldLock =
+        toType === "relic_vault" ||
+        toType === "relic_chamber" ||
+        toType === "crypt_vault";
+
       const type = buildConnectionType(fromType, toType, true, shouldLock);
 
       let doorId: DoorId | null = null;
@@ -785,10 +841,13 @@ function buildGraphConnections(args: {
     }
   }
 
-  // Optional loop/secret connection
   if (rng() < loopChance && mainPathIndexes.length >= 5) {
-    const fromMainIndex = pickOne(rng, mainPathIndexes.slice(1, Math.max(2, mainPathIndexes.length - 3)));
+    const fromMainIndex = pickOne(
+      rng,
+      mainPathIndexes.slice(1, Math.max(2, mainPathIndexes.length - 3))
+    );
     const laterCandidates = mainPathIndexes.filter((idx) => idx > fromMainIndex + 1);
+
     if (laterCandidates.length) {
       const toMainIndex = pickOne(rng, laterCandidates);
       connectionCounter += 1;
@@ -808,145 +867,170 @@ function buildGraphConnections(args: {
   return connections;
 }
 
-function applyEnvironmentStoryTags(
+function buildEnvironmentState(
   blueprint: FloorBlueprint,
-  plan: RoomNodePlan
-): string[] {
-  const tags: string[] = [`env:${blueprint.environment}`];
+  roomType: RoomType
+): DungeonRoomEnvironment {
+  const taxonomy = ROOM_TYPE_DEFINITIONS[roomType];
+  const refuge =
+    taxonomy.supportsSafeRestCandidate === true ||
+    roomType === "shrine" ||
+    roomType === "rest_site";
 
-  if (blueprint.environment === "dark") {
-    tags.push("requires:torch");
-  }
+  const hasFireSource =
+    taxonomy.supportsWarmth === true ||
+    roomType === "forge_chamber" ||
+    roomType === "rest_site" ||
+    roomType === "ritual_chamber" ||
+    roomType === "trial_chamber";
 
-  if (blueprint.environment === "cold_dark") {
-    tags.push("requires:torch");
-    tags.push("requires:warmth");
-  }
-
-  if (plan.roomType === "rest_site" || plan.roomType === "shrine") {
-    if (blueprint.environment !== "lit") {
-      tags.push("refuge:true");
-      tags.push("fire_source:possible");
-    }
-  }
-
-  return tags;
-}
-
-function applyRoleStoryTags(plan: RoomNodePlan): string[] {
-  return [
-    `route:${plan.routeRole}`,
-    `branch_depth:${plan.branchDepth}`,
-  ];
+  return {
+    pressure: blueprint.environment,
+    requiresTorchlight: blueprint.environment !== "lit",
+    requiresWarmth: blueprint.environment === "cold_dark",
+    isRefuge: refuge,
+    hasFireSource,
+  };
 }
 
 function buildForcedLabelHint(plan: RoomNodePlan): string | null {
   if (plan.forcedLabelHint) return plan.forcedLabelHint;
-
-  const tags = plan.forcedStoryTags ?? [];
-  for (const tag of tags) {
-    if (tag === "setpiece:breach_chamber") return "Breach Chamber";
-    if (tag === "setpiece:last_barracks") return "Last Barracks";
-    if (tag === "setpiece:failed_shrine") return "Fallen Shrine";
-    if (tag === "setpiece:watchtower_stairwell") return "Watchtower Stairwell";
-    if (tag === "setpiece:oathbound_gate") return "Oathbound Gate";
-    if (tag === "setpiece:ossuary") return "Ossuary";
-    if (tag === "setpiece:flooded_chamber") return "Flooded Chamber";
-    if (tag === "setpiece:collapsed_passage") return "Collapsed Passage";
-    if (tag === "setpiece:pre_gate_hall") return "Pre-Gate Hall";
-    if (tag === "setpiece:witness_antechamber") return "Witness Antechamber";
-    if (tag === "setpiece:crypt_rite_hall") return "Ritual Vault";
-    if (tag === "setpiece:bone_vault") return "Bone Vault";
+  switch (plan.setpieceId) {
+    case "breach_chamber":
+      return "Breach Chamber";
+    case "last_barracks":
+      return "Last Barracks";
+    case "failed_shrine":
+      return "Fallen Shrine";
+    case "watchtower_stairwell":
+      return "Watchtower Stairwell";
+    case "oathbound_gate":
+      return "Oathbound Gate";
+    case "ossuary":
+      return "Ossuary";
+    case "flooded_chamber":
+      return "Flooded Chamber";
+    case "collapsed_passage":
+      return "Collapsed Passage";
+    case "pre_gate_hall":
+      return "Pre-Gate Hall";
+    case "witness_antechamber":
+      return "Witness Antechamber";
+    case "crypt_rite_hall":
+      return "Ritual Vault";
+    case "bone_vault":
+      return "Bone Vault";
+    default:
+      return null;
   }
-
-  return null;
 }
 
 function buildLootHintForRoom(roomType: RoomType): DungeonRoom["lootHint"] {
-  if (roomType === "relic_vault") return "relic";
+  if (
+    roomType === "relic_vault" ||
+    roomType === "relic_chamber" ||
+    roomType === "crypt_vault"
+  ) {
+    return "relic";
+  }
   if (roomType === "treasure_room") return "treasure";
-  if (roomType === "armory" || roomType === "storage") return "supplies";
-  if (roomType === "rest_site") return "cache";
-  if (roomType === "crypt") return "cache";
+  if (roomType === "armory" || roomType === "storage" || roomType === "forge_chamber") {
+    return "supplies";
+  }
+  if (roomType === "rest_site" || roomType === "crypt") return "cache";
   return null;
 }
 
 function buildRoomsForPlans(args: {
   rng: () => number;
   floorId: FloorId;
-  floorIndex: number;
   blueprint: FloorBlueprint;
   roomPlans: RoomNodePlan[];
   puzzleAssignments: Map<number, PuzzleId>;
   trapIndexes: Set<number>;
+  floorIndex: number;
 }): DungeonRoom[] {
-  const { rng, floorId, floorIndex, blueprint, roomPlans, puzzleAssignments, trapIndexes } = args;
+  const { rng, floorId, blueprint, roomPlans, puzzleAssignments, trapIndexes, floorIndex } = args;
 
   return roomPlans.map((plan, roomIndex) => {
     const roomId = makeRoomId(floorIndex, roomIndex);
     const encounterSeed = inferEncounterSeedForRoom(plan.roomType);
     const lootHint = buildLootHintForRoom(plan.roomType);
+    const environment = buildEnvironmentState(blueprint, plan.roomType);
+    const trap = trapIndexes.has(roomIndex)
+      ? chooseTrapForRoom(rng, plan.roomType, blueprint.theme)
+      : null;
+
+    const puzzleId = puzzleAssignments.get(roomIndex) ?? null;
+    const trapId = trap?.id ?? null;
 
     const features = defaultFeaturesForRoomType(plan.roomType);
-    const storyTags: string[] = [
-      `floor_depth:${blueprint.depthLabel}`,
-      `theme:${blueprint.theme}`,
-      ...applyEnvironmentStoryTags(blueprint, plan),
-      ...applyRoleStoryTags(plan),
-      ...(plan.forcedStoryTags ?? []),
-    ];
 
-    if (lootHint) {
-      storyTags.push(`loot:${lootHint}`);
-    }
-
-    if (puzzleAssignments.has(roomIndex)) {
-      const puzzleId = puzzleAssignments.get(roomIndex)!;
-      storyTags.push(`puzzle:${puzzleId}`);
-      features.push({
-        kind: "hazard",
-        discoveredByDefault: false,
-        note: `puzzle:${puzzleId}`,
-      });
-    }
-
-    if (trapIndexes.has(roomIndex)) {
-      const trap = chooseTrapForRoom(rng, plan.roomType, blueprint.theme);
-      if (trap) {
-        storyTags.push(...buildTrapStoryHint(trap));
-
-        const hazardIndex = features.findIndex((f) => f.kind === "hazard");
-        if (hazardIndex >= 0) {
-          features[hazardIndex] = {
-            ...features[hazardIndex],
-            note: trap.id,
-          };
-        } else {
-          features.push({
-            kind: "hazard",
-            discoveredByDefault: false,
-            note: trap.id,
-          });
-        }
+    if (puzzleId) {
+      const existingHazard = features.find((f) => f.kind === "hazard");
+      if (!existingHazard) {
+        features.push({
+          kind: "hazard",
+          discoveredByDefault: false,
+          note: `puzzle:${puzzleId}`,
+        });
       }
     }
 
-    const forcedLabelHint = buildForcedLabelHint(plan);
-    if (forcedLabelHint) {
-      storyTags.push(`label_hint:${forcedLabelHint}`);
+    if (trapId) {
+      const hazardIndex = features.findIndex((f) => f.kind === "hazard");
+      if (hazardIndex >= 0) {
+        features[hazardIndex] = {
+          ...features[hazardIndex],
+          note: trapId,
+        };
+      } else {
+        features.push({
+          kind: "hazard",
+          discoveredByDefault: false,
+          note: trapId,
+        });
+      }
     }
+
+    const forcedLabel = buildForcedLabelHint(plan);
+    const roomTaxonomy = ROOM_TYPE_DEFINITIONS[plan.roomType];
 
     return {
       id: roomId,
       floorId,
       roomType: plan.roomType,
-      label: forcedLabelHint ?? buildRoomLabel(plan.roomType),
+      label: forcedLabel ?? buildRoomLabel(plan.roomType),
       discoverable: roomIndex !== 0,
       discoveredByDefault: roomIndex === 0,
       features,
       encounterSeed,
       lootHint,
-      storyHint: stringifyStoryTags(storyTags),
+      storyHint: buildStoryHintParts({
+        depth: blueprint.depth,
+        theme: blueprint.theme,
+        routeRole: plan.routeRole,
+        branchDepth: plan.branchDepth,
+        environment: blueprint.environment,
+        puzzleId,
+        trapId,
+        setpieceId: plan.setpieceId ?? null,
+        lootHint,
+        refuge: environment.isRefuge,
+        fireSource: environment.hasFireSource,
+      }),
+      routeRole: plan.routeRole,
+      branchDepth: plan.branchDepth,
+      isMainPath: plan.branchDepth === 0,
+      isBranch: plan.branchDepth > 0,
+      isDeadEnd: plan.routeRole === "dead_end",
+      environment,
+      puzzleId,
+      trapId,
+      isSignature: !!plan.setpieceId || plan.routeRole === "signature",
+      setpieceId: plan.setpieceId ?? null,
+      supportsTorchRefill: roomTaxonomy.supportsTorchRefill === true,
+      supportsWarmth: roomTaxonomy.supportsWarmth === true,
     };
   });
 }
@@ -958,6 +1042,7 @@ function buildFloor(
   blueprint: FloorBlueprint
 ): DungeonFloor {
   const floorId = makeFloorId(floorIndex);
+  const floorDefinition = FLOOR_THEME_DEFINITIONS[blueprint.theme];
 
   const roomPlans = buildFloorPlans(rng, blueprint);
   const puzzleAssignments = placePuzzlesOnPlans(rng, blueprint, roomPlans);
@@ -968,11 +1053,11 @@ function buildFloor(
   const rooms = buildRoomsForPlans({
     rng,
     floorId,
-    floorIndex,
     blueprint,
     roomPlans,
     puzzleAssignments,
     trapIndexes,
+    floorIndex,
   });
 
   const roomIds = rooms.map((r) => r.id);
@@ -992,8 +1077,12 @@ function buildFloor(
     id: floorId,
     dungeonId,
     floorIndex,
+    depth: blueprint.depth,
     theme: blueprint.theme,
-    label: buildFloorLabel(blueprint.theme, blueprint.depthLabel),
+    label: buildFloorLabel(blueprint.theme, blueprint.depth),
+    environmentPressure: floorDefinition.environmentPressure,
+    requiresTorchlight: floorDefinition.requiresTorchlight,
+    requiresWarmth: floorDefinition.requiresWarmth,
     startRoomId: rooms[0].id,
     bossRoomId: bossRoom.id,
     rooms,
@@ -1005,8 +1094,6 @@ export function generateDungeon(args: GeneratorArgs): DungeonDefinition {
   const seed = String(args.seed || "echoes-of-fate");
   const dungeonId = String(args.dungeonId || "echoes_dungeon");
 
-  // Echoes of Fate is now explicitly a 3-floor game:
-  // Floor 0, Floor -1, Floor -2 (crypt)
   const blueprints = fixedFloorBlueprints();
   const rng = mulberry32(hash32(seed));
 
