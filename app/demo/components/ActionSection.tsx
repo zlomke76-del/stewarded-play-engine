@@ -417,6 +417,7 @@ export default function ActionSection({
 }: Props) {
   const hasParty = partyMembers.length > 0;
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const hasAutoFocusedRef = useRef(false);
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
   const speechBufferRef = useRef<string>("");
   const shouldResumeListeningRef = useRef(false);
@@ -475,16 +476,6 @@ export default function ActionSection({
     return actingSkillLabels.slice(0, 3);
   }, [actingSkillLabels]);
 
-  const nextActingPlayerId = useMemo(() => {
-    if (partyMembers.length <= 1) return null;
-
-    const currentIndex = partyMembers.findIndex((m) => m.id === actingPlayerId);
-    if (currentIndex === -1) return partyMembers[0]?.id ?? null;
-
-    const nextIndex = (currentIndex + 1) % partyMembers.length;
-    return partyMembers[nextIndex]?.id ?? null;
-  }, [partyMembers, actingPlayerId]);
-
   const lockReason = useMemo(() => {
     if (!combatActive) return null;
     if (dmMode === "human") return null;
@@ -501,9 +492,15 @@ export default function ActionSection({
 
   useEffect(() => {
     if (!canSubmit) return;
-    const id = window.setTimeout(() => textareaRef.current?.focus(), 50);
+    if (hasAutoFocusedRef.current) return;
+
+    const id = window.setTimeout(() => {
+      textareaRef.current?.focus();
+      hasAutoFocusedRef.current = true;
+    }, 50);
+
     return () => window.clearTimeout(id);
-  }, [canSubmit, actingPlayerId]);
+  }, [canSubmit]);
 
   useEffect(() => {
     const RecognitionCtor = window.SpeechRecognition ?? window.webkitSpeechRecognition;
@@ -652,10 +649,6 @@ export default function ActionSection({
     }
 
     onSubmit();
-
-    if (nextActingPlayerId) {
-      onSetActingPlayerId(nextActingPlayerId);
-    }
   }
 
   function toggleListening() {
