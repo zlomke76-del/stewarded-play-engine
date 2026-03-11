@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { getPortraitPath } from "@/lib/portraits/getPortraitPath";
 import { getSkillDefinition } from "@/lib/skills/skillDefinitions";
 import { getSpeciesTraitDefinition } from "@/lib/skills/speciesTraitMap";
@@ -107,6 +107,7 @@ const SFX = {
   uiSuccess: "/assets/audio/sfx_success_01.mp3",
   uiFailure: "/assets/audio/sfx_failure_01.mp3",
   arbiterCanonRecord: "/assets/audio/sfx_arbiter_cannon_record_01.mp3",
+  heroSelectionLoop: "/assets/audio/sfx_hero_selection_01.mp3",
 } as const;
 
 function playSfx(src: string, volume = 0.66) {
@@ -538,6 +539,9 @@ export default function PartySetupSection(props: {
     focusConfirmed: false,
   });
 
+  const heroSelectionAudioRef = useRef<HTMLAudioElement | null>(null);
+  const heroSelectionAudioStartedRef = useRef(false);
+
   const editable = !partyLocked && !!partyDraft;
   const sourceHero = (partyDraft?.members?.[0] ?? partyMembersFallback?.[0]) as PartyMember | undefined;
   const row: PartyMember | null = sourceHero ?? null;
@@ -559,6 +563,68 @@ export default function PartySetupSection(props: {
       resolvedClass: getResolvedClass(row.className),
     };
   }, [row]);
+
+  function stopHeroSelectionLoop(resetTime = true) {
+    const audio = heroSelectionAudioRef.current;
+    if (!audio) return;
+
+    try {
+      audio.pause();
+      if (resetTime) {
+        audio.currentTime = 0;
+      }
+    } catch {
+      // fail silently
+    }
+  }
+
+  function startHeroSelectionLoop() {
+    try {
+      let audio = heroSelectionAudioRef.current;
+
+      if (!audio) {
+        audio = new Audio(SFX.heroSelectionLoop);
+        audio.loop = true;
+        audio.volume = 0.58;
+        audio.preload = "auto";
+        heroSelectionAudioRef.current = audio;
+      }
+
+      if (!audio.paused) return;
+
+      void audio.play().then(() => {
+        heroSelectionAudioStartedRef.current = true;
+      }).catch(() => {});
+    } catch {
+      // fail silently
+    }
+  }
+
+  useEffect(() => {
+    const shouldPlayLoop =
+      enabled &&
+      !!row &&
+      showFullEditor &&
+      !partyCanonicalExists &&
+      editable;
+
+    if (shouldPlayLoop) {
+      startHeroSelectionLoop();
+    } else {
+      stopHeroSelectionLoop(false);
+    }
+
+    return () => {
+      stopHeroSelectionLoop(false);
+    };
+  }, [enabled, row, showFullEditor, partyCanonicalExists, editable]);
+
+  useEffect(() => {
+    return () => {
+      stopHeroSelectionLoop(true);
+      heroSelectionAudioRef.current = null;
+    };
+  }, []);
 
   function setHeroField(patch: Partial<PartyMember>) {
     setPartyDraft((prev) => {
@@ -1176,6 +1242,7 @@ export default function PartySetupSection(props: {
                           playSfx(SFX.uiFailure, 0.5);
                           return;
                         }
+                        stopHeroSelectionLoop(true);
                         playSfx(SFX.arbiterCanonRecord, 0.78);
                         commitParty();
                       }}
