@@ -24,6 +24,18 @@ type Props = {
 type PuzzleStatus = "idle" | "building" | "failed" | "solved";
 
 const TARGET_GAUGES = [4, 2, 3] as const;
+const EXPECTED_BUILD: Exclude<PressurePlateId, "Crown">[] = [
+  "Sun",
+  "Sun",
+  "Sun",
+  "Sun",
+  "Moon",
+  "Moon",
+  "Cross",
+  "Cross",
+  "Cross",
+] as const;
+
 const ROOM_IMAGE =
   "/assets/V3/Dungeon/Puzzles/Pressure_Gauges/corridor_puzzle_room.png";
 
@@ -81,13 +93,6 @@ function gaugeImage(value: number) {
   return GAUGE_STATES[clampGauge(value)];
 }
 
-function plateStatusLabel(
-  plate: PressurePlateId,
-  lastPressedPlate: PressurePlateId | null
-) {
-  return lastPressedPlate === plate ? "Engaged" : "Idle";
-}
-
 function appendSequenceTextToInput(
   current: string,
   sequence: PressurePlateId[],
@@ -100,6 +105,61 @@ function appendSequenceTextToInput(
   const trimmed = current.trim();
   if (!trimmed) return combined;
   return `${trimmed}\n${combined}`;
+}
+
+function bleedNetwork(values: number[]) {
+  return [
+    clampGauge(values[0] - 1),
+    clampGauge(values[1] - 1),
+    clampGauge(values[2] - 1),
+  ];
+}
+
+function incrementGauge(values: number[], plate: Exclude<PressurePlateId, "Crown">) {
+  if (plate === "Sun") {
+    return [clampGauge(values[0] + 1), values[1], values[2]];
+  }
+
+  if (plate === "Moon") {
+    return [values[0], clampGauge(values[1] + 1), values[2]];
+  }
+
+  return [values[0], values[1], clampGauge(values[2] + 1)];
+}
+
+function buildIndexFromSequence(sequence: PressurePlateId[]) {
+  return sequence.filter((plate) => plate !== "Crown").length;
+}
+
+function plateStatusLabel(args: {
+  plate: PressurePlateId;
+  gauges: number[];
+  solved: boolean;
+  status: PuzzleStatus;
+}) {
+  const { plate, gauges, solved, status } = args;
+
+  if (plate === "Sun") {
+    if (gauges[0] >= TARGET_GAUGES[0]) return "Aligned";
+    if (gauges[0] > 0) return "Charging";
+    return status === "failed" ? "Drained" : "Idle";
+  }
+
+  if (plate === "Moon") {
+    if (gauges[1] >= TARGET_GAUGES[1]) return "Aligned";
+    if (gauges[1] > 0) return "Charging";
+    return status === "failed" ? "Drained" : "Idle";
+  }
+
+  if (plate === "Cross") {
+    if (gauges[2] >= TARGET_GAUGES[2]) return "Aligned";
+    if (gauges[2] > 0) return "Charging";
+    return status === "failed" ? "Drained" : "Idle";
+  }
+
+  if (solved) return "Released";
+  if (gaugesMatch(gauges)) return "Ready";
+  return status === "failed" ? "Rejecting" : "Idle";
 }
 
 export default function PressureGaugeVisual(props: Props) {
@@ -118,11 +178,9 @@ export default function PressureGaugeVisual(props: Props) {
   const [sequence, setSequence] = useState<PressurePlateId[]>([]);
   const [status, setStatus] = useState<PuzzleStatus>("idle");
   const [message, setMessage] = useState(
-    "Build pressure with Sun, Moon, and Cross. Use Crown only when the mechanism is ready to judge the pattern."
+    "Build the chamber in order: four Sun charges, two Moon charges, three Cross charges, then Crown to judge."
   );
   const [solved, setSolved] = useState(false);
-  const [lastPressedPlate, setLastPressedPlate] =
-    useState<PressurePlateId | null>(null);
   const [pressedPlate, setPressedPlate] = useState<PressurePlateId | null>(null);
 
   const pressTimerRef = useRef<number | null>(null);
@@ -247,12 +305,11 @@ export default function PressureGaugeVisual(props: Props) {
     }
 
     setPressedPlate(plate);
-    setLastPressedPlate(plate);
 
     pressTimerRef.current = window.setTimeout(() => {
       setPressedPlate(null);
       pressTimerRef.current = null;
-    }, 160);
+    }, 180);
   }
 
   function clearSequence() {
@@ -260,10 +317,9 @@ export default function PressureGaugeVisual(props: Props) {
     setSequence([]);
     setStatus("idle");
     setSolved(false);
-    setLastPressedPlate(null);
     setPressedPlate(null);
     setMessage(
-      "Build pressure with Sun, Moon, and Cross. Use Crown only when the mechanism is ready to judge the pattern."
+      "Build the chamber in order: four Sun charges, two Moon charges, three Cross charges, then Crown to judge."
     );
     solvedCallbackFiredRef.current = false;
   }
@@ -273,6 +329,19 @@ export default function PressureGaugeVisual(props: Props) {
     setPlayerInput(appendSequenceTextToInput(playerInput, sequence, gauges));
   }
 
+  function failBuildAttempt(plate: Exclude<PressurePlateId, "Crown">) {
+    const next = bleedNetwork(gauges);
+
+    setSequence((prev) => [...prev, plate]);
+    setGauges(next);
+    setStatus("failed");
+    setMessage(
+      `${plate} engages out of order. The mechanism rejects the step and bleeds pressure from the network.`
+    );
+
+    playSfx("reject");
+  }
+
   function handleBuildPlate(plate: Exclude<PressurePlateId, "Crown">) {
     if (solved || isSubmitting) return;
 
@@ -280,34 +349,40 @@ export default function PressureGaugeVisual(props: Props) {
     pulsePlate(plate);
     playSfx("plate");
 
-    const next = [...gauges];
+    const buildIndex = buildIndexFromSequence(sequence);
+    const expectedPlate = EXPECTED_BUILD[buildIndex];
 
-    if (plate === "Sun") {
-      next[0] = clampGauge(next[0] + 1);
-      setMessage(
-        next[0] === TARGET_GAUGES[0]
-          ? "The left gauge settles into the chamber’s demanded range."
-          : "Pressure rises through the left channel."
-      );
-    } else if (plate === "Moon") {
-      next[1] = clampGauge(next[1] + 1);
-      setMessage(
-        next[1] === TARGET_GAUGES[1]
-          ? "The center gauge aligns with the hidden demand."
-          : "Pressure gathers in the center channel."
-      );
-    } else {
-      next[2] = clampGauge(next[2] + 1);
-      setMessage(
-        next[2] === TARGET_GAUGES[2]
-          ? "The right gauge steadies close to release."
-          : "The right channel takes more weight."
-      );
+    if (!expectedPlate || plate !== expectedPlate) {
+      failBuildAttempt(plate);
+      return;
     }
+
+    const next = incrementGauge(gauges, plate);
 
     setGauges(next);
     setSequence((prev) => [...prev, plate]);
     setStatus("building");
+
+    if (plate === "Sun") {
+      setMessage(
+        next[0] === TARGET_GAUGES[0]
+          ? "The Sun lane locks in. The left channel now holds its full charge."
+          : "The Sun lane gathers force."
+      );
+    } else if (plate === "Moon") {
+      setMessage(
+        next[1] === TARGET_GAUGES[1]
+          ? "The Moon lane aligns. The center channel now holds."
+          : "The Moon lane takes the hidden weight."
+      );
+    } else {
+      setMessage(
+        next[2] === TARGET_GAUGES[2]
+          ? "The Cross lane completes. The chamber is ready for judgment."
+          : "The Cross lane draws in the remaining charge."
+      );
+    }
+
     playSfx("tick");
   }
 
@@ -318,9 +393,16 @@ export default function PressureGaugeVisual(props: Props) {
     pulsePlate("Crown");
     playSfx("plate");
     setSequence((prev) => [...prev, "Crown"]);
-    setLastPressedPlate("Crown");
 
-    if (gaugesMatch(gauges)) {
+    const buildSequence = sequence.filter(
+      (plate): plate is Exclude<PressurePlateId, "Crown"> => plate !== "Crown"
+    );
+
+    const buildMatches =
+      buildSequence.length === EXPECTED_BUILD.length &&
+      buildSequence.every((plate, index) => plate === EXPECTED_BUILD[index]);
+
+    if (buildMatches && gaugesMatch(gauges)) {
       setSolved(true);
       setStatus("solved");
       setMessage("The crown accepts the built pressure. Stone answers stone.");
@@ -338,11 +420,7 @@ export default function PressureGaugeVisual(props: Props) {
       return;
     }
 
-    const vented = [
-      clampGauge(gauges[0] - 1),
-      clampGauge(gauges[1] - 1),
-      clampGauge(gauges[2] - 1),
-    ];
+    const vented = bleedNetwork(gauges);
 
     setGauges(vented);
     setStatus("failed");
@@ -365,6 +443,21 @@ export default function PressureGaugeVisual(props: Props) {
         : status === "building"
           ? "Pressure Building"
           : "Passage Blocked";
+
+  const sunAligned = gauges[0] >= TARGET_GAUGES[0];
+  const moonAligned = gauges[1] >= TARGET_GAUGES[1];
+  const crossAligned = gauges[2] >= TARGET_GAUGES[2];
+
+  const sunStarted = gauges[0] > 0;
+  const moonStarted = gauges[1] > 0;
+  const crossStarted = gauges[2] > 0;
+
+  const plateGlowState: Record<PressurePlateId, "idle" | "active" | "aligned"> = {
+    Sun: sunAligned ? "aligned" : sunStarted ? "active" : "idle",
+    Moon: moonAligned ? "aligned" : moonStarted ? "active" : "idle",
+    Cross: crossAligned ? "aligned" : crossStarted ? "active" : "idle",
+    Crown: solved ? "aligned" : gaugesMatch(gauges) ? "active" : "idle",
+  };
 
   return (
     <div style={{ display: "grid", gap: 14 }}>
@@ -481,6 +574,11 @@ export default function PressureGaugeVisual(props: Props) {
             userSelect: "none",
             pointerEvents: "none",
             zIndex: 4,
+            filter: sunAligned
+              ? "drop-shadow(0 0 14px rgba(255,212,120,0.42))"
+              : sunStarted
+                ? "drop-shadow(0 0 8px rgba(255,212,120,0.22))"
+                : "none",
           }}
         />
 
@@ -497,6 +595,11 @@ export default function PressureGaugeVisual(props: Props) {
             userSelect: "none",
             pointerEvents: "none",
             zIndex: 4,
+            filter: moonAligned
+              ? "drop-shadow(0 0 14px rgba(255,212,120,0.42))"
+              : moonStarted
+                ? "drop-shadow(0 0 8px rgba(255,212,120,0.22))"
+                : "none",
           }}
         />
 
@@ -513,6 +616,11 @@ export default function PressureGaugeVisual(props: Props) {
             userSelect: "none",
             pointerEvents: "none",
             zIndex: 4,
+            filter: crossAligned
+              ? "drop-shadow(0 0 14px rgba(255,212,120,0.42))"
+              : crossStarted
+                ? "drop-shadow(0 0 8px rgba(255,212,120,0.22))"
+                : "none",
           }}
         />
 
@@ -525,7 +633,9 @@ export default function PressureGaugeVisual(props: Props) {
           ] as const
         ).map((item) => {
           const plate = item.plate;
-          const pressed = pressedPlate === plate;
+          const transientPressed = pressedPlate === plate;
+          const glowState = plateGlowState[plate];
+          const persistentActive = glowState === "active" || glowState === "aligned";
           const images = PLATE_IMAGES[plate];
 
           const handleClick = () => {
@@ -549,7 +659,7 @@ export default function PressureGaugeVisual(props: Props) {
                 top: item.top,
                 width: 76,
                 height: 76,
-                transform: "translate(-50%, -50%)",
+                transform: "translate(-50%, -50%) rotate(45deg)",
                 padding: 0,
                 margin: 0,
                 border: "none",
@@ -564,7 +674,7 @@ export default function PressureGaugeVisual(props: Props) {
               }}
             >
               <img
-                src={pressed ? images.pressed : images.idle}
+                src={transientPressed || persistentActive ? images.pressed : images.idle}
                 alt={`${plate} plate`}
                 draggable={false}
                 style={{
@@ -573,12 +683,16 @@ export default function PressureGaugeVisual(props: Props) {
                   objectFit: "contain",
                   userSelect: "none",
                   pointerEvents: "none",
-                  filter: pressed
-                    ? "drop-shadow(0 0 10px rgba(255,230,170,0.22))"
-                    : "drop-shadow(0 8px 18px rgba(0,0,0,0.30))",
-                  transform: pressed
-                    ? "translateY(4px) scale(0.985)"
-                    : "translateY(0) scale(1)",
+                  filter:
+                    glowState === "aligned"
+                      ? "drop-shadow(0 0 16px rgba(255,226,148,0.42))"
+                      : glowState === "active"
+                        ? "drop-shadow(0 0 10px rgba(255,230,170,0.24))"
+                        : "drop-shadow(0 8px 18px rgba(0,0,0,0.30))",
+                  transform:
+                    transientPressed || persistentActive
+                      ? "translateY(4px) scale(0.985) rotate(-45deg)"
+                      : "translateY(0) scale(1) rotate(-45deg)",
                   transition:
                     "transform 90ms ease, filter 90ms ease, opacity 90ms ease",
                 }}
@@ -775,7 +889,12 @@ export default function PressureGaugeVisual(props: Props) {
                 {plate} Plate
               </div>
               <div style={{ fontWeight: 700, lineHeight: 1.5 }}>
-                {plateStatusLabel(plate, lastPressedPlate)}
+                {plateStatusLabel({
+                  plate,
+                  gauges,
+                  solved,
+                  status,
+                })}
               </div>
             </div>
           ))}
