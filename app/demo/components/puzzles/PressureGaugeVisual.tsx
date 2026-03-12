@@ -18,6 +18,7 @@ type Props = {
   setPlayerInput: (value: string) => void;
   isSubmitting?: boolean;
   riddleLines?: string[];
+  onSolved?: () => void | Promise<void>;
 };
 
 type PuzzleStatus = "idle" | "building" | "failed" | "solved";
@@ -110,6 +111,7 @@ export default function PressureGaugeVisual(props: Props) {
     setPlayerInput,
     isSubmitting = false,
     riddleLines = [],
+    onSolved,
   } = props;
 
   const [gauges, setGauges] = useState<number[]>([0, 0, 0]);
@@ -126,6 +128,7 @@ export default function PressureGaugeVisual(props: Props) {
   const pressTimerRef = useRef<number | null>(null);
   const audioRef = useRef<AudioMap | null>(null);
   const audioUnlockedRef = useRef(false);
+  const solvedCallbackFiredRef = useRef(false);
 
   useEffect(() => {
     const audioMap: AudioMap = {
@@ -175,6 +178,17 @@ export default function PressureGaugeVisual(props: Props) {
       );
     }
   }, [puzzleResult]);
+
+  async function fireSolvedCallback() {
+    if (solvedCallbackFiredRef.current) return;
+    solvedCallbackFiredRef.current = true;
+
+    try {
+      await onSolved?.();
+    } catch {
+      solvedCallbackFiredRef.current = false;
+    }
+  }
 
   function unlockAudio() {
     if (audioUnlockedRef.current) return;
@@ -251,6 +265,7 @@ export default function PressureGaugeVisual(props: Props) {
     setMessage(
       "Build pressure with Sun, Moon, and Cross. Use Crown only when the mechanism is ready to judge the pattern."
     );
+    solvedCallbackFiredRef.current = false;
   }
 
   function appendSequenceToInput() {
@@ -297,7 +312,7 @@ export default function PressureGaugeVisual(props: Props) {
   }
 
   function handleCrown() {
-    if (isSubmitting) return;
+    if (isSubmitting || solved) return;
 
     unlockAudio();
     pulsePlate("Crown");
@@ -319,6 +334,7 @@ export default function PressureGaugeVisual(props: Props) {
         playSfx("gateOpen");
       }, 760);
 
+      void fireSolvedCallback();
       return;
     }
 
@@ -451,53 +467,6 @@ export default function PressureGaugeVisual(props: Props) {
             {intendedRouteLabel ?? "Passage forward"}
           </div>
         </div>
-
-        {riddleLines.length > 0 ? (
-          <div
-            style={{
-              position: "absolute",
-              right: 18,
-              bottom: 18,
-              maxWidth: 320,
-              padding: "12px 14px",
-              borderRadius: 14,
-              border: "1px solid rgba(214,188,120,0.18)",
-              background:
-                "linear-gradient(180deg, rgba(20,18,14,0.84), rgba(10,9,8,0.78))",
-              boxShadow:
-                "0 12px 30px rgba(0,0,0,0.24), inset 0 1px 0 rgba(255,255,255,0.04)",
-              display: "grid",
-              gap: 6,
-              zIndex: 8,
-            }}
-          >
-            <div
-              style={{
-                fontSize: 10,
-                letterSpacing: 0.85,
-                textTransform: "uppercase",
-                opacity: 0.58,
-                color: "rgba(240,242,246,0.84)",
-              }}
-            >
-              Stone Inscription
-            </div>
-
-            <div
-              style={{
-                display: "grid",
-                gap: 4,
-                fontSize: 13,
-                lineHeight: 1.6,
-                color: "rgba(239,226,198,0.94)",
-              }}
-            >
-              {riddleLines.map((line, index) => (
-                <div key={`${index}-${line}`}>{line}</div>
-              ))}
-            </div>
-          </div>
-        ) : null}
 
         <img
           src={gaugeImage(gauges[0])}
@@ -722,6 +691,48 @@ export default function PressureGaugeVisual(props: Props) {
           </div>
         ) : null}
       </div>
+
+      {riddleLines.length > 0 ? (
+        <div
+          style={{
+            padding: "12px 14px",
+            borderRadius: 14,
+            border: "1px solid rgba(214,188,120,0.18)",
+            background:
+              "linear-gradient(180deg, rgba(20,18,14,0.84), rgba(10,9,8,0.78))",
+            boxShadow:
+              "0 12px 30px rgba(0,0,0,0.18), inset 0 1px 0 rgba(255,255,255,0.04)",
+            display: "grid",
+            gap: 6,
+          }}
+        >
+          <div
+            style={{
+              fontSize: 10,
+              letterSpacing: 0.85,
+              textTransform: "uppercase",
+              opacity: 0.58,
+              color: "rgba(240,242,246,0.84)",
+            }}
+          >
+            Stone Inscription
+          </div>
+
+          <div
+            style={{
+              display: "grid",
+              gap: 4,
+              fontSize: 13,
+              lineHeight: 1.6,
+              color: "rgba(239,226,198,0.94)",
+            }}
+          >
+            {riddleLines.map((line, index) => (
+              <div key={`${index}-${line}`}>{line}</div>
+            ))}
+          </div>
+        </div>
+      ) : null}
 
       <div
         style={{
