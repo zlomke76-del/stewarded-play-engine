@@ -737,11 +737,11 @@ export default function PressureGaugeVisual(props: Props) {
                       : glowState === "active"
                         ? "drop-shadow(0 0 10px rgba(255,230,170,0.24))"
                         : "drop-shadow(0 8px 18px rgba(0,0,0,0.30))",
-                  transform:
-                    transientPressed || persistentActive
-                      ? "translateY(4px) scale(0.985) rotate(0deg)"
-                      : "translateY(0) scale(1) rotate(0deg)",
-                  transition:
+                          transform:
+                      transientPressed || persistentActive
+                        ? "translateY(4px) scale(0.985) rotate(45deg)"
+                        : "translateY(0) scale(1) rotate(45deg)",
+                      transition:
                     "transform 90ms ease, filter 90ms ease, opacity 90ms ease",
                 }}
               />
