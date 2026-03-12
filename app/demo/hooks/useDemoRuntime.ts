@@ -698,6 +698,7 @@ export function useDemoRuntime() {
   }, [currentRoom, location.floorId, currentFloor.depth]);
 
   useEffect(() => {
+  useEffect(() => {
     setPuzzleResolution(null);
   }, [location.floorId, location.roomId]);
 
@@ -714,16 +715,27 @@ export function useDemoRuntime() {
   }, [tableAccepted, partyCanonical, state.events, dungeon]);
 
   function resolvePressureGaugePuzzleSuccess() {
+    const successResult = runRoomPuzzleAttemptRuntime({
+      room: currentRoom,
+      floorId: location.floorId,
+      floorDepth: currentFloor.depth,
+      actorId: actingPlayerId,
+      actorName:
+        partyMembers.find((m) => String(m.id) === String(actingPlayerId))?.name ??
+        effectivePlayerNames[0] ??
+        null,
+      inputText: "pressure gauge solved",
+      knownCanon: puzzleCanon,
+    });
+
+    setPuzzleResolution(successResult);
+
     setState((prev) => {
       let next = prev;
 
-      next = appendEventToState(next, "PUZZLE_RESOLVED", {
-        puzzleId: "pressure_gauges",
-        floorId: location.floorId,
-        roomId: location.roomId,
-        success: true,
-        method: "mechanism",
-      } as any);
+      for (const event of successResult.suggestedEvents) {
+        next = appendEventToState(next, event.type, event.payload as any);
+      }
 
       next = appendEventToState(next, "HERO_EXPERIENCE_GAINED", {
         amount: 25,
@@ -751,14 +763,6 @@ export function useDemoRuntime() {
       });
 
       return next;
-    });
-
-    setPuzzleResolution({
-      success: true,
-      summary: `The mechanism releases and the way into ${
-        selectedTraversalTargetLabel ?? "the chosen passage"
-      } opens.`,
-      narration: [],
     });
 
     setGameplayFocusStep("map");
@@ -804,6 +808,7 @@ export function useDemoRuntime() {
           success: true,
           selectedText:
             selectedTraversalTargetLabel ??
+            selectedTraversalRoute?.targetLabel ??
             selectedTraversalRoute?.targetType ??
             selectedTraversalRoute?.id ??
             "",
