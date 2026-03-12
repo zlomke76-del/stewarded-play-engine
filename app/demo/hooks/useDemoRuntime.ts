@@ -114,6 +114,7 @@ type PressurePuzzleVictoryState = {
   xpGranted: number;
   destinationLabel: string;
   selectedText: string;
+  selectedConnectionId: string | null;
   floorId: string;
   roomId: string;
   isFirstPuzzleCompletion: boolean;
@@ -755,6 +756,11 @@ export function useDemoRuntime() {
       selectedTraversalRoute?.targetLabel ??
       "Passage forward";
 
+    const selectedConnectionId =
+      selectedTraversalRoute?.id ??
+      selectedTraversalTargetId ??
+      null;
+
     const isFirstPuzzleCompletion =
       puzzleCanon.filter((record) => record.type === "puzzle_resolved" && record.success === true)
         .length === 0;
@@ -783,6 +789,7 @@ export function useDemoRuntime() {
       xpGranted: 25,
       destinationLabel,
       selectedText,
+      selectedConnectionId,
       floorId: location.floorId,
       roomId: location.roomId,
       isFirstPuzzleCompletion,
@@ -813,6 +820,7 @@ export function useDemoRuntime() {
         prevState: prev,
         success: true,
         selectedText: pressurePuzzleVictoryState.selectedText,
+        selectedConnectionId: pressurePuzzleVictoryState.selectedConnectionId,
         currentRoom,
         reachableConnections,
         dungeon,
@@ -880,6 +888,11 @@ export function useDemoRuntime() {
         selectedTraversalRoute?.targetLabel ??
         "Passage forward";
 
+      const selectedConnectionId =
+        selectedTraversalRoute?.id ??
+        selectedTraversalTargetId ??
+        null;
+
       const isFirstPuzzleCompletion =
         puzzleCanon.filter(
           (record) => record.type === "puzzle_resolved" && record.success === true
@@ -890,6 +903,7 @@ export function useDemoRuntime() {
         xpGranted: 25,
         destinationLabel,
         selectedText,
+        selectedConnectionId,
         floorId: location.floorId,
         roomId: location.roomId,
         isFirstPuzzleCompletion,
