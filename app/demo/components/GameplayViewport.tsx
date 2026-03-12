@@ -10,8 +10,6 @@ import CanonChronicleSection from "./CanonChronicleSection";
 import PressureGaugeVisual from "./puzzles/PressureGaugeVisual";
 import { anchorId } from "../demoUtils";
 
-type PressurePlateId = "Sun" | "Moon" | "Cross" | "Crown";
-
 function ProgressionBanner(props: { demo: any }) {
   const { demo } = props;
 
@@ -575,11 +573,8 @@ function PuzzleCommandPanel(props: {
   prompt: string;
   isSubmitting: boolean;
   onAttempt: () => Promise<void>;
-  sequence: PressurePlateId[];
-  onAppendSequenceToInput: () => void;
-  onClearSequence: () => void;
 }) {
-  const { demo, prompt, isSubmitting, onAttempt, sequence, onAppendSequenceToInput, onClearSequence } = props;
+  const { demo, prompt, isSubmitting, onAttempt } = props;
 
   return (
     <div
@@ -612,53 +607,6 @@ function PuzzleCommandPanel(props: {
         }}
       >
         {prompt}
-      </div>
-
-      <div
-        style={{
-          display: "flex",
-          gap: 8,
-          flexWrap: "wrap",
-        }}
-      >
-        <button
-          type="button"
-          onClick={onAppendSequenceToInput}
-          disabled={sequence.length === 0 || isSubmitting}
-          style={{
-            padding: "10px 12px",
-            borderRadius: 12,
-            border: "1px solid rgba(214,188,120,0.22)",
-            background:
-              "linear-gradient(180deg, rgba(214,188,120,0.14), rgba(214,188,120,0.05))",
-            color: "rgba(245,236,216,0.96)",
-            fontWeight: 800,
-            cursor:
-              sequence.length === 0 || isSubmitting ? "not-allowed" : "pointer",
-            opacity: sequence.length === 0 || isSubmitting ? 0.5 : 1,
-          }}
-        >
-          Use Plate Sequence
-        </button>
-
-        <button
-          type="button"
-          onClick={onClearSequence}
-          disabled={sequence.length === 0 || isSubmitting}
-          style={{
-            padding: "10px 12px",
-            borderRadius: 12,
-            border: "1px solid rgba(255,255,255,0.10)",
-            background: "rgba(255,255,255,0.04)",
-            color: "rgba(238,240,244,0.88)",
-            fontWeight: 700,
-            cursor:
-              sequence.length === 0 || isSubmitting ? "not-allowed" : "pointer",
-            opacity: sequence.length === 0 || isSubmitting ? 0.5 : 1,
-          }}
-        >
-          Clear Sequence
-        </button>
       </div>
 
       <textarea
@@ -737,7 +685,6 @@ function PuzzleRoomPanel(props: {
 }) {
   const { demo, onAdvanceToAction } = props;
 
-  const [plateSequence, setPlateSequence] = useState<PressurePlateId[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const activePuzzle = useMemo(() => {
@@ -764,28 +711,6 @@ function PuzzleRoomPanel(props: {
     String(activePuzzle?.title ?? activePuzzle?.label ?? "")
       .toLowerCase()
       .includes("pressure");
-
-  function handlePressPlate(plate: PressurePlateId) {
-    setPlateSequence((prev) => {
-      if (prev.length >= 4) return prev;
-      if (prev.includes(plate)) return prev;
-      return [...prev, plate];
-    });
-  }
-
-  function handleClearSequence() {
-    setPlateSequence([]);
-  }
-
-  function handleAppendSequenceToInput() {
-    if (plateSequence.length === 0) return;
-
-    const sequenceText = `Plate order: ${plateSequence.join(" -> ")}.`;
-
-    const current = String(demo.playerInput ?? "").trim();
-    const next = current ? `${current}\n${sequenceText}` : sequenceText;
-    demo.setPlayerInput(next);
-  }
 
   async function handleAttempt() {
     const trimmed = String(demo.playerInput ?? "").trim();
@@ -827,9 +752,8 @@ function PuzzleRoomPanel(props: {
               currentRoomTitle={demo.currentRoomTitle}
               intendedRouteLabel={intendedRouteLabel}
               puzzleResult={puzzleResult}
-              plateSequence={plateSequence}
-              onPressPlate={handlePressPlate}
-              onClearSequence={handleClearSequence}
+              playerInput={demo.playerInput ?? ""}
+              setPlayerInput={demo.setPlayerInput}
               isSubmitting={isSubmitting}
             />
           ) : null}
@@ -991,9 +915,6 @@ function PuzzleRoomPanel(props: {
             prompt={activePuzzle?.prompt ?? "Describe how your hero attempts the puzzle."}
             isSubmitting={isSubmitting}
             onAttempt={handleAttempt}
-            sequence={plateSequence}
-            onAppendSequenceToInput={handleAppendSequenceToInput}
-            onClearSequence={handleClearSequence}
           />
 
           {puzzleResult ? (
