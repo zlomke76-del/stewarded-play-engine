@@ -109,6 +109,16 @@ type MusicRefs = {
   lastCombatIndexRef: React.MutableRefObject<number>;
 };
 
+type PressurePuzzleVictoryState = {
+  isOpen: boolean;
+  xpGranted: number;
+  destinationLabel: string;
+  selectedText: string;
+  floorId: string;
+  roomId: string;
+  isFirstPuzzleCompletion: boolean;
+};
+
 export function useDemoRuntime() {
   const role: "arbiter" = "arbiter";
 
@@ -149,6 +159,10 @@ export function useDemoRuntime() {
 
   const [puzzleResolution, setPuzzleResolution] = useState<PuzzleResolution | null>(null);
   const [selectedTraversalTargetId, setSelectedTraversalTargetId] = useState<string | null>(null);
+  const [pressurePuzzleVictoryState, setPressurePuzzleVictoryState] =
+    useState<PressurePuzzleVictoryState | null>(null);
+  const [isConfirmingPressurePuzzleTraversal, setIsConfirmingPressurePuzzleTraversal] =
+    useState(false);
 
   const outcomesCount = useMemo(
     () => state.events.filter((e: any) => e?.type === "OUTCOME").length,
@@ -699,6 +713,8 @@ export function useDemoRuntime() {
 
   useEffect(() => {
     setPuzzleResolution(null);
+    setPressurePuzzleVictoryState(null);
+    setIsConfirmingPressurePuzzleTraversal(false);
   }, [location.floorId, location.roomId]);
 
   useEffect(() => {
@@ -727,6 +743,22 @@ export function useDemoRuntime() {
       knownCanon: puzzleCanon,
     });
 
+    const selectedText =
+      selectedTraversalTargetLabel ??
+      selectedTraversalRoute?.targetLabel ??
+      selectedTraversalRoute?.targetType ??
+      selectedTraversalRoute?.id ??
+      "";
+
+    const destinationLabel =
+      selectedTraversalTargetLabel ??
+      selectedTraversalRoute?.targetLabel ??
+      "Passage forward";
+
+    const isFirstPuzzleCompletion =
+      puzzleCanon.filter((record) => record.type === "puzzle_resolved" && record.success === true)
+        .length === 0;
+
     setPuzzleResolution(successResult);
 
     setState((prev) => {
@@ -743,15 +775,44 @@ export function useDemoRuntime() {
         roomId: location.roomId,
       } as any);
 
-      next = commitDungeonTraversalBundle({
-        prevState: next,
+      return next;
+    });
+
+    setPressurePuzzleVictoryState({
+      isOpen: true,
+      xpGranted: 25,
+      destinationLabel,
+      selectedText,
+      floorId: location.floorId,
+      roomId: location.roomId,
+      isFirstPuzzleCompletion,
+    });
+
+    setGameplayFocusStep("puzzle");
+    setActiveSection("puzzle");
+  }
+
+  function confirmPressurePuzzleTraversal() {
+    if (!pressurePuzzleVictoryState?.isOpen) return;
+    if (isConfirmingPressurePuzzleTraversal) return;
+
+    const sameRoom =
+      pressurePuzzleVictoryState.floorId === location.floorId &&
+      pressurePuzzleVictoryState.roomId === location.roomId;
+
+    if (!sameRoom) {
+      setPressurePuzzleVictoryState(null);
+      setIsConfirmingPressurePuzzleTraversal(false);
+      return;
+    }
+
+    setIsConfirmingPressurePuzzleTraversal(true);
+
+    setState((prev) =>
+      commitDungeonTraversalBundle({
+        prevState: prev,
         success: true,
-        selectedText:
-          selectedTraversalTargetLabel ??
-          selectedTraversalRoute?.targetLabel ??
-          selectedTraversalRoute?.targetType ??
-          selectedTraversalRoute?.id ??
-          "",
+        selectedText: pressurePuzzleVictoryState.selectedText,
         currentRoom,
         reachableConnections,
         dungeon,
@@ -759,13 +820,13 @@ export function useDemoRuntime() {
         roomId: location.roomId,
         openedDoorIds,
         unlockedDoorIds,
-      });
+      })
+    );
 
-      return next;
-    });
-
+    setPressurePuzzleVictoryState(null);
     setGameplayFocusStep("map");
     setActiveSection("map");
+    setIsConfirmingPressurePuzzleTraversal(false);
   }
 
   async function runRoomPuzzleAttempt(inputText: string) {
@@ -801,32 +862,41 @@ export function useDemoRuntime() {
           floorId: location.floorId,
           roomId: location.roomId,
         } as any);
-
-        next = commitDungeonTraversalBundle({
-          prevState: next,
-          success: true,
-          selectedText:
-            selectedTraversalTargetLabel ??
-            selectedTraversalRoute?.targetLabel ??
-            selectedTraversalRoute?.targetType ??
-            selectedTraversalRoute?.id ??
-            "",
-          currentRoom,
-          reachableConnections,
-          dungeon,
-          floorId: location.floorId,
-          roomId: location.roomId,
-          openedDoorIds,
-          unlockedDoorIds,
-        });
       }
 
       return next;
     });
 
     if (result.success) {
-      setGameplayFocusStep("map");
-      setActiveSection("map");
+      const selectedText =
+        selectedTraversalTargetLabel ??
+        selectedTraversalRoute?.targetLabel ??
+        selectedTraversalRoute?.targetType ??
+        selectedTraversalRoute?.id ??
+        "";
+
+      const destinationLabel =
+        selectedTraversalTargetLabel ??
+        selectedTraversalRoute?.targetLabel ??
+        "Passage forward";
+
+      const isFirstPuzzleCompletion =
+        puzzleCanon.filter(
+          (record) => record.type === "puzzle_resolved" && record.success === true
+        ).length === 0;
+
+      setPressurePuzzleVictoryState({
+        isOpen: true,
+        xpGranted: 25,
+        destinationLabel,
+        selectedText,
+        floorId: location.floorId,
+        roomId: location.roomId,
+        isFirstPuzzleCompletion,
+      });
+
+      setGameplayFocusStep("puzzle");
+      setActiveSection("puzzle");
     }
 
     return result;
@@ -1035,6 +1105,9 @@ export function useDemoRuntime() {
     puzzleResolution,
     setPuzzleResolution,
     resolvePressureGaugePuzzleSuccess,
+    pressurePuzzleVictoryState,
+    isConfirmingPressurePuzzleTraversal,
+    confirmPressurePuzzleTraversal,
 
     selectedTraversalTargetId,
     setSelectedTraversalTargetId,
