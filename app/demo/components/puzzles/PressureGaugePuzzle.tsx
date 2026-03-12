@@ -34,7 +34,7 @@ const SFX = {
   gateOpen: "/assets/audio/Puzzles/Pressure_Plates/sfx_stone_gate_rumble_open.mp3",
 } as const;
 
-type AudioMap = Record<keyof typeof SFX, HTMLAudioElement | null>;
+type AudioMap = Record<keyof typeof SFX, HTMLAudioElement>;
 
 function clampGauge(value: number) {
   return Math.max(0, Math.min(4, value));
@@ -92,15 +92,7 @@ export default function PressureGaugePuzzle() {
   );
   const [solved, setSolved] = useState(false);
 
-  const audioRef = useRef<AudioMap>({
-    plate: null,
-    tick: null,
-    reject: null,
-    validate: null,
-    release: null,
-    gateOpen: null,
-  });
-
+  const audioRef = useRef<AudioMap | null>(null);
   const audioUnlockedRef = useRef(false);
 
   useEffect(() => {
@@ -131,17 +123,19 @@ export default function PressureGaugePuzzle() {
         audio.pause();
         audio.src = "";
       });
+      audioRef.current = null;
     };
   }, []);
 
   function unlockAudio() {
     if (audioUnlockedRef.current) return;
 
+    const audioMap = audioRef.current;
+    if (!audioMap) return;
+
     audioUnlockedRef.current = true;
 
-    Object.values(audioRef.current).forEach((audio) => {
-      if (!audio) return;
-
+    Object.values(audioMap).forEach((audio) => {
       try {
         audio.muted = true;
         audio.currentTime = 0;
@@ -169,15 +163,19 @@ export default function PressureGaugePuzzle() {
   }
 
   function playSfx(name: keyof typeof SFX) {
-    const audio = audioRef.current[name];
-    if (!audio) return;
+    const audioMap = audioRef.current;
+    if (!audioMap) return;
+
+    const audio = audioMap[name];
 
     try {
       audio.pause();
       audio.currentTime = 0;
-      void audio.play().catch(() => {});
-    } catch {
-      // fail silently
+      void audio.play().catch((err) => {
+        console.warn("SFX failed:", name, err);
+      });
+    } catch (err) {
+      console.warn("SFX error:", name, err);
     }
   }
 
