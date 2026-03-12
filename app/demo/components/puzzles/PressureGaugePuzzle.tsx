@@ -560,4 +560,3 @@ export default function PressureGaugePuzzle() {
     </div>
   );
 }
-Need anything else added here?
