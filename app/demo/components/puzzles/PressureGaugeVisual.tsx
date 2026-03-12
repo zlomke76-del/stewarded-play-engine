@@ -15,6 +15,7 @@ type PressurePuzzleVictoryState = {
   xpGranted: number;
   destinationLabel: string;
   selectedText: string;
+  selectedConnectionId: string | null;
   floorId: string;
   roomId: string;
   isFirstPuzzleCompletion: boolean;
