@@ -120,7 +120,9 @@ const SECRET_PASSAGE_ASSETS: readonly string[] = [
 
 const ROOM_ASSETS: Record<string, readonly string[]> = {
   entrance: ["/assets/V3/Dungeon/Entrance/Main_01.png"],
+
   corridor: ["/assets/V3/Dungeon/Corridor/Corridor_01.png"],
+
   guard_post: ["/assets/V3/Dungeon/Guard_Post/Guard_Post_01.png"],
 
   breach_chamber: ["/assets/V3/Dungeon/Breach_Chamber/breach_chamber_01.png"],
@@ -139,6 +141,36 @@ const ROOM_ASSETS: Record<string, readonly string[]> = {
   shrine: ["/assets/V3/Dungeon/Shrine/shrine_01.png"],
   shrine_room: ["/assets/V3/Dungeon/Shrine/shrine_01.png"],
   forgotten_shrine: ["/assets/V3/Dungeon/Shrine/shrine_01.png"],
+
+  barracks: ["/assets/V3/Dungeon/Barracks/barracks_01.png"],
+  barracks_room: ["/assets/V3/Dungeon/Barracks/barracks_01.png"],
+
+  camp: ["/assets/V3/Dungeon/Camp/camp_01.png"],
+  rest_site: ["/assets/V3/Dungeon/Camp/camp_01.png"],
+  campsite: ["/assets/V3/Dungeon/Camp/camp_01.png"],
+
+  collapsed: ["/assets/V3/Dungeon/Collapsed/collapsed_01.png"],
+  collapsed_passage: ["/assets/V3/Dungeon/Collapsed/collapsed_01.png"],
+  collapsed_corridor: ["/assets/V3/Dungeon/Collapsed/collapsed_01.png"],
+
+  flooded: ["/assets/V3/Dungeon/Flooded/flooded_01.png"],
+  flooded_room: ["/assets/V3/Dungeon/Flooded/flooded_01.png"],
+  flooded_passage: ["/assets/V3/Dungeon/Flooded/flooded_01.png"],
+
+  mess_hall: ["/assets/V3/Dungeon/Mess_Hall/mess_hall_01.png"],
+  dining_hall: ["/assets/V3/Dungeon/Mess_Hall/mess_hall_01.png"],
+
+  prison: ["/assets/V3/Dungeon/Prison/prison_01.png"],
+  cell_block: ["/assets/V3/Dungeon/Prison/prison_01.png"],
+
+  ritual_chamber: ["/assets/V3/Dungeon/Ritual_Chamber/ritual_chamber_01.png"],
+  ritual_room: ["/assets/V3/Dungeon/Ritual_Chamber/ritual_chamber_01.png"],
+  ritual_site: ["/assets/V3/Dungeon/Ritual_Chamber/ritual_chamber_01.png"],
+
+  watchtower: ["/assets/V3/Dungeon/Watchtower/watchtower_01.png"],
+  tower: ["/assets/V3/Dungeon/Watchtower/watchtower_01.png"],
+
+  tavern: ["/assets/V3/Dungeon/Tavern/tavern_01.png"],
 
   ruined_outpost_default: ["/assets/V3/Dungeon/Military_Outpost/Military_Outpost_01.png"],
   default: ["/assets/V3/Dungeon/Entrance/Main_01.png"],
