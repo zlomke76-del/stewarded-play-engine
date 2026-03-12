@@ -53,7 +53,6 @@ import {
 import {
   buildStarterMember,
   cleanCommittedSoloParty,
-  defaultParty,
   deriveInjuryStacksForPlayer,
   deriveLatestParty,
   displayName,
@@ -263,7 +262,11 @@ export function useDemoRuntime() {
 
   const activeCombatantSpec = useMemo(() => {
     if (!derivedCombat?.activeCombatantId) return null;
-    return derivedCombat.participants.find((p: any) => p.id === derivedCombat.activeCombatantId) ?? null;
+    return (
+      derivedCombat.participants.find(
+        (p: any) => p.id === derivedCombat.activeCombatantId
+      ) ?? null
+    );
   }, [derivedCombat]);
 
   const isEnemyTurn = combatActive && activeCombatantSpec?.kind === "enemy_group";
@@ -338,7 +341,12 @@ export function useDemoRuntime() {
       createEnterDungeon({
         canEnterDungeon,
         playIntro: () =>
-          playIntroTheme({ introAudioRef, bgmAudioRef, currentMusicModeRef, loop: true }),
+          playIntroTheme({
+            introAudioRef,
+            bgmAudioRef,
+            currentMusicModeRef,
+            loop: true,
+          }),
         setEnteredDungeonState,
         setDungeonDescentConfirmed,
         setActiveSection,
@@ -389,7 +397,12 @@ export function useDemoRuntime() {
 
     if (!tableAccepted) {
       if (currentMusicModeRef.current !== "intro" || !introIsPlaying) {
-        playIntroTheme({ introAudioRef, bgmAudioRef, currentMusicModeRef, loop: true });
+        playIntroTheme({
+          introAudioRef,
+          bgmAudioRef,
+          currentMusicModeRef,
+          loop: true,
+        });
       }
       return;
     }
@@ -552,7 +565,9 @@ export function useDemoRuntime() {
     if (combatEnded) return;
 
     setState((prev) =>
-      appendEventToState(prev, "COMBAT_ENDED", { combatId: derivedCombat.combatId } as any)
+      appendEventToState(prev, "COMBAT_ENDED", {
+        combatId: derivedCombat.combatId,
+      } as any)
     );
   }
 
@@ -620,7 +635,14 @@ export function useDemoRuntime() {
         chronicleSeed,
         dungeonEvolutionSignals: dungeonEvolution.signals,
       }),
-    [dungeon, currentFloor, currentRoom, reachableConnections, chronicleSeed, dungeonEvolution.signals]
+    [
+      dungeon,
+      currentFloor,
+      currentRoom,
+      reachableConnections,
+      chronicleSeed,
+      dungeonEvolution.signals,
+    ]
   );
 
   const roomConnectionsView = useMemo(
@@ -690,6 +712,58 @@ export function useDemoRuntime() {
       })
     );
   }, [tableAccepted, partyCanonical, state.events, dungeon]);
+
+  function resolvePressureGaugePuzzleSuccess() {
+    setState((prev) => {
+      let next = prev;
+
+      next = appendEventToState(next, "PUZZLE_RESOLVED", {
+        puzzleId: "pressure_gauges",
+        floorId: location.floorId,
+        roomId: location.roomId,
+        success: true,
+        method: "mechanism",
+      } as any);
+
+      next = appendEventToState(next, "HERO_EXPERIENCE_GAINED", {
+        amount: 25,
+        source: "pressure_gauges_puzzle",
+        floorId: location.floorId,
+        roomId: location.roomId,
+      } as any);
+
+      next = commitDungeonTraversalBundle({
+        prevState: next,
+        success: true,
+        selectedText:
+          selectedTraversalTargetLabel ??
+          selectedTraversalRoute?.targetLabel ??
+          selectedTraversalRoute?.targetType ??
+          selectedTraversalRoute?.id ??
+          "",
+        currentRoom,
+        reachableConnections,
+        dungeon,
+        floorId: location.floorId,
+        roomId: location.roomId,
+        openedDoorIds,
+        unlockedDoorIds,
+      });
+
+      return next;
+    });
+
+    setPuzzleResolution({
+      success: true,
+      summary: `The mechanism releases and the way into ${
+        selectedTraversalTargetLabel ?? "the chosen passage"
+      } opens.`,
+      narration: [],
+    });
+
+    setGameplayFocusStep("map");
+    setActiveSection("map");
+  }
 
   async function runRoomPuzzleAttempt(inputText: string) {
     const trimmed = String(inputText ?? "").trim();
@@ -818,10 +892,14 @@ export function useDemoRuntime() {
   const showGameplay = presentationPhase === "gameplay";
 
   const activeEnemyOverlayName =
-    dmMode !== "human" && combatActive && isEnemyTurn ? String(activeCombatantSpec?.name ?? "") : null;
+    dmMode !== "human" && combatActive && isEnemyTurn
+      ? String(activeCombatantSpec?.name ?? "")
+      : null;
 
   const activeEnemyOverlayId =
-    dmMode !== "human" && combatActive && isEnemyTurn ? String(activeCombatantSpec?.id ?? "") : null;
+    dmMode !== "human" && combatActive && isEnemyTurn
+      ? String(activeCombatantSpec?.id ?? "")
+      : null;
 
   const solaceNeutralEnemyTurnEnabled =
     dmMode === "solace-neutral" &&
@@ -1051,6 +1129,7 @@ export function useDemoRuntime() {
     activeRoomPuzzle,
     activePuzzleBlock,
     runRoomPuzzleAttempt,
+    resolvePressureGaugePuzzleSuccess,
 
     chronicleSeed,
     roomNarrative: roomView.roomNarrative,
