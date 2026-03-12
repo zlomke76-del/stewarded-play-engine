@@ -929,6 +929,7 @@ export function useDemoRuntime() {
         payload,
         playerInput,
         selectedOptionDescription: selectedText,
+        selectedConnectionId: selectedTraversalRoute?.id ?? selectedTraversalTargetId ?? null,
         location,
         currentRoom,
         reachableConnections,
