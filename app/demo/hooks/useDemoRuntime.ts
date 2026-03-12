@@ -66,7 +66,10 @@ import {
   stopAllMusic,
   stopAmbience,
 } from "./runtime/demoRuntimeAudio";
-import { mapStateEventsToPuzzleCanon } from "./runtime/demoRuntimeTraversal";
+import {
+  commitDungeonTraversalBundle,
+  mapStateEventsToPuzzleCanon,
+} from "./runtime/demoRuntimeTraversal";
 import {
   deriveChapterState,
   deriveGameplayPermissions,
@@ -146,6 +149,7 @@ export function useDemoRuntime() {
   } | null>(null);
 
   const [puzzleResolution, setPuzzleResolution] = useState<PuzzleResolution | null>(null);
+  const [selectedTraversalTargetId, setSelectedTraversalTargetId] = useState<string | null>(null);
 
   const outcomesCount = useMemo(
     () => state.events.filter((e: any) => e?.type === "OUTCOME").length,
@@ -630,6 +634,26 @@ export function useDemoRuntime() {
     [reachableConnections, currentRoom, currentFloor, dungeon]
   );
 
+  useEffect(() => {
+    const firstRouteId = roomConnectionsView[0]?.id ?? null;
+
+    setSelectedTraversalTargetId((prev) => {
+      if (!prev) return firstRouteId;
+      const stillExists = roomConnectionsView.some((route) => route.id === prev);
+      return stillExists ? prev : firstRouteId;
+    });
+  }, [roomConnectionsView, location.floorId, location.roomId]);
+
+  const selectedTraversalRoute = useMemo(() => {
+    return (
+      roomConnectionsView.find((route) => route.id === selectedTraversalTargetId) ??
+      roomConnectionsView[0] ??
+      null
+    );
+  }, [roomConnectionsView, selectedTraversalTargetId]);
+
+  const selectedTraversalTargetLabel = selectedTraversalRoute?.targetLabel ?? null;
+
   const puzzleCanon = useMemo(
     () => mapStateEventsToPuzzleCanon(state.events as any[]) as PuzzleCanonRecord[],
     [state.events]
@@ -686,19 +710,45 @@ export function useDemoRuntime() {
 
     setPuzzleResolution(result);
 
-    if (result.suggestedEvents.length > 0) {
-      setState((prev) => {
-        let next = prev;
-        for (const event of result.suggestedEvents) {
-          next = appendEventToState(next, event.type, event.payload as any);
-        }
-        return next;
-      });
-    }
+    setState((prev) => {
+      let next = prev;
+
+      for (const event of result.suggestedEvents) {
+        next = appendEventToState(next, event.type, event.payload as any);
+      }
+
+      if (result.success) {
+        next = appendEventToState(next, "HERO_EXPERIENCE_GAINED", {
+          amount: 25,
+          source: "pressure_gauges_puzzle",
+          floorId: location.floorId,
+          roomId: location.roomId,
+        } as any);
+
+        next = commitDungeonTraversalBundle({
+          prevState: next,
+          success: true,
+          selectedText:
+            selectedTraversalTargetLabel ??
+            selectedTraversalRoute?.targetType ??
+            selectedTraversalRoute?.id ??
+            "",
+          currentRoom,
+          reachableConnections,
+          dungeon,
+          floorId: location.floorId,
+          roomId: location.roomId,
+          openedDoorIds,
+          unlockedDoorIds,
+        });
+      }
+
+      return next;
+    });
 
     if (result.success) {
-      setGameplayFocusStep("action");
-      setActiveSection("action");
+      setGameplayFocusStep("chamber");
+      setActiveSection("map");
     }
 
     return result;
@@ -906,6 +956,10 @@ export function useDemoRuntime() {
 
     puzzleResolution,
     setPuzzleResolution,
+
+    selectedTraversalTargetId,
+    setSelectedTraversalTargetId,
+    selectedTraversalTargetLabel,
 
     outcomesCount,
     canonCount,
