@@ -38,35 +38,52 @@ const IMAGE_BY_SYMBOL: Record<
   },
 };
 
-const PRESS_DURATION_MS = 180;
+const PRESS_DURATION_MS = 140;
 
 export default function PressurePlate(props: Props) {
   const { symbol, left, top, onPress, disabled = false } = props;
 
   const [pressed, setPressed] = useState(false);
-  const resetTimerRef = useRef<number | null>(null);
+  const timerRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
+  const pressLockRef = useRef(false);
+
+  function clearTimer() {
+    if (timerRef.current !== null) {
+      window.clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+  }
+
+  function releaseVisual() {
+    clearTimer();
+    setPressed(false);
+    pressLockRef.current = false;
+  }
 
   useEffect(() => {
     return () => {
-      if (resetTimerRef.current !== null) {
-        window.clearTimeout(resetTimerRef.current);
-      }
+      clearTimer();
     };
   }, []);
 
-  function triggerPress() {
-    if (disabled) return;
-
-    if (resetTimerRef.current !== null) {
-      window.clearTimeout(resetTimerRef.current);
+  useEffect(() => {
+    if (disabled) {
+      releaseVisual();
     }
+  }, [disabled]);
 
+  function handlePressStart() {
+    if (disabled) return;
+    if (pressLockRef.current) return;
+
+    pressLockRef.current = true;
     setPressed(true);
     onPress();
 
-    resetTimerRef.current = window.setTimeout(() => {
+    timerRef.current = window.setTimeout(() => {
       setPressed(false);
-      resetTimerRef.current = null;
+      pressLockRef.current = false;
+      timerRef.current = null;
     }, PRESS_DURATION_MS);
   }
 
@@ -76,7 +93,11 @@ export default function PressurePlate(props: Props) {
   return (
     <button
       type="button"
-      onClick={triggerPress}
+      onPointerDown={handlePressStart}
+      onPointerUp={releaseVisual}
+      onPointerCancel={releaseVisual}
+      onPointerLeave={releaseVisual}
+      onBlur={releaseVisual}
       disabled={disabled}
       aria-label={images.alt}
       style={{
@@ -97,6 +118,7 @@ export default function PressurePlate(props: Props) {
         display: "grid",
         placeItems: "center",
         opacity: disabled ? 0.72 : 1,
+        touchAction: "manipulation",
       }}
     >
       <img
@@ -111,11 +133,12 @@ export default function PressurePlate(props: Props) {
           userSelect: "none",
           pointerEvents: "none",
           filter: pressed
-            ? "drop-shadow(0 0 12px rgba(255,230,170,0.18))"
+            ? "drop-shadow(0 0 10px rgba(255,230,170,0.18))"
             : "drop-shadow(0 8px 18px rgba(0,0,0,0.26))",
-          transform: pressed ? "translateY(4px) scale(0.985)" : "translateY(0) scale(1)",
-          transition:
-            "transform 110ms ease, filter 110ms ease, opacity 110ms ease",
+          transform: pressed
+            ? "translateY(4px) scale(0.985)"
+            : "translateY(0) scale(1)",
+          transition: "transform 90ms ease, filter 90ms ease, opacity 90ms ease",
         }}
       />
     </button>
