@@ -27,7 +27,8 @@ function ProgressionBanner(props: { demo: any }) {
   const masteryUnlocked = Boolean(
     summary.hero?.masteryUnlocked ?? progression.hero?.masteryUnlocked
   );
-  const partyActive = summary.party?.activeSlots ?? progression.party?.activeSlots ?? 1;
+  const partyActive =
+    summary.party?.activeSlots ?? progression.party?.activeSlots ?? 1;
   const partyMax = summary.party?.maxSlots ?? progression.party?.maxSlots ?? 6;
   const inventoryUsed =
     summary.inventory?.usedSlots ?? progression.inventory?.usedSlots ?? 0;
@@ -45,7 +46,8 @@ function ProgressionBanner(props: { demo: any }) {
       progression.campaign?.fullFellowshipAssembled
   );
   const relicBonded = summary.relics?.bondedCount ?? 0;
-  const fallen = summary.party?.fallenMembers ?? progression.party?.fallenMembers ?? 0;
+  const fallen =
+    summary.party?.fallenMembers ?? progression.party?.fallenMembers ?? 0;
 
   const statusTone = finalReady
     ? {
@@ -432,7 +434,9 @@ function StageTabs(props: {
               background: active
                 ? "rgba(214,188,120,0.10)"
                 : "rgba(255,255,255,0.04)",
-              color: active ? "rgba(245,236,216,0.96)" : "rgba(228,232,240,0.84)",
+              color: active
+                ? "rgba(245,236,216,0.96)"
+                : "rgba(228,232,240,0.84)",
               fontSize: 11,
               fontWeight: active ? 800 : 700,
               letterSpacing: 0.6,
@@ -621,7 +625,8 @@ function PuzzleCommandPanel(props: {
           resize: "vertical",
           borderRadius: 16,
           border: "1px solid rgba(214, 188, 120, 0.18)",
-          background: "linear-gradient(180deg, rgba(8,10,16,0.88), rgba(10,12,18,0.78))",
+          background:
+            "linear-gradient(180deg, rgba(8,10,16,0.88), rgba(10,12,18,0.78))",
           color: "rgba(245,236,216,0.96)",
           padding: "14px 16px",
           lineHeight: 1.6,
@@ -746,7 +751,7 @@ function PuzzleRoomPanel(props: {
         title={activePuzzle?.title ?? activePuzzle?.label ?? "Puzzle Chamber"}
         description="The chamber’s immediate obstacle now takes the center. Solve or answer it before returning to broad command."
         footer={
-          puzzleResult ? (
+          !isPressureGaugePuzzle && puzzleResult ? (
             <SceneAdvanceBar
               label="Continue to Command"
               hint="The trial has been confronted. Now decide what the hero does next."
@@ -757,20 +762,20 @@ function PuzzleRoomPanel(props: {
       >
         <div style={{ display: "grid", gap: 14 }}>
           {isPressureGaugePuzzle ? (
-        <PressureGaugeVisual
-          currentRoomTitle={demo.currentRoomTitle}
-          intendedRouteLabel={intendedRouteLabel}
-          puzzleResult={puzzleResult}
-          playerInput={demo.playerInput ?? ""}
-          setPlayerInput={demo.setPlayerInput}
-          isSubmitting={isSubmitting}
-          riddleLines={riddleLines}
-          onSolved={async () => {
-            if (typeof demo.runRoomPuzzleAttempt === "function") {
-              await demo.runRoomPuzzleAttempt("pressure gauge solved");
-            }
-          }}
-        />
+            <PressureGaugeVisual
+              currentRoomTitle={demo.currentRoomTitle}
+              intendedRouteLabel={intendedRouteLabel}
+              puzzleResult={puzzleResult}
+              playerInput={demo.playerInput ?? ""}
+              setPlayerInput={demo.setPlayerInput}
+              isSubmitting={isSubmitting}
+              riddleLines={riddleLines}
+              onSolved={async () => {
+                if (typeof demo.resolvePressureGaugePuzzleSuccess === "function") {
+                  await demo.resolvePressureGaugePuzzleSuccess();
+                }
+              }}
+            />
           ) : (
             <>
               <div
