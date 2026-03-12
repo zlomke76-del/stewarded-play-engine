@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import type { RoomFeatureLite } from "../lib/demoNarration";
 
 type RouteView = {
@@ -23,6 +23,8 @@ type Props = {
   roomExitNarrative: string[];
   roomConnectionsView: RouteView[];
   currentFeatures: RoomFeatureLite[];
+  selectedRouteId: string | null;
+  onSelectRoute: (routeId: string) => void;
 };
 
 function formatTitle(value: string) {
@@ -118,10 +120,9 @@ export default function RoomTopologyPanel(props: Props) {
     roomExitNarrative,
     roomConnectionsView,
     currentFeatures,
+    selectedRouteId,
+    onSelectRoute,
   } = props;
-
-  const initialSelectedRouteId = roomConnectionsView[0]?.id ?? null;
-  const [selectedRouteId, setSelectedRouteId] = useState<string | null>(initialSelectedRouteId);
 
   const selectedRoute = useMemo(() => {
     return roomConnectionsView.find((route) => route.id === selectedRouteId) ?? roomConnectionsView[0] ?? null;
@@ -325,7 +326,7 @@ export default function RoomTopologyPanel(props: Props) {
                   <button
                     key={route.id}
                     type="button"
-                    onClick={() => setSelectedRouteId(route.id)}
+                    onClick={() => onSelectRoute(route.id)}
                     style={{
                       width: "100%",
                       textAlign: "left",
