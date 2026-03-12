@@ -101,7 +101,10 @@ export default function PressureGaugePuzzle() {
   const [solved, setSolved] = useState(false);
 
   const buildSequence = useMemo(
-    () => sequence.filter((plate): plate is Exclude<PlateId, "crown"> => plate !== "crown"),
+    () =>
+      sequence.filter(
+        (plate): plate is Exclude<PlateId, "crown"> => plate !== "crown"
+      ),
     [sequence]
   );
 
@@ -355,10 +358,34 @@ export default function PressureGaugePuzzle() {
         <PressureGauge value={gauges[1]} left={825} top={430} />
         <PressureGauge value={gauges[2]} left={1040} top={430} />
 
-        <PressurePlate symbol="sun" left={500} top={650} onPress={pressSun} />
-        <PressurePlate symbol="moon" left={750} top={650} onPress={pressMoon} />
-        <PressurePlate symbol="cross" left={1000} top={650} onPress={pressCross} />
-        <PressurePlate symbol="crown" left={1250} top={650} onPress={pressCrown} />
+        <PressurePlate
+          symbol="sun"
+          left={500}
+          top={650}
+          onPress={pressSun}
+          disabled={solved}
+        />
+        <PressurePlate
+          symbol="moon"
+          left={750}
+          top={650}
+          onPress={pressMoon}
+          disabled={solved}
+        />
+        <PressurePlate
+          symbol="cross"
+          left={1000}
+          top={650}
+          onPress={pressCross}
+          disabled={solved}
+        />
+        <PressurePlate
+          symbol="crown"
+          left={1250}
+          top={650}
+          onPress={pressCrown}
+          disabled={solved}
+        />
 
         <div
           style={{
@@ -533,3 +560,4 @@ export default function PressureGaugePuzzle() {
     </div>
   );
 }
+Need anything else added here?
