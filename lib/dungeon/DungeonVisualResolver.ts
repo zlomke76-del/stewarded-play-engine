@@ -122,6 +122,83 @@ const CRYPT_ROOM_ASSETS: readonly string[] = [
   "/assets/V3/Dungeon/Crypt/crypt_01.png",
 ];
 
+const ARMORY_ASSETS: readonly string[] = [
+  "/assets/V3/Dungeon/Armory/armory_01.png",
+  "/assets/V3/Dungeon/Armory/armory_02.png",
+  "/assets/V3/Dungeon/Armory/armory_03.png",
+  "/assets/V3/Dungeon/Armory/armory_04.png",
+];
+
+const ARCANE_HALL_ASSETS: readonly string[] = [
+  "/assets/V3/Dungeon/Arcane_Hall/arcane_01.png",
+  "/assets/V3/Dungeon/Arcane_Hall/arcane_02.png",
+  "/assets/V3/Dungeon/Arcane_Hall/arcane_03.png",
+  "/assets/V3/Dungeon/Arcane_Hall/arcane_04.png",
+];
+
+const BEAST_DEN_ASSETS: readonly string[] = [
+  "/assets/V3/Dungeon/Beast_Den/beast_01.png",
+  "/assets/V3/Dungeon/Beast_Den/beast_02.png",
+  "/assets/V3/Dungeon/Beast_Den/beast_03.png",
+  "/assets/V3/Dungeon/Beast_Den/beast_04.png",
+];
+
+const BONE_PIT_ASSETS: readonly string[] = [
+  "/assets/V3/Dungeon/Bone_Pit/bone_01.png",
+  "/assets/V3/Dungeon/Bone_Pit/bone_02.png",
+  "/assets/V3/Dungeon/Bone_Pit/bone_03.png",
+  "/assets/V3/Dungeon/Bone_Pit/bone_04.png",
+];
+
+const BOSS_CHAMBER_ASSETS: readonly string[] = [
+  "/assets/V3/Dungeon/Boss_Chamber/boss_01.png",
+  "/assets/V3/Dungeon/Boss_Chamber/boss_02.png",
+  "/assets/V3/Dungeon/Boss_Chamber/boss_03.png",
+  "/assets/V3/Dungeon/Boss_Chamber/boss_04.png",
+];
+
+const CRYPT_VAULT_ASSETS: readonly string[] = [
+  "/assets/V3/Dungeon/Crypt_Vault/crypt_01.png",
+  "/assets/V3/Dungeon/Crypt_Vault/crypt_02.png",
+  "/assets/V3/Dungeon/Crypt_Vault/crypt_03.png",
+  "/assets/V3/Dungeon/Crypt_Vault/crypt_04.png",
+];
+
+const GATE_HALL_ASSETS: readonly string[] = [
+  "/assets/V3/Dungeon/Gate_Hall/gate_01.png",
+  "/assets/V3/Dungeon/Gate_Hall/gate_02.png",
+  "/assets/V3/Dungeon/Gate_Hall/gate_03.png",
+  "/assets/V3/Dungeon/Gate_Hall/gate_04.png",
+];
+
+const OSSUARY_ASSETS: readonly string[] = [
+  "/assets/V3/Dungeon/Ossuary/ossuary_01.png",
+  "/assets/V3/Dungeon/Ossuary/ossuary_02.png",
+  "/assets/V3/Dungeon/Ossuary/ossuary_03.png",
+  "/assets/V3/Dungeon/Ossuary/ossuary_04.png",
+];
+
+const RELIC_CHAMBER_ASSETS: readonly string[] = [
+  "/assets/V3/Dungeon/Relic_Chamber/relic_chamber_01.png",
+  "/assets/V3/Dungeon/Relic_Chamber/relic_chamber_02.png",
+  "/assets/V3/Dungeon/Relic_Chamber/relic_chamber_03.png",
+  "/assets/V3/Dungeon/Relic_Chamber/relic_chamber_04.png",
+];
+
+const RELIC_VAULT_ASSETS: readonly string[] = [
+  "/assets/V3/Dungeon/Relic_Vault/relic_vault_01.png",
+  "/assets/V3/Dungeon/Relic_Vault/relic_vault_02.png",
+  "/assets/V3/Dungeon/Relic_Vault/relic_vault_03.png",
+  "/assets/V3/Dungeon/Relic_Vault/relic_vault_04.png",
+];
+
+const TRIAL_CHAMBER_ASSETS: readonly string[] = [
+  "/assets/V3/Dungeon/Trial_Chamber/trial_chamber_01.png",
+  "/assets/V3/Dungeon/Trial_Chamber/trial_chamber_02.png",
+  "/assets/V3/Dungeon/Trial_Chamber/trial_chamber_03.png",
+  "/assets/V3/Dungeon/Trial_Chamber/trial_chamber_04.png",
+];
+
 const ROOM_ASSETS: Record<string, readonly string[]> = {
   entrance: ["/assets/V3/Dungeon/Entrance/Main_01.png"],
 
@@ -176,21 +253,24 @@ const ROOM_ASSETS: Record<string, readonly string[]> = {
   hidden_corridor: SECRET_PASSAGE_ASSETS,
 
   crypt: CRYPT_ROOM_ASSETS,
-  crypt_vault: CRYPT_ROOM_ASSETS,
-  ossuary: CRYPT_ROOM_ASSETS,
-  bone_pit: CRYPT_ROOM_ASSETS,
-  relic_chamber: CRYPT_ROOM_ASSETS,
-  relic_vault: CRYPT_ROOM_ASSETS,
 
-  armory: ["/assets/V3/Dungeon/Barracks/barracks_01.png"],
-  treasure_room: ["/assets/V3/Dungeon/Storage_Room/storage_01.png"],
-  beast_den: ["/assets/V3/Dungeon/Collapsed/collapsed_01.png"],
-  arcane_hall: ["/assets/V3/Dungeon/Ritual_Chamber/ritual_chamber_01.png"],
-  sentinel_hall: ["/assets/V3/Dungeon/Guard_Post/Guard_Post_01.png"],
-  gate_hall: ["/assets/V3/Dungeon/Guard_Post/Guard_Post_01.png"],
-  trial_chamber: ["/assets/V3/Dungeon/Ritual_Chamber/ritual_chamber_01.png"],
-  forge_chamber: ["/assets/V3/Dungeon/Military_Outpost/Military_Outpost_01.png"],
-  boss_chamber: ["/assets/V3/Dungeon/Breach_Chamber/breach_chamber_01.png"],
+  crypt_vault: CRYPT_VAULT_ASSETS,
+  ossuary: OSSUARY_ASSETS,
+  bone_pit: BONE_PIT_ASSETS,
+  relic_chamber: RELIC_CHAMBER_ASSETS,
+  relic_vault: RELIC_VAULT_ASSETS,
+
+  armory: ARMORY_ASSETS,
+  beast_den: BEAST_DEN_ASSETS,
+  arcane_hall: ARCANE_HALL_ASSETS,
+  gate_hall: GATE_HALL_ASSETS,
+  trial_chamber: TRIAL_CHAMBER_ASSETS,
+  boss_chamber: BOSS_CHAMBER_ASSETS,
+
+  // Keep these until their dedicated 4-packs are wired in.
+  forge_chamber: ["/assets/V3/Dungeon/Forge_Chamber/forge_chamber_01.png"],
+  sentinel_hall: ["/assets/V3/Dungeon/Sentinel_Hall/sentinel_hall_01.png"],
+  treasure_room: ["/assets/V3/Dungeon/Treasure_Room/treasure_room_01.png"],
 
   tavern: ["/assets/V3/Dungeon/Tavern/tavern_01.png"],
 
