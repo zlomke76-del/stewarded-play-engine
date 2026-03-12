@@ -118,21 +118,16 @@ const SECRET_PASSAGE_ASSETS: readonly string[] = [
   "/assets/V3/Dungeon/Secret_Passage/secret_passage_05.png",
 ];
 
+const CRYPT_ROOM_ASSETS: readonly string[] = [
+  "/assets/V3/Dungeon/Crypt/crypt_01.png",
+];
+
 const ROOM_ASSETS: Record<string, readonly string[]> = {
   entrance: ["/assets/V3/Dungeon/Entrance/Main_01.png"],
 
   corridor: ["/assets/V3/Dungeon/Corridor/Corridor_01.png"],
 
   guard_post: ["/assets/V3/Dungeon/Guard_Post/Guard_Post_01.png"],
-
-  breach_chamber: ["/assets/V3/Dungeon/Breach_Chamber/breach_chamber_01.png"],
-  breach: ["/assets/V3/Dungeon/Breach_Chamber/breach_chamber_01.png"],
-  breach_room: ["/assets/V3/Dungeon/Breach_Chamber/breach_chamber_01.png"],
-
-  secret_passage: SECRET_PASSAGE_ASSETS,
-  hidden_passage: SECRET_PASSAGE_ASSETS,
-  secret_corridor: SECRET_PASSAGE_ASSETS,
-  hidden_corridor: SECRET_PASSAGE_ASSETS,
 
   storage: ["/assets/V3/Dungeon/Storage_Room/storage_01.png"],
   storage_room: ["/assets/V3/Dungeon/Storage_Room/storage_01.png"],
@@ -145,6 +140,17 @@ const ROOM_ASSETS: Record<string, readonly string[]> = {
   barracks: ["/assets/V3/Dungeon/Barracks/barracks_01.png"],
   barracks_room: ["/assets/V3/Dungeon/Barracks/barracks_01.png"],
 
+  breach_chamber: ["/assets/V3/Dungeon/Breach_Chamber/breach_chamber_01.png"],
+  breach: ["/assets/V3/Dungeon/Breach_Chamber/breach_chamber_01.png"],
+  breach_room: ["/assets/V3/Dungeon/Breach_Chamber/breach_chamber_01.png"],
+
+  watchtower: ["/assets/V3/Dungeon/Watchtower/watchtower_01.png"],
+  tower: ["/assets/V3/Dungeon/Watchtower/watchtower_01.png"],
+
+  ritual_chamber: ["/assets/V3/Dungeon/Ritual_Chamber/ritual_chamber_01.png"],
+  ritual_room: ["/assets/V3/Dungeon/Ritual_Chamber/ritual_chamber_01.png"],
+  ritual_site: ["/assets/V3/Dungeon/Ritual_Chamber/ritual_chamber_01.png"],
+
   camp: ["/assets/V3/Dungeon/Camp/camp_01.png"],
   rest_site: ["/assets/V3/Dungeon/Camp/camp_01.png"],
   campsite: ["/assets/V3/Dungeon/Camp/camp_01.png"],
@@ -154,25 +160,44 @@ const ROOM_ASSETS: Record<string, readonly string[]> = {
   collapsed_corridor: ["/assets/V3/Dungeon/Collapsed/collapsed_01.png"],
 
   flooded: ["/assets/V3/Dungeon/Flooded/flooded_01.png"],
+  flooded_chamber: ["/assets/V3/Dungeon/Flooded/flooded_01.png"],
   flooded_room: ["/assets/V3/Dungeon/Flooded/flooded_01.png"],
   flooded_passage: ["/assets/V3/Dungeon/Flooded/flooded_01.png"],
-
-  mess_hall: ["/assets/V3/Dungeon/Mess_Hall/mess_hall_01.png"],
-  dining_hall: ["/assets/V3/Dungeon/Mess_Hall/mess_hall_01.png"],
 
   prison: ["/assets/V3/Dungeon/Prison/prison_01.png"],
   cell_block: ["/assets/V3/Dungeon/Prison/prison_01.png"],
 
-  ritual_chamber: ["/assets/V3/Dungeon/Ritual_Chamber/ritual_chamber_01.png"],
-  ritual_room: ["/assets/V3/Dungeon/Ritual_Chamber/ritual_chamber_01.png"],
-  ritual_site: ["/assets/V3/Dungeon/Ritual_Chamber/ritual_chamber_01.png"],
+  mess_hall: ["/assets/V3/Dungeon/Mess_Hall/mess_hall_01.png"],
+  dining_hall: ["/assets/V3/Dungeon/Mess_Hall/mess_hall_01.png"],
 
-  watchtower: ["/assets/V3/Dungeon/Watchtower/watchtower_01.png"],
-  tower: ["/assets/V3/Dungeon/Watchtower/watchtower_01.png"],
+  secret_passage: SECRET_PASSAGE_ASSETS,
+  hidden_passage: SECRET_PASSAGE_ASSETS,
+  secret_corridor: SECRET_PASSAGE_ASSETS,
+  hidden_corridor: SECRET_PASSAGE_ASSETS,
+
+  crypt: CRYPT_ROOM_ASSETS,
+  crypt_vault: CRYPT_ROOM_ASSETS,
+  ossuary: CRYPT_ROOM_ASSETS,
+  bone_pit: CRYPT_ROOM_ASSETS,
+  relic_chamber: CRYPT_ROOM_ASSETS,
+  relic_vault: CRYPT_ROOM_ASSETS,
+
+  armory: ["/assets/V3/Dungeon/Barracks/barracks_01.png"],
+  treasure_room: ["/assets/V3/Dungeon/Storage_Room/storage_01.png"],
+  beast_den: ["/assets/V3/Dungeon/Collapsed/collapsed_01.png"],
+  arcane_hall: ["/assets/V3/Dungeon/Ritual_Chamber/ritual_chamber_01.png"],
+  sentinel_hall: ["/assets/V3/Dungeon/Guard_Post/Guard_Post_01.png"],
+  gate_hall: ["/assets/V3/Dungeon/Guard_Post/Guard_Post_01.png"],
+  trial_chamber: ["/assets/V3/Dungeon/Ritual_Chamber/ritual_chamber_01.png"],
+  forge_chamber: ["/assets/V3/Dungeon/Military_Outpost/Military_Outpost_01.png"],
+  boss_chamber: ["/assets/V3/Dungeon/Breach_Chamber/breach_chamber_01.png"],
 
   tavern: ["/assets/V3/Dungeon/Tavern/tavern_01.png"],
 
   ruined_outpost_default: ["/assets/V3/Dungeon/Military_Outpost/Military_Outpost_01.png"],
+  deep_warrens_default: ["/assets/V3/Dungeon/Collapsed/collapsed_01.png"],
+  forgotten_crypt_default: CRYPT_ROOM_ASSETS,
+
   default: ["/assets/V3/Dungeon/Entrance/Main_01.png"],
 };
 
@@ -225,6 +250,16 @@ export function resolveRoomImage(args: ResolveRoomImageArgs): string {
     return buildDeterministicAsset(seed, themeAssets, themeAssets[0]!);
   }
 
+  if (floorTheme === "deep_warrens") {
+    const themeAssets = ROOM_ASSETS.deep_warrens_default;
+    return buildDeterministicAsset(seed, themeAssets, themeAssets[0]!);
+  }
+
+  if (floorTheme === "forgotten_crypt") {
+    const themeAssets = ROOM_ASSETS.forgotten_crypt_default;
+    return buildDeterministicAsset(seed, themeAssets, themeAssets[0]!);
+  }
+
   const fallbackAssets = ROOM_ASSETS.default;
   return buildDeterministicAsset(seed, fallbackAssets, fallbackAssets[0]!);
 }
@@ -239,6 +274,16 @@ export function resolveFloorBackdropImage(args: {
 
   if (floorTheme === "ruined_outpost") {
     const assets = ROOM_ASSETS.ruined_outpost_default;
+    return buildDeterministicAsset(seed, assets, assets[0]!);
+  }
+
+  if (floorTheme === "deep_warrens") {
+    const assets = ROOM_ASSETS.deep_warrens_default;
+    return buildDeterministicAsset(seed, assets, assets[0]!);
+  }
+
+  if (floorTheme === "forgotten_crypt") {
+    const assets = ROOM_ASSETS.forgotten_crypt_default;
     return buildDeterministicAsset(seed, assets, assets[0]!);
   }
 
@@ -287,7 +332,9 @@ export function inferVisualBand(
   if (isCryptBand(key)) return "crypt";
   if (key === "ruined_outpost") return "main";
   if (key === "cult_temple" || key === "arcane_forge") return "down";
-  if (key === "wild_depths" || key === "ancient_vault") return "lower";
+  if (key === "wild_depths" || key === "ancient_vault" || key === "deep_warrens") {
+    return "lower";
+  }
 
   return "unknown";
 }
