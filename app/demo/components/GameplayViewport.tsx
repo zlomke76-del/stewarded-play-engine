@@ -757,15 +757,20 @@ function PuzzleRoomPanel(props: {
       >
         <div style={{ display: "grid", gap: 14 }}>
           {isPressureGaugePuzzle ? (
-            <PressureGaugeVisual
-              currentRoomTitle={demo.currentRoomTitle}
-              intendedRouteLabel={intendedRouteLabel}
-              puzzleResult={puzzleResult}
-              playerInput={demo.playerInput ?? ""}
-              setPlayerInput={demo.setPlayerInput}
-              isSubmitting={isSubmitting}
-              riddleLines={riddleLines}
-            />
+        <PressureGaugeVisual
+          currentRoomTitle={demo.currentRoomTitle}
+          intendedRouteLabel={intendedRouteLabel}
+          puzzleResult={puzzleResult}
+          playerInput={demo.playerInput ?? ""}
+          setPlayerInput={demo.setPlayerInput}
+          isSubmitting={isSubmitting}
+          riddleLines={riddleLines}
+          onSolved={async () => {
+            if (typeof demo.runRoomPuzzleAttempt === "function") {
+              await demo.runRoomPuzzleAttempt("pressure gauge solved");
+            }
+          }}
+        />
           ) : (
             <>
               <div
