@@ -10,6 +10,16 @@ type PuzzleResultLike = {
   narration?: string[];
 } | null;
 
+type PressurePuzzleVictoryState = {
+  isOpen: boolean;
+  xpGranted: number;
+  destinationLabel: string;
+  selectedText: string;
+  floorId: string;
+  roomId: string;
+  isFirstPuzzleCompletion: boolean;
+} | null;
+
 type Props = {
   currentRoomTitle?: string | null;
   intendedRouteLabel?: string | null;
@@ -19,6 +29,9 @@ type Props = {
   isSubmitting?: boolean;
   riddleLines?: string[];
   onSolved?: () => void | Promise<void>;
+  victoryState?: PressurePuzzleVictoryState;
+  onConfirmTraversal?: () => void | Promise<void>;
+  isConfirmingTraversal?: boolean;
 };
 
 type PuzzleStatus = "idle" | "building" | "failed" | "solved";
@@ -172,6 +185,9 @@ export default function PressureGaugeVisual(props: Props) {
     isSubmitting = false,
     riddleLines = [],
     onSolved,
+    victoryState,
+    onConfirmTraversal,
+    isConfirmingTraversal = false,
   } = props;
 
   const [gauges, setGauges] = useState<number[]>([0, 0, 0]);
@@ -187,6 +203,8 @@ export default function PressureGaugeVisual(props: Props) {
   const audioRef = useRef<AudioMap | null>(null);
   const audioUnlockedRef = useRef(false);
   const solvedCallbackFiredRef = useRef(false);
+
+  const victoryOpen = Boolean(victoryState?.isOpen);
 
   useEffect(() => {
     const audioMap: AudioMap = {
@@ -313,6 +331,8 @@ export default function PressureGaugeVisual(props: Props) {
   }
 
   function clearSequence() {
+    if (victoryOpen || isConfirmingTraversal) return;
+
     setGauges([0, 0, 0]);
     setSequence([]);
     setStatus("idle");
@@ -325,7 +345,7 @@ export default function PressureGaugeVisual(props: Props) {
   }
 
   function appendSequenceToInput() {
-    if (sequence.length === 0) return;
+    if (sequence.length === 0 || victoryOpen) return;
     setPlayerInput(appendSequenceTextToInput(playerInput, sequence, gauges));
   }
 
@@ -343,7 +363,7 @@ export default function PressureGaugeVisual(props: Props) {
   }
 
   function handleBuildPlate(plate: Exclude<PressurePlateId, "Crown">) {
-    if (solved || isSubmitting) return;
+    if (solved || isSubmitting || victoryOpen || isConfirmingTraversal) return;
 
     unlockAudio();
     pulsePlate(plate);
@@ -387,7 +407,7 @@ export default function PressureGaugeVisual(props: Props) {
   }
 
   function handleCrown() {
-    if (isSubmitting || solved) return;
+    if (isSubmitting || solved || victoryOpen || isConfirmingTraversal) return;
 
     unlockAudio();
     pulsePlate("Crown");
@@ -459,6 +479,10 @@ export default function PressureGaugeVisual(props: Props) {
     Crown: solved ? "aligned" : gaugesMatch(gauges) ? "active" : "idle",
   };
 
+  const confirmLabel = victoryState?.destinationLabel
+    ? `Enter ${victoryState.destinationLabel}`
+    : `Enter ${intendedRouteLabel ?? "Passage forward"}`;
+
   return (
     <div style={{ display: "grid", gap: 14 }}>
       <div
@@ -481,6 +505,19 @@ export default function PressureGaugeVisual(props: Props) {
             height: "100%",
             objectFit: "cover",
             display: "block",
+          }}
+        />
+
+        <div
+          style={{
+            position: "absolute",
+            inset: 0,
+            background: victoryOpen
+              ? "radial-gradient(circle at center, rgba(186,220,146,0.12), rgba(0,0,0,0.18) 56%, rgba(0,0,0,0.34) 100%)"
+              : "transparent",
+            pointerEvents: "none",
+            transition: "background 240ms ease",
+            zIndex: 2,
           }}
         />
 
@@ -529,8 +566,12 @@ export default function PressureGaugeVisual(props: Props) {
             top: 18,
             padding: "10px 12px",
             borderRadius: 12,
-            border: "1px solid rgba(255,255,255,0.10)",
-            background: "rgba(8,10,16,0.66)",
+            border: victoryOpen
+              ? "1px solid rgba(118,188,132,0.26)"
+              : "1px solid rgba(255,255,255,0.10)",
+            background: victoryOpen
+              ? "rgba(28,48,28,0.74)"
+              : "rgba(8,10,16,0.66)",
             backdropFilter: "blur(10px)",
             WebkitBackdropFilter: "blur(10px)",
             display: "grid",
@@ -554,10 +595,12 @@ export default function PressureGaugeVisual(props: Props) {
             style={{
               fontSize: 14,
               fontWeight: 800,
-              color: "rgba(245,236,216,0.96)",
+              color: victoryOpen
+                ? "rgba(214,245,220,0.98)"
+                : "rgba(245,236,216,0.96)",
             }}
           >
-            {intendedRouteLabel ?? "Passage forward"}
+            {victoryState?.destinationLabel ?? intendedRouteLabel ?? "Passage forward"}
           </div>
         </div>
 
@@ -651,7 +694,7 @@ export default function PressureGaugeVisual(props: Props) {
               key={plate}
               type="button"
               onClick={handleClick}
-              disabled={isSubmitting}
+              disabled={isSubmitting || victoryOpen || isConfirmingTraversal}
               aria-label={`${plate} plate`}
               style={{
                 position: "absolute",
@@ -665,12 +708,16 @@ export default function PressureGaugeVisual(props: Props) {
                 border: "none",
                 outline: "none",
                 background: "transparent",
-                cursor: isSubmitting ? "not-allowed" : "pointer",
+                cursor:
+                  isSubmitting || victoryOpen || isConfirmingTraversal
+                    ? "not-allowed"
+                    : "pointer",
                 appearance: "none",
                 WebkitAppearance: "none",
                 display: "grid",
                 placeItems: "center",
                 zIndex: 7,
+                opacity: victoryOpen ? 0.96 : 1,
               }}
             >
               <img
@@ -743,7 +790,7 @@ export default function PressureGaugeVisual(props: Props) {
             <button
               type="button"
               onClick={appendSequenceToInput}
-              disabled={sequence.length === 0 || isSubmitting}
+              disabled={sequence.length === 0 || isSubmitting || victoryOpen || isConfirmingTraversal}
               style={{
                 padding: "8px 10px",
                 borderRadius: 10,
@@ -754,8 +801,13 @@ export default function PressureGaugeVisual(props: Props) {
                 fontSize: 11,
                 fontWeight: 800,
                 cursor:
-                  sequence.length === 0 || isSubmitting ? "not-allowed" : "pointer",
-                opacity: sequence.length === 0 || isSubmitting ? 0.5 : 1,
+                  sequence.length === 0 || isSubmitting || victoryOpen || isConfirmingTraversal
+                    ? "not-allowed"
+                    : "pointer",
+                opacity:
+                  sequence.length === 0 || isSubmitting || victoryOpen || isConfirmingTraversal
+                    ? 0.5
+                    : 1,
               }}
             >
               Use Sequence
@@ -764,7 +816,7 @@ export default function PressureGaugeVisual(props: Props) {
             <button
               type="button"
               onClick={clearSequence}
-              disabled={isSubmitting}
+              disabled={isSubmitting || victoryOpen || isConfirmingTraversal}
               style={{
                 padding: "8px 10px",
                 borderRadius: 10,
@@ -773,8 +825,11 @@ export default function PressureGaugeVisual(props: Props) {
                 color: "rgba(240,242,246,0.88)",
                 fontSize: 11,
                 fontWeight: 700,
-                cursor: isSubmitting ? "not-allowed" : "pointer",
-                opacity: isSubmitting ? 0.5 : 1,
+                cursor:
+                  isSubmitting || victoryOpen || isConfirmingTraversal
+                    ? "not-allowed"
+                    : "pointer",
+                opacity: isSubmitting || victoryOpen || isConfirmingTraversal ? 0.5 : 1,
               }}
             >
               Clear Sequence
@@ -782,7 +837,140 @@ export default function PressureGaugeVisual(props: Props) {
           </div>
         </div>
 
-        {solved ? (
+        {victoryOpen ? (
+          <div
+            style={{
+              position: "absolute",
+              left: "50%",
+              bottom: 24,
+              transform: "translateX(-50%)",
+              width: "min(720px, calc(100% - 48px))",
+              padding: "18px 20px",
+              borderRadius: 18,
+              border: "1px solid rgba(118,188,132,0.26)",
+              background:
+                "linear-gradient(180deg, rgba(18,28,18,0.94), rgba(12,18,12,0.90))",
+              boxShadow: "0 18px 42px rgba(0,0,0,0.34)",
+              display: "grid",
+              gap: 12,
+              zIndex: 10,
+            }}
+          >
+            <div style={{ display: "grid", gap: 6 }}>
+              <div
+                style={{
+                  fontSize: 11,
+                  letterSpacing: 0.85,
+                  textTransform: "uppercase",
+                  color: "rgba(214,245,220,0.78)",
+                }}
+              >
+                Mechanism Released
+              </div>
+              <div
+                style={{
+                  fontSize: 24,
+                  fontWeight: 900,
+                  lineHeight: 1.06,
+                  color: "rgba(236,250,240,0.98)",
+                }}
+              >
+                The way to the {victoryState?.destinationLabel ?? "next chamber"} opens.
+              </div>
+            </div>
+
+            <div
+              style={{
+                display: "inline-flex",
+                justifySelf: "start",
+                alignItems: "center",
+                gap: 10,
+                padding: "10px 12px",
+                borderRadius: 999,
+                border: "1px solid rgba(214,188,120,0.20)",
+                background: "rgba(214,188,120,0.10)",
+                color: "rgba(245,236,216,0.98)",
+                fontWeight: 900,
+                fontSize: 14,
+              }}
+            >
+              <span>+{victoryState?.xpGranted ?? 25} XP</span>
+              <span style={{ opacity: 0.7 }}>Hero progress updated</span>
+            </div>
+
+            <div
+              style={{
+                fontSize: 14,
+                lineHeight: 1.7,
+                color: "rgba(228,236,232,0.90)",
+              }}
+            >
+              {message}
+            </div>
+
+            {victoryState?.isFirstPuzzleCompletion ? (
+              <div
+                style={{
+                  padding: "12px 13px",
+                  borderRadius: 14,
+                  border: "1px solid rgba(214,188,120,0.18)",
+                  background:
+                    "linear-gradient(180deg, rgba(214,188,120,0.10), rgba(214,188,120,0.04))",
+                  fontSize: 13,
+                  lineHeight: 1.65,
+                  color: "rgba(245,236,216,0.94)",
+                }}
+              >
+                Your earlier choice set the destination. Solving the chamber’s trial opened
+                the path and earned experience. Press continue to enter the{" "}
+                {victoryState.destinationLabel}.
+              </div>
+            ) : null}
+
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                gap: 12,
+                flexWrap: "wrap",
+              }}
+            >
+              <div
+                style={{
+                  fontSize: 12,
+                  lineHeight: 1.5,
+                  color: "rgba(210,218,214,0.72)",
+                }}
+              >
+                The path is unlocked. Movement will occur only when you confirm it.
+              </div>
+
+              <button
+                type="button"
+                onClick={() => {
+                  void onConfirmTraversal?.();
+                }}
+                disabled={isConfirmingTraversal}
+                style={{
+                  padding: "12px 16px",
+                  borderRadius: 12,
+                  border: "1px solid rgba(118,188,132,0.28)",
+                  background: isConfirmingTraversal
+                    ? "rgba(255,255,255,0.06)"
+                    : "linear-gradient(180deg, rgba(118,188,132,0.20), rgba(118,188,132,0.08))",
+                  color: "rgba(236,250,240,0.98)",
+                  fontWeight: 900,
+                  cursor: isConfirmingTraversal ? "not-allowed" : "pointer",
+                  opacity: isConfirmingTraversal ? 0.65 : 1,
+                  whiteSpace: "nowrap",
+                }}
+              >
+                {isConfirmingTraversal ? "Entering..." : confirmLabel}
+              </button>
+            </div>
+          </div>
+        ) : solved ? (
           <div
             style={{
               position: "absolute",
