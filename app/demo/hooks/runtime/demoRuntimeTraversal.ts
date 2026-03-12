@@ -204,6 +204,13 @@ export function commitDungeonTraversalBundle(args: {
     viaConnectionId: resolved.connection.id,
   }));
 
+  next = appendEventToState(next, "ROOM_ENTERED", {
+    floorId: resolved.nextFloorId,
+    roomId: resolved.toRoom.id,
+    fromRoomId: roomId,
+    viaConnectionId: resolved.connection.id,
+  } as any);
+
   if (resolved.connection.doorId && resolved.connection.type === "locked_door") {
     if (!unlockedDoorIds.includes(resolved.connection.doorId)) {
       next = appendEventToState(next, "DOOR_UNLOCKED", {
