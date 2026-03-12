@@ -11,7 +11,13 @@ export function derivePresentationPhase(args: {
   partyCanonicalExists: boolean;
   dungeonDescentConfirmed: boolean;
 }): PresentationPhase {
-  const { dmMode, enteredDungeon, tableAccepted, partyCanonicalExists, dungeonDescentConfirmed } = args;
+  const {
+    dmMode,
+    enteredDungeon,
+    tableAccepted,
+    partyCanonicalExists,
+    dungeonDescentConfirmed,
+  } = args;
 
   if (dmMode === null || !enteredDungeon) return "onboarding";
   if (!tableAccepted) return "chronicle";
@@ -30,8 +36,15 @@ export function deriveRoomInteractionMode(args: {
 
   if (combatActive) return "combat";
   if (gameplayFocusStep === "pressure") return "threshold";
+
+  const unresolvedPuzzle = hasActivePuzzle && !puzzleResolved;
+
+  if (unresolvedPuzzle) {
+    if (gameplayFocusStep === "map") return "navigation";
+    return "trial";
+  }
+
   if (gameplayFocusStep === "map") return "navigation";
-  if (hasActivePuzzle && !puzzleResolved && gameplayFocusStep === "puzzle") return "trial";
   return "command";
 }
 
@@ -51,12 +64,14 @@ export function deriveGameplayPermissions(args: {
 
   const gameplayAllowsMap =
     gameplayAllowsPressure &&
-    (gameplayFocusStep === "map" || gameplayFocusStep === "puzzle" || gameplayFocusStep === "action");
+    (gameplayFocusStep === "map" ||
+      gameplayFocusStep === "puzzle" ||
+      gameplayFocusStep === "action");
 
   const gameplayAllowsAction =
     gameplayAllowsPressure &&
     gameplayFocusStep === "action" &&
-    roomInteractionMode !== "trial";
+    roomInteractionMode === "command";
 
   return {
     gameplayAllowsPressure,
@@ -72,7 +87,13 @@ export function deriveChapterState(args: {
   showInitialTable: boolean;
   dungeonDescentConfirmed: boolean;
 }) {
-  const { dmMode, tableAccepted, partyCanonicalExists, showInitialTable, dungeonDescentConfirmed } = args;
+  const {
+    dmMode,
+    tableAccepted,
+    partyCanonicalExists,
+    showInitialTable,
+    dungeonDescentConfirmed,
+  } = args;
 
   const doneMode = dmMode !== null;
   const doneTable = tableAccepted;
