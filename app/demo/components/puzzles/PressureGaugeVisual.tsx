@@ -13,7 +13,7 @@ function PuzzleGaugeFace(props: {
   size?: string;
   opacity?: number;
 }) {
-  const { src, left, top, size = "13.8%", opacity = 1 } = props;
+  const { src, left, top, size = "10.8%", opacity = 1 } = props;
 
   return (
     <img
@@ -29,7 +29,11 @@ function PuzzleGaugeFace(props: {
         objectFit: "contain",
         pointerEvents: "none",
         opacity,
-        filter: opacity > 0 ? "drop-shadow(0 0 12px rgba(120,180,255,0.18))" : "none",
+        filter:
+          opacity > 0
+            ? "drop-shadow(0 0 8px rgba(120,180,255,0.14))"
+            : "none",
+        mixBlendMode: "screen",
       }}
     />
   );
@@ -96,6 +100,61 @@ function PuzzlePlateToken(props: {
         }}
       >
         {state === "pressed" ? "Engaged" : "Idle"}
+      </div>
+    </div>
+  );
+}
+
+function CornerBadge(props: {
+  title: string;
+  value: string;
+  align?: "left" | "right";
+  tone?: "neutral" | "success";
+}) {
+  const { title, value, align = "left", tone = "neutral" } = props;
+
+  const success = tone === "success";
+
+  return (
+    <div
+      style={{
+        position: "absolute",
+        top: 14,
+        [align]: 14,
+        padding: "7px 9px",
+        borderRadius: 11,
+        border: success
+          ? "1px solid rgba(118,188,132,0.24)"
+          : "1px solid rgba(255,255,255,0.10)",
+        background: success ? "rgba(118,188,132,0.12)" : "rgba(8,10,16,0.60)",
+        backdropFilter: "blur(10px)",
+        WebkitBackdropFilter: "blur(10px)",
+        display: "grid",
+        gap: 2,
+        maxWidth: "32%",
+      }}
+    >
+      <div
+        style={{
+          fontSize: 9,
+          letterSpacing: 0.75,
+          textTransform: "uppercase",
+          opacity: 0.58,
+        }}
+      >
+        {title}
+      </div>
+      <div
+        style={{
+          fontSize: 13,
+          fontWeight: 800,
+          color: success
+            ? "rgba(176,235,188,0.96)"
+            : "rgba(245,236,216,0.96)",
+          lineHeight: 1.2,
+        }}
+      >
+        {value}
       </div>
     </div>
   );
@@ -168,131 +227,68 @@ export default function PressureGaugeVisual(props: Props) {
               position: "absolute",
               inset: 0,
               background:
-                "linear-gradient(180deg, rgba(0,0,0,0.02) 0%, rgba(0,0,0,0.14) 100%)",
+                "linear-gradient(180deg, rgba(0,0,0,0.03) 0%, rgba(0,0,0,0.12) 100%)",
               pointerEvents: "none",
             }}
           />
 
+          {/* Built-in wall gauge faces only */}
           <PuzzleGaugeFace
             src={gaugeState.left}
-            left="31.6%"
-            top="57.1%"
-            size="13.5%"
+            left="33.4%"
+            top="49.9%"
+            size="10.8%"
             opacity={1}
           />
           <PuzzleGaugeFace
             src={gaugeState.center}
-            left="43.25%"
-            top="57.1%"
-            size="13.5%"
+            left="44.55%"
+            top="49.9%"
+            size="10.8%"
             opacity={1}
           />
           <PuzzleGaugeFace
             src={gaugeState.right}
-            left="54.95%"
-            top="57.1%"
-            size="13.5%"
+            left="55.7%"
+            top="49.9%"
+            size="10.8%"
             opacity={1}
+          />
+
+          <CornerBadge
+            title="Current Chamber"
+            value={
+              puzzleResult
+                ? `${currentRoomTitle ?? "Corridor"} — Trial Engaged`
+                : `${currentRoomTitle ?? "Corridor"} — Passage Blocked`
+            }
+            align="left"
+          />
+
+          <CornerBadge
+            title="Intended Route"
+            value={intendedRouteLabel ?? "Passage forward"}
+            align="right"
           />
 
           <div
             style={{
               position: "absolute",
-              left: 16,
-              top: 16,
-              padding: "8px 10px",
-              borderRadius: 12,
-              border: "1px solid rgba(255,255,255,0.10)",
-              background: "rgba(8,10,16,0.64)",
+              left: 14,
+              bottom: 14,
+              padding: "7px 9px",
+              borderRadius: 11,
+              border: success
+                ? "1px solid rgba(118,188,132,0.24)"
+                : "1px solid rgba(214,188,120,0.20)",
+              background: success ? "rgba(118,188,132,0.12)" : "rgba(8,10,16,0.60)",
               backdropFilter: "blur(10px)",
               WebkitBackdropFilter: "blur(10px)",
-              display: "grid",
-              gap: 3,
             }}
           >
             <div
               style={{
                 fontSize: 10,
-                letterSpacing: 0.8,
-                textTransform: "uppercase",
-                opacity: 0.58,
-              }}
-            >
-              Current Chamber
-            </div>
-            <div
-              style={{
-                fontSize: 14,
-                fontWeight: 800,
-                color: "rgba(245,236,216,0.96)",
-              }}
-            >
-              {puzzleResult
-                ? `${currentRoomTitle ?? "Corridor"} — Trial Engaged`
-                : `${currentRoomTitle ?? "Corridor"} — Passage Blocked`}
-            </div>
-          </div>
-
-          <div
-            style={{
-              position: "absolute",
-              right: 16,
-              top: 16,
-              padding: "8px 10px",
-              borderRadius: 12,
-              border: success
-                ? "1px solid rgba(118,188,132,0.24)"
-                : "1px solid rgba(214,188,120,0.20)",
-              background: success
-                ? "rgba(118,188,132,0.12)"
-                : "rgba(8,10,16,0.64)",
-              backdropFilter: "blur(10px)",
-              WebkitBackdropFilter: "blur(10px)",
-              display: "grid",
-              gap: 3,
-            }}
-          >
-            <div
-              style={{
-                fontSize: 10,
-                letterSpacing: 0.8,
-                textTransform: "uppercase",
-                opacity: 0.58,
-              }}
-            >
-              Intended Route
-            </div>
-            <div
-              style={{
-                fontSize: 14,
-                fontWeight: 800,
-                color: "rgba(245,236,216,0.96)",
-              }}
-            >
-              {intendedRouteLabel ?? "Passage forward"}
-            </div>
-          </div>
-
-          <div
-            style={{
-              position: "absolute",
-              left: 16,
-              bottom: 16,
-              padding: "8px 10px",
-              borderRadius: 12,
-              border: success
-                ? "1px solid rgba(118,188,132,0.24)"
-                : "1px solid rgba(214,188,120,0.20)",
-              background: success
-                ? "rgba(118,188,132,0.12)"
-                : "rgba(8,10,16,0.64)",
-              backdropFilter: "blur(10px)",
-              WebkitBackdropFilter: "blur(10px)",
-            }}
-          >
-            <div
-              style={{
-                fontSize: 11,
                 letterSpacing: 0.8,
                 textTransform: "uppercase",
                 fontWeight: 800,
