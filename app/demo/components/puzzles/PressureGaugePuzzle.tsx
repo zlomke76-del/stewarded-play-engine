@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import PressureGauge from "./PressureGauge";
 import PressurePlate from "./PressurePlate";
 
@@ -34,15 +34,7 @@ const SFX = {
   gateOpen: "/assets/audio/Puzzles/Pressure_Plates/sfx_stone_gate_rumble_open.mp3",
 } as const;
 
-function playSfx(src: string, volume = 0.72) {
-  try {
-    const audio = new Audio(src);
-    audio.volume = volume;
-    void audio.play().catch(() => {});
-  } catch {
-    // fail silently
-  }
-}
+type AudioMap = Record<keyof typeof SFX, HTMLAudioElement | null>;
 
 function clampGauge(value: number) {
   return Math.max(0, Math.min(4, value));
@@ -100,6 +92,95 @@ export default function PressureGaugePuzzle() {
   );
   const [solved, setSolved] = useState(false);
 
+  const audioRef = useRef<AudioMap>({
+    plate: null,
+    tick: null,
+    reject: null,
+    validate: null,
+    release: null,
+    gateOpen: null,
+  });
+
+  const audioUnlockedRef = useRef(false);
+
+  useEffect(() => {
+    const audioMap: AudioMap = {
+      plate: new Audio(SFX.plate),
+      tick: new Audio(SFX.tick),
+      reject: new Audio(SFX.reject),
+      validate: new Audio(SFX.validate),
+      release: new Audio(SFX.release),
+      gateOpen: new Audio(SFX.gateOpen),
+    };
+
+    audioMap.plate.volume = 0.6;
+    audioMap.tick.volume = 0.42;
+    audioMap.reject.volume = 0.66;
+    audioMap.validate.volume = 0.78;
+    audioMap.release.volume = 0.82;
+    audioMap.gateOpen.volume = 0.9;
+
+    Object.values(audioMap).forEach((audio) => {
+      audio.preload = "auto";
+    });
+
+    audioRef.current = audioMap;
+
+    return () => {
+      Object.values(audioMap).forEach((audio) => {
+        audio.pause();
+        audio.src = "";
+      });
+    };
+  }, []);
+
+  function unlockAudio() {
+    if (audioUnlockedRef.current) return;
+
+    audioUnlockedRef.current = true;
+
+    Object.values(audioRef.current).forEach((audio) => {
+      if (!audio) return;
+
+      try {
+        audio.muted = true;
+        audio.currentTime = 0;
+
+        const playPromise = audio.play();
+        if (playPromise && typeof playPromise.then === "function") {
+          playPromise
+            .then(() => {
+              audio.pause();
+              audio.currentTime = 0;
+              audio.muted = false;
+            })
+            .catch(() => {
+              audio.muted = false;
+            });
+        } else {
+          audio.pause();
+          audio.currentTime = 0;
+          audio.muted = false;
+        }
+      } catch {
+        audio.muted = false;
+      }
+    });
+  }
+
+  function playSfx(name: keyof typeof SFX) {
+    const audio = audioRef.current[name];
+    if (!audio) return;
+
+    try {
+      audio.pause();
+      audio.currentTime = 0;
+      void audio.play().catch(() => {});
+    } catch {
+      // fail silently
+    }
+  }
+
   const buildSequence = useMemo(
     () =>
       sequence.filter(
@@ -135,13 +216,14 @@ export default function PressureGaugePuzzle() {
       )} plate engages out of order. The mechanism rejects the step and pressure bleeds from the network.`
     );
 
-    playSfx(SFX.reject, 0.66);
+    playSfx("reject");
   }
 
   function handleBuildPlate(pressedPlate: Exclude<PlateId, "crown">) {
     if (solved) return;
 
-    playSfx(SFX.plate, 0.6);
+    unlockAudio();
+    playSfx("plate");
 
     const nextExpected = EXPECTED_BUILD[buildSequence.length];
 
@@ -181,7 +263,7 @@ export default function PressureGaugePuzzle() {
       );
     }
 
-    playSfx(SFX.tick, 0.42);
+    playSfx("tick");
   }
 
   function pressSun() {
@@ -199,7 +281,8 @@ export default function PressureGaugePuzzle() {
   function pressCrown() {
     if (solved) return;
 
-    playSfx(SFX.plate, 0.64);
+    unlockAudio();
+    playSfx("plate");
     setSequence((prev) => [...prev, "crown"]);
 
     const buildMatches =
@@ -210,14 +293,14 @@ export default function PressureGaugePuzzle() {
       setSolved(true);
       setStatus("solved");
       setMessage("The mechanism accepts the pattern. Stone answers stone.");
-      playSfx(SFX.validate, 0.78);
+      playSfx("validate");
 
       window.setTimeout(() => {
-        playSfx(SFX.release, 0.82);
+        playSfx("release");
       }, 240);
 
       window.setTimeout(() => {
-        playSfx(SFX.gateOpen, 0.9);
+        playSfx("gateOpen");
       }, 760);
 
       return;
@@ -230,7 +313,7 @@ export default function PressureGaugePuzzle() {
     setMessage(
       "The crown plate rejects the pattern. The chamber vents pressure and the passage remains sealed."
     );
-    playSfx(SFX.reject, 0.66);
+    playSfx("reject");
   }
 
   return (
