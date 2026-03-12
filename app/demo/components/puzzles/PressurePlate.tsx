@@ -44,7 +44,7 @@ export default function PressurePlate(props: Props) {
   const { symbol, left, top, onPress, disabled = false } = props;
 
   const [pressed, setPressed] = useState(false);
-  const timerRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
+  const timerRef = useRef<number | null>(null);
   const pressLockRef = useRef(false);
 
   function clearTimer() {
