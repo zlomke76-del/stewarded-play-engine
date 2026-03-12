@@ -770,6 +770,15 @@ function PuzzleRoomPanel(props: {
               setPlayerInput={demo.setPlayerInput}
               isSubmitting={isSubmitting}
               riddleLines={riddleLines}
+              victoryState={demo.pressurePuzzleVictoryState ?? null}
+              onConfirmTraversal={async () => {
+                if (typeof demo.confirmPressurePuzzleTraversal === "function") {
+                  await demo.confirmPressurePuzzleTraversal();
+                }
+              }}
+              isConfirmingTraversal={Boolean(
+                demo.isConfirmingPressurePuzzleTraversal
+              )}
               onSolved={async () => {
                 if (typeof demo.resolvePressureGaugePuzzleSuccess === "function") {
                   await demo.resolvePressureGaugePuzzleSuccess();
