@@ -110,12 +110,28 @@ function resolveTrapAssetForRoom(room: DungeonRoom | null): string | null {
   return getDungeonTrapAssetPath(trapId);
 }
 
+const SECRET_PASSAGE_ASSETS: readonly string[] = [
+  "/assets/V3/Dungeon/Secret_Passage/secret_passage_01.png",
+  "/assets/V3/Dungeon/Secret_Passage/secret_passage_02.png",
+  "/assets/V3/Dungeon/Secret_Passage/secret_passage_03.png",
+  "/assets/V3/Dungeon/Secret_Passage/secret_passage_04.png",
+  "/assets/V3/Dungeon/Secret_Passage/secret_passage_05.png",
+];
+
 const ROOM_ASSETS: Record<string, readonly string[]> = {
   entrance: ["/assets/V3/Dungeon/Entrance/Main_01.png"],
   corridor: ["/assets/V3/Dungeon/Corridor/Corridor_01.png"],
   guard_post: ["/assets/V3/Dungeon/Guard_Post/Guard_Post_01.png"],
 
-  // Newly added room art
+  breach_chamber: ["/assets/V3/Dungeon/Breach_Chamber/breach_chamber_01.png"],
+  breach: ["/assets/V3/Dungeon/Breach_Chamber/breach_chamber_01.png"],
+  breach_room: ["/assets/V3/Dungeon/Breach_Chamber/breach_chamber_01.png"],
+
+  secret_passage: SECRET_PASSAGE_ASSETS,
+  hidden_passage: SECRET_PASSAGE_ASSETS,
+  secret_corridor: SECRET_PASSAGE_ASSETS,
+  hidden_corridor: SECRET_PASSAGE_ASSETS,
+
   storage: ["/assets/V3/Dungeon/Storage_Room/storage_01.png"],
   storage_room: ["/assets/V3/Dungeon/Storage_Room/storage_01.png"],
   storeroom: ["/assets/V3/Dungeon/Storage_Room/storage_01.png"],
@@ -160,6 +176,16 @@ export function resolveRoomImage(args: ResolveRoomImageArgs): string {
   const exactRoomAssets = ROOM_ASSETS[roomType];
   if (exactRoomAssets?.length) {
     return buildDeterministicAsset(seed, exactRoomAssets, exactRoomAssets[0]!);
+  }
+
+  const roomIdAssets = ROOM_ASSETS[slugKey(room?.id ?? "")];
+  if (roomIdAssets?.length) {
+    return buildDeterministicAsset(seed, roomIdAssets, roomIdAssets[0]!);
+  }
+
+  const roomLabelAssets = ROOM_ASSETS[slugKey(room?.label ?? "")];
+  if (roomLabelAssets?.length) {
+    return buildDeterministicAsset(seed, roomLabelAssets, roomLabelAssets[0]!);
   }
 
   if (floorTheme === "ruined_outpost") {
