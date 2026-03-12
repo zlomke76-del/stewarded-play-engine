@@ -10,6 +10,18 @@ type PuzzleStatus = "idle" | "building" | "failed" | "solved";
 
 const TARGET_GAUGES = [4, 2, 3] as const;
 
+const EXPECTED_BUILD: PlateId[] = [
+  "sun",
+  "sun",
+  "sun",
+  "sun",
+  "moon",
+  "moon",
+  "cross",
+  "cross",
+  "cross",
+];
+
 const ROOM_IMAGE =
   "/assets/V3/Dungeon/Puzzles/Pressure_Gauges/corridor_puzzle_room.png";
 
@@ -59,14 +71,39 @@ function gaugesMatch(values: number[]) {
   );
 }
 
+function bleedNetwork(values: number[]) {
+  return [
+    clampGauge(values[0] - 1),
+    clampGauge(values[1] - 1),
+    clampGauge(values[2] - 1),
+  ];
+}
+
+function incrementGauge(values: number[], plate: Exclude<PlateId, "crown">) {
+  if (plate === "sun") {
+    return [clampGauge(values[0] + 1), values[1], values[2]];
+  }
+
+  if (plate === "moon") {
+    return [values[0], clampGauge(values[1] + 1), values[2]];
+  }
+
+  return [values[0], values[1], clampGauge(values[2] + 1)];
+}
+
 export default function PressureGaugePuzzle() {
   const [gauges, setGauges] = useState<number[]>([0, 0, 0]);
   const [sequence, setSequence] = useState<PlateId[]>([]);
   const [status, setStatus] = useState<PuzzleStatus>("idle");
   const [message, setMessage] = useState(
-    "Build the pressure pattern, then use the Crown plate to validate the network."
+    "Build the pressure pattern in order, then use the Crown plate to validate the network."
   );
   const [solved, setSolved] = useState(false);
+
+  const buildSequence = useMemo(
+    () => sequence.filter((plate): plate is Exclude<PlateId, "crown"> => plate !== "crown"),
+    [sequence]
+  );
 
   const sequenceLabel = useMemo(() => {
     if (sequence.length === 0) return "No plates engaged yet.";
@@ -79,62 +116,81 @@ export default function PressureGaugePuzzle() {
     setStatus("idle");
     setSolved(false);
     setMessage(
-      "Build the pressure pattern, then use the Crown plate to validate the network."
+      "Build the pressure pattern in order, then use the Crown plate to validate the network."
     );
+  }
+
+  function failBuildAttempt(pressedPlate: Exclude<PlateId, "crown">) {
+    const next = bleedNetwork(gauges);
+
+    setSequence((prev) => [...prev, pressedPlate]);
+    setGauges(next);
+    setStatus("failed");
+    setMessage(
+      `The ${plateLabel(
+        pressedPlate
+      )} plate engages out of order. The mechanism rejects the step and pressure bleeds from the network.`
+    );
+
+    playSfx(SFX.reject, 0.66);
+  }
+
+  function handleBuildPlate(pressedPlate: Exclude<PlateId, "crown">) {
+    if (solved) return;
+
+    playSfx(SFX.plate, 0.6);
+
+    const nextExpected = EXPECTED_BUILD[buildSequence.length];
+
+    if (!nextExpected) {
+      failBuildAttempt(pressedPlate);
+      return;
+    }
+
+    if (pressedPlate !== nextExpected) {
+      failBuildAttempt(pressedPlate);
+      return;
+    }
+
+    const next = incrementGauge(gauges, pressedPlate);
+
+    setGauges(next);
+    setSequence((prev) => [...prev, pressedPlate]);
+    setStatus("building");
+
+    if (pressedPlate === "sun") {
+      setMessage(
+        next[0] === TARGET_GAUGES[0]
+          ? "The left gauge settles into the needed range."
+          : "Pressure enters the left channel."
+      );
+    } else if (pressedPlate === "moon") {
+      setMessage(
+        next[1] === TARGET_GAUGES[1]
+          ? "The center gauge aligns with the chamber’s demand."
+          : "Pressure rises in the center channel."
+      );
+    } else {
+      setMessage(
+        next[2] === TARGET_GAUGES[2]
+          ? "The right gauge steadies near release."
+          : "The cross plate redistributes force into the right channel."
+      );
+    }
+
+    playSfx(SFX.tick, 0.42);
   }
 
   function pressSun() {
-    if (solved) return;
-
-    playSfx(SFX.plate, 0.6);
-
-    const next = [clampGauge(gauges[0] + 1), gauges[1], gauges[2]];
-    setGauges(next);
-    setSequence((prev) => [...prev, "sun"]);
-    setStatus("building");
-    setMessage(
-      next[0] === TARGET_GAUGES[0]
-        ? "The left gauge settles into the needed range."
-        : "Pressure enters the left channel."
-    );
-
-    playSfx(SFX.tick, 0.42);
+    handleBuildPlate("sun");
   }
 
   function pressMoon() {
-    if (solved) return;
-
-    playSfx(SFX.plate, 0.6);
-
-    const next = [gauges[0], clampGauge(gauges[1] + 1), gauges[2]];
-    setGauges(next);
-    setSequence((prev) => [...prev, "moon"]);
-    setStatus("building");
-    setMessage(
-      next[1] === TARGET_GAUGES[1]
-        ? "The center gauge aligns with the chamber’s demand."
-        : "Pressure rises in the center channel."
-    );
-
-    playSfx(SFX.tick, 0.42);
+    handleBuildPlate("moon");
   }
 
   function pressCross() {
-    if (solved) return;
-
-    playSfx(SFX.plate, 0.6);
-
-    const next = [gauges[0], gauges[1], clampGauge(gauges[2] + 1)];
-    setGauges(next);
-    setSequence((prev) => [...prev, "cross"]);
-    setStatus("building");
-    setMessage(
-      next[2] === TARGET_GAUGES[2]
-        ? "The right gauge steadies near release."
-        : "The cross plate redistributes force into the right channel."
-    );
-
-    playSfx(SFX.tick, 0.42);
+    handleBuildPlate("cross");
   }
 
   function pressCrown() {
@@ -143,7 +199,11 @@ export default function PressureGaugePuzzle() {
     playSfx(SFX.plate, 0.64);
     setSequence((prev) => [...prev, "crown"]);
 
-    if (gaugesMatch(gauges)) {
+    const buildMatches =
+      buildSequence.length === EXPECTED_BUILD.length &&
+      buildSequence.every((plate, index) => plate === EXPECTED_BUILD[index]);
+
+    if (buildMatches && gaugesMatch(gauges)) {
       setSolved(true);
       setStatus("solved");
       setMessage("The mechanism accepts the pattern. Stone answers stone.");
@@ -160,16 +220,12 @@ export default function PressureGaugePuzzle() {
       return;
     }
 
-    const vented = [
-      clampGauge(gauges[0] - 1),
-      clampGauge(gauges[1] - 1),
-      clampGauge(gauges[2] - 1),
-    ];
+    const vented = bleedNetwork(gauges);
 
     setGauges(vented);
     setStatus("failed");
     setMessage(
-      "The crown plate rejects the sequence. Pressure bleeds from the network."
+      "The crown plate rejects the pattern. The chamber vents pressure and the passage remains sealed."
     );
     playSfx(SFX.reject, 0.66);
   }
@@ -414,7 +470,8 @@ export default function PressureGaugePuzzle() {
           }}
         >
           Four symbolic plates feed a three-channel mechanism. The first three plates
-          build pressure. The Crown does not fill a gauge — it judges the pattern.
+          build pressure in strict order. The Crown does not fill a gauge — it judges
+          the finished pattern.
         </div>
 
         <div
