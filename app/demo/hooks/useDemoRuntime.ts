@@ -698,7 +698,6 @@ export function useDemoRuntime() {
   }, [currentRoom, location.floorId, currentFloor.depth]);
 
   useEffect(() => {
-  useEffect(() => {
     setPuzzleResolution(null);
   }, [location.floorId, location.roomId]);
 
@@ -897,14 +896,10 @@ export function useDemoRuntime() {
   const showGameplay = presentationPhase === "gameplay";
 
   const activeEnemyOverlayName =
-    dmMode !== "human" && combatActive && isEnemyTurn
-      ? String(activeCombatantSpec?.name ?? "")
-      : null;
+    dmMode !== "human" && combatActive && isEnemyTurn ? String(activeCombatantSpec?.name ?? "") : null;
 
   const activeEnemyOverlayId =
-    dmMode !== "human" && combatActive && isEnemyTurn
-      ? String(activeCombatantSpec?.id ?? "")
-      : null;
+    dmMode !== "human" && combatActive && isEnemyTurn ? String(activeCombatantSpec?.id ?? "") : null;
 
   const solaceNeutralEnemyTurnEnabled =
     dmMode === "solace-neutral" &&
@@ -1039,6 +1034,7 @@ export function useDemoRuntime() {
 
     puzzleResolution,
     setPuzzleResolution,
+    resolvePressureGaugePuzzleSuccess,
 
     selectedTraversalTargetId,
     setSelectedTraversalTargetId,
@@ -1134,7 +1130,6 @@ export function useDemoRuntime() {
     activeRoomPuzzle,
     activePuzzleBlock,
     runRoomPuzzleAttempt,
-    resolvePressureGaugePuzzleSuccess,
 
     chronicleSeed,
     roomNarrative: roomView.roomNarrative,
