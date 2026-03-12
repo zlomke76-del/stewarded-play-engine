@@ -30,6 +30,7 @@ export default function PressureGauge({ value, left, top }: Props) {
         position: "absolute",
         left,
         top,
+        transform: "translate(-50%, -50%)",
         pointerEvents: "none",
         userSelect: "none",
       }}
