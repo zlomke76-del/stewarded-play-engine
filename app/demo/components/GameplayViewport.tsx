@@ -561,6 +561,8 @@ function ChamberScene(props: {
             roomExitNarrative={demo.roomExitNarrative}
             roomConnectionsView={demo.roomConnectionsView}
             currentFeatures={demo.currentFeatures}
+            selectedRouteId={demo.selectedTraversalTargetId}
+            onSelectRoute={demo.setSelectedTraversalTargetId}
           />
         ) : null}
       </SceneFrame>
@@ -712,6 +714,13 @@ function PuzzleRoomPanel(props: {
       .toLowerCase()
       .includes("pressure");
 
+  const riddleLines =
+    Array.isArray(activePuzzle?.riddleLines) && activePuzzle.riddleLines.length > 0
+      ? activePuzzle.riddleLines
+      : typeof activePuzzle?.hint === "string" && activePuzzle.hint.trim()
+        ? [activePuzzle.hint.trim()]
+        : [];
+
   async function handleAttempt() {
     const trimmed = String(demo.playerInput ?? "").trim();
     if (!trimmed) return;
@@ -755,167 +764,170 @@ function PuzzleRoomPanel(props: {
               playerInput={demo.playerInput ?? ""}
               setPlayerInput={demo.setPlayerInput}
               isSubmitting={isSubmitting}
+              riddleLines={riddleLines}
             />
-          ) : null}
-
-          <div
-            style={{
-              padding: "14px 16px",
-              borderRadius: 18,
-              border: "1px solid rgba(214, 188, 120, 0.16)",
-              background:
-                "linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.018))",
-              display: "grid",
-              gap: 10,
-            }}
-          >
-            <div
-              style={{
-                fontSize: 16,
-                lineHeight: 1.65,
-                color: "rgba(244, 238, 225, 0.96)",
-              }}
-            >
-              {activePuzzle?.description ??
-                activePuzzle?.shortDescription ??
-                "This chamber holds a deterministic trial."}
-            </div>
-
-            <div
-              style={{
-                display: "grid",
-                gap: 10,
-                gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))",
-              }}
-            >
+          ) : (
+            <>
               <div
                 style={{
-                  padding: "12px 13px",
-                  borderRadius: 14,
-                  border: "1px solid rgba(255,255,255,0.08)",
-                  background: "rgba(255,255,255,0.03)",
-                  display: "grid",
-                  gap: 6,
-                }}
-              >
-                <div
-                  style={{
-                    fontSize: 11,
-                    letterSpacing: 0.75,
-                    textTransform: "uppercase",
-                    opacity: 0.58,
-                  }}
-                >
-                  Current Chamber
-                </div>
-                <div style={{ lineHeight: 1.55, fontWeight: 700 }}>
-                  {demo.currentRoomTitle ?? "Corridor"}
-                </div>
-              </div>
-
-              <div
-                style={{
-                  padding: "12px 13px",
-                  borderRadius: 14,
-                  border: "1px solid rgba(255,255,255,0.08)",
-                  background: "rgba(255,255,255,0.03)",
-                  display: "grid",
-                  gap: 6,
-                }}
-              >
-                <div
-                  style={{
-                    fontSize: 11,
-                    letterSpacing: 0.75,
-                    textTransform: "uppercase",
-                    opacity: 0.58,
-                  }}
-                >
-                  Intended Route
-                </div>
-                <div style={{ lineHeight: 1.55, fontWeight: 700 }}>
-                  {intendedRouteLabel}
-                </div>
-              </div>
-
-              <div
-                style={{
-                  padding: "12px 13px",
-                  borderRadius: 14,
-                  border: "1px solid rgba(255,255,255,0.08)",
-                  background: "rgba(255,255,255,0.03)",
-                  display: "grid",
-                  gap: 6,
-                }}
-              >
-                <div
-                  style={{
-                    fontSize: 11,
-                    letterSpacing: 0.75,
-                    textTransform: "uppercase",
-                    opacity: 0.58,
-                  }}
-                >
-                  Trial State
-                </div>
-                <div style={{ lineHeight: 1.55, fontWeight: 700 }}>
-                  {puzzleResult
-                    ? puzzleResult.success === true
-                      ? "Resolved"
-                      : "Attempt recorded"
-                    : "Passage blocked"}
-                </div>
-              </div>
-            </div>
-
-            <div
-              style={{
-                padding: "12px 13px",
-                borderRadius: 14,
-                border: "1px solid rgba(255,255,255,0.08)",
-                background: "rgba(255,255,255,0.03)",
-                display: "grid",
-                gap: 6,
-              }}
-            >
-              <div
-                style={{
-                  fontSize: 11,
-                  letterSpacing: 0.75,
-                  textTransform: "uppercase",
-                  opacity: 0.58,
-                }}
-              >
-                Prompt
-              </div>
-              <div style={{ lineHeight: 1.6 }}>
-                {activePuzzle?.prompt ?? "Describe how your hero attempts the puzzle."}
-              </div>
-            </div>
-
-            {activePuzzle?.hint ? (
-              <div
-                style={{
-                  padding: "11px 13px",
-                  borderRadius: 14,
-                  border: "1px solid rgba(120, 160, 214, 0.16)",
+                  padding: "14px 16px",
+                  borderRadius: 18,
+                  border: "1px solid rgba(214, 188, 120, 0.16)",
                   background:
-                    "linear-gradient(180deg, rgba(120,160,214,0.08), rgba(120,160,214,0.04))",
-                  fontSize: 13,
-                  lineHeight: 1.55,
+                    "linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.018))",
+                  display: "grid",
+                  gap: 10,
                 }}
               >
-                <strong style={{ fontWeight: 700 }}>Hint:</strong> {activePuzzle.hint}
-              </div>
-            ) : null}
-          </div>
+                <div
+                  style={{
+                    fontSize: 16,
+                    lineHeight: 1.65,
+                    color: "rgba(244, 238, 225, 0.96)",
+                  }}
+                >
+                  {activePuzzle?.description ??
+                    activePuzzle?.shortDescription ??
+                    "This chamber holds a deterministic trial."}
+                </div>
 
-          <PuzzleCommandPanel
-            demo={demo}
-            prompt={activePuzzle?.prompt ?? "Describe how your hero attempts the puzzle."}
-            isSubmitting={isSubmitting}
-            onAttempt={handleAttempt}
-          />
+                <div
+                  style={{
+                    display: "grid",
+                    gap: 10,
+                    gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))",
+                  }}
+                >
+                  <div
+                    style={{
+                      padding: "12px 13px",
+                      borderRadius: 14,
+                      border: "1px solid rgba(255,255,255,0.08)",
+                      background: "rgba(255,255,255,0.03)",
+                      display: "grid",
+                      gap: 6,
+                    }}
+                  >
+                    <div
+                      style={{
+                        fontSize: 11,
+                        letterSpacing: 0.75,
+                        textTransform: "uppercase",
+                        opacity: 0.58,
+                      }}
+                    >
+                      Current Chamber
+                    </div>
+                    <div style={{ lineHeight: 1.55, fontWeight: 700 }}>
+                      {demo.currentRoomTitle ?? "Corridor"}
+                    </div>
+                  </div>
+
+                  <div
+                    style={{
+                      padding: "12px 13px",
+                      borderRadius: 14,
+                      border: "1px solid rgba(255,255,255,0.08)",
+                      background: "rgba(255,255,255,0.03)",
+                      display: "grid",
+                      gap: 6,
+                    }}
+                  >
+                    <div
+                      style={{
+                        fontSize: 11,
+                        letterSpacing: 0.75,
+                        textTransform: "uppercase",
+                        opacity: 0.58,
+                      }}
+                    >
+                      Intended Route
+                    </div>
+                    <div style={{ lineHeight: 1.55, fontWeight: 700 }}>
+                      {intendedRouteLabel}
+                    </div>
+                  </div>
+
+                  <div
+                    style={{
+                      padding: "12px 13px",
+                      borderRadius: 14,
+                      border: "1px solid rgba(255,255,255,0.08)",
+                      background: "rgba(255,255,255,0.03)",
+                      display: "grid",
+                      gap: 6,
+                    }}
+                  >
+                    <div
+                      style={{
+                        fontSize: 11,
+                        letterSpacing: 0.75,
+                        textTransform: "uppercase",
+                        opacity: 0.58,
+                      }}
+                    >
+                      Trial State
+                    </div>
+                    <div style={{ lineHeight: 1.55, fontWeight: 700 }}>
+                      {puzzleResult
+                        ? puzzleResult.success === true
+                          ? "Resolved"
+                          : "Attempt recorded"
+                        : "Passage blocked"}
+                    </div>
+                  </div>
+                </div>
+
+                <div
+                  style={{
+                    padding: "12px 13px",
+                    borderRadius: 14,
+                    border: "1px solid rgba(255,255,255,0.08)",
+                    background: "rgba(255,255,255,0.03)",
+                    display: "grid",
+                    gap: 6,
+                  }}
+                >
+                  <div
+                    style={{
+                      fontSize: 11,
+                      letterSpacing: 0.75,
+                      textTransform: "uppercase",
+                      opacity: 0.58,
+                    }}
+                  >
+                    Prompt
+                  </div>
+                  <div style={{ lineHeight: 1.6 }}>
+                    {activePuzzle?.prompt ?? "Describe how your hero attempts the puzzle."}
+                  </div>
+                </div>
+
+                {activePuzzle?.hint ? (
+                  <div
+                    style={{
+                      padding: "11px 13px",
+                      borderRadius: 14,
+                      border: "1px solid rgba(120, 160, 214, 0.16)",
+                      background:
+                        "linear-gradient(180deg, rgba(120,160,214,0.08), rgba(120,160,214,0.04))",
+                      fontSize: 13,
+                      lineHeight: 1.55,
+                    }}
+                  >
+                    <strong style={{ fontWeight: 700 }}>Hint:</strong> {activePuzzle.hint}
+                  </div>
+                ) : null}
+              </div>
+
+              <PuzzleCommandPanel
+                demo={demo}
+                prompt={activePuzzle?.prompt ?? "Describe how your hero attempts the puzzle."}
+                isSubmitting={isSubmitting}
+                onAttempt={handleAttempt}
+              />
+            </>
+          )}
 
           {puzzleResult ? (
             <div
@@ -1173,6 +1185,8 @@ export default function GameplayViewport({ demo }: Props) {
                   roomExitNarrative={demo.roomExitNarrative}
                   roomConnectionsView={demo.roomConnectionsView}
                   currentFeatures={demo.currentFeatures}
+                  selectedRouteId={demo.selectedTraversalTargetId}
+                  onSelectRoute={demo.setSelectedTraversalTargetId}
                 />
               </div>
             ) : null}
