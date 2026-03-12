@@ -164,6 +164,13 @@ const CRYPT_VAULT_ASSETS: readonly string[] = [
   "/assets/V3/Dungeon/Crypt_Vault/crypt_04.png",
 ];
 
+const FORGE_CHAMBER_ASSETS: readonly string[] = [
+  "/assets/V3/Dungeon/Forge_Chamber/forge_01.png",
+  "/assets/V3/Dungeon/Forge_Chamber/forge_02.png",
+  "/assets/V3/Dungeon/Forge_Chamber/forge_03.png",
+  "/assets/V3/Dungeon/Forge_Chamber/forge_04.png",
+];
+
 const GATE_HALL_ASSETS: readonly string[] = [
   "/assets/V3/Dungeon/Gate_Hall/gate_01.png",
   "/assets/V3/Dungeon/Gate_Hall/gate_02.png",
@@ -190,6 +197,20 @@ const RELIC_VAULT_ASSETS: readonly string[] = [
   "/assets/V3/Dungeon/Relic_Vault/relic_vault_02.png",
   "/assets/V3/Dungeon/Relic_Vault/relic_vault_03.png",
   "/assets/V3/Dungeon/Relic_Vault/relic_vault_04.png",
+];
+
+const SENTINEL_HALL_ASSETS: readonly string[] = [
+  "/assets/V3/Dungeon/Sentinel_Hall/sentinal_01.png",
+  "/assets/V3/Dungeon/Sentinel_Hall/sentinal_02.png",
+  "/assets/V3/Dungeon/Sentinel_Hall/sentinal_03.png",
+  "/assets/V3/Dungeon/Sentinel_Hall/sentinal_04.png",
+];
+
+const TREASURE_ROOM_ASSETS: readonly string[] = [
+  "/assets/V3/Dungeon/Treasure_Room/treasure_01.png",
+  "/assets/V3/Dungeon/Treasure_Room/treasure_02.png",
+  "/assets/V3/Dungeon/Treasure_Room/treasure_03.png",
+  "/assets/V3/Dungeon/Treasure_Room/treasure_04.png",
 ];
 
 const TRIAL_CHAMBER_ASSETS: readonly string[] = [
@@ -261,16 +282,14 @@ const ROOM_ASSETS: Record<string, readonly string[]> = {
   relic_vault: RELIC_VAULT_ASSETS,
 
   armory: ARMORY_ASSETS,
+  treasure_room: TREASURE_ROOM_ASSETS,
   beast_den: BEAST_DEN_ASSETS,
   arcane_hall: ARCANE_HALL_ASSETS,
+  sentinel_hall: SENTINEL_HALL_ASSETS,
   gate_hall: GATE_HALL_ASSETS,
   trial_chamber: TRIAL_CHAMBER_ASSETS,
+  forge_chamber: FORGE_CHAMBER_ASSETS,
   boss_chamber: BOSS_CHAMBER_ASSETS,
-
-  // Keep these until their dedicated 4-packs are wired in.
-  forge_chamber: ["/assets/V3/Dungeon/Forge_Chamber/forge_chamber_01.png"],
-  sentinel_hall: ["/assets/V3/Dungeon/Sentinel_Hall/sentinel_hall_01.png"],
-  treasure_room: ["/assets/V3/Dungeon/Treasure_Room/treasure_room_01.png"],
 
   tavern: ["/assets/V3/Dungeon/Tavern/tavern_01.png"],
 
