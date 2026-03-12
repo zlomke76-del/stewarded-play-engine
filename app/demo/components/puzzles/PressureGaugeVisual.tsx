@@ -67,10 +67,6 @@ function clampGauge(value: number) {
   return Math.max(0, Math.min(4, value));
 }
 
-function formatPlate(plate: PressurePlateId) {
-  return plate;
-}
-
 function gaugesMatch(values: number[]) {
   return (
     values[0] === TARGET_GAUGES[0] &&
@@ -83,9 +79,11 @@ function gaugeImage(value: number) {
   return GAUGE_STATES[clampGauge(value)];
 }
 
-function plateStatusLabel(plate: PressurePlateId, lastPressedPlate: PressurePlateId | null) {
-  if (lastPressedPlate === plate) return "Engaged";
-  return "Idle";
+function plateStatusLabel(
+  plate: PressurePlateId,
+  lastPressedPlate: PressurePlateId | null
+) {
+  return lastPressedPlate === plate ? "Engaged" : "Idle";
 }
 
 function appendSequenceTextToInput(
@@ -119,7 +117,8 @@ export default function PressureGaugeVisual(props: Props) {
     "Build pressure with Sun, Moon, and Cross. Use Crown only when the mechanism is ready to judge the pattern."
   );
   const [solved, setSolved] = useState(false);
-  const [lastPressedPlate, setLastPressedPlate] = useState<PressurePlateId | null>(null);
+  const [lastPressedPlate, setLastPressedPlate] =
+    useState<PressurePlateId | null>(null);
   const [pressedPlate, setPressedPlate] = useState<PressurePlateId | null>(null);
 
   const pressTimerRef = useRef<number | null>(null);
@@ -337,7 +336,7 @@ export default function PressureGaugeVisual(props: Props) {
 
   const sequenceLabel = useMemo(() => {
     if (sequence.length === 0) return "Select plates in the chamber floor.";
-    return sequence.map(formatPlate).join(" -> ");
+    return sequence.join(" -> ");
   }, [sequence]);
 
   const trialStateLabel =
@@ -360,6 +359,7 @@ export default function PressureGaugeVisual(props: Props) {
           border: "1px solid rgba(214,188,120,0.16)",
           background: "rgba(0,0,0,0.24)",
           boxShadow: "0 20px 48px rgba(0,0,0,0.28)",
+          aspectRatio: "16 / 9",
         }}
       >
         <img
@@ -367,6 +367,8 @@ export default function PressureGaugeVisual(props: Props) {
           alt="Pressure gauge chamber"
           style={{
             width: "100%",
+            height: "100%",
+            objectFit: "cover",
             display: "block",
           }}
         />
@@ -453,14 +455,14 @@ export default function PressureGaugeVisual(props: Props) {
           alt="Left pressure gauge"
           style={{
             position: "absolute",
-            left: 610,
-            top: 430,
-            width: 150,
-            height: 150,
+            left: "39.5%",
+            top: "56.2%",
+            width: 88,
+            height: 88,
             transform: "translate(-50%, -50%)",
             userSelect: "none",
             pointerEvents: "none",
-            zIndex: 3,
+            zIndex: 4,
           }}
         />
 
@@ -469,14 +471,14 @@ export default function PressureGaugeVisual(props: Props) {
           alt="Center pressure gauge"
           style={{
             position: "absolute",
-            left: 825,
-            top: 430,
-            width: 150,
-            height: 150,
+            left: "50%",
+            top: "56.2%",
+            width: 88,
+            height: 88,
             transform: "translate(-50%, -50%)",
             userSelect: "none",
             pointerEvents: "none",
-            zIndex: 3,
+            zIndex: 4,
           }}
         />
 
@@ -485,23 +487,23 @@ export default function PressureGaugeVisual(props: Props) {
           alt="Right pressure gauge"
           style={{
             position: "absolute",
-            left: 1040,
-            top: 430,
-            width: 150,
-            height: 150,
+            left: "60.5%",
+            top: "56.2%",
+            width: 88,
+            height: 88,
             transform: "translate(-50%, -50%)",
             userSelect: "none",
             pointerEvents: "none",
-            zIndex: 3,
+            zIndex: 4,
           }}
         />
 
         {(
           [
-            { plate: "Sun", left: 720, top: 590 },
-            { plate: "Moon", left: 860, top: 590 },
-            { plate: "Cross", left: 1000, top: 590 },
-            { plate: "Crown", left: 1140, top: 590 },
+            { plate: "Sun", left: "40.5%", top: "81.2%" },
+            { plate: "Moon", left: "50.5%", top: "81.2%" },
+            { plate: "Cross", left: "60.5%", top: "81.2%" },
+            { plate: "Crown", left: "68.8%", top: "81.2%" },
           ] as const
         ).map((item) => {
           const plate = item.plate;
@@ -527,8 +529,8 @@ export default function PressureGaugeVisual(props: Props) {
                 position: "absolute",
                 left: item.left,
                 top: item.top,
-                width: 132,
-                height: 132,
+                width: 76,
+                height: 76,
                 transform: "translate(-50%, -50%)",
                 padding: 0,
                 margin: 0,
@@ -557,7 +559,7 @@ export default function PressureGaugeVisual(props: Props) {
                     ? "drop-shadow(0 0 10px rgba(255,230,170,0.22))"
                     : "drop-shadow(0 8px 18px rgba(0,0,0,0.30))",
                   transform: pressed
-                    ? "translateY(5px) scale(0.985)"
+                    ? "translateY(4px) scale(0.985)"
                     : "translateY(0) scale(1)",
                   transition:
                     "transform 90ms ease, filter 90ms ease, opacity 90ms ease",
@@ -572,7 +574,7 @@ export default function PressureGaugeVisual(props: Props) {
             position: "absolute",
             left: 18,
             bottom: 18,
-            maxWidth: 420,
+            maxWidth: 280,
             padding: "10px 12px",
             borderRadius: 12,
             border: "1px solid rgba(255,255,255,0.10)",
