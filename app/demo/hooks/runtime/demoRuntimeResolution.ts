@@ -12,6 +12,7 @@ type HandleRecordArgs = {
   };
   playerInput: string;
   selectedOptionDescription: string;
+  selectedConnectionId?: string | null;
   location: {
     floorId: string;
     roomId: string;
@@ -51,6 +52,7 @@ export function commitResolvedActionToState(args: HandleRecordArgs) {
     payload,
     playerInput,
     selectedOptionDescription,
+    selectedConnectionId,
     location,
     currentRoom,
     reachableConnections,
@@ -75,6 +77,7 @@ export function commitResolvedActionToState(args: HandleRecordArgs) {
       floorId: location.floorId,
       roomId: location.roomId,
       success,
+      selectedConnectionId: selectedConnectionId ?? null,
     },
   };
 
@@ -130,6 +133,7 @@ export function commitResolvedActionToState(args: HandleRecordArgs) {
     prevState: next,
     success,
     selectedText: combinedText,
+    selectedConnectionId: selectedConnectionId ?? null,
     currentRoom,
     reachableConnections,
     dungeon,
