@@ -45,6 +45,8 @@ export function inferConnectionChoiceFromText(
       if (label.includes("boss") && /boss|leader|captain|warlord|priest/i.test(t)) score += 48;
       if (label.includes("beast") && /beast|den|nest|predator/i.test(t)) score += 40;
       if (label.includes("arcane") && /arcane|construct|sentinel|magic/i.test(t)) score += 40;
+      if (label.includes("guard") && /guard|watch|post|sentry/i.test(t)) score += 42;
+      if (label.includes("entrance") && /entrance|entry|return|back/i.test(t)) score += 42;
     }
 
     return { connection, score };
@@ -124,6 +126,7 @@ export function commitDungeonTraversalBundle(args: {
   prevState: any;
   success: boolean;
   selectedText: string;
+  selectedConnectionId?: string | null;
   currentRoom: any;
   reachableConnections: any[];
   dungeon: any;
@@ -136,6 +139,7 @@ export function commitDungeonTraversalBundle(args: {
     prevState,
     success,
     selectedText,
+    selectedConnectionId,
     currentRoom,
     reachableConnections,
     dungeon,
@@ -145,13 +149,18 @@ export function commitDungeonTraversalBundle(args: {
     unlockedDoorIds,
   } = args;
 
-  const chosenConnection = inferConnectionChoiceFromText(
-    currentRoom,
-    reachableConnections,
-    dungeon,
-    floorId,
-    selectedText
-  );
+  const chosenConnection =
+    reachableConnections.find(
+      (connection) =>
+        String(connection?.id ?? "").trim() === String(selectedConnectionId ?? "").trim()
+    ) ??
+    inferConnectionChoiceFromText(
+      currentRoom,
+      reachableConnections,
+      dungeon,
+      floorId,
+      selectedText
+    );
 
   let next = prevState;
 
