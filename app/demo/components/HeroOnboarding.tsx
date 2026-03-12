@@ -3,15 +3,12 @@
 // ------------------------------------------------------------
 // HeroOnboarding.tsx
 // ------------------------------------------------------------
-// Updated onboarding flow:
-// - full mode uses progressive reveal
-// - opening state shows:
-//    1) title + subtitle
-//    2) Choose Your Play Style
-//    3) begin-alone / fellowship framing
-//    4) cinematic hero image panel
-// - Party Size selection is removed
-// - compact mode reflects fellowship progression instead of starting party size
+// Upgraded onboarding flow:
+// - full mode presents a premium first-class threshold experience
+// - play style is framed as a ceremonial guide choice, not a settings toggle
+// - Human / Solace are rendered as two narrative selection cards
+// - fellowship framing remains visible, but no longer competes with the first decision
+// - compact mode still reflects fellowship progression instead of starting party size
 // ------------------------------------------------------------
 
 import React, { useMemo } from "react";
@@ -168,96 +165,6 @@ function Chip({
   );
 }
 
-function TriToggle({
-  dmMode,
-  onSetDmMode,
-  leftLabel,
-  rightLabel,
-  disabled,
-}: {
-  dmMode: DMMode | null;
-  onSetDmMode: (next: DMMode) => void;
-  leftLabel: string;
-  rightLabel: string;
-  disabled?: boolean;
-}) {
-  const isHuman = dmMode === "human";
-  const isSolace = dmMode === "solace-neutral";
-  const knobLeft = dmMode === null ? 16 : isSolace ? 32 : 0;
-
-  const labelStyle = (active: boolean) => ({
-    fontSize: 13,
-    opacity: disabled ? 0.6 : active ? 0.96 : 0.8,
-    fontWeight: active ? 900 : 700,
-    cursor: disabled ? "not-allowed" : "pointer",
-    userSelect: "none" as const,
-    transition: "opacity 140ms ease, transform 140ms ease",
-    transform: active ? "translateY(-1px)" : "translateY(0px)",
-  });
-
-  return (
-    <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
-      <button
-        type="button"
-        onClick={() => !disabled && onSetDmMode("human")}
-        disabled={!!disabled}
-        style={{
-          all: "unset",
-          ...labelStyle(isHuman),
-        }}
-      >
-        {leftLabel}
-      </button>
-
-      <button
-        type="button"
-        aria-label="toggle"
-        disabled
-        style={{
-          width: 58,
-          height: 30,
-          borderRadius: 999,
-          border: "1px solid rgba(255,255,255,0.18)",
-          background: disabled ? "rgba(255,255,255,0.03)" : "rgba(255,255,255,0.06)",
-          position: "relative",
-          cursor: "default",
-          padding: 0,
-          opacity: disabled ? 0.65 : 1,
-          boxShadow: "inset 0 0 20px rgba(0,0,0,0.24)",
-        }}
-        title={dmMode === null ? "Declare a style" : undefined}
-      >
-        <span
-          style={{
-            position: "absolute",
-            top: 3,
-            left: 3 + knobLeft,
-            width: 24,
-            height: 24,
-            borderRadius: 999,
-            background: "rgba(220,220,255,0.88)",
-            boxShadow:
-              "0 0 0 1px rgba(0,0,0,0.22), 0 0 18px rgba(150,175,255,0.18)",
-            transition: "left 160ms ease",
-          }}
-        />
-      </button>
-
-      <button
-        type="button"
-        onClick={() => !disabled && onSetDmMode("solace-neutral")}
-        disabled={!!disabled}
-        style={{
-          all: "unset",
-          ...labelStyle(isSolace),
-        }}
-      >
-        {rightLabel}
-      </button>
-    </div>
-  );
-}
-
 function SummaryPill({
   label,
   value,
@@ -286,29 +193,223 @@ function SummaryPill({
   );
 }
 
-function ModeLoreBlock({ dmMode }: { dmMode: DMMode | null }) {
+function GuideCard({
+  title,
+  subtitle,
+  body,
+  accent,
+  selected,
+  onClick,
+}: {
+  title: string;
+  subtitle: string;
+  body: string;
+  accent: "ember" | "azure";
+  selected: boolean;
+  onClick: () => void;
+}) {
+  const isAzure = accent === "azure";
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      style={{
+        width: "100%",
+        textAlign: "left",
+        padding: 0,
+        border: selected
+          ? isAzure
+            ? "1px solid rgba(138,180,255,0.42)"
+            : "1px solid rgba(255,196,132,0.42)"
+          : "1px solid rgba(255,255,255,0.10)",
+        borderRadius: 18,
+        overflow: "hidden",
+        cursor: "pointer",
+        background:
+          selected
+            ? isAzure
+              ? "linear-gradient(180deg, rgba(138,180,255,0.12), rgba(18,24,36,0.92))"
+              : "linear-gradient(180deg, rgba(255,196,132,0.10), rgba(28,20,14,0.92))"
+            : "linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.02))",
+        boxShadow: selected
+          ? isAzure
+            ? "0 18px 40px rgba(0,0,0,0.34), 0 0 24px rgba(138,180,255,0.12)"
+            : "0 18px 40px rgba(0,0,0,0.34), 0 0 24px rgba(255,166,82,0.10)"
+          : "0 12px 28px rgba(0,0,0,0.22)",
+        transition:
+          "transform 180ms ease, border-color 180ms ease, box-shadow 220ms ease, background 220ms ease, filter 180ms ease",
+      }}
+      onMouseEnter={(e) => {
+        e.currentTarget.style.transform = "translateY(-2px)";
+        e.currentTarget.style.filter = "brightness(1.03)";
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.transform = "translateY(0px)";
+        e.currentTarget.style.filter = "brightness(1)";
+      }}
+      aria-pressed={selected}
+    >
+      <div
+        style={{
+          position: "relative",
+          padding: 18,
+          display: "grid",
+          gap: 10,
+          minHeight: 214,
+          background: isAzure
+            ? "radial-gradient(520px 240px at 78% 8%, rgba(138,180,255,0.14), rgba(0,0,0,0) 62%)"
+            : "radial-gradient(520px 240px at 12% 8%, rgba(255,168,94,0.16), rgba(0,0,0,0) 62%)",
+        }}
+      >
+        <div
+          aria-hidden
+          style={{
+            position: "absolute",
+            inset: 0,
+            background: isAzure
+              ? "linear-gradient(180deg, rgba(120,150,255,0.06), rgba(0,0,0,0) 34%, rgba(0,0,0,0.12) 100%)"
+              : "linear-gradient(180deg, rgba(255,168,94,0.06), rgba(0,0,0,0) 34%, rgba(0,0,0,0.12) 100%)",
+            pointerEvents: "none",
+          }}
+        />
+
+        <div style={{ position: "relative", zIndex: 1, display: "grid", gap: 8 }}>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: 12,
+              flexWrap: "wrap",
+            }}
+          >
+            <div
+              style={{
+                fontSize: 11,
+                fontWeight: 900,
+                letterSpacing: 0.6,
+                textTransform: "uppercase",
+                color: selected
+                  ? isAzure
+                    ? "rgba(190,215,255,0.96)"
+                    : "rgba(255,224,188,0.96)"
+                  : "rgba(255,255,255,0.7)",
+              }}
+            >
+              {subtitle}
+            </div>
+
+            <div
+              style={{
+                minWidth: 76,
+                height: 28,
+                borderRadius: 999,
+                padding: "0 10px",
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+                border: selected
+                  ? isAzure
+                    ? "1px solid rgba(138,180,255,0.32)"
+                    : "1px solid rgba(255,196,132,0.32)"
+                  : "1px solid rgba(255,255,255,0.10)",
+                background: selected
+                  ? isAzure
+                    ? "rgba(138,180,255,0.12)"
+                    : "rgba(255,196,132,0.12)"
+                  : "rgba(255,255,255,0.04)",
+                fontSize: 11,
+                fontWeight: 900,
+                letterSpacing: 0.45,
+                textTransform: "uppercase",
+                color: "rgba(255,255,255,0.92)",
+              }}
+            >
+              {selected ? "Chosen" : "Choose"}
+            </div>
+          </div>
+
+          <div
+            style={{
+              fontSize: 22,
+              fontWeight: 950,
+              lineHeight: 1.06,
+              letterSpacing: 0.2,
+              textShadow: "0 4px 18px rgba(0,0,0,0.28)",
+            }}
+          >
+            {title}
+          </div>
+
+          <div
+            style={{
+              fontSize: 13,
+              lineHeight: 1.6,
+              opacity: 0.84,
+              maxWidth: 420,
+            }}
+          >
+            {body}
+          </div>
+        </div>
+
+        <div
+          style={{
+            position: "relative",
+            zIndex: 1,
+            display: "flex",
+            alignItems: "center",
+            gap: 10,
+            flexWrap: "wrap",
+            marginTop: "auto",
+          }}
+        >
+          <span
+            style={{
+              width: 10,
+              height: 10,
+              borderRadius: 999,
+              background: isAzure ? "rgba(138,180,255,0.88)" : "rgba(255,176,96,0.88)",
+              boxShadow: isAzure
+                ? "0 0 16px rgba(138,180,255,0.34)"
+                : "0 0 16px rgba(255,176,96,0.34)",
+            }}
+          />
+          <span style={{ fontSize: 12, opacity: 0.8 }}>
+            {isAzure
+              ? "Structured guidance, continuity, and balanced pacing."
+              : "Human judgment, improvisation, and handcrafted rulings."}
+          </span>
+        </div>
+      </div>
+    </button>
+  );
+}
+
+function GuideLorePanel({ dmMode }: { dmMode: DMMode | null }) {
   const title =
     dmMode === "human"
-      ? "Human Dungeon Master"
+      ? "The Human Guide"
       : dmMode === "solace-neutral"
-        ? "Solace Dungeon Master"
-        : "Choose Who Guides the Adventure";
+        ? "Solace — Keeper of the Chronicle"
+        : "Who Will Guide the Expedition?";
 
   const body =
     dmMode === "human"
-      ? "A human DM interprets the world through judgment, improvisation, and personal storytelling. You shape the pace, tone, and consequences by hand."
+      ? "A human guide shapes the dungeon through live judgment, improvisation, and authored instinct. The story breathes through discretion, surprise, and table-born rulings."
       : dmMode === "solace-neutral"
-        ? "Solace guides the expedition with responsive pacing and narrative continuity. The dungeon keeps moving while preserving balance, tone, and consequence."
-        : "A human DM offers handcrafted control and creative rulings. Solace offers a living guided flow that keeps the story moving through the dark.";
+        ? "Solace stewards the expedition through continuity, pacing, and consequence. The chronicle remains coherent while the descent unfolds through responsive but disciplined guidance."
+        : "This choice is not a setting. It is the voice that will stand beside the threshold and interpret what comes next.";
 
   return (
     <div
       style={{
-        padding: "12px 13px",
-        borderRadius: 14,
+        padding: "14px 15px",
+        borderRadius: 16,
         border: "1px solid rgba(255,255,255,0.10)",
         background:
-          "linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.025))",
+          "linear-gradient(180deg, rgba(255,255,255,0.045), rgba(255,255,255,0.025))",
         boxShadow: "inset 0 1px 0 rgba(255,255,255,0.03)",
       }}
     >
@@ -316,19 +417,24 @@ function ModeLoreBlock({ dmMode }: { dmMode: DMMode | null }) {
         style={{
           fontSize: 12,
           fontWeight: 900,
-          letterSpacing: 0.45,
+          letterSpacing: 0.5,
           textTransform: "uppercase",
-          color: "rgba(190,205,255,0.88)",
-          marginBottom: 7,
+          color:
+            dmMode === "solace-neutral"
+              ? "rgba(190,210,255,0.9)"
+              : dmMode === "human"
+                ? "rgba(255,220,188,0.9)"
+                : "rgba(215,220,235,0.86)",
+          marginBottom: 8,
         }}
       >
         {title}
       </div>
       <div
         style={{
-          fontSize: 12.5,
-          lineHeight: 1.55,
-          opacity: 0.8,
+          fontSize: 12.75,
+          lineHeight: 1.6,
+          opacity: 0.82,
         }}
       >
         {body}
@@ -379,9 +485,9 @@ export default function HeroOnboarding({
   completionRequiresFullFellowship,
 }: Props) {
   const dmHint = useMemo(() => {
-    if (dmMode === "solace-neutral") return "Solace keeps the adventure moving.";
-    if (dmMode === "human") return "You decide how each action resolves.";
-    return "Choose who guides the fate of the expedition.";
+    if (dmMode === "solace-neutral") return "Solace has been chosen to guide the descent.";
+    if (dmMode === "human") return "A human guide has been chosen to shape the expedition.";
+    return "Choose who will guide your fate at the threshold.";
   }, [dmMode]);
 
   const modeLabel = useMemo(() => {
@@ -449,7 +555,10 @@ export default function HeroOnboarding({
               >
                 <SummaryPill label="Mode" value={modeLabel} />
                 <SummaryPill label="Fellowship" value={`${activePartySize} / ${maxPartySlots}`} />
-                <SummaryPill label="Unlocked" value={`${unlockedPartySlots} Slot${unlockedPartySlots === 1 ? "" : "s"}`} />
+                <SummaryPill
+                  label="Unlocked"
+                  value={`${unlockedPartySlots} Slot${unlockedPartySlots === 1 ? "" : "s"}`}
+                />
                 <SummaryPill label="Chapter" value={compactActiveChapter} />
               </div>
 
@@ -542,16 +651,96 @@ export default function HeroOnboarding({
             }}
           >
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-              <Chip label="Mode" state={chapterState.mode} compact onClick={() => { playSfx(SFX.buttonClick, 0.58); onJump("mode"); }} />
-              <Chip label="Fellowship" state={chapterState.party} compact onClick={() => { playSfx(SFX.buttonClick, 0.58); onJump("party"); }} />
-              <Chip label="Table" state={chapterState.table} compact onClick={() => { playSfx(SFX.buttonClick, 0.58); onJump("table"); }} />
-              <Chip label="Pressure" state={chapterState.pressure} compact onClick={() => { playSfx(SFX.buttonClick, 0.58); onJump("pressure"); }} />
-              <Chip label="Map" state={chapterState.map} compact onClick={() => { playSfx(SFX.buttonClick, 0.58); onJump("map"); }} />
-              <Chip label="Combat" state={chapterState.combat} compact onClick={() => { playSfx(SFX.buttonClick, 0.58); onJump("combat"); }} />
-              <Chip label="Action" state={chapterState.action} compact onClick={() => { playSfx(SFX.buttonClick, 0.58); onJump("action"); }} />
-              <Chip label="Resolution" state={chapterState.resolution} compact onClick={() => { playSfx(SFX.buttonClick, 0.58); onJump("resolution"); }} />
-              <Chip label="Canon" state={chapterState.canon} compact onClick={() => { playSfx(SFX.buttonClick, 0.58); onJump("canon"); }} />
-              <Chip label="Chronicle" state={chapterState.ledger} compact onClick={() => { playSfx(SFX.buttonClick, 0.58); onJump("ledger"); }} />
+              <Chip
+                label="Mode"
+                state={chapterState.mode}
+                compact
+                onClick={() => {
+                  playSfx(SFX.buttonClick, 0.58);
+                  onJump("mode");
+                }}
+              />
+              <Chip
+                label="Fellowship"
+                state={chapterState.party}
+                compact
+                onClick={() => {
+                  playSfx(SFX.buttonClick, 0.58);
+                  onJump("party");
+                }}
+              />
+              <Chip
+                label="Table"
+                state={chapterState.table}
+                compact
+                onClick={() => {
+                  playSfx(SFX.buttonClick, 0.58);
+                  onJump("table");
+                }}
+              />
+              <Chip
+                label="Pressure"
+                state={chapterState.pressure}
+                compact
+                onClick={() => {
+                  playSfx(SFX.buttonClick, 0.58);
+                  onJump("pressure");
+                }}
+              />
+              <Chip
+                label="Map"
+                state={chapterState.map}
+                compact
+                onClick={() => {
+                  playSfx(SFX.buttonClick, 0.58);
+                  onJump("map");
+                }}
+              />
+              <Chip
+                label="Combat"
+                state={chapterState.combat}
+                compact
+                onClick={() => {
+                  playSfx(SFX.buttonClick, 0.58);
+                  onJump("combat");
+                }}
+              />
+              <Chip
+                label="Action"
+                state={chapterState.action}
+                compact
+                onClick={() => {
+                  playSfx(SFX.buttonClick, 0.58);
+                  onJump("action");
+                }}
+              />
+              <Chip
+                label="Resolution"
+                state={chapterState.resolution}
+                compact
+                onClick={() => {
+                  playSfx(SFX.buttonClick, 0.58);
+                  onJump("resolution");
+                }}
+              />
+              <Chip
+                label="Canon"
+                state={chapterState.canon}
+                compact
+                onClick={() => {
+                  playSfx(SFX.buttonClick, 0.58);
+                  onJump("canon");
+                }}
+              />
+              <Chip
+                label="Chronicle"
+                state={chapterState.ledger}
+                compact
+                onClick={() => {
+                  playSfx(SFX.buttonClick, 0.58);
+                  onJump("ledger");
+                }}
+              />
             </div>
 
             <div style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 10 }}>
@@ -579,12 +768,12 @@ export default function HeroOnboarding({
       style={{
         position: "relative",
         background:
-          "linear-gradient(180deg, rgba(17,17,17,0.86), rgba(10,10,10,0.86))",
+          "linear-gradient(180deg, rgba(14,15,18,0.88), rgba(8,8,10,0.90))",
         border: "1px solid rgba(255,255,255,0.10)",
-        borderRadius: 18,
-        padding: "28px 24px",
+        borderRadius: 22,
+        padding: "30px 26px",
         marginTop: 20,
-        boxShadow: "0 18px 60px rgba(0,0,0,0.36)",
+        boxShadow: "0 20px 70px rgba(0,0,0,0.42)",
         overflow: "hidden",
       }}
     >
@@ -626,116 +815,276 @@ export default function HeroOnboarding({
             transform: translateY(0);
           }
         }
+
+        @keyframes runeGlow {
+          0% {
+            opacity: 0.14;
+          }
+          50% {
+            opacity: 0.28;
+          }
+          100% {
+            opacity: 0.14;
+          }
+        }
+
+        @media (max-width: 1080px) {
+          .hero-onboarding-grid {
+            grid-template-columns: 1fr !important;
+          }
+
+          .hero-onboarding-guides {
+            grid-template-columns: 1fr !important;
+          }
+        }
+
+        @media (max-width: 720px) {
+          .hero-onboarding-shell {
+            padding: 22px 18px !important;
+            border-radius: 18px !important;
+          }
+
+          .hero-onboarding-title {
+            font-size: 28px !important;
+          }
+
+          .hero-onboarding-viewport {
+            min-height: 320px !important;
+          }
+
+          .hero-onboarding-panel {
+            padding: 14px !important;
+          }
+        }
       `}</style>
 
       <div
         aria-hidden
         style={{
           position: "absolute",
-          inset: "-120px",
+          inset: "-140px",
           background:
-            "radial-gradient(600px 400px at 50% 0%, rgba(140,160,255,0.10), transparent 70%)",
+            "radial-gradient(700px 420px at 50% -2%, rgba(140,160,255,0.11), transparent 72%), radial-gradient(540px 300px at 12% 14%, rgba(255,164,88,0.08), transparent 70%)",
           pointerEvents: "none",
           zIndex: 0,
         }}
       />
 
-      <div style={{ position: "relative", zIndex: 1, display: "grid", gap: 18 }}>
-        <div style={{ display: "grid", gap: 8 }}>
+      <div
+        aria-hidden
+        style={{
+          position: "absolute",
+          inset: 0,
+          background:
+            "linear-gradient(90deg, rgba(255,255,255,0.015), rgba(255,255,255,0) 14%, rgba(255,255,255,0.015) 86%, rgba(255,255,255,0.02))",
+          pointerEvents: "none",
+          zIndex: 0,
+        }}
+      />
+
+      <div className="hero-onboarding-shell" style={{ position: "relative", zIndex: 1, display: "grid", gap: 20 }}>
+        <div style={{ display: "grid", gap: 10 }}>
           <div
+            className="hero-onboarding-title"
             style={{
-              fontSize: 34,
+              fontSize: 38,
               fontWeight: 950,
-              letterSpacing: 0.4,
-              lineHeight: 1.04,
-              textShadow: "0 6px 24px rgba(0,0,0,0.38)",
+              letterSpacing: 0.35,
+              lineHeight: 1.02,
+              textShadow: "0 8px 28px rgba(0,0,0,0.42)",
             }}
           >
             {heroTitle}
           </div>
+
           <div
             style={{
-              fontSize: 15,
-              opacity: 0.82,
-              lineHeight: 1.45,
-              maxWidth: 700,
+              display: "grid",
+              gap: 6,
+              maxWidth: 780,
             }}
           >
-            {heroSubtitle}
+            <div
+              style={{
+                fontSize: 14,
+                fontWeight: 900,
+                letterSpacing: 0.55,
+                textTransform: "uppercase",
+                color: "rgba(198,210,235,0.78)",
+              }}
+            >
+              Every action leaves an echo
+            </div>
+            <div
+              style={{
+                fontSize: 15,
+                opacity: 0.82,
+                lineHeight: 1.5,
+              }}
+            >
+              {heroSubtitle}
+            </div>
           </div>
         </div>
 
         <div
+          className="hero-onboarding-grid"
           style={{
             display: "grid",
-            gridTemplateColumns: "minmax(0, 1.06fr) minmax(0, 0.94fr)",
-            gap: 16,
+            gridTemplateColumns: "minmax(0, 1.08fr) minmax(0, 0.92fr)",
+            gap: 18,
             alignItems: "stretch",
           }}
         >
-          <div style={{ display: "grid", gap: 12, alignContent: "start" }}>
+          <div style={{ display: "grid", gap: 14, alignContent: "start" }}>
             <div
+              className="hero-onboarding-panel"
               style={{
                 display: "grid",
-                gap: 12,
-                padding: 16,
-                borderRadius: 16,
+                gap: 14,
+                padding: 18,
+                borderRadius: 18,
                 background:
-                  "linear-gradient(180deg, rgba(255,255,255,0.045), rgba(255,255,255,0.028))",
+                  "linear-gradient(180deg, rgba(255,255,255,0.045), rgba(255,255,255,0.025))",
                 border: "1px solid rgba(255,255,255,0.10)",
                 boxShadow: "inset 0 1px 0 rgba(255,255,255,0.03)",
-                animation: "onboardingFadeUp 300ms ease both",
+                animation: "onboardingFadeUp 320ms ease both",
               }}
             >
-              <div style={{ fontWeight: 900, letterSpacing: 0.2, fontSize: 18 }}>
-                Choose Your Play Style
+              <div style={{ display: "grid", gap: 6 }}>
+                <div
+                  style={{
+                    fontSize: 12,
+                    fontWeight: 900,
+                    letterSpacing: 0.6,
+                    textTransform: "uppercase",
+                    color: "rgba(195,205,230,0.84)",
+                  }}
+                >
+                  The Threshold
+                </div>
+                <div style={{ fontWeight: 950, letterSpacing: 0.2, fontSize: 24, lineHeight: 1.08 }}>
+                  Who Will Guide the Expedition?
+                </div>
+                <div style={{ fontSize: 13, opacity: 0.8, lineHeight: 1.6, maxWidth: 660 }}>
+                  This is not a play-style toggle. It is the voice that stands beside the gate and
+                  answers when fate is invoked.
+                </div>
               </div>
 
-              <TriToggle
-                dmMode={dmMode}
-                onSetDmMode={(next) => {
-                  playSfx(SFX.buttonClick, 0.62);
-                  onSetDmMode(next);
+              <div
+                className="hero-onboarding-guides"
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+                  gap: 12,
                 }}
-                leftLabel="Human"
-                rightLabel="Solace"
-              />
+              >
+                <GuideCard
+                  title="Human Dungeon Master"
+                  subtitle="Handcrafted Guidance"
+                  body="A living guide interprets the world through instinct, rulings, and improvisation. Expect authored turns, table energy, and judgment shaped in the moment."
+                  accent="ember"
+                  selected={dmMode === "human"}
+                  onClick={() => {
+                    playSfx(SFX.buttonClick, 0.62);
+                    onSetDmMode("human");
+                  }}
+                />
 
-              <div style={{ fontSize: 12.5, opacity: 0.82, lineHeight: 1.45 }}>{dmHint}</div>
+                <GuideCard
+                  title="Solace — Keeper of the Chronicle"
+                  subtitle="Stewarded Guidance"
+                  body="Solace guides the descent with continuity, discipline, and narrative balance. The expedition moves with responsive pacing while consequence remains legible."
+                  accent="azure"
+                  selected={dmMode === "solace-neutral"}
+                  onClick={() => {
+                    playSfx(SFX.buttonClick, 0.62);
+                    onSetDmMode("solace-neutral");
+                  }}
+                />
+              </div>
 
-              <ModeLoreBlock dmMode={dmMode} />
+              <GuideLorePanel dmMode={dmMode} />
+
+              <div
+                style={{
+                  padding: "12px 13px",
+                  borderRadius: 14,
+                  border: "1px solid rgba(255,255,255,0.08)",
+                  background:
+                    "linear-gradient(180deg, rgba(255,255,255,0.035), rgba(255,255,255,0.02))",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 10,
+                  flexWrap: "wrap",
+                }}
+              >
+                <span
+                  style={{
+                    width: 8,
+                    height: 8,
+                    borderRadius: 999,
+                    background:
+                      dmMode === "solace-neutral"
+                        ? "rgba(138,180,255,0.92)"
+                        : dmMode === "human"
+                          ? "rgba(255,180,108,0.92)"
+                          : "rgba(255,255,255,0.66)",
+                    boxShadow:
+                      dmMode === "solace-neutral"
+                        ? "0 0 16px rgba(138,180,255,0.34)"
+                        : dmMode === "human"
+                          ? "0 0 16px rgba(255,180,108,0.34)"
+                          : "0 0 10px rgba(255,255,255,0.16)",
+                  }}
+                />
+                <div style={{ fontSize: 12.75, opacity: 0.84 }}>{dmHint}</div>
+              </div>
             </div>
 
             {showFellowshipStep && (
               <div
+                className="hero-onboarding-panel"
                 style={{
                   display: "grid",
                   gap: 12,
-                  padding: 16,
-                  borderRadius: 16,
+                  padding: 18,
+                  borderRadius: 18,
                   background:
                     "linear-gradient(180deg, rgba(255,255,255,0.045), rgba(255,255,255,0.028))",
                   border: "1px solid rgba(255,255,255,0.10)",
                   boxShadow: "inset 0 1px 0 rgba(255,255,255,0.03)",
-                  animation: "onboardingFadeUp 320ms ease both",
+                  animation: "onboardingFadeUp 360ms ease both",
                 }}
               >
-                <div style={{ fontWeight: 900, letterSpacing: 0.2, fontSize: 18 }}>
-                  You Begin Alone
-                </div>
-
-                <div style={{ fontSize: 12.5, opacity: 0.84, lineHeight: 1.55 }}>
-                  One hero enters the dark. Fellowship is not chosen at the threshold — it is earned
-                  through survival, consequence, trust, and sacrifice.
-                </div>
-
-                <div style={{ display: "grid", gap: 9 }}>
-                  <div style={{ fontWeight: 900, letterSpacing: 0.2 }}>
-                    Fellowship Progression
+                <div style={{ display: "grid", gap: 6 }}>
+                  <div
+                    style={{
+                      fontSize: 12,
+                      fontWeight: 900,
+                      letterSpacing: 0.6,
+                      textTransform: "uppercase",
+                      color: "rgba(195,205,230,0.84)",
+                    }}
+                  >
+                    Fellowship
                   </div>
-                  <div style={{ fontSize: 12.5, opacity: 0.78, lineHeight: 1.45 }}>
-                    Power and companionship will not always grow together. Some milestones will force a
-                    choice between strengthening the hero and unlocking another place in the fellowship.
+                  <div style={{ fontWeight: 950, letterSpacing: 0.2, fontSize: 22, lineHeight: 1.08 }}>
+                    You Begin Alone
+                  </div>
+                </div>
+
+                <div style={{ fontSize: 13, opacity: 0.84, lineHeight: 1.62 }}>
+                  One hero enters the dark. Companions are not chosen at the threshold. They are earned
+                  through trust, survival, consequence, and sacrifice.
+                </div>
+
+                <div style={{ display: "grid", gap: 10 }}>
+                  <div style={{ fontWeight: 900, letterSpacing: 0.2 }}>Fellowship Progression</div>
+                  <div style={{ fontSize: 12.75, opacity: 0.78, lineHeight: 1.52 }}>
+                    Some milestones will force a difficult choice between deepening the hero’s power and
+                    unlocking another place in the fellowship.
                   </div>
                   <FellowshipPips
                     active={activePartySize}
@@ -753,12 +1102,10 @@ export default function HeroOnboarding({
                       "linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.02))",
                   }}
                 >
-                  <div style={{ fontWeight: 900, fontSize: 13, marginBottom: 6 }}>
-                    North Star
-                  </div>
-                  <div style={{ fontSize: 12.5, lineHeight: 1.55, opacity: 0.78 }}>
-                    Rare heroes may defeat impossible things alone, but true campaign completion remains
-                    sealed until the full fellowship of six stands assembled.
+                  <div style={{ fontWeight: 900, fontSize: 13, marginBottom: 6 }}>North Star</div>
+                  <div style={{ fontSize: 12.75, lineHeight: 1.58, opacity: 0.78 }}>
+                    Rare heroes may overcome horrors alone, but true campaign completion remains sealed
+                    until the full fellowship of six stands assembled.
                   </div>
                 </div>
               </div>
@@ -766,14 +1113,15 @@ export default function HeroOnboarding({
           </div>
 
           <div
+            className="hero-onboarding-viewport"
             style={{
-              borderRadius: 18,
+              borderRadius: 20,
               overflow: "hidden",
               border: "1px solid rgba(255,255,255,0.10)",
               background: "rgba(0,0,0,0.40)",
               position: "relative",
-              minHeight: 360,
-              boxShadow: "0 16px 44px rgba(0,0,0,0.42)",
+              minHeight: 430,
+              boxShadow: "0 18px 50px rgba(0,0,0,0.46)",
             }}
           >
             {heroImageOk ? (
@@ -788,9 +1136,9 @@ export default function HeroOnboarding({
                   height: "100%",
                   objectFit: "cover",
                   display: "block",
-                  opacity: 0.9,
+                  opacity: 0.92,
                   animation: "heroTorchPulse 6s ease-in-out infinite",
-                  transform: "scale(1.025)",
+                  transform: "scale(1.03)",
                 }}
               />
             ) : (
@@ -809,7 +1157,7 @@ export default function HeroOnboarding({
                 position: "absolute",
                 inset: 0,
                 background:
-                  "linear-gradient(90deg, rgba(0,0,0,0.70) 0%, rgba(0,0,0,0.34) 32%, rgba(0,0,0,0.34) 68%, rgba(0,0,0,0.70) 100%), radial-gradient(120% 95% at 50% 55%, rgba(0,0,0,0.04), rgba(0,0,0,0.82))",
+                  "linear-gradient(90deg, rgba(0,0,0,0.72) 0%, rgba(0,0,0,0.34) 28%, rgba(0,0,0,0.32) 72%, rgba(0,0,0,0.72) 100%), radial-gradient(120% 95% at 50% 55%, rgba(0,0,0,0.04), rgba(0,0,0,0.82))",
                 pointerEvents: "none",
               }}
             />
@@ -819,7 +1167,7 @@ export default function HeroOnboarding({
                 position: "absolute",
                 inset: 0,
                 background:
-                  "radial-gradient(700px 360px at 65% 35%, rgba(255,170,90,0.10), rgba(0,0,0,0) 62%), radial-gradient(520px 280px at 35% 70%, rgba(120,150,255,0.08), rgba(0,0,0,0) 60%)",
+                  "radial-gradient(720px 380px at 66% 34%, rgba(255,170,90,0.12), rgba(0,0,0,0) 62%), radial-gradient(520px 280px at 35% 70%, rgba(120,150,255,0.10), rgba(0,0,0,0) 60%)",
                 mixBlendMode: "screen",
                 pointerEvents: "none",
                 opacity: 0.9,
@@ -840,34 +1188,66 @@ export default function HeroOnboarding({
             />
 
             <div
+              aria-hidden
               style={{
                 position: "absolute",
-                left: 14,
-                right: 14,
-                bottom: 14,
-                padding: 14,
-                borderRadius: 16,
+                inset: 0,
+                background:
+                  "radial-gradient(circle at 50% 22%, rgba(138,180,255,0.10) 0%, rgba(138,180,255,0) 24%)",
+                animation: "runeGlow 4.4s ease-in-out infinite",
+                pointerEvents: "none",
+              }}
+            />
+
+            <div
+              style={{
+                position: "absolute",
+                left: 16,
+                right: 16,
+                bottom: 16,
+                padding: 16,
+                borderRadius: 18,
                 border: "1px solid rgba(255,255,255,0.12)",
-                background: "linear-gradient(180deg, rgba(10,10,10,0.34), rgba(10,10,10,0.64))",
-                backdropFilter: "blur(10px)",
-                boxShadow: "0 12px 40px rgba(0,0,0,0.45)",
+                background: "linear-gradient(180deg, rgba(10,10,10,0.34), rgba(10,10,10,0.68))",
+                backdropFilter: "blur(12px)",
+                boxShadow: "0 14px 42px rgba(0,0,0,0.45)",
               }}
             >
-              <div style={{ fontWeight: 950, fontSize: 18, letterSpacing: 0.2 }}>
-                {showEnterStep ? "Enter the Dungeon" : "The Journey Begins"}
-              </div>
-              <div style={{ marginTop: 5, fontSize: 12.5, opacity: 0.82, lineHeight: 1.45 }}>
-                {showEnterStep
-                  ? "You enter with one hero only. The depths will decide whether strength or fellowship comes first."
-                  : "Choose who guides the expedition, and the echoes of fate will answer."}
+              <div
+                style={{
+                  display: "grid",
+                  gap: 6,
+                }}
+              >
+                <div
+                  style={{
+                    fontSize: 12,
+                    fontWeight: 900,
+                    letterSpacing: 0.6,
+                    textTransform: "uppercase",
+                    color: "rgba(198,210,235,0.78)",
+                  }}
+                >
+                  The Chronicle Awaits
+                </div>
+
+                <div style={{ fontWeight: 950, fontSize: 24, letterSpacing: 0.2, lineHeight: 1.06 }}>
+                  {showEnterStep ? "Step Through the Gate" : "Choose Your Guide"}
+                </div>
+
+                <div style={{ fontSize: 13, opacity: 0.82, lineHeight: 1.58 }}>
+                  {showEnterStep
+                    ? "You descend with one hero only. The dungeon will decide whether strength or fellowship comes first."
+                    : "Choose who will guide the expedition, and the first echo of fate will answer."}
+                </div>
               </div>
 
               {showEnterStep ? (
                 <div
                   style={{
-                    marginTop: 12,
+                    marginTop: 14,
                     display: "flex",
-                    gap: 10,
+                    gap: 12,
                     alignItems: "center",
                     flexWrap: "wrap",
                   }}
@@ -884,31 +1264,52 @@ export default function HeroOnboarding({
                     }}
                     disabled={!canEnter}
                     style={{
-                      padding: "11px 16px",
-                      borderRadius: 12,
+                      position: "relative",
+                      padding: "13px 18px",
+                      borderRadius: 14,
                       fontWeight: 950,
-                      letterSpacing: 0.2,
+                      letterSpacing: 0.3,
+                      textTransform: "uppercase",
                       border: canEnter
-                        ? "1px solid rgba(255,255,255,0.24)"
-                        : "1px solid rgba(255,255,255,0.18)",
+                        ? "1px solid rgba(255,224,188,0.28)"
+                        : "1px solid rgba(255,255,255,0.14)",
                       background: canEnter
-                        ? "rgba(255,255,255,0.12)"
+                        ? "linear-gradient(180deg, rgba(255,230,198,0.16), rgba(186,96,28,0.14) 48%, rgba(40,18,8,0.68) 100%)"
                         : "rgba(255,255,255,0.04)",
+                      color: "rgba(255,245,230,0.98)",
                       cursor: canEnter ? "pointer" : "not-allowed",
                       opacity: canEnter ? 1 : 0.6,
-                      boxShadow: canEnter ? "0 0 18px rgba(255,255,255,0.06)" : "none",
+                      boxShadow: canEnter
+                        ? "0 0 20px rgba(255,166,82,0.12), 0 12px 28px rgba(0,0,0,0.28)"
+                        : "none",
+                      transition:
+                        "transform 140ms ease, filter 160ms ease, box-shadow 180ms ease, border-color 180ms ease",
+                    }}
+                    onMouseEnter={(e) => {
+                      if (!canEnter) return;
+                      e.currentTarget.style.transform = "translateY(-1px)";
+                      e.currentTarget.style.filter = "brightness(1.05)";
+                      e.currentTarget.style.boxShadow =
+                        "0 0 28px rgba(255,166,82,0.18), 0 16px 34px rgba(0,0,0,0.34)";
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.transform = "translateY(0px)";
+                      e.currentTarget.style.filter = "brightness(1)";
+                      e.currentTarget.style.boxShadow = canEnter
+                        ? "0 0 20px rgba(255,166,82,0.12), 0 12px 28px rgba(0,0,0,0.28)"
+                        : "none";
                     }}
                   >
-                    Enter
+                    Enter the Dungeon
                   </button>
 
-                  <div style={{ fontSize: 12.5, opacity: 0.76 }}>
+                  <div style={{ fontSize: 12.75, opacity: 0.76 }}>
                     Next: accept the scene and declare the lone hero who descends first.
                   </div>
                 </div>
               ) : (
-                <div style={{ marginTop: 12, fontSize: 12.5, opacity: 0.76 }}>
-                  Choose a play style to continue.
+                <div style={{ marginTop: 14, fontSize: 12.75, opacity: 0.76 }}>
+                  Declare a guide to continue.
                 </div>
               )}
             </div>
