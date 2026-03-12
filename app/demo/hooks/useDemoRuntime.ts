@@ -747,7 +747,7 @@ export function useDemoRuntime() {
     });
 
     if (result.success) {
-      setGameplayFocusStep("chamber");
+      setGameplayFocusStep("map");
       setActiveSection("map");
     }
 
