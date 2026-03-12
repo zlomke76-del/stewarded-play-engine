@@ -1,9 +1,15 @@
 "use client";
 
+type PlateId = "Sun" | "Moon" | "Cross" | "Crown";
+
 type Props = {
   currentRoomTitle?: string | null;
   intendedRouteLabel?: string | null;
   puzzleResult: any | null;
+  plateSequence: PlateId[];
+  onPressPlate: (plate: PlateId) => void;
+  onClearSequence: () => void;
+  isSubmitting?: boolean;
 };
 
 function PuzzleGaugeFace(props: {
@@ -31,7 +37,7 @@ function PuzzleGaugeFace(props: {
         opacity,
         filter:
           opacity > 0
-            ? "drop-shadow(0 0 8px rgba(120,180,255,0.14))"
+            ? "drop-shadow(0 0 8px rgba(120,180,255,0.16))"
             : "none",
         mixBlendMode: "screen",
       }}
@@ -49,10 +55,10 @@ function PuzzlePlateToken(props: {
   const tone =
     state === "pressed"
       ? {
-          border: "1px solid rgba(214,188,120,0.26)",
+          border: "1px solid rgba(214,188,120,0.28)",
           background:
-            "linear-gradient(180deg, rgba(214,188,120,0.14), rgba(214,188,120,0.05))",
-          text: "rgba(245,236,216,0.96)",
+            "linear-gradient(180deg, rgba(214,188,120,0.15), rgba(214,188,120,0.05))",
+          text: "rgba(245,236,216,0.98)",
         }
       : {
           border: "1px solid rgba(255,255,255,0.10)",
@@ -109,11 +115,8 @@ function CornerBadge(props: {
   title: string;
   value: string;
   align?: "left" | "right";
-  tone?: "neutral" | "success";
 }) {
-  const { title, value, align = "left", tone = "neutral" } = props;
-
-  const success = tone === "success";
+  const { title, value, align = "left" } = props;
 
   return (
     <div
@@ -123,10 +126,8 @@ function CornerBadge(props: {
         [align]: 14,
         padding: "7px 9px",
         borderRadius: 11,
-        border: success
-          ? "1px solid rgba(118,188,132,0.24)"
-          : "1px solid rgba(255,255,255,0.10)",
-        background: success ? "rgba(118,188,132,0.12)" : "rgba(8,10,16,0.60)",
+        border: "1px solid rgba(255,255,255,0.10)",
+        background: "rgba(8,10,16,0.60)",
         backdropFilter: "blur(10px)",
         WebkitBackdropFilter: "blur(10px)",
         display: "grid",
@@ -148,9 +149,7 @@ function CornerBadge(props: {
         style={{
           fontSize: 13,
           fontWeight: 800,
-          color: success
-            ? "rgba(176,235,188,0.96)"
-            : "rgba(245,236,216,0.96)",
+          color: "rgba(245,236,216,0.96)",
           lineHeight: 1.2,
         }}
       >
@@ -160,34 +159,101 @@ function CornerBadge(props: {
   );
 }
 
+function FloorPlateButton(props: {
+  plate: PlateId;
+  symbol: string;
+  left: string;
+  top: string;
+  pressed: boolean;
+  disabled?: boolean;
+  onClick: () => void;
+}) {
+  const { plate, symbol, left, top, pressed, disabled, onClick } = props;
+
+  return (
+    <button
+      type="button"
+      aria-label={`${plate} plate`}
+      disabled={disabled}
+      onClick={onClick}
+      style={{
+        position: "absolute",
+        left,
+        top,
+        width: "9.2%",
+        aspectRatio: "1 / 1",
+        borderRadius: "50%",
+        border: pressed
+          ? "1px solid rgba(214,188,120,0.34)"
+          : "1px solid rgba(255,255,255,0.12)",
+        background: pressed
+          ? "radial-gradient(circle at 35% 30%, rgba(255,227,179,0.28), rgba(214,188,120,0.10) 55%, rgba(15,18,28,0.74) 100%)"
+          : "radial-gradient(circle at 35% 30%, rgba(255,255,255,0.10), rgba(255,255,255,0.02) 55%, rgba(15,18,28,0.72) 100%)",
+        boxShadow: pressed
+          ? "0 0 22px rgba(214,188,120,0.18), inset 0 1px 0 rgba(255,246,226,0.30)"
+          : "0 8px 18px rgba(0,0,0,0.24), inset 0 1px 0 rgba(255,255,255,0.10)",
+        color: pressed ? "rgba(255,240,214,0.98)" : "rgba(226,231,239,0.88)",
+        cursor: disabled ? "not-allowed" : "pointer",
+        transform: pressed ? "translateY(2px) scale(0.98)" : "translateY(0) scale(1)",
+        transition:
+          "transform 120ms ease, box-shadow 150ms ease, border-color 150ms ease, background 150ms ease",
+        display: "grid",
+        placeItems: "center",
+        fontSize: "1.35vw",
+        fontWeight: 900,
+        lineHeight: 1,
+      }}
+    >
+      <span
+        style={{
+          fontSize: 20,
+          filter: pressed ? "drop-shadow(0 0 8px rgba(255,220,160,0.28))" : "none",
+        }}
+      >
+        {symbol}
+      </span>
+    </button>
+  );
+}
+
 export default function PressureGaugeVisual(props: Props) {
-  const { currentRoomTitle, intendedRouteLabel, puzzleResult } = props;
+  const {
+    currentRoomTitle,
+    intendedRouteLabel,
+    puzzleResult,
+    plateSequence,
+    onPressPlate,
+    onClearSequence,
+    isSubmitting = false,
+  } = props;
 
   const success = Boolean(puzzleResult?.success);
+  const attemptStarted = plateSequence.length > 0 || Boolean(puzzleResult);
 
-  const gaugeState = success
-    ? {
-        left: "/assets/V3/Dungeon/Puzzles/Pressure_Gauges/gauge_full.png",
-        center: "/assets/V3/Dungeon/Puzzles/Pressure_Gauges/gauge_level_2.png",
-        right: "/assets/V3/Dungeon/Puzzles/Pressure_Gauges/gauge_level_3.png",
-        pressed: ["Sun", "Moon", "Crown"],
-      }
-    : puzzleResult
-      ? {
-          left: "/assets/V3/Dungeon/Puzzles/Pressure_Gauges/gauge_level_1.png",
-          center: "/assets/V3/Dungeon/Puzzles/Pressure_Gauges/gauge_empty.png",
-          right: "/assets/V3/Dungeon/Puzzles/Pressure_Gauges/gauge_level_2.png",
-          pressed: ["Sun"],
-        }
-      : {
-          left: "/assets/V3/Dungeon/Puzzles/Pressure_Gauges/gauge_empty.png",
-          center: "/assets/V3/Dungeon/Puzzles/Pressure_Gauges/gauge_empty.png",
-          right: "/assets/V3/Dungeon/Puzzles/Pressure_Gauges/gauge_empty.png",
-          pressed: [] as string[],
-        };
+  const fillCount = success ? 3 : Math.min(plateSequence.length, 3);
 
-  function plateState(name: string): "idle" | "pressed" {
-    return gaugeState.pressed.includes(name) ? "pressed" : "idle";
+  const gaugeImages = [
+    fillCount >= 1
+      ? success
+        ? "/assets/V3/Dungeon/Puzzles/Pressure_Gauges/gauge_full.png"
+        : "/assets/V3/Dungeon/Puzzles/Pressure_Gauges/gauge_level_1.png"
+      : "/assets/V3/Dungeon/Puzzles/Pressure_Gauges/gauge_empty.png",
+    fillCount >= 2
+      ? success
+        ? "/assets/V3/Dungeon/Puzzles/Pressure_Gauges/gauge_level_2.png"
+        : "/assets/V3/Dungeon/Puzzles/Pressure_Gauges/gauge_level_2.png"
+      : "/assets/V3/Dungeon/Puzzles/Pressure_Gauges/gauge_empty.png",
+    fillCount >= 3
+      ? success
+        ? "/assets/V3/Dungeon/Puzzles/Pressure_Gauges/gauge_level_3.png"
+        : "/assets/V3/Dungeon/Puzzles/Pressure_Gauges/gauge_level_3.png"
+      : "/assets/V3/Dungeon/Puzzles/Pressure_Gauges/gauge_empty.png",
+  ] as const;
+
+  const pressedSet = new Set<PlateId>(plateSequence);
+
+  function plateState(name: PlateId): "idle" | "pressed" {
+    return pressedSet.has(name) ? "pressed" : "idle";
   }
 
   return (
@@ -232,36 +298,68 @@ export default function PressureGaugeVisual(props: Props) {
             }}
           />
 
-          {/* Built-in wall gauge faces only */}
           <PuzzleGaugeFace
-            src={gaugeState.left}
+            src={gaugeImages[0]}
             left="33.4%"
             top="49.9%"
             size="10.8%"
             opacity={1}
           />
           <PuzzleGaugeFace
-            src={gaugeState.center}
+            src={gaugeImages[1]}
             left="44.55%"
             top="49.9%"
             size="10.8%"
             opacity={1}
           />
           <PuzzleGaugeFace
-            src={gaugeState.right}
+            src={gaugeImages[2]}
             left="55.7%"
             top="49.9%"
             size="10.8%"
             opacity={1}
           />
 
+          <FloorPlateButton
+            plate="Sun"
+            symbol="☼"
+            left="36.4%"
+            top="69.6%"
+            pressed={pressedSet.has("Sun")}
+            disabled={isSubmitting}
+            onClick={() => onPressPlate("Sun")}
+          />
+          <FloorPlateButton
+            plate="Moon"
+            symbol="☾"
+            left="45.2%"
+            top="69.6%"
+            pressed={pressedSet.has("Moon")}
+            disabled={isSubmitting}
+            onClick={() => onPressPlate("Moon")}
+          />
+          <FloorPlateButton
+            plate="Cross"
+            symbol="✚"
+            left="54%"
+            top="69.6%"
+            pressed={pressedSet.has("Cross")}
+            disabled={isSubmitting}
+            onClick={() => onPressPlate("Cross")}
+          />
+          <FloorPlateButton
+            plate="Crown"
+            symbol="◇"
+            left="62.8%"
+            top="69.6%"
+            pressed={pressedSet.has("Crown")}
+            disabled={isSubmitting}
+            onClick={() => onPressPlate("Crown")}
+          />
+
           <CornerBadge
             title="Current Chamber"
-            value={
-              puzzleResult
-                ? `${currentRoomTitle ?? "Corridor"} — Trial Engaged`
-                : `${currentRoomTitle ?? "Corridor"} — Passage Blocked`
-            }
+            value={currentRoomTitle ?? "Corridor"}
             align="left"
           />
 
@@ -284,6 +382,8 @@ export default function PressureGaugeVisual(props: Props) {
               background: success ? "rgba(118,188,132,0.12)" : "rgba(8,10,16,0.60)",
               backdropFilter: "blur(10px)",
               WebkitBackdropFilter: "blur(10px)",
+              display: "grid",
+              gap: 4,
             }}
           >
             <div
@@ -297,7 +397,47 @@ export default function PressureGaugeVisual(props: Props) {
                   : "rgba(245,236,216,0.92)",
               }}
             >
-              {success ? "Mechanism Released" : "Pressure Network"}
+              {success
+                ? "Mechanism Released"
+                : attemptStarted
+                  ? "Pressure Building"
+                  : "Pressure Network"}
+            </div>
+
+            <div
+              style={{
+                fontSize: 11,
+                lineHeight: 1.4,
+                color: "rgba(228,232,240,0.80)",
+              }}
+            >
+              {plateSequence.length > 0
+                ? `Sequence: ${plateSequence.join(" → ")}`
+                : "Select plates in the chamber floor."}
+            </div>
+
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <button
+                type="button"
+                disabled={isSubmitting || plateSequence.length === 0}
+                onClick={onClearSequence}
+                style={{
+                  padding: "6px 8px",
+                  borderRadius: 10,
+                  border: "1px solid rgba(255,255,255,0.10)",
+                  background: "rgba(255,255,255,0.04)",
+                  color: "rgba(240,242,246,0.88)",
+                  fontSize: 11,
+                  fontWeight: 700,
+                  cursor:
+                    isSubmitting || plateSequence.length === 0
+                      ? "not-allowed"
+                      : "pointer",
+                  opacity: isSubmitting || plateSequence.length === 0 ? 0.5 : 1,
+                }}
+              >
+                Clear Sequence
+              </button>
             </div>
           </div>
         </div>
