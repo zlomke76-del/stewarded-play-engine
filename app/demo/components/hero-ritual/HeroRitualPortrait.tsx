@@ -26,17 +26,17 @@ function getViewerTuning(height: number | string) {
 
   if (numericHeight !== null && numericHeight >= 380) {
     return {
-      cameraOrbit: "0deg 78deg 1.92m",
+      cameraOrbit: "0deg 78deg 2.12m",
       fieldOfView: "24deg",
-      minCameraOrbit: "auto 62deg 1.7m",
-      maxCameraOrbit: "auto 92deg 2.3m",
+      minCameraOrbit: "auto 62deg 1.9m",
+      maxCameraOrbit: "auto 92deg 2.5m",
       minFieldOfView: "18deg",
       maxFieldOfView: "30deg",
-      posterScale: "scale(1.1)",
+      posterScale: "scale(1.08)",
       stagePaddingTop: "1%",
       pedestalHeight: "20%",
       pedestalWidth: "60%",
-      modelScale: "scale(1.0)",
+      modelScale: "scale(0.96)",
     };
   }
 
