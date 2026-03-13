@@ -8,6 +8,7 @@
     "update-files": "git ls-files > all-files.txt"
   },
   "dependencies": {
+    "@google/model-viewer": "^3.4.0",
     "@mozilla/readability": "^0.6.0",
     "@supabase/ssr": "^0.7.0",
     "@supabase/supabase-js": "^2.78.0",
