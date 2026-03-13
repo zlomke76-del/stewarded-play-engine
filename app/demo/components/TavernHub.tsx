@@ -124,8 +124,8 @@ function GlassCard(props: {
 
 export default function TavernHub({
   onBeginDescent,
-  heroName = "The Wanderer",
-  heroTitle = "Unproven",
+  heroName = "Unknown",
+  heroTitle = "Wanderer",
   heroLevel = 1,
   echoCount = 0,
 }: Props) {
@@ -249,7 +249,9 @@ export default function TavernHub({
   }, [lastRoundSummary]);
 
   const chronicleSummary = useMemo(() => {
-    return `${heroName} · ${heroTitle} · Level ${heroLevel} · Echo ${echoCount}`;
+    const safeName = (heroName || "Unknown").trim() || "Unknown";
+    const safeTitle = (heroTitle || "Wanderer").trim() || "Wanderer";
+    return `${safeName} the ${safeTitle} · Level ${heroLevel} · Echo ${echoCount}`;
   }, [echoCount, heroLevel, heroName, heroTitle]);
 
   const echoSummary = useMemo(() => {
