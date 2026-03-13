@@ -298,6 +298,8 @@ const SFX = {
   heroSelectionLoop: "/assets/audio/sfx_hero_selection_01.mp3",
 } as const;
 
+const ELF_WARRIOR_FEMALE_GLB = "/assets/hero3d/elf_warrior_female.glb";
+
 function playSfx(src: string, volume = 0.66) {
   try {
     const audio = new Audio(src);
@@ -408,6 +410,119 @@ function getPortraitObjectPosition(kind: "intro" | "card" | "name" | "oath" | "t
   if (kind === "name") return "center 16%";
   if (kind === "thumb") return "center 16%";
   return "center 18%";
+}
+
+function shouldUseElfWarriorFemaleModel(
+  species: string,
+  className: string,
+  portrait: PortraitType
+) {
+  return (
+    getResolvedSpecies(species) === "Elf" &&
+    getResolvedClass(className) === "Warrior" &&
+    portrait === "Female"
+  );
+}
+
+function PortraitSurface(props: {
+  species: string;
+  className: string;
+  portrait: PortraitType;
+  imageSrc: string;
+  fallbackImageSrc?: string;
+  alt: string;
+  height: number | string;
+  objectPosition: string;
+}) {
+  const {
+    species,
+    className,
+    portrait,
+    imageSrc,
+    fallbackImageSrc,
+    alt,
+    height,
+    objectPosition,
+  } = props;
+
+  const [imageFailed, setImageFailed] = useState(false);
+  const useModel =
+    !imageFailed && shouldUseElfWarriorFemaleModel(species, className, portrait);
+
+  useEffect(() => {
+    if (!useModel) return;
+
+    const existing = document.querySelector(
+      'script[data-echoes-model-viewer="true"]'
+    ) as HTMLScriptElement | null;
+    if (existing) return;
+
+    const script = document.createElement("script");
+    script.type = "module";
+    script.src =
+      "https://unpkg.com/@google/model-viewer/dist/model-viewer.min.js";
+    script.setAttribute("data-echoes-model-viewer", "true");
+    document.head.appendChild(script);
+  }, [useModel]);
+
+  useEffect(() => {
+    setImageFailed(false);
+  }, [imageSrc, species, className, portrait]);
+
+  if (useModel) {
+    return (
+      <div
+        style={{
+          width: "100%",
+          height,
+          background:
+            "radial-gradient(circle at center, rgba(255,255,255,0.04), rgba(0,0,0,0.02))",
+        }}
+      >
+        {React.createElement("model-viewer" as any, {
+          src: ELF_WARRIOR_FEMALE_GLB,
+          alt,
+          "camera-controls": true,
+          "touch-action": "pan-y",
+          "interaction-prompt": "none",
+          "shadow-intensity": "1",
+          exposure: "1",
+          "environment-image": "neutral",
+          "camera-orbit": "0deg 82deg 2.2m",
+          "field-of-view": "28deg",
+          style: {
+            width: "100%",
+            height: "100%",
+            display: "block",
+            background: "transparent",
+          },
+        })}
+      </div>
+    );
+  }
+
+  return (
+    <img
+      src={imageSrc}
+      alt={alt}
+      style={{
+        width: "100%",
+        height,
+        objectFit: "cover",
+        objectPosition,
+        display: "block",
+      }}
+      onError={(e) => {
+        if (!fallbackImageSrc) return;
+        const img = e.currentTarget;
+        if (img.src.endsWith(fallbackImageSrc)) return;
+        setImageFailed(true);
+        img.onerror = null;
+        img.src = fallbackImageSrc;
+        img.style.objectPosition = objectPosition;
+      }}
+    />
+  );
 }
 
 function getFocusPalette(focus: BuildFocus, active: boolean) {
@@ -611,6 +726,9 @@ function RitualChoiceCard({
   selected = false,
   disabled = false,
   details,
+  species,
+  className,
+  portrait,
 }: {
   title: string;
   subtitle?: string;
@@ -619,6 +737,9 @@ function RitualChoiceCard({
   selected?: boolean;
   disabled?: boolean;
   details?: React.ReactNode;
+  species: string;
+  className: string;
+  portrait: PortraitType;
 }) {
   const [hovered, setHovered] = useState(false);
 
@@ -661,16 +782,14 @@ function RitualChoiceCard({
           borderBottom: "1px solid rgba(255,255,255,0.08)",
         }}
       >
-        <img
-          src={imageSrc}
+        <PortraitSurface
+          species={species}
+          className={className}
+          portrait={portrait}
+          imageSrc={imageSrc}
           alt={title}
-          style={{
-            width: "100%",
-            height: "100%",
-            objectFit: "cover",
-            objectPosition: getPortraitObjectPosition("card"),
-            display: "block",
-          }}
+          height={210}
+          objectPosition={getPortraitObjectPosition("card")}
         />
       </div>
 
@@ -971,7 +1090,6 @@ export default function PartySetupSection(props: {
 
   if (!enabled || !row) return null;
 
-  // Once the hero is canonized, this ritual UI should vanish completely.
   if (partyCanonicalExists) return null;
 
   const { resolvedSpecies, resolvedClass, skillIds, traitIds } = getResolvedLoadout(row);
@@ -1189,6 +1307,9 @@ export default function PartySetupSection(props: {
                             : "A fierce line of portraits for your hero's journey."
                         }
                         imageSrc={imageSrc}
+                        species={resolvedSpecies}
+                        className={resolvedClass}
+                        portrait={portrait}
                         selected={selected}
                         disabled={!editable}
                         details={
@@ -1271,6 +1392,9 @@ export default function PartySetupSection(props: {
                         title={species}
                         subtitle={meta.fantasy}
                         imageSrc={imageSrc}
+                        species={species}
+                        className={resolvedClass}
+                        portrait={row?.portrait ?? "Male"}
                         selected={selected}
                         disabled={!editable}
                         details={
@@ -1362,6 +1486,9 @@ export default function PartySetupSection(props: {
                         title={className}
                         subtitle={meta.fantasy}
                         imageSrc={imageSrc}
+                        species={resolvedSpecies}
+                        className={className}
+                        portrait={row?.portrait ?? "Male"}
                         selected={selected}
                         disabled={!editable}
                         details={
@@ -1623,22 +1750,15 @@ export default function PartySetupSection(props: {
                       boxSizing: "border-box",
                     }}
                   >
-                    <img
-                      src={portraitPath}
+                    <PortraitSurface
+                      species={resolvedSpecies}
+                      className={resolvedClass}
+                      portrait={row?.portrait ?? "Male"}
+                      imageSrc={portraitPath}
+                      fallbackImageSrc={fallbackPortraitPath}
                       alt={`${display} portrait`}
-                      style={{
-                        width: "100%",
-                        height: 320,
-                        objectFit: "cover",
-                        objectPosition: getPortraitObjectPosition("name"),
-                        display: "block",
-                      }}
-                      onError={(e) => {
-                        const img = e.currentTarget;
-                        img.onerror = null;
-                        img.src = fallbackPortraitPath;
-                        img.style.objectPosition = getPortraitObjectPosition("name");
-                      }}
+                      height={320}
+                      objectPosition={getPortraitObjectPosition("name")}
                     />
                   </div>
                 </div>
@@ -1745,22 +1865,15 @@ export default function PartySetupSection(props: {
                       boxSizing: "border-box",
                     }}
                   >
-                    <img
-                      src={portraitPath}
+                    <PortraitSurface
+                      species={resolvedSpecies}
+                      className={resolvedClass}
+                      portrait={row?.portrait ?? "Male"}
+                      imageSrc={portraitPath}
+                      fallbackImageSrc={fallbackPortraitPath}
                       alt={`${display} portrait`}
-                      style={{
-                        width: "100%",
-                        height: 400,
-                        objectFit: "cover",
-                        objectPosition: getPortraitObjectPosition("oath"),
-                        display: "block",
-                      }}
-                      onError={(e) => {
-                        const img = e.currentTarget;
-                        img.onerror = null;
-                        img.src = fallbackPortraitPath;
-                        img.style.objectPosition = getPortraitObjectPosition("oath");
-                      }}
+                      height={400}
+                      objectPosition={getPortraitObjectPosition("oath")}
                     />
                   </div>
 
