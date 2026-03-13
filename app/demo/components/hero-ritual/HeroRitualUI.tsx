@@ -3,10 +3,7 @@
 import React, { useState } from "react";
 import HeroRitualPortrait from "./HeroRitualPortrait";
 import { getPortraitObjectPosition } from "./helpers";
-import type {
-  HeroCreationStep,
-  PortraitType,
-} from "./types";
+import type { HeroCreationStep, PortraitType } from "./types";
 
 export function SectionPill({
   children,
