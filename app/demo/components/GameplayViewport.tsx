@@ -1,7 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
+import HeroStatusBar from "./HeroStatusBar";
 import GameStateAdvisoryPanel from "./GameStateAdvisoryPanel";
 import RoomTopologyPanel from "./RoomTopologyPanel";
 import GameplayActionColumn from "./GameplayActionColumn";
@@ -9,6 +10,293 @@ import GameplayCombatPanel from "./GameplayCombatPanel";
 import CanonChronicleSection from "./CanonChronicleSection";
 import PressureGaugeVisual from "./puzzles/PressureGaugeVisual";
 import { anchorId } from "../demoUtils";
+
+function ProgressionBanner(props: { demo: any }) {
+  const { demo } = props;
+
+  const banner =
+    typeof demo.progressionInspectorBanner === "string"
+      ? demo.progressionInspectorBanner
+      : "";
+
+  const summary = demo.progressionInspectorSummary ?? null;
+  const progression = demo.progression ?? null;
+
+  if (!banner || !summary || !progression) return null;
+
+  const heroLevel = summary.hero?.level ?? progression.hero?.level ?? 1;
+  const masteryUnlocked = Boolean(
+    summary.hero?.masteryUnlocked ?? progression.hero?.masteryUnlocked
+  );
+  const partyActive =
+    summary.party?.activeSlots ?? progression.party?.activeSlots ?? 1;
+  const partyMax = summary.party?.maxSlots ?? progression.party?.maxSlots ?? 6;
+  const inventoryUsed =
+    summary.inventory?.usedSlots ?? progression.inventory?.usedSlots ?? 0;
+  const inventoryTotal =
+    summary.inventory?.totalSlots ?? progression.inventory?.totalSlots ?? 0;
+  const cryptCleared = Boolean(
+    summary.campaign?.cryptFullyCleared ?? progression.campaign?.cryptFullyCleared
+  );
+  const finalReady = Boolean(
+    summary.campaign?.finalDescentUnlocked ??
+      progression.campaign?.finalDescentUnlocked
+  );
+  const fullFellowship = Boolean(
+    summary.campaign?.fullFellowshipAssembled ??
+      progression.campaign?.fullFellowshipAssembled
+  );
+  const relicBonded = summary.relics?.bondedCount ?? 0;
+  const fallen =
+    summary.party?.fallenMembers ?? progression.party?.fallenMembers ?? 0;
+
+  const statusTone = finalReady
+    ? {
+        edge: "rgba(167, 219, 174, 0.34)",
+        glow: "rgba(120, 196, 128, 0.20)",
+        text: "rgba(214, 245, 220, 0.96)",
+        chip: "rgba(120, 196, 128, 0.12)",
+      }
+    : masteryUnlocked
+      ? {
+          edge: "rgba(214, 188, 120, 0.34)",
+          glow: "rgba(214, 188, 120, 0.16)",
+          text: "rgba(245, 236, 216, 0.96)",
+          chip: "rgba(214, 188, 120, 0.10)",
+        }
+      : {
+          edge: "rgba(126, 150, 196, 0.30)",
+          glow: "rgba(92, 116, 168, 0.16)",
+          text: "rgba(232, 236, 245, 0.95)",
+          chip: "rgba(126, 150, 196, 0.10)",
+        };
+
+  const statusLabel = finalReady
+    ? "Final Descent Ready"
+    : cryptCleared
+      ? "Crypt Cleared"
+      : fullFellowship
+        ? "Fellowship Complete"
+        : "Fellowship Forming";
+
+  const subtitle = finalReady
+    ? "Six stand together. The lower law answers."
+    : cryptCleared
+      ? "The crypt has fallen silent. Only the final threshold remains."
+      : fullFellowship
+        ? "The company is assembled. Mastery now decides the road."
+        : "The Chronicle is still gathering its living names.";
+
+  return (
+    <div
+      style={{
+        position: "relative",
+        overflow: "hidden",
+        marginBottom: 18,
+        borderRadius: 22,
+        border: `1px solid ${statusTone.edge}`,
+        background:
+          "radial-gradient(circle at top left, rgba(214,188,120,0.16), transparent 34%), radial-gradient(circle at top right, rgba(96,116,171,0.14), transparent 30%), linear-gradient(180deg, rgba(16,18,28,0.96), rgba(9,11,18,0.92))",
+        boxShadow: `0 18px 48px rgba(0,0,0,0.30), inset 0 1px 0 rgba(255,255,255,0.05), 0 0 0 1px ${statusTone.glow}`,
+      }}
+    >
+      <div
+        style={{
+          position: "relative",
+          display: "grid",
+          gap: 14,
+          padding: "16px 16px 14px",
+        }}
+      >
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "flex-start",
+            gap: 16,
+            flexWrap: "wrap",
+          }}
+        >
+          <div style={{ display: "grid", gap: 6, minWidth: 0 }}>
+            <div
+              style={{
+                fontSize: 11,
+                letterSpacing: 1.2,
+                textTransform: "uppercase",
+                opacity: 0.62,
+              }}
+            >
+              Chronicle Status
+            </div>
+
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 10,
+                flexWrap: "wrap",
+              }}
+            >
+              <div
+                style={{
+                  fontSize: 20,
+                  fontWeight: 800,
+                  lineHeight: 1.1,
+                  color: statusTone.text,
+                }}
+              >
+                {statusLabel}
+              </div>
+
+              <div
+                style={{
+                  padding: "6px 10px",
+                  borderRadius: 999,
+                  border: `1px solid ${statusTone.edge}`,
+                  background: statusTone.chip,
+                  fontSize: 11,
+                  letterSpacing: 0.9,
+                  textTransform: "uppercase",
+                  fontWeight: 800,
+                  color: statusTone.text,
+                  whiteSpace: "nowrap",
+                }}
+              >
+                {heroLevel >= 30 ? "Level 30 Mastery" : `Hero Level ${heroLevel}`}
+              </div>
+            </div>
+
+            <div
+              style={{
+                fontSize: 13,
+                lineHeight: 1.55,
+                color: "rgba(229, 232, 240, 0.82)",
+                maxWidth: 760,
+              }}
+            >
+              {subtitle}
+            </div>
+          </div>
+
+          <div
+            style={{
+              minWidth: 220,
+              padding: "10px 12px",
+              borderRadius: 16,
+              border: "1px solid rgba(255,255,255,0.08)",
+              background:
+                "linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.025))",
+              boxShadow: "inset 0 1px 0 rgba(255,255,255,0.05)",
+              display: "grid",
+              gap: 6,
+            }}
+          >
+            <div
+              style={{
+                fontSize: 10,
+                letterSpacing: 1.1,
+                textTransform: "uppercase",
+                opacity: 0.55,
+              }}
+            >
+              Live Banner
+            </div>
+            <div
+              style={{
+                fontFamily:
+                  'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace',
+                fontSize: 12,
+                lineHeight: 1.5,
+                color: "rgba(238, 239, 242, 0.92)",
+                wordBreak: "break-word",
+              }}
+            >
+              {banner}
+            </div>
+          </div>
+        </div>
+
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))",
+            gap: 10,
+          }}
+        >
+          {[
+            {
+              label: "Fellowship",
+              value: `${partyActive}/${partyMax}`,
+              hint: fullFellowship ? "Complete" : "Still gathering",
+            },
+            {
+              label: "Inventory",
+              value: `${inventoryUsed}/${inventoryTotal}`,
+              hint:
+                inventoryTotal > 0
+                  ? `${Math.max(0, inventoryTotal - inventoryUsed)} free slots`
+                  : "No storage",
+            },
+            {
+              label: "Bonded Relics",
+              value: String(relicBonded),
+              hint: relicBonded > 0 ? "Lineage forming" : "None bonded yet",
+            },
+            {
+              label: "Fallen",
+              value: String(fallen),
+              hint: fallen > 0 ? "The Chronicle remembers" : "No losses recorded",
+            },
+          ].map((item) => (
+            <div
+              key={item.label}
+              style={{
+                padding: "11px 13px",
+                borderRadius: 16,
+                border: "1px solid rgba(255,255,255,0.08)",
+                background:
+                  "linear-gradient(180deg, rgba(255,255,255,0.045), rgba(255,255,255,0.018))",
+                boxShadow: "inset 0 1px 0 rgba(255,255,255,0.04)",
+                display: "grid",
+                gap: 4,
+              }}
+            >
+              <div
+                style={{
+                  fontSize: 11,
+                  letterSpacing: 0.9,
+                  textTransform: "uppercase",
+                  opacity: 0.6,
+                }}
+              >
+                {item.label}
+              </div>
+              <div
+                style={{
+                  fontSize: 22,
+                  fontWeight: 800,
+                  lineHeight: 1,
+                  color: "rgba(245,236,216,0.97)",
+                }}
+              >
+                {item.value}
+              </div>
+              <div
+                style={{
+                  fontSize: 12,
+                  lineHeight: 1.45,
+                  color: "rgba(225, 228, 236, 0.72)",
+                }}
+              >
+                {item.hint}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function SceneAdvanceBar(props: {
   label: string;
@@ -239,106 +527,6 @@ function SceneFrame(props: {
   );
 }
 
-function MinimalPressureRead(props: { demo: any }) {
-  const { demo } = props;
-
-  const roomTitle = demo.currentRoomTitle ?? "Entrance";
-  const roomSummary =
-    typeof demo.roomSummary === "string" && demo.roomSummary.trim().length > 0
-      ? demo.roomSummary.trim()
-      : "The threshold waits in tense silence.";
-
-  const signalLine =
-    Array.isArray(demo.dungeonEvolution?.signals) && demo.dungeonEvolution.signals.length > 0
-      ? String(demo.dungeonEvolution.signals[0] ?? "").trim()
-      : "The room still holds. Every sound feels larger because so little answers it.";
-
-  return (
-    <div
-      style={{
-        display: "grid",
-        gap: 14,
-      }}
-    >
-      <div
-        style={{
-          padding: "16px 18px",
-          borderRadius: 18,
-          border: "1px solid rgba(214, 188, 120, 0.16)",
-          background:
-            "linear-gradient(180deg, rgba(255,255,255,0.045), rgba(255,255,255,0.02))",
-          display: "grid",
-          gap: 10,
-        }}
-      >
-        <div
-          style={{
-            fontSize: 11,
-            letterSpacing: 0.8,
-            textTransform: "uppercase",
-            opacity: 0.58,
-          }}
-        >
-          Current Chamber
-        </div>
-
-        <div
-          style={{
-            fontSize: 22,
-            fontWeight: 850,
-            lineHeight: 1.08,
-            color: "rgba(245,236,216,0.97)",
-          }}
-        >
-          {roomTitle}
-        </div>
-
-        <div
-          style={{
-            fontSize: 15,
-            lineHeight: 1.72,
-            color: "rgba(239,241,246,0.90)",
-          }}
-        >
-          {roomSummary}
-        </div>
-      </div>
-
-      <div
-        style={{
-          padding: "14px 16px",
-          borderRadius: 16,
-          border: "1px solid rgba(255,255,255,0.08)",
-          background: "rgba(255,255,255,0.03)",
-          display: "grid",
-          gap: 8,
-        }}
-      >
-        <div
-          style={{
-            fontSize: 11,
-            letterSpacing: 0.8,
-            textTransform: "uppercase",
-            opacity: 0.58,
-          }}
-        >
-          Signal
-        </div>
-
-        <div
-          style={{
-            fontSize: 14,
-            lineHeight: 1.7,
-            color: "rgba(231,235,242,0.84)",
-          }}
-        >
-          {signalLine}
-        </div>
-      </div>
-    </div>
-  );
-}
-
 function ChamberScene(props: {
   demo: any;
   hasPuzzleRoom: boolean;
@@ -353,15 +541,15 @@ function ChamberScene(props: {
         title={demo.currentRoomTitle ?? "The Descent"}
         description={
           hasPuzzleRoom
-            ? "The room is now visible. Read the chamber itself, then confront the immediate trial."
-            : "The room is now visible. Read the chamber itself, then decide your next command."
+            ? "See the chamber, choose the route that matters, then confront the room’s immediate trial."
+            : "See the chamber, choose the route that matters, then issue a decisive command."
         }
         footer={
           <SceneAdvanceBar
             label={hasPuzzleRoom ? "Continue to Trial" : "Continue to Command"}
             hint={
               hasPuzzleRoom
-                ? "The chamber is understood. Its obstacle comes next."
+                ? "The chamber is understood. The room’s obstacle comes next."
                 : "The chamber is understood. The next decisive act belongs to the hero."
             }
             onClick={onAdvanceToPuzzleOrAction}
@@ -818,6 +1006,8 @@ type Props = {
 };
 
 export default function GameplayViewport({ demo }: Props) {
+  const [showChronicleEntry, setShowChronicleEntry] = useState(true);
+
   const hasPuzzleRoom = !!(
     demo.activePuzzleBlock ??
     demo.activeRoomPuzzle ??
@@ -831,6 +1021,35 @@ export default function GameplayViewport({ demo }: Props) {
     if (demo.gameplayFocusStep === "pressure") return "pressure";
     return "chamber";
   }, [demo.combatActive, demo.gameplayFocusStep, hasPuzzleRoom]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setShowChronicleEntry(false);
+    }, 2200);
+
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, []);
+
+  const hero = useMemo(() => {
+    const member = demo.partyMembers?.[0] ?? null;
+    const fallbackName =
+      demo.effectivePlayerNames?.[0] ??
+      member?.name ??
+      "The Lone Hero";
+
+    return {
+      name: String(member?.name ?? fallbackName ?? "The Lone Hero"),
+      species: String(member?.species ?? "Human"),
+      className: String(member?.className ?? "Warrior"),
+      level: Number(demo.progression?.hero?.level ?? 1),
+      hpCurrent: Number(member?.hpCurrent ?? member?.hpMax ?? 0),
+      hpMax: Number(member?.hpMax ?? 0),
+      ac: Number(member?.ac ?? 0),
+      initiativeMod: Number(member?.initiativeMod ?? 0),
+    };
+  }, [demo.partyMembers, demo.effectivePlayerNames, demo.progression?.hero?.level]);
 
   function setPressureScene() {
     demo.setGameplayFocusStep("pressure");
@@ -853,14 +1072,86 @@ export default function GameplayViewport({ demo }: Props) {
   }
 
   return (
-    <div style={{ display: "grid", gap: 18 }}>
+    <div style={{ display: "grid", gap: 18, position: "relative" }}>
+      {showChronicleEntry ? (
+        <div
+          style={{
+            position: "sticky",
+            top: 16,
+            zIndex: 20,
+            pointerEvents: "none",
+            display: "flex",
+            justifyContent: "center",
+          }}
+        >
+          <div
+            style={{
+              width: "min(100%, 720px)",
+              padding: "16px 18px",
+              borderRadius: 18,
+              border: "1px solid rgba(214,188,120,0.24)",
+              background:
+                "linear-gradient(180deg, rgba(16,18,28,0.94), rgba(10,12,20,0.90))",
+              boxShadow:
+                "0 18px 48px rgba(0,0,0,0.30), 0 0 0 1px rgba(214,188,120,0.08), inset 0 1px 0 rgba(255,255,255,0.04)",
+              animation: "roomFadeIn 320ms ease",
+            }}
+          >
+            <div
+              style={{
+                fontSize: 11,
+                letterSpacing: 1.1,
+                textTransform: "uppercase",
+                opacity: 0.6,
+              }}
+            >
+              Chronicle Entry
+            </div>
+            <div
+              style={{
+                marginTop: 6,
+                fontSize: 22,
+                fontWeight: 900,
+                lineHeight: 1.08,
+                color: "rgba(245,236,216,0.98)",
+              }}
+            >
+              {hero.name} enters the dungeon.
+            </div>
+            <div
+              style={{
+                marginTop: 8,
+                fontSize: 13,
+                lineHeight: 1.6,
+                color: "rgba(228,232,240,0.80)",
+              }}
+            >
+              The Chronicle begins. The threshold remembers the first living step.
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      <HeroStatusBar
+        heroName={hero.name}
+        species={hero.species}
+        className={hero.className}
+        level={hero.level}
+        hpCurrent={hero.hpCurrent}
+        hpMax={hero.hpMax}
+        ac={hero.ac}
+        initiativeMod={hero.initiativeMod}
+      />
+
+      <ProgressionBanner demo={demo} />
+
       <div style={{ position: "relative", display: "grid", gap: 18 }}>
         {activeScene === "pressure" ? (
           <div id={anchorId("pressure")} style={{ scrollMarginTop: 90 }}>
             <SceneFrame
               eyebrow="Threshold State"
-              title={demo.currentRoomTitle ?? "Entrance"}
-              description="You crossed the threshold. Read the room before you move."
+              title="The Air Tightens"
+              description="Read the danger state first. This establishes the chamber’s pressure before the chamber itself fully resolves."
               headerExtra={
                 <StageTabs
                   activeScene="pressure"
@@ -874,12 +1165,21 @@ export default function GameplayViewport({ demo }: Props) {
               footer={
                 <SceneAdvanceBar
                   label="Continue to Chamber"
-                  hint="Take in the room first. Then move deeper."
+                  hint="Danger first. Chamber second. Obstacle third. Command last."
                   onClick={setChamberScene}
                 />
               }
             >
-              <MinimalPressureRead demo={demo} />
+              {demo.gameplayAllowsPressure ? (
+                <GameStateAdvisoryPanel
+                  currentRoomTitle={demo.currentRoomTitle}
+                  currentFloorLabel={demo.currentFloor.label}
+                  floorId={demo.location.floorId}
+                  roomId={demo.location.roomId}
+                  dungeonEvolution={demo.dungeonEvolution}
+                  roomSummary={demo.roomSummary}
+                />
+              ) : null}
             </SceneFrame>
           </div>
         ) : null}
@@ -982,22 +1282,8 @@ export default function GameplayViewport({ demo }: Props) {
               gap: 14,
             }}
           >
-            <div
-              style={{
-                padding: "12px 14px",
-                borderRadius: 14,
-                border: "1px solid rgba(255,255,255,0.08)",
-                background: "rgba(255,255,255,0.03)",
-                fontSize: 12,
-                lineHeight: 1.6,
-                color: "rgba(226,230,238,0.74)",
-              }}
-            >
-              Chronicle status and advisory systems are intentionally collapsed here so the main dungeon flow stays immersive.
-            </div>
-
-            {demo.gameplayAllowsPressure ? (
-              <div id="pressure-support" style={{ scrollMarginTop: 90 }}>
+            {activeScene !== "pressure" && demo.gameplayAllowsPressure ? (
+              <div id={anchorId("pressure")} style={{ scrollMarginTop: 90 }}>
                 <GameStateAdvisoryPanel
                   currentRoomTitle={demo.currentRoomTitle}
                   currentFloorLabel={demo.currentFloor.label}
@@ -1009,8 +1295,8 @@ export default function GameplayViewport({ demo }: Props) {
               </div>
             ) : null}
 
-            {demo.gameplayAllowsMap ? (
-              <div id="map-support" style={{ scrollMarginTop: 90 }}>
+            {activeScene !== "chamber" && demo.gameplayAllowsMap ? (
+              <div id={anchorId("map")} style={{ scrollMarginTop: 90 }}>
                 <RoomTopologyPanel
                   currentRoomVisualKey={demo.currentRoomVisualKey}
                   currentRoomTitle={demo.currentRoomTitle}
@@ -1026,8 +1312,8 @@ export default function GameplayViewport({ demo }: Props) {
               </div>
             ) : null}
 
-            {demo.combatActive ? (
-              <div id="combat-support" style={{ scrollMarginTop: 90 }}>
+            {activeScene !== "combat" && demo.combatActive ? (
+              <div id={anchorId("combat")} style={{ scrollMarginTop: 90 }}>
                 <GameplayCombatPanel demo={demo} />
               </div>
             ) : null}
