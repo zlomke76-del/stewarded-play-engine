@@ -17,7 +17,7 @@ const HUB_BG = "/assets/V3/Dungeon/Tavern/tavern_01.png";
 const TAVERN_AMBIENCE_A = "/assets/audio/sfx_tavern_01.mp3";
 const TAVERN_AMBIENCE_B = "/assets/audio/sfx_tavern_02.mp3";
 const TAVERN_BEER = "/assets/audio/sfx_tavern_beer_01.mp3";
-const TAVERN_BACKGROUND_LOOP = "/assets/audio/sfx_tavern_background.mp3";
+const TAVERN_BACKGROUND_LOOP = "/assets/audio/sfx_tavern_background_01.mp3";
 
 function formatTavernEcho(totalScore: number, bestThrowScore: number) {
   if (bestThrowScore >= 100) return "The tavern remembers a champion's hand.";
