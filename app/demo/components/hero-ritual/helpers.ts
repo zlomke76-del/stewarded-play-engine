@@ -10,8 +10,63 @@ export const SFX = {
   heroSelectionLoop: "/assets/audio/sfx_hero_selection_01.mp3",
 } as const;
 
-export const ELF_WARRIOR_FEMALE_GLB = "/assets/hero3d/elf_warrior_female.glb";
-export const ELF_WARRIOR_MALE_GLB = "/assets/hero3d/elf_warrior_male.glb";
+function toLowerSafe(value: string) {
+  return String(value ?? "").trim().toLowerCase();
+}
+
+function normalizeToken(value: string) {
+  return String(value ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/[\s-]+/g, "_");
+}
+
+function getSpeciesFolder(species: string) {
+  const resolvedSpecies = getResolvedSpecies(species);
+
+  if (resolvedSpecies === "Elf") return "Elf";
+  if (resolvedSpecies === "Dwarf") return "Dwarf";
+  if (resolvedSpecies === "Halfling") return "Halfling";
+  return "Human";
+}
+
+function getPortraitToken(portrait: "Male" | "Female") {
+  return portrait === "Female" ? "female" : "male";
+}
+
+function buildHeroModelCandidates(
+  species: string,
+  className: string,
+  portrait: "Male" | "Female"
+) {
+  const resolvedSpecies = getResolvedSpecies(species);
+  const resolvedClass = getResolvedClass(className);
+  const speciesFolder = getSpeciesFolder(resolvedSpecies);
+  const speciesToken = normalizeToken(resolvedSpecies);
+  const classToken = normalizeToken(resolvedClass);
+  const sexToken = getPortraitToken(portrait);
+
+  const candidates: string[] = [];
+
+  if (speciesFolder !== "Human") {
+    candidates.push(
+      `/assets/hero3d/${speciesFolder}/${speciesToken}_${classToken}_full_${sexToken}_01.glb`,
+      `/assets/hero3d/${speciesFolder}/${speciesToken}_${classToken}_full_${sexToken}.glb`
+    );
+  }
+
+  candidates.push(
+    `/assets/hero3d/Human/${classToken}_full_${sexToken}_01.glb`,
+    `/assets/hero3d/Human/${classToken}_full_${sexToken}.glb`
+  );
+
+  return candidates.filter(
+    (path, index, arr) =>
+      path.includes("_full_") &&
+      !path.includes("_base_") &&
+      arr.indexOf(path) === index
+  );
+}
 
 export function playSfx(src: string, volume = 0.66) {
   try {
@@ -35,7 +90,7 @@ export function getResolvedSpecies(value?: string) {
   const normalized = normalizeSpeciesValue(value ?? "");
   if (!normalized) return "Human";
   return (
-    SAFE_SPECIES.find((x) => x.toLowerCase() === normalized.toLowerCase()) ??
+    SAFE_SPECIES.find((x) => toLowerSafe(x) === toLowerSafe(normalized)) ??
     normalized
   );
 }
@@ -44,8 +99,9 @@ export function getResolvedClass(value?: string) {
   const normalized = normalizeClassValue(value ?? "");
   if (!normalized) return "Warrior";
   return (
-    SAFE_CLASS_ARCHETYPES.find((x) => x.toLowerCase() === normalized.toLowerCase()) ??
-    normalized
+    SAFE_CLASS_ARCHETYPES.find(
+      (x) => toLowerSafe(x) === toLowerSafe(normalized)
+    ) ?? normalized
   );
 }
 
@@ -156,15 +212,9 @@ export function getGlbPathForPortrait(
   className: string,
   portrait: "Male" | "Female"
 ) {
-  const resolvedSpecies = getResolvedSpecies(species);
-  const resolvedClass = getResolvedClass(className);
+  const candidates = buildHeroModelCandidates(species, className, portrait);
 
-  if (resolvedSpecies === "Elf" && resolvedClass === "Warrior") {
-    if (portrait === "Female") return ELF_WARRIOR_FEMALE_GLB;
-    if (portrait === "Male") return ELF_WARRIOR_MALE_GLB;
-  }
-
-  return null;
+  return candidates[0] ?? null;
 }
 
 export function getFocusPalette(focus: BuildFocus, active: boolean) {
