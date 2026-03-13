@@ -14,6 +14,7 @@ import {
 import {
   SFX,
   applyBuildFocusToStats,
+  getBaseStatsForClass,
   getResolvedClass,
   getResolvedLoadout,
   getResolvedSpecies,
@@ -198,92 +199,7 @@ export default function PartySetupSection(props: {
       getResolvedClass(row.className || "Warrior")
     );
     const focusedStats = applyBuildFocusToStats(
-      {
-        ac:
-          resolvedClass === "Warrior"
-            ? 14
-            : resolvedClass === "Rogue"
-              ? 13
-              : resolvedClass === "Mage"
-                ? 11
-                : resolvedClass === "Cleric"
-                  ? 13
-                  : resolvedClass === "Ranger"
-                    ? 13
-                    : resolvedClass === "Paladin"
-                      ? 15
-                      : resolvedClass === "Bard"
-                        ? 12
-                        : resolvedClass === "Druid"
-                          ? 12
-                          : resolvedClass === "Monk"
-                            ? 13
-                            : resolvedClass === "Artificer"
-                              ? 13
-                              : resolvedClass === "Barbarian"
-                                ? 13
-                                : resolvedClass === "Sorcerer"
-                                  ? 11
-                                  : resolvedClass === "Warlock"
-                                    ? 12
-                                    : 14,
-        hpMax:
-          resolvedClass === "Warrior"
-            ? 14
-            : resolvedClass === "Rogue"
-              ? 11
-              : resolvedClass === "Mage"
-                ? 9
-                : resolvedClass === "Cleric"
-                  ? 12
-                  : resolvedClass === "Ranger"
-                    ? 12
-                    : resolvedClass === "Paladin"
-                      ? 14
-                      : resolvedClass === "Bard"
-                        ? 10
-                        : resolvedClass === "Druid"
-                          ? 10
-                          : resolvedClass === "Monk"
-                            ? 11
-                            : resolvedClass === "Artificer"
-                              ? 11
-                              : resolvedClass === "Barbarian"
-                                ? 15
-                                : resolvedClass === "Sorcerer"
-                                  ? 9
-                                  : resolvedClass === "Warlock"
-                                    ? 10
-                                    : 12,
-        initiativeMod:
-          resolvedClass === "Warrior"
-            ? 1
-            : resolvedClass === "Rogue"
-              ? 3
-              : resolvedClass === "Mage"
-                ? 1
-                : resolvedClass === "Cleric"
-                  ? 0
-                  : resolvedClass === "Ranger"
-                    ? 2
-                    : resolvedClass === "Paladin"
-                      ? 0
-                      : resolvedClass === "Bard"
-                        ? 2
-                        : resolvedClass === "Druid"
-                          ? 1
-                          : resolvedClass === "Monk"
-                            ? 3
-                            : resolvedClass === "Artificer"
-                              ? 1
-                              : resolvedClass === "Barbarian"
-                                ? 1
-                                : resolvedClass === "Sorcerer"
-                                  ? 2
-                                  : resolvedClass === "Warlock"
-                                    ? 1
-                                    : 1,
-      },
+      getBaseStatsForClass(resolvedClass),
       focus
     );
 
@@ -301,35 +217,7 @@ export default function PartySetupSection(props: {
     if (!row) return;
 
     const resolvedClass = getResolvedClass(row.className || "Warrior");
-    const base =
-      resolvedClass === "Warrior"
-        ? { ac: 14, hpMax: 14, initiativeMod: 1 }
-        : resolvedClass === "Rogue"
-          ? { ac: 13, hpMax: 11, initiativeMod: 3 }
-          : resolvedClass === "Mage"
-            ? { ac: 11, hpMax: 9, initiativeMod: 1 }
-            : resolvedClass === "Cleric"
-              ? { ac: 13, hpMax: 12, initiativeMod: 0 }
-              : resolvedClass === "Ranger"
-                ? { ac: 13, hpMax: 12, initiativeMod: 2 }
-                : resolvedClass === "Paladin"
-                  ? { ac: 15, hpMax: 14, initiativeMod: 0 }
-                  : resolvedClass === "Bard"
-                    ? { ac: 12, hpMax: 10, initiativeMod: 2 }
-                    : resolvedClass === "Druid"
-                      ? { ac: 12, hpMax: 10, initiativeMod: 1 }
-                      : resolvedClass === "Monk"
-                        ? { ac: 13, hpMax: 11, initiativeMod: 3 }
-                        : resolvedClass === "Artificer"
-                          ? { ac: 13, hpMax: 11, initiativeMod: 1 }
-                          : resolvedClass === "Barbarian"
-                            ? { ac: 13, hpMax: 15, initiativeMod: 1 }
-                            : resolvedClass === "Sorcerer"
-                              ? { ac: 11, hpMax: 9, initiativeMod: 2 }
-                              : resolvedClass === "Warlock"
-                                ? { ac: 12, hpMax: 10, initiativeMod: 1 }
-                                : { ac: 14, hpMax: 12, initiativeMod: 1 };
-
+    const base = getBaseStatsForClass(resolvedClass);
     const nextStats = applyBuildFocusToStats(base, focus);
 
     playSfx(SFX.buttonClick, 0.54);
