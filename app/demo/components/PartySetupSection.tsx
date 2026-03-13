@@ -525,6 +525,7 @@ function StatChip({
         border: "1px solid rgba(255,255,255,0.08)",
         background: "rgba(255,255,255,0.04)",
         minWidth: 70,
+        boxSizing: "border-box",
       }}
     >
       <div style={{ fontSize: 10, opacity: 0.62, textTransform: "uppercase", letterSpacing: "0.1em" }}>
@@ -570,6 +571,7 @@ function FellowshipSlots({
               gap: 6,
               justifyItems: "center",
               opacity: unlocked ? 1 : 0.58,
+              boxSizing: "border-box",
             }}
           >
             <div style={{ fontSize: 18 }}>{active ? "⚔" : unlocked ? "◌" : "🔒"}</div>
@@ -606,11 +608,13 @@ function RitualFrame({
         maxWidth: 1150,
         margin: "0 auto",
         width: "100%",
+        boxSizing: "border-box",
         overflow: "hidden",
+        minWidth: 0,
       }}
     >
-      <div style={{ display: "grid", gap: 18 }}>
-        <div style={{ display: "grid", gap: 8 }}>
+      <div style={{ display: "grid", gap: 18, minWidth: 0 }}>
+        <div style={{ display: "grid", gap: 8, minWidth: 0 }}>
           <div
             style={{
               fontSize: 11,
@@ -624,7 +628,9 @@ function RitualFrame({
           </div>
           <div style={{ fontSize: 28, fontWeight: 950, letterSpacing: 0.2 }}>{title}</div>
           {subtitle ? (
-            <div style={{ fontSize: 14, opacity: 0.84, lineHeight: 1.7, maxWidth: 820 }}>{subtitle}</div>
+            <div style={{ fontSize: 14, opacity: 0.84, lineHeight: 1.7, maxWidth: 820 }}>
+              {subtitle}
+            </div>
           ) : null}
         </div>
 
@@ -635,6 +641,7 @@ function RitualFrame({
             style={{
               paddingTop: 14,
               borderTop: "1px solid rgba(255,255,255,0.08)",
+              minWidth: 0,
             }}
           >
             {footer}
@@ -673,6 +680,8 @@ function RitualChoiceCard({
       onMouseLeave={() => setHovered(false)}
       style={{
         width: "100%",
+        minWidth: 0,
+        boxSizing: "border-box",
         textAlign: "left",
         padding: 0,
         borderRadius: 18,
@@ -714,10 +723,10 @@ function RitualChoiceCard({
         />
       </div>
 
-      <div style={{ padding: 16, display: "grid", gap: 8 }}>
+      <div style={{ padding: 16, display: "grid", gap: 8, minWidth: 0, boxSizing: "border-box" }}>
         <div style={{ fontSize: 18, fontWeight: 900 }}>{title}</div>
         {subtitle ? <div style={{ fontSize: 13, opacity: 0.82, lineHeight: 1.6 }}>{subtitle}</div> : null}
-        {details ? <div style={{ display: "grid", gap: 6 }}>{details}</div> : null}
+        {details ? <div style={{ display: "grid", gap: 6, minWidth: 0 }}>{details}</div> : null}
       </div>
     </button>
   );
@@ -978,12 +987,14 @@ export default function PartySetupSection(props: {
     padding: 18,
     overflowX: "hidden",
     position: "relative",
+    boxSizing: "border-box",
   };
 
   const ritualStageStyle: React.CSSProperties = {
     transition: "opacity 260ms ease, transform 260ms ease",
     opacity: 1,
     transform: "translateY(0)",
+    minWidth: 0,
   };
 
   const controlButtonBase: React.CSSProperties = {
@@ -1032,6 +1043,8 @@ export default function PartySetupSection(props: {
     background: "rgba(255,255,255,0.03)",
     display: "grid",
     gap: 8,
+    boxSizing: "border-box",
+    minWidth: 0,
   };
 
   if (!enabled || !row) return null;
@@ -1136,7 +1149,7 @@ export default function PartySetupSection(props: {
                 </div>
               }
             >
-              <div style={{ display: "grid", gap: 16 }}>
+              <div style={{ display: "grid", gap: 16, minWidth: 0 }}>
                 <RitualStepPills currentStep={heroCreationStep} />
 
                 <div
@@ -1145,6 +1158,7 @@ export default function PartySetupSection(props: {
                     justifyItems: "center",
                     gap: 18,
                     padding: "10px 0 6px",
+                    minWidth: 0,
                   }}
                 >
                   <div
@@ -1156,6 +1170,7 @@ export default function PartySetupSection(props: {
                       background: "rgba(255,255,255,0.03)",
                       boxShadow: "0 18px 46px rgba(0,0,0,0.24)",
                       position: "relative",
+                      boxSizing: "border-box",
                     }}
                   >
                     <img
@@ -1224,7 +1239,7 @@ export default function PartySetupSection(props: {
                 </div>
               }
             >
-              <div style={{ display: "grid", gap: 16 }}>
+              <div style={{ display: "grid", gap: 16, minWidth: 0 }}>
                 <RitualStepPills currentStep={heroCreationStep} />
 
                 <div
@@ -1232,6 +1247,9 @@ export default function PartySetupSection(props: {
                     display: "grid",
                     gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
                     gap: 18,
+                    width: "100%",
+                    minWidth: 0,
+                    alignItems: "stretch",
                   }}
                 >
                   {(["Male", "Female"] as const).map((portrait) => {
@@ -1306,7 +1324,7 @@ export default function PartySetupSection(props: {
                 </div>
               }
             >
-              <div style={{ display: "grid", gap: 16 }}>
+              <div style={{ display: "grid", gap: 16, minWidth: 0 }}>
                 <RitualStepPills currentStep={heroCreationStep} />
 
                 <div
@@ -1314,6 +1332,9 @@ export default function PartySetupSection(props: {
                     display: "grid",
                     gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
                     gap: 14,
+                    width: "100%",
+                    minWidth: 0,
+                    alignItems: "stretch",
                   }}
                 >
                   {SAFE_SPECIES.map((species) => {
@@ -1394,7 +1415,7 @@ export default function PartySetupSection(props: {
                 </div>
               }
             >
-              <div style={{ display: "grid", gap: 16 }}>
+              <div style={{ display: "grid", gap: 16, minWidth: 0 }}>
                 <RitualStepPills currentStep={heroCreationStep} />
 
                 <div
@@ -1402,6 +1423,9 @@ export default function PartySetupSection(props: {
                     display: "grid",
                     gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
                     gap: 14,
+                    width: "100%",
+                    minWidth: 0,
+                    alignItems: "stretch",
                   }}
                 >
                   {SAFE_CLASS_ARCHETYPES.map((className) => {
@@ -1488,7 +1512,7 @@ export default function PartySetupSection(props: {
                 </div>
               }
             >
-              <div style={{ display: "grid", gap: 16 }}>
+              <div style={{ display: "grid", gap: 16, minWidth: 0 }}>
                 <RitualStepPills currentStep={heroCreationStep} />
 
                 <div
@@ -1496,6 +1520,8 @@ export default function PartySetupSection(props: {
                     display: "grid",
                     gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
                     gap: 14,
+                    width: "100%",
+                    minWidth: 0,
                   }}
                 >
                   {BUILD_FOCUS_OPTIONS.map((option) => {
@@ -1533,6 +1559,8 @@ export default function PartySetupSection(props: {
                           display: "grid",
                           gap: 10,
                           transition: "transform 140ms ease, box-shadow 140ms ease, border-color 140ms ease",
+                          minWidth: 0,
+                          boxSizing: "border-box",
                         }}
                       >
                         <div style={{ fontSize: 18, fontWeight: 900, color: getFocusTitleColor(option.id) }}>
@@ -1612,7 +1640,7 @@ export default function PartySetupSection(props: {
                 </div>
               }
             >
-              <div style={{ display: "grid", gap: 16 }}>
+              <div style={{ display: "grid", gap: 16, minWidth: 0 }}>
                 <RitualStepPills currentStep={heroCreationStep} />
 
                 <div
@@ -1621,10 +1649,11 @@ export default function PartySetupSection(props: {
                     gridTemplateColumns: "minmax(0, 1fr) minmax(260px, 320px)",
                     gap: 20,
                     alignItems: "start",
+                    minWidth: 0,
                   }}
                 >
-                  <div style={{ display: "grid", gap: 14 }}>
-                    <div style={{ display: "grid", gap: 10 }}>
+                  <div style={{ display: "grid", gap: 14, minWidth: 0 }}>
+                    <div style={{ display: "grid", gap: 10, minWidth: 0 }}>
                       <TinyLabel>Hero Name</TinyLabel>
                       <input
                         value={row?.name ?? ""}
@@ -1667,6 +1696,8 @@ export default function PartySetupSection(props: {
                       overflow: "hidden",
                       border: "1px solid rgba(255,255,255,0.10)",
                       background: "rgba(255,255,255,0.03)",
+                      minWidth: 0,
+                      boxSizing: "border-box",
                     }}
                   >
                     <img
@@ -1768,7 +1799,7 @@ export default function PartySetupSection(props: {
                 </div>
               }
             >
-              <div style={{ display: "grid", gap: 16 }}>
+              <div style={{ display: "grid", gap: 16, minWidth: 0 }}>
                 <RitualStepPills currentStep={heroCreationStep} />
 
                 <div
@@ -1777,6 +1808,7 @@ export default function PartySetupSection(props: {
                     gridTemplateColumns: "minmax(240px, 320px) minmax(0, 1fr)",
                     gap: 20,
                     alignItems: "start",
+                    minWidth: 0,
                   }}
                 >
                   <div
@@ -1786,6 +1818,8 @@ export default function PartySetupSection(props: {
                       border: "1px solid rgba(255,255,255,0.10)",
                       background: "rgba(255,255,255,0.03)",
                       boxShadow: "0 0 40px rgba(255,180,80,0.18), 0 18px 40px rgba(0,0,0,0.24)",
+                      minWidth: 0,
+                      boxSizing: "border-box",
                     }}
                   >
                     <img
@@ -1807,7 +1841,7 @@ export default function PartySetupSection(props: {
                     />
                   </div>
 
-                  <div style={{ display: "grid", gap: 16 }}>
+                  <div style={{ display: "grid", gap: 16, minWidth: 0 }}>
                     <div>
                       <div style={{ fontSize: 36, fontWeight: 950, lineHeight: 1.05 }}>{display}</div>
                       <div style={{ marginTop: 8, fontSize: 16, opacity: 0.82 }}>
@@ -1832,6 +1866,7 @@ export default function PartySetupSection(props: {
                         display: "grid",
                         gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
                         gap: 10,
+                        minWidth: 0,
                       }}
                     >
                       <StatChip
@@ -1891,7 +1926,7 @@ export default function PartySetupSection(props: {
   }
 
   return (
-    <div style={{ scrollMarginTop: 90, overflowX: "hidden", position: "relative" }}>
+    <div style={{ scrollMarginTop: 90, overflowX: "hidden", position: "relative", minWidth: 0 }}>
       {canonFlashVisible ? (
         <div
           style={{
@@ -1906,16 +1941,17 @@ export default function PartySetupSection(props: {
       ) : null}
 
       <section style={shellStyle}>
-        <div style={{ display: "grid", gap: 16 }}>
+        <div style={{ display: "grid", gap: 16, minWidth: 0 }}>
           <div
             style={{
               display: "grid",
               gridTemplateColumns: "minmax(0, 1.1fr) auto",
               gap: 14,
               alignItems: "start",
+              minWidth: 0,
             }}
           >
-            <div>
+            <div style={{ minWidth: 0 }}>
               <div style={{ fontSize: 24, fontWeight: 950, letterSpacing: 0.2 }}>
                 {partyCanonicalExists ? "The Lone Hero" : "Declare the Lone Hero"}
               </div>
@@ -1981,6 +2017,8 @@ export default function PartySetupSection(props: {
                 borderRadius: 14,
                 border: "1px solid rgba(255,255,255,0.10)",
                 background: "rgba(255,255,255,0.04)",
+                boxSizing: "border-box",
+                minWidth: 0,
               }}
             >
               <div style={{ fontSize: 13, opacity: 0.82, lineHeight: 1.6 }}>
@@ -2015,6 +2053,8 @@ export default function PartySetupSection(props: {
                   background: "rgba(255,255,255,0.04)",
                   display: "grid",
                   gap: 10,
+                  boxSizing: "border-box",
+                  minWidth: 0,
                 }}
               >
                 <div style={{ fontWeight: 900, letterSpacing: 0.2, fontSize: 17 }}>Fellowship Progression</div>
@@ -2037,6 +2077,9 @@ export default function PartySetupSection(props: {
                   background: "linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.02))",
                   padding: 16,
                   boxShadow: "inset 0 1px 0 rgba(255,255,255,0.03)",
+                  boxSizing: "border-box",
+                  minWidth: 0,
+                  overflow: "hidden",
                 }}
               >
                 <div
@@ -2045,9 +2088,10 @@ export default function PartySetupSection(props: {
                     gridTemplateColumns: "110px minmax(0, 1fr)",
                     gap: 16,
                     alignItems: "start",
+                    minWidth: 0,
                   }}
                 >
-                  <div style={{ display: "grid", gap: 10 }}>
+                  <div style={{ display: "grid", gap: 10, minWidth: 0 }}>
                     <div
                       style={{
                         width: 110,
@@ -2057,6 +2101,7 @@ export default function PartySetupSection(props: {
                         border: "1px solid rgba(255,255,255,0.12)",
                         background: "rgba(255,255,255,0.04)",
                         boxShadow: "0 10px 24px rgba(0,0,0,0.18)",
+                        boxSizing: "border-box",
                       }}
                       title={`${resolvedSpecies} ${resolvedClass} ${row?.portrait ?? "Male"}`}
                     >
@@ -2084,6 +2129,7 @@ export default function PartySetupSection(props: {
                         display: "grid",
                         gridTemplateColumns: "1fr 1fr",
                         gap: 8,
+                        minWidth: 0,
                       }}
                     >
                       <button
@@ -2155,9 +2201,10 @@ export default function PartySetupSection(props: {
                         gridTemplateColumns: "minmax(220px, 1.1fr) repeat(4, minmax(110px, 0.55fr))",
                         gap: 12,
                         alignItems: "end",
+                        minWidth: 0,
                       }}
                     >
-                      <div>
+                      <div style={{ minWidth: 0 }}>
                         <TinyLabel>Hero</TinyLabel>
                         <input
                           value={row?.name ?? ""}
@@ -2171,22 +2218,22 @@ export default function PartySetupSection(props: {
                         </div>
                       </div>
 
-                      <div>
+                      <div style={{ minWidth: 0 }}>
                         <TinyLabel>Armor Class</TinyLabel>
                         <StatChip label="AC" value={row?.ac ?? 14} />
                       </div>
 
-                      <div>
+                      <div style={{ minWidth: 0 }}>
                         <TinyLabel>HP</TinyLabel>
                         <StatChip label="HP" value={row?.hpCurrent ?? 12} />
                       </div>
 
-                      <div>
+                      <div style={{ minWidth: 0 }}>
                         <TinyLabel>HP Max</TinyLabel>
                         <StatChip label="HP Max" value={row?.hpMax ?? 12} />
                       </div>
 
-                      <div>
+                      <div style={{ minWidth: 0 }}>
                         <TinyLabel>Initiative</TinyLabel>
                         <StatChip label="Init" value={row?.initiativeMod ?? 1} />
                       </div>
@@ -2198,6 +2245,8 @@ export default function PartySetupSection(props: {
                         borderRadius: 12,
                         border: "1px solid rgba(255,255,255,0.08)",
                         background: "rgba(255,255,255,0.03)",
+                        boxSizing: "border-box",
+                        minWidth: 0,
                       }}
                     >
                       <TinyLabel>Build Focus</TinyLabel>
@@ -2248,6 +2297,7 @@ export default function PartySetupSection(props: {
                         display: "grid",
                         gridTemplateColumns: "1fr 1fr",
                         gap: 12,
+                        minWidth: 0,
                       }}
                     >
                       <div
@@ -2256,6 +2306,8 @@ export default function PartySetupSection(props: {
                           borderRadius: 12,
                           border: "1px solid rgba(255,255,255,0.08)",
                           background: "rgba(255,255,255,0.03)",
+                          boxSizing: "border-box",
+                          minWidth: 0,
                         }}
                       >
                         <TinyLabel>Class Skills</TinyLabel>
@@ -2280,6 +2332,8 @@ export default function PartySetupSection(props: {
                           borderRadius: 12,
                           border: "1px solid rgba(255,255,255,0.08)",
                           background: "rgba(255,255,255,0.03)",
+                          boxSizing: "border-box",
+                          minWidth: 0,
                         }}
                       >
                         <TinyLabel>Species Traits</TinyLabel>
@@ -2311,6 +2365,8 @@ export default function PartySetupSection(props: {
                   fontSize: 13,
                   opacity: 0.84,
                   lineHeight: 1.7,
+                  boxSizing: "border-box",
+                  minWidth: 0,
                 }}
               >
                 The opening declaration now binds a single hero to the dungeon’s canon. Fellowship growth happens later
