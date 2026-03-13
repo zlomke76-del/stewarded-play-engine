@@ -536,55 +536,6 @@ function StatChip({
   );
 }
 
-function FellowshipSlots({
-  unlockedPartySlots,
-  maxPartySlots,
-}: {
-  unlockedPartySlots: number;
-  maxPartySlots: number;
-}) {
-  return (
-    <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-      {Array.from({ length: maxPartySlots }, (_, i) => {
-        const slot = i + 1;
-        const unlocked = slot <= unlockedPartySlots;
-        const active = slot === 1;
-
-        return (
-          <div
-            key={slot}
-            style={{
-              width: 70,
-              padding: "10px 8px",
-              borderRadius: 12,
-              border: active
-                ? "1px solid rgba(138,180,255,0.34)"
-                : unlocked
-                  ? "1px solid rgba(255,255,255,0.12)"
-                  : "1px solid rgba(255,255,255,0.08)",
-              background: active
-                ? "rgba(138,180,255,0.10)"
-                : unlocked
-                  ? "rgba(255,255,255,0.04)"
-                  : "rgba(255,255,255,0.02)",
-              display: "grid",
-              gap: 6,
-              justifyItems: "center",
-              opacity: unlocked ? 1 : 0.58,
-              boxSizing: "border-box",
-            }}
-          >
-            <div style={{ fontSize: 18 }}>{active ? "⚔" : unlocked ? "◌" : "🔒"}</div>
-            <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: 0.3 }}>
-              {active ? "Hero" : unlocked ? `Slot ${slot}` : `Locked ${slot}`}
-            </div>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
 function RitualFrame({
   title,
   subtitle,
@@ -787,12 +738,8 @@ export default function PartySetupSection(props: {
     partyLockedByCombat,
     commitParty,
     setPartyDraft,
-    unlockedPartySlots,
-    maxPartySlots,
-    completionRequiresFullFellowship,
   } = props;
 
-  const [showDeclaredEditor, setShowDeclaredEditor] = useState(false);
   const [heroCreationStep, setHeroCreationStep] = useState<HeroCreationStep>("intro");
   const [ritualProgress, setRitualProgress] = useState<RitualProgress>({
     sexConfirmed: false,
@@ -809,8 +756,6 @@ export default function PartySetupSection(props: {
   const editable = !partyLocked && !!partyDraft;
   const sourceHero = (partyDraft?.members?.[0] ?? partyMembersFallback?.[0]) as PartyMember | undefined;
   const row: PartyMember | null = sourceHero ?? null;
-  const canCollapseToSummary = partyCanonicalExists && partyLocked;
-  const showFullEditor = !canCollapseToSummary || showDeclaredEditor;
 
   const heroSummary = useMemo(() => {
     if (!row) {
@@ -863,12 +808,7 @@ export default function PartySetupSection(props: {
   }
 
   useEffect(() => {
-    const shouldPlayLoop =
-      enabled &&
-      !!row &&
-      showFullEditor &&
-      !partyCanonicalExists &&
-      editable;
+    const shouldPlayLoop = enabled && !!row && !partyCanonicalExists && editable;
 
     if (shouldPlayLoop) {
       startHeroSelectionLoop();
@@ -879,7 +819,7 @@ export default function PartySetupSection(props: {
     return () => {
       stopHeroSelectionLoop(false);
     };
-  }, [enabled, row, showFullEditor, partyCanonicalExists, editable]);
+  }, [enabled, row, partyCanonicalExists, editable]);
 
   useEffect(() => {
     return () => {
@@ -1018,24 +958,6 @@ export default function PartySetupSection(props: {
     outline: "none",
   };
 
-  const tagStyle: React.CSSProperties = {
-    display: "inline-flex",
-    alignItems: "center",
-    borderRadius: 999,
-    padding: "5px 9px",
-    fontSize: 11,
-    lineHeight: 1.25,
-    background: "rgba(255,255,255,0.08)",
-    border: "1px solid rgba(255,255,255,0.10)",
-    whiteSpace: "nowrap",
-  };
-
-  const traitTagStyle: React.CSSProperties = {
-    ...tagStyle,
-    background: "rgba(120,180,255,0.10)",
-    border: "1px solid rgba(120,180,255,0.22)",
-  };
-
   const helperCardStyle: React.CSSProperties = {
     padding: "12px 14px",
     borderRadius: 14,
@@ -1049,12 +971,13 @@ export default function PartySetupSection(props: {
 
   if (!enabled || !row) return null;
 
+  // Once the hero is canonized, this ritual UI should vanish completely.
+  if (partyCanonicalExists) return null;
+
   const { resolvedSpecies, resolvedClass, skillIds, traitIds } = getResolvedLoadout(row);
   const currentFocus = inferBuildFocus(row, resolvedClass);
   const portraitPath = getPortraitPath(resolvedSpecies, resolvedClass, row?.portrait ?? "Male");
   const fallbackPortraitPath = getPortraitPath("Human", "Warrior", row?.portrait ?? "Male");
-  const skillLabels = skillIds.map((skillId) => getSkillDefinition(skillId)?.label ?? skillId);
-  const traitLabels = traitIds.map((traitId) => getSpeciesTraitDefinition(traitId)?.label ?? traitId);
   const display = row?.name?.trim() || "The Lone Hero";
   const hasValidHeroName = (row?.name ?? "").trim().length > 0;
 
@@ -1518,7 +1441,7 @@ export default function PartySetupSection(props: {
                 <div
                   style={{
                     display: "grid",
-                    gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+                    gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
                     gap: 14,
                     width: "100%",
                     minWidth: 0,
@@ -1646,7 +1569,7 @@ export default function PartySetupSection(props: {
                 <div
                   style={{
                     display: "grid",
-                    gridTemplateColumns: "minmax(0, 1fr) minmax(260px, 320px)",
+                    gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
                     gap: 20,
                     alignItems: "start",
                     minWidth: 0,
@@ -1805,7 +1728,7 @@ export default function PartySetupSection(props: {
                 <div
                   style={{
                     display: "grid",
-                    gridTemplateColumns: "minmax(240px, 320px) minmax(0, 1fr)",
+                    gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
                     gap: 20,
                     alignItems: "start",
                     minWidth: 0,
@@ -1864,7 +1787,7 @@ export default function PartySetupSection(props: {
                     <div
                       style={{
                         display: "grid",
-                        gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+                        gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))",
                         gap: 10,
                         minWidth: 0,
                       }}
@@ -1945,7 +1868,7 @@ export default function PartySetupSection(props: {
           <div
             style={{
               display: "grid",
-              gridTemplateColumns: "minmax(0, 1.1fr) auto",
+              gridTemplateColumns: "minmax(0, 1fr)",
               gap: 14,
               alignItems: "start",
               minWidth: 0,
@@ -1953,448 +1876,51 @@ export default function PartySetupSection(props: {
           >
             <div style={{ minWidth: 0 }}>
               <div style={{ fontSize: 24, fontWeight: 950, letterSpacing: 0.2 }}>
-                {partyCanonicalExists ? "The Lone Hero" : "Declare the Lone Hero"}
+                Declare the Lone Hero
               </div>
               <div style={{ marginTop: 6, fontSize: 14, opacity: 0.82, maxWidth: 820, lineHeight: 1.6 }}>
                 The journey begins with one hero only. This opening should feel like the start of a Chronicle, not a
                 control panel.
               </div>
 
-              {!partyCanonicalExists && (
-                <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 12 }}>
-                  <SectionPill>
-                    <strong>1</strong> Starting Hero
-                  </SectionPill>
-                  <SectionPill>
-                    <strong>{row?.portrait ?? "Male"}</strong> Portrait
-                  </SectionPill>
-                  <SectionPill>
-                    <strong>{heroSummary.resolvedClass}</strong> Class
-                  </SectionPill>
-                  <SectionPill>
-                    <strong>{heroSummary.resolvedSpecies}</strong> Lineage
-                  </SectionPill>
-                  <SectionPill>{partyCanonicalExists ? "Hero canonized" : "Draft hero only"}</SectionPill>
-                  {partyLockedByCombat ? <SectionPill tone="warn">Combat lock active</SectionPill> : null}
-                </div>
-              )}
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 12 }}>
+                <SectionPill>
+                  <strong>1</strong> Starting Hero
+                </SectionPill>
+                <SectionPill>
+                  <strong>{row?.portrait ?? "Male"}</strong> Portrait
+                </SectionPill>
+                <SectionPill>
+                  <strong>{heroSummary.resolvedClass}</strong> Class
+                </SectionPill>
+                <SectionPill>
+                  <strong>{heroSummary.resolvedSpecies}</strong> Lineage
+                </SectionPill>
+                <SectionPill>Draft hero only</SectionPill>
+                {partyLockedByCombat ? <SectionPill tone="warn">Combat lock active</SectionPill> : null}
+              </div>
             </div>
-
-            {canCollapseToSummary && showFullEditor && (
-              <button
-                onClick={() => {
-                  if (!partyCanonicalExists) {
-                    playSfx(SFX.uiFailure, 0.5);
-                    return;
-                  }
-                  playSfx(SFX.buttonClick, 0.56);
-                  setShowDeclaredEditor(false);
-                }}
-                style={{
-                  ...controlButtonBase,
-                  border: "1px solid rgba(255,255,255,0.12)",
-                  background: "rgba(255,255,255,0.05)",
-                  color: "inherit",
-                  alignSelf: "start",
-                }}
-              >
-                Collapse Hero
-              </button>
-            )}
           </div>
 
-          {!partyCanonicalExists && showFullEditor && renderCreationFlow()}
+          {renderCreationFlow()}
 
-          {partyCanonicalExists && !showFullEditor && (
-            <div
+          <div style={{ display: "flex", justifyContent: "center" }}>
+            <button
+              type="button"
+              onClick={() => {
+                playSfx(SFX.buttonClick, 0.54);
+                resetRitualFlow();
+              }}
               style={{
-                display: "flex",
-                justifyContent: "space-between",
-                gap: 12,
-                flexWrap: "wrap",
-                alignItems: "center",
-                padding: "14px 16px",
-                borderRadius: 14,
-                border: "1px solid rgba(255,255,255,0.10)",
-                background: "rgba(255,255,255,0.04)",
-                boxSizing: "border-box",
-                minWidth: 0,
+                ...controlButtonBase,
+                border: "1px solid rgba(255,255,255,0.12)",
+                background: "rgba(255,255,255,0.05)",
+                color: "inherit",
               }}
             >
-              <div style={{ fontSize: 13, opacity: 0.82, lineHeight: 1.6 }}>
-                The hero editor is folded away because this identity is already committed to canon. Later growth will
-                unlock fellowship rather than replacing this beginning.
-              </div>
-
-              <button
-                onClick={() => {
-                  playSfx(SFX.buttonClick, 0.58);
-                  setShowDeclaredEditor(true);
-                }}
-                style={{
-                  ...controlButtonBase,
-                  border: "1px solid rgba(255,255,255,0.12)",
-                  background: "rgba(255,255,255,0.05)",
-                  color: "inherit",
-                }}
-              >
-                Review Hero
-              </button>
-            </div>
-          )}
-
-          {partyCanonicalExists && showFullEditor && (
-            <>
-              <div
-                style={{
-                  padding: "14px 16px",
-                  borderRadius: 16,
-                  border: "1px solid rgba(255,255,255,0.10)",
-                  background: "rgba(255,255,255,0.04)",
-                  display: "grid",
-                  gap: 10,
-                  boxSizing: "border-box",
-                  minWidth: 0,
-                }}
-              >
-                <div style={{ fontWeight: 900, letterSpacing: 0.2, fontSize: 17 }}>Fellowship Progression</div>
-                <div style={{ fontSize: 13, opacity: 0.8, lineHeight: 1.6 }}>
-                  The campaign begins with a single active hero. Additional fellowship slots must be earned through
-                  milestones, recruit opportunities, and power-versus-companionship choices.
-                </div>
-                <FellowshipSlots unlockedPartySlots={unlockedPartySlots} maxPartySlots={maxPartySlots} />
-                <div style={{ fontSize: 12, opacity: 0.72, lineHeight: 1.5 }}>
-                  {completionRequiresFullFellowship
-                    ? "True completion remains blocked until all six fellowship seats are assembled."
-                    : "Campaign completion is not currently blocked by fellowship size."}
-                </div>
-              </div>
-
-              <article
-                style={{
-                  borderRadius: 18,
-                  border: "1px solid rgba(255,255,255,0.10)",
-                  background: "linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.02))",
-                  padding: 16,
-                  boxShadow: "inset 0 1px 0 rgba(255,255,255,0.03)",
-                  boxSizing: "border-box",
-                  minWidth: 0,
-                  overflow: "hidden",
-                }}
-              >
-                <div
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: "110px minmax(0, 1fr)",
-                    gap: 16,
-                    alignItems: "start",
-                    minWidth: 0,
-                  }}
-                >
-                  <div style={{ display: "grid", gap: 10, minWidth: 0 }}>
-                    <div
-                      style={{
-                        width: 110,
-                        height: 132,
-                        borderRadius: 14,
-                        overflow: "hidden",
-                        border: "1px solid rgba(255,255,255,0.12)",
-                        background: "rgba(255,255,255,0.04)",
-                        boxShadow: "0 10px 24px rgba(0,0,0,0.18)",
-                        boxSizing: "border-box",
-                      }}
-                      title={`${resolvedSpecies} ${resolvedClass} ${row?.portrait ?? "Male"}`}
-                    >
-                      <img
-                        src={portraitPath}
-                        alt={`${display} portrait`}
-                        style={{
-                          width: "100%",
-                          height: "100%",
-                          objectFit: "cover",
-                          objectPosition: getPortraitObjectPosition("thumb"),
-                          display: "block",
-                        }}
-                        onError={(e) => {
-                          const img = e.currentTarget;
-                          img.onerror = null;
-                          img.src = fallbackPortraitPath;
-                          img.style.objectPosition = getPortraitObjectPosition("thumb");
-                        }}
-                      />
-                    </div>
-
-                    <div
-                      style={{
-                        display: "grid",
-                        gridTemplateColumns: "1fr 1fr",
-                        gap: 8,
-                        minWidth: 0,
-                      }}
-                    >
-                      <button
-                        type="button"
-                        onClick={() => {
-                          if (!editable) {
-                            playSfx(SFX.uiFailure, 0.5);
-                            return;
-                          }
-                          setPortrait("Male");
-                        }}
-                        disabled={!editable}
-                        style={{
-                          ...controlButtonBase,
-                          padding: "8px 0",
-                          fontSize: 12,
-                          border:
-                            row?.portrait === "Male"
-                              ? "1px solid rgba(138,180,255,0.42)"
-                              : "1px solid rgba(255,255,255,0.12)",
-                          background:
-                            row?.portrait === "Male"
-                              ? "rgba(138,180,255,0.12)"
-                              : "rgba(255,255,255,0.04)",
-                          color: "inherit",
-                          opacity: editable ? 1 : 0.6,
-                          cursor: editable ? "pointer" : "not-allowed",
-                        }}
-                      >
-                        Male
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => {
-                          if (!editable) {
-                            playSfx(SFX.uiFailure, 0.5);
-                            return;
-                          }
-                          setPortrait("Female");
-                        }}
-                        disabled={!editable}
-                        style={{
-                          ...controlButtonBase,
-                          padding: "8px 0",
-                          fontSize: 12,
-                          border:
-                            row?.portrait === "Female"
-                              ? "1px solid rgba(138,180,255,0.42)"
-                              : "1px solid rgba(255,255,255,0.12)",
-                          background:
-                            row?.portrait === "Female"
-                              ? "rgba(138,180,255,0.12)"
-                              : "rgba(255,255,255,0.04)",
-                          color: "inherit",
-                          opacity: editable ? 1 : 0.6,
-                          cursor: editable ? "pointer" : "not-allowed",
-                        }}
-                      >
-                        Female
-                      </button>
-                    </div>
-                  </div>
-
-                  <div style={{ display: "grid", gap: 14, minWidth: 0 }}>
-                    <div
-                      style={{
-                        display: "grid",
-                        gridTemplateColumns: "minmax(220px, 1.1fr) repeat(4, minmax(110px, 0.55fr))",
-                        gap: 12,
-                        alignItems: "end",
-                        minWidth: 0,
-                      }}
-                    >
-                      <div style={{ minWidth: 0 }}>
-                        <TinyLabel>Hero</TinyLabel>
-                        <input
-                          value={row?.name ?? ""}
-                          disabled={!editable}
-                          onChange={(e) => setHeroField({ name: e.target.value })}
-                          placeholder="The Lone Hero"
-                          style={inputStyle}
-                        />
-                        <div style={{ marginTop: 8, fontSize: 13, opacity: 0.82 }}>
-                          <strong>{display}</strong> · {resolvedSpecies} {resolvedClass}
-                        </div>
-                      </div>
-
-                      <div style={{ minWidth: 0 }}>
-                        <TinyLabel>Armor Class</TinyLabel>
-                        <StatChip label="AC" value={row?.ac ?? 14} />
-                      </div>
-
-                      <div style={{ minWidth: 0 }}>
-                        <TinyLabel>HP</TinyLabel>
-                        <StatChip label="HP" value={row?.hpCurrent ?? 12} />
-                      </div>
-
-                      <div style={{ minWidth: 0 }}>
-                        <TinyLabel>HP Max</TinyLabel>
-                        <StatChip label="HP Max" value={row?.hpMax ?? 12} />
-                      </div>
-
-                      <div style={{ minWidth: 0 }}>
-                        <TinyLabel>Initiative</TinyLabel>
-                        <StatChip label="Init" value={row?.initiativeMod ?? 1} />
-                      </div>
-                    </div>
-
-                    <div
-                      style={{
-                        padding: "12px 14px",
-                        borderRadius: 12,
-                        border: "1px solid rgba(255,255,255,0.08)",
-                        background: "rgba(255,255,255,0.03)",
-                        boxSizing: "border-box",
-                        minWidth: 0,
-                      }}
-                    >
-                      <TinyLabel>Build Focus</TinyLabel>
-
-                      <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-                        {BUILD_FOCUS_OPTIONS.map((option) => {
-                          const active = currentFocus === option.id;
-                          const palette = getFocusPalette(option.id, active);
-
-                          return (
-                            <button
-                              key={option.id}
-                              type="button"
-                              onClick={() => {
-                                if (!editable) {
-                                  playSfx(SFX.uiFailure, 0.5);
-                                  return;
-                                }
-                                setBuildFocus(option.id);
-                              }}
-                              disabled={!editable}
-                              title={option.hint}
-                              style={{
-                                ...controlButtonBase,
-                                padding: "8px 10px",
-                                fontSize: 12,
-                                border: palette.border,
-                                background: palette.background,
-                                boxShadow: palette.shadow,
-                                color: getFocusTitleColor(option.id),
-                                opacity: editable ? 1 : 0.6,
-                                cursor: editable ? "pointer" : "not-allowed",
-                              }}
-                            >
-                              {option.icon} {option.label}
-                            </button>
-                          );
-                        })}
-                      </div>
-
-                      <div style={{ marginTop: 8, fontSize: 12, opacity: 0.72 }}>
-                        Choose one stance to shape survivability and speed without raw stat editing.
-                      </div>
-                    </div>
-
-                    <div
-                      style={{
-                        display: "grid",
-                        gridTemplateColumns: "1fr 1fr",
-                        gap: 12,
-                        minWidth: 0,
-                      }}
-                    >
-                      <div
-                        style={{
-                          padding: "12px 14px",
-                          borderRadius: 12,
-                          border: "1px solid rgba(255,255,255,0.08)",
-                          background: "rgba(255,255,255,0.03)",
-                          boxSizing: "border-box",
-                          minWidth: 0,
-                        }}
-                      >
-                        <TinyLabel>Class Skills</TinyLabel>
-                        <div style={{ display: "flex", flexWrap: "wrap", gap: 6, minHeight: 28 }}>
-                          {skillLabels.length > 0 ? (
-                            skillLabels.map((label, skillIdx) => (
-                              <span key={`hero_skill_${label}_${skillIdx}`} style={tagStyle}>
-                                {label}
-                              </span>
-                            ))
-                          ) : (
-                            <span className="muted" style={{ fontSize: 12 }}>
-                              No class skills
-                            </span>
-                          )}
-                        </div>
-                      </div>
-
-                      <div
-                        style={{
-                          padding: "12px 14px",
-                          borderRadius: 12,
-                          border: "1px solid rgba(255,255,255,0.08)",
-                          background: "rgba(255,255,255,0.03)",
-                          boxSizing: "border-box",
-                          minWidth: 0,
-                        }}
-                      >
-                        <TinyLabel>Species Traits</TinyLabel>
-                        <div style={{ display: "flex", flexWrap: "wrap", gap: 6, minHeight: 28 }}>
-                          {traitLabels.length > 0 ? (
-                            traitLabels.map((label, traitIdx) => (
-                              <span key={`hero_trait_${label}_${traitIdx}`} style={traitTagStyle}>
-                                {label}
-                              </span>
-                            ))
-                          ) : (
-                            <span className="muted" style={{ fontSize: 12 }}>
-                              No species traits
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </article>
-
-              <div
-                style={{
-                  padding: "14px 16px",
-                  borderRadius: 14,
-                  border: "1px solid rgba(255,255,255,0.10)",
-                  background: "rgba(255,255,255,0.04)",
-                  fontSize: 13,
-                  opacity: 0.84,
-                  lineHeight: 1.7,
-                  boxSizing: "border-box",
-                  minWidth: 0,
-                }}
-              >
-                The opening declaration now binds a single hero to the dungeon’s canon. Fellowship growth happens later
-                through progression, recruitment, and consequence rather than pre-run roster assembly.
-              </div>
-            </>
-          )}
-
-          {!partyCanonicalExists && (
-            <div style={{ display: "flex", justifyContent: "center" }}>
-              <button
-                type="button"
-                onClick={() => {
-                  if (partyCanonicalExists) return;
-                  playSfx(SFX.buttonClick, 0.54);
-                  resetRitualFlow();
-                }}
-                style={{
-                  ...controlButtonBase,
-                  border: "1px solid rgba(255,255,255,0.12)",
-                  background: "rgba(255,255,255,0.05)",
-                  color: "inherit",
-                }}
-              >
-                Restart Ritual
-              </button>
-            </div>
-          )}
+              Restart Ritual
+            </button>
+          </div>
         </div>
       </section>
     </div>
