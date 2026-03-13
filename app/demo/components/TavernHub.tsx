@@ -13,6 +13,7 @@ const HUB_BG = "/assets/V3/Dungeon/Tavern/tavern_01.png";
 const TAVERN_AMBIENCE_A = "/assets/audio/sfx_tavern_01.mp3";
 const TAVERN_AMBIENCE_B = "/assets/audio/sfx_tavern_02.mp3";
 const TAVERN_BEER = "/assets/audio/sfx_tavern_beer_01.mp3";
+const TAVERN_BACKGROUND_LOOP = "/assets/audio/sfx_tavern_background.mp3";
 
 function formatTavernEcho(totalScore: number, bestThrowScore: number) {
   if (bestThrowScore >= 100) return "The tavern remembers a champion's hand.";
@@ -132,8 +133,10 @@ export default function TavernHub({ onBeginDescent }: Props) {
 
   const ambienceARef = useRef<HTMLAudioElement | null>(null);
   const ambienceBRef = useRef<HTMLAudioElement | null>(null);
+  const backgroundLoopRef = useRef<HTMLAudioElement | null>(null);
   const beerRef = useRef<HTMLAudioElement | null>(null);
   const beerTimerRef = useRef<number | null>(null);
+  const backgroundFadeFrameRef = useRef<number | null>(null);
 
   useEffect(() => {
     setMounted(true);
@@ -149,6 +152,11 @@ export default function TavernHub({ onBeginDescent }: Props) {
     ambienceBRef.current.volume = 0.2;
     ambienceBRef.current.play().catch(() => {});
 
+    backgroundLoopRef.current = new Audio(TAVERN_BACKGROUND_LOOP);
+    backgroundLoopRef.current.loop = true;
+    backgroundLoopRef.current.volume = 0;
+    backgroundLoopRef.current.play().catch(() => {});
+
     beerRef.current = new Audio(TAVERN_BEER);
     beerRef.current.volume = 0.28;
 
@@ -163,9 +171,15 @@ export default function TavernHub({ onBeginDescent }: Props) {
 
     return () => {
       clearTimeout(hideTimer);
+
       if (beerTimerRef.current) window.clearTimeout(beerTimerRef.current);
+      if (backgroundFadeFrameRef.current) {
+        window.cancelAnimationFrame(backgroundFadeFrameRef.current);
+      }
+
       ambienceARef.current?.pause();
       ambienceBRef.current?.pause();
+      backgroundLoopRef.current?.pause();
       beerRef.current?.pause();
     };
   }, []);
@@ -173,7 +187,8 @@ export default function TavernHub({ onBeginDescent }: Props) {
   useEffect(() => {
     const a = ambienceARef.current;
     const b = ambienceBRef.current;
-    if (!a || !b) return;
+    const bg = backgroundLoopRef.current;
+    if (!a || !b || !bg) return;
 
     if (mode === "hub") {
       a.volume = 0.34;
@@ -182,6 +197,36 @@ export default function TavernHub({ onBeginDescent }: Props) {
       a.volume = 0.22;
       b.volume = 0.12;
     }
+
+    const targetBackgroundVolume = mode === "hub" ? 0.24 : 0;
+
+    if (backgroundFadeFrameRef.current) {
+      window.cancelAnimationFrame(backgroundFadeFrameRef.current);
+      backgroundFadeFrameRef.current = null;
+    }
+
+    const fadeStep = () => {
+      const current = bg.volume;
+      const diff = targetBackgroundVolume - current;
+
+      if (Math.abs(diff) < 0.01) {
+        bg.volume = targetBackgroundVolume;
+        backgroundFadeFrameRef.current = null;
+        return;
+      }
+
+      bg.volume = Math.max(0, Math.min(1, current + diff * 0.08));
+      backgroundFadeFrameRef.current = window.requestAnimationFrame(fadeStep);
+    };
+
+    backgroundFadeFrameRef.current = window.requestAnimationFrame(fadeStep);
+
+    return () => {
+      if (backgroundFadeFrameRef.current) {
+        window.cancelAnimationFrame(backgroundFadeFrameRef.current);
+        backgroundFadeFrameRef.current = null;
+      }
+    };
   }, [mode]);
 
   const tavernEcho = useMemo(() => {
