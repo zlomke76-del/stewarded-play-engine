@@ -4,12 +4,12 @@
 // HeroOnboarding.tsx
 // ------------------------------------------------------------
 // Direction:
-// - full mode becomes a cinematic threshold scene
-// - guide choice is presented as a mythic split-path decision
-// - less library / dashboard energy
-// - fewer nested boxes, larger typography, stronger atmosphere
-// - fellowship remains, but no longer competes with the first choice
-// - compact mode remains functional and unchanged in purpose
+// - full mode is now a cinematic threshold scene
+// - the dungeon image carries the emotional weight
+// - Human / Solace are overlay path plaques on top of the scene
+// - copy is shorter, more mythic, less dashboard-like
+// - CTA appears as a ceremonial continuation after a guide is chosen
+// - compact mode remains functional and progression-oriented
 // ------------------------------------------------------------
 
 import React, { useMemo } from "react";
@@ -194,11 +194,10 @@ function SummaryPill({
   );
 }
 
-function GuidePathCard({
+function GuideOverlayCard({
   title,
   kicker,
   body,
-  pathLine,
   accent,
   selected,
   onChoose,
@@ -206,7 +205,6 @@ function GuidePathCard({
   title: string;
   kicker: string;
   body: string;
-  pathLine: string;
   accent: "ember" | "azure";
   selected: boolean;
   onChoose: () => void;
@@ -217,27 +215,27 @@ function GuidePathCard({
     <div
       style={{
         position: "relative",
-        minHeight: 380,
-        borderRadius: 26,
+        borderRadius: 20,
         overflow: "hidden",
         border: selected
           ? isAzure
             ? "1px solid rgba(138,180,255,0.42)"
             : "1px solid rgba(255,196,132,0.42)"
-          : "1px solid rgba(255,255,255,0.10)",
-        background:
-          selected
-            ? isAzure
-              ? "linear-gradient(180deg, rgba(26,34,52,0.90), rgba(10,12,16,0.96))"
-              : "linear-gradient(180deg, rgba(40,24,14,0.90), rgba(10,10,12,0.96))"
-            : "linear-gradient(180deg, rgba(20,20,24,0.84), rgba(10,10,12,0.96))",
+          : "1px solid rgba(255,255,255,0.12)",
+        background: selected
+          ? isAzure
+            ? "linear-gradient(180deg, rgba(16,28,52,0.78), rgba(8,10,16,0.76))"
+            : "linear-gradient(180deg, rgba(48,26,12,0.78), rgba(10,10,12,0.76))"
+          : "linear-gradient(180deg, rgba(12,12,16,0.66), rgba(8,8,10,0.74))",
+        backdropFilter: "blur(12px)",
+        WebkitBackdropFilter: "blur(12px)",
         boxShadow: selected
           ? isAzure
-            ? "0 22px 60px rgba(0,0,0,0.42), 0 0 28px rgba(138,180,255,0.12)"
-            : "0 22px 60px rgba(0,0,0,0.42), 0 0 28px rgba(255,166,82,0.10)"
-          : "0 18px 46px rgba(0,0,0,0.34)",
-        transition:
-          "transform 180ms ease, border-color 180ms ease, box-shadow 220ms ease, filter 180ms ease",
+            ? "0 16px 42px rgba(0,0,0,0.34), 0 0 28px rgba(138,180,255,0.14)"
+            : "0 16px 42px rgba(0,0,0,0.34), 0 0 28px rgba(255,166,82,0.12)"
+          : "0 14px 34px rgba(0,0,0,0.26)",
+        transform: selected ? "translateY(-2px)" : "translateY(0px)",
+        transition: "transform 180ms ease, border-color 180ms ease, box-shadow 220ms ease, background 220ms ease",
       }}
     >
       <div
@@ -246,46 +244,26 @@ function GuidePathCard({
           position: "absolute",
           inset: 0,
           background: isAzure
-            ? "radial-gradient(800px 300px at 78% 10%, rgba(138,180,255,0.18), rgba(0,0,0,0) 54%), radial-gradient(500px 240px at 22% 88%, rgba(90,130,255,0.08), rgba(0,0,0,0) 50%)"
-            : "radial-gradient(800px 300px at 18% 10%, rgba(255,168,94,0.20), rgba(0,0,0,0) 54%), radial-gradient(500px 240px at 78% 88%, rgba(255,128,60,0.08), rgba(0,0,0,0) 50%)",
+            ? "radial-gradient(440px 180px at 82% 8%, rgba(138,180,255,0.16), rgba(0,0,0,0) 60%)"
+            : "radial-gradient(440px 180px at 18% 8%, rgba(255,168,94,0.18), rgba(0,0,0,0) 60%)",
           pointerEvents: "none",
         }}
       />
 
-      <div
-        aria-hidden
-        style={{
-          position: "absolute",
-          inset: 0,
-          background: "linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0) 22%, rgba(0,0,0,0.16) 100%)",
-          pointerEvents: "none",
-        }}
-      />
-
-      <div
-        style={{
-          position: "relative",
-          zIndex: 1,
-          height: "100%",
-          display: "grid",
-          gridTemplateRows: "auto 1fr auto",
-          padding: "26px 24px 22px",
-          gap: 20,
-        }}
-      >
-        <div style={{ display: "grid", gap: 10 }}>
+      <div style={{ position: "relative", zIndex: 1, padding: "18px 18px 16px", display: "grid", gap: 14 }}>
+        <div style={{ display: "grid", gap: 8 }}>
           <div
             style={{
               display: "flex",
+              alignItems: "center",
               justifyContent: "space-between",
               gap: 10,
-              alignItems: "center",
               flexWrap: "wrap",
             }}
           >
             <div
               style={{
-                fontSize: 12,
+                fontSize: 11,
                 fontWeight: 900,
                 letterSpacing: 0.7,
                 textTransform: "uppercase",
@@ -293,7 +271,7 @@ function GuidePathCard({
                   ? isAzure
                     ? "rgba(190,215,255,0.96)"
                     : "rgba(255,226,196,0.96)"
-                  : "rgba(210,216,228,0.74)",
+                  : "rgba(220,224,235,0.76)",
               }}
             >
               {kicker}
@@ -301,37 +279,36 @@ function GuidePathCard({
 
             <div
               style={{
-                padding: "8px 12px",
+                padding: "6px 10px",
                 borderRadius: 999,
                 border: selected
                   ? isAzure
-                    ? "1px solid rgba(138,180,255,0.32)"
-                    : "1px solid rgba(255,196,132,0.32)"
-                  : "1px solid rgba(255,255,255,0.12)",
+                    ? "1px solid rgba(138,180,255,0.28)"
+                    : "1px solid rgba(255,196,132,0.28)"
+                  : "1px solid rgba(255,255,255,0.10)",
                 background: selected
                   ? isAzure
-                    ? "rgba(138,180,255,0.12)"
-                    : "rgba(255,196,132,0.12)"
+                    ? "rgba(138,180,255,0.10)"
+                    : "rgba(255,196,132,0.10)"
                   : "rgba(255,255,255,0.04)",
-                fontSize: 11,
+                fontSize: 10,
                 fontWeight: 900,
-                letterSpacing: 0.5,
+                letterSpacing: 0.55,
                 textTransform: "uppercase",
                 color: "rgba(255,255,255,0.92)",
               }}
             >
-              {selected ? "Chosen Path" : "Open Path"}
+              {selected ? "Chosen" : "Open Path"}
             </div>
           </div>
 
           <div
             style={{
-              fontSize: 38,
+              fontSize: 28,
               fontWeight: 950,
-              lineHeight: 0.96,
+              lineHeight: 0.98,
               letterSpacing: 0.1,
-              maxWidth: 420,
-              textShadow: "0 6px 24px rgba(0,0,0,0.34)",
+              textShadow: "0 6px 18px rgba(0,0,0,0.34)",
             }}
           >
             {title}
@@ -340,89 +317,46 @@ function GuidePathCard({
 
         <div
           style={{
-            display: "grid",
-            alignContent: "center",
-            gap: 18,
+            fontSize: 13.5,
+            lineHeight: 1.62,
+            opacity: 0.86,
+            maxWidth: 420,
           }}
         >
-          <div
-            style={{
-              fontSize: 15,
-              lineHeight: 1.7,
-              opacity: 0.86,
-              maxWidth: 430,
-            }}
-          >
-            {body}
-          </div>
-
-          <div
-            style={{
-              fontSize: 13,
-              lineHeight: 1.65,
-              opacity: 0.74,
-              maxWidth: 420,
-            }}
-          >
-            {pathLine}
-          </div>
+          {body}
         </div>
 
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
-          <button
-            type="button"
-            onClick={onChoose}
-            style={{
-              padding: "14px 18px",
-              borderRadius: 14,
-              border: selected
-                ? isAzure
-                  ? "1px solid rgba(138,180,255,0.34)"
-                  : "1px solid rgba(255,196,132,0.34)"
-                : "1px solid rgba(255,255,255,0.16)",
-              background: selected
-                ? isAzure
-                  ? "linear-gradient(180deg, rgba(138,180,255,0.16), rgba(18,30,60,0.22))"
-                  : "linear-gradient(180deg, rgba(255,196,132,0.14), rgba(56,28,12,0.22))"
-                : "rgba(255,255,255,0.06)",
-              color: "rgba(255,248,240,0.98)",
-              fontWeight: 950,
-              letterSpacing: 0.3,
-              textTransform: "uppercase",
-              cursor: "pointer",
-              boxShadow: selected
-                ? isAzure
-                  ? "0 0 22px rgba(138,180,255,0.12)"
-                  : "0 0 22px rgba(255,166,82,0.10)"
-                : "none",
-            }}
-          >
-            {selected ? "Path Chosen" : "Choose This Guide"}
-          </button>
-
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 10,
-              fontSize: 12.5,
-              opacity: 0.76,
-            }}
-          >
-            <span
-              style={{
-                width: 10,
-                height: 10,
-                borderRadius: 999,
-                background: isAzure ? "rgba(138,180,255,0.9)" : "rgba(255,176,96,0.9)",
-                boxShadow: isAzure
-                  ? "0 0 18px rgba(138,180,255,0.30)"
-                  : "0 0 18px rgba(255,176,96,0.30)",
-              }}
-            />
-            {isAzure ? "Rune-lit stewardship" : "Torch-lit judgment"}
-          </div>
-        </div>
+        <button
+          type="button"
+          onClick={onChoose}
+          style={{
+            justifySelf: "start",
+            padding: "12px 16px",
+            borderRadius: 14,
+            border: selected
+              ? isAzure
+                ? "1px solid rgba(138,180,255,0.30)"
+                : "1px solid rgba(255,196,132,0.30)"
+              : "1px solid rgba(255,255,255,0.14)",
+            background: selected
+              ? isAzure
+                ? "linear-gradient(180deg, rgba(138,180,255,0.14), rgba(18,30,60,0.18))"
+                : "linear-gradient(180deg, rgba(255,196,132,0.14), rgba(56,28,12,0.18))"
+              : "rgba(255,255,255,0.05)",
+            color: "rgba(255,248,240,0.98)",
+            fontWeight: 950,
+            letterSpacing: 0.3,
+            textTransform: "uppercase",
+            cursor: "pointer",
+            boxShadow: selected
+              ? isAzure
+                ? "0 0 20px rgba(138,180,255,0.10)"
+                : "0 0 20px rgba(255,166,82,0.10)"
+              : "none",
+          }}
+        >
+          {selected ? "Path Chosen" : "Choose This Path"}
+        </button>
       </div>
     </div>
   );
@@ -470,8 +404,8 @@ export default function HeroOnboarding({
   completionRequiresFullFellowship,
 }: Props) {
   const dmHint = useMemo(() => {
-    if (dmMode === "solace-neutral") return "Solace has taken her place beside the threshold.";
-    if (dmMode === "human") return "A human guide now stands beside the gate.";
+    if (dmMode === "solace-neutral") return "Solace now stands beside the threshold.";
+    if (dmMode === "human") return "A human guide now stands beside the threshold.";
     return "Choose the voice that will answer when fate is invoked.";
   }, [dmMode]);
 
@@ -752,14 +686,15 @@ export default function HeroOnboarding({
       className="card"
       style={{
         position: "relative",
-        background:
-          "linear-gradient(180deg, rgba(12,13,16,0.84), rgba(7,8,10,0.94))",
+        background: "linear-gradient(180deg, rgba(10,11,14,0.78), rgba(7,8,10,0.92))",
         border: "1px solid rgba(255,255,255,0.08)",
-        borderRadius: 26,
-        padding: "34px 30px 28px",
-        marginTop: 16,
-        boxShadow: "0 26px 90px rgba(0,0,0,0.48)",
+        borderRadius: 28,
+        padding: "32px 28px 24px",
+        marginTop: 14,
+        boxShadow: "0 28px 90px rgba(0,0,0,0.48)",
         overflow: "hidden",
+        maxWidth: 1340,
+        marginInline: "auto",
       }}
     >
       <style jsx>{`
@@ -813,39 +748,62 @@ export default function HeroOnboarding({
           }
         }
 
+        @keyframes plaqueFloat {
+          0% {
+            transform: translateY(0px);
+          }
+          50% {
+            transform: translateY(-3px);
+          }
+          100% {
+            transform: translateY(0px);
+          }
+        }
+
         @media (max-width: 1180px) {
-          .hero-threshold-grid {
+          .hero-overlay-choices {
             grid-template-columns: 1fr !important;
+            left: 20px !important;
+            right: 20px !important;
+            top: 20px !important;
+            max-width: none !important;
           }
 
-          .hero-guide-split {
-            grid-template-columns: 1fr !important;
+          .hero-viewport-bottom {
+            left: 20px !important;
+            right: 20px !important;
+            bottom: 20px !important;
           }
 
-          .hero-scene-panel {
-            min-height: 380px !important;
+          .hero-onboarding-shell {
+            gap: 20px !important;
           }
         }
 
         @media (max-width: 760px) {
+          .hero-title {
+            font-size: 32px !important;
+          }
+
+          .hero-subtitle {
+            font-size: 16px !important;
+          }
+
+          .hero-scene-panel {
+            min-height: 760px !important;
+          }
+
           .hero-onboarding-shell {
             gap: 18px !important;
           }
 
-          .hero-title {
-            font-size: 30px !important;
+          .hero-onboarding-root {
+            padding: 22px 16px 18px !important;
+            border-radius: 22px !important;
           }
 
-          .hero-guide-card-title {
-            font-size: 30px !important;
-          }
-
-          .hero-onboarding-body {
-            padding: 24px 18px 22px !important;
-          }
-
-          .hero-scene-panel {
-            min-height: 320px !important;
+          .hero-viewport-bottom-title {
+            font-size: 24px !important;
           }
         }
       `}</style>
@@ -856,33 +814,24 @@ export default function HeroOnboarding({
           position: "absolute",
           inset: "-120px",
           background:
-            "radial-gradient(840px 460px at 50% -4%, rgba(110,140,255,0.12), transparent 72%), radial-gradient(760px 400px at 0% 34%, rgba(255,128,42,0.08), transparent 70%), radial-gradient(760px 400px at 100% 34%, rgba(255,170,90,0.06), transparent 70%)",
+            "radial-gradient(840px 460px at 50% -4%, rgba(110,140,255,0.10), transparent 72%), radial-gradient(760px 400px at 0% 34%, rgba(255,128,42,0.08), transparent 70%), radial-gradient(760px 400px at 100% 34%, rgba(255,170,90,0.06), transparent 70%)",
           pointerEvents: "none",
           zIndex: 0,
         }}
       />
 
       <div
-        aria-hidden
-        style={{
-          position: "absolute",
-          inset: 0,
-          background:
-            "linear-gradient(90deg, rgba(255,255,255,0.012), rgba(255,255,255,0) 16%, rgba(255,255,255,0.012) 84%, rgba(255,255,255,0.018))",
-          pointerEvents: "none",
-          zIndex: 0,
-        }}
-      />
-
-      <div className="hero-onboarding-shell" style={{ position: "relative", zIndex: 1, display: "grid", gap: 24 }}>
-        <div style={{ display: "grid", gap: 10, animation: "onboardingFadeUp 320ms ease both" }}>
+        className="hero-onboarding-root"
+        style={{ position: "relative", zIndex: 1, display: "grid", gap: 24 }}
+      >
+        <div className="hero-onboarding-shell" style={{ display: "grid", gap: 12, animation: "onboardingFadeUp 320ms ease both" }}>
           <div
             className="hero-title"
             style={{
-              fontSize: 46,
+              fontSize: 50,
               fontWeight: 950,
-              letterSpacing: 0.2,
-              lineHeight: 0.96,
+              letterSpacing: 0.15,
+              lineHeight: 0.94,
               textShadow: "0 10px 32px rgba(0,0,0,0.42)",
             }}
           >
@@ -893,26 +842,27 @@ export default function HeroOnboarding({
             style={{
               display: "grid",
               gap: 8,
-              maxWidth: 860,
+              maxWidth: 920,
             }}
           >
             <div
               style={{
-                fontSize: 13,
+                fontSize: 12,
                 fontWeight: 900,
-                letterSpacing: 0.7,
+                letterSpacing: 0.8,
                 textTransform: "uppercase",
-                color: "rgba(196,206,228,0.76)",
+                color: "rgba(196,206,228,0.74)",
               }}
             >
               A Threshold of Fate
             </div>
 
             <div
+              className="hero-subtitle"
               style={{
-                fontSize: 18,
-                lineHeight: 1.55,
-                opacity: 0.86,
+                fontSize: 19,
+                lineHeight: 1.58,
+                opacity: 0.88,
               }}
             >
               {heroSubtitle}
@@ -921,60 +871,112 @@ export default function HeroOnboarding({
         </div>
 
         <div
-          className="hero-threshold-grid"
+          className="hero-scene-panel"
           style={{
-            display: "grid",
-            gridTemplateColumns: "minmax(0, 1.36fr) minmax(0, 0.84fr)",
-            gap: 22,
-            alignItems: "stretch",
+            position: "relative",
+            minHeight: 640,
+            borderRadius: 28,
+            overflow: "hidden",
+            border: "1px solid rgba(255,255,255,0.10)",
+            background: "rgba(0,0,0,0.38)",
+            boxShadow: "0 24px 64px rgba(0,0,0,0.46)",
+            animation: "onboardingFadeUp 420ms ease both",
           }}
         >
-          <div style={{ display: "grid", gap: 18 }}>
+          {heroImageOk ? (
+            <img
+              src={heroImageSrc}
+              alt="Enter the dungeon"
+              onError={onHeroImageError}
+              style={{
+                position: "absolute",
+                inset: 0,
+                width: "100%",
+                height: "100%",
+                objectFit: "cover",
+                display: "block",
+                opacity: 0.96,
+                animation: "heroTorchPulse 6s ease-in-out infinite",
+                transform: "scale(1.04)",
+              }}
+            />
+          ) : (
             <div
               style={{
-                display: "grid",
-                gap: 10,
-                animation: "onboardingFadeUp 360ms ease both",
+                position: "absolute",
+                inset: 0,
+                background:
+                  "radial-gradient(1200px 600px at 70% 40%, rgba(255,190,120,0.12), rgba(0,0,0,0) 60%), radial-gradient(900px 500px at 40% 65%, rgba(140,170,255,0.10), rgba(0,0,0,0) 55%), linear-gradient(180deg, rgba(255,255,255,0.06), rgba(0,0,0,0.10))",
               }}
-            >
-              <div
-                style={{
-                  fontSize: 13,
-                  fontWeight: 900,
-                  letterSpacing: 0.72,
-                  textTransform: "uppercase",
-                  color: "rgba(198,208,228,0.72)",
-                }}
-              >
-                Who Will Guide the Expedition?
-              </div>
+            />
+          )}
 
-              <div
-                style={{
-                  fontSize: 20,
-                  lineHeight: 1.6,
-                  opacity: 0.82,
-                  maxWidth: 900,
-                }}
-              >
-                Choose the voice that will stand beside the gate and answer when the first echo is made.
-              </div>
-            </div>
+          <div
+            style={{
+              position: "absolute",
+              inset: 0,
+              background:
+                "linear-gradient(180deg, rgba(0,0,0,0.18) 0%, rgba(0,0,0,0.10) 20%, rgba(0,0,0,0.62) 100%), linear-gradient(90deg, rgba(0,0,0,0.60) 0%, rgba(0,0,0,0.14) 28%, rgba(0,0,0,0.14) 72%, rgba(0,0,0,0.60) 100%)",
+              pointerEvents: "none",
+            }}
+          />
 
-            <div
-              className="hero-guide-split"
-              style={{
-                display: "grid",
-                gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
-                gap: 16,
-                animation: "onboardingFadeUp 420ms ease both",
-              }}
-            >
-              <GuidePathCard
+          <div
+            style={{
+              position: "absolute",
+              inset: 0,
+              background:
+                "radial-gradient(760px 380px at 66% 34%, rgba(255,170,90,0.15), rgba(0,0,0,0) 62%), radial-gradient(520px 280px at 35% 70%, rgba(120,150,255,0.12), rgba(0,0,0,0) 60%)",
+              mixBlendMode: "screen",
+              pointerEvents: "none",
+              opacity: 0.94,
+            }}
+          />
+
+          <div
+            aria-hidden
+            style={{
+              position: "absolute",
+              inset: 0,
+              background:
+                "radial-gradient(circle at 50% 78%, rgba(235,245,255,0.18) 0%, rgba(160,180,220,0.08) 18%, rgba(0,0,0,0) 42%)",
+              mixBlendMode: "screen",
+              animation: "heroMistShift 8s ease-in-out infinite",
+              pointerEvents: "none",
+            }}
+          />
+
+          <div
+            aria-hidden
+            style={{
+              position: "absolute",
+              inset: 0,
+              background:
+                "radial-gradient(circle at 52% 20%, rgba(138,180,255,0.11) 0%, rgba(138,180,255,0) 26%)",
+              animation: "thresholdGlow 4.4s ease-in-out infinite",
+              pointerEvents: "none",
+            }}
+          />
+
+          <div
+            className="hero-overlay-choices"
+            style={{
+              position: "absolute",
+              left: 28,
+              right: 28,
+              top: 28,
+              display: "grid",
+              gridTemplateColumns: "repeat(2, minmax(0, 360px))",
+              justifyContent: "space-between",
+              gap: 16,
+              alignItems: "start",
+            }}
+          >
+            <div style={{ animation: "plaqueFloat 7s ease-in-out infinite" }}>
+              <GuideOverlayCard
                 title="Human Dungeon Master"
                 kicker="The Mortal Path"
-                body="A living guide of instinct, judgment, and improvisation. The dungeon breathes through authored rulings, table energy, and the surprise of human discretion."
-                pathLine="Choose this path for handcrafted turns, narrative instinct, and the warmth of a torch carried by mortal hands."
+                body="A living guide of instinct, judgment, and improvisation. The dungeon breathes through authored rulings and human surprise."
                 accent="ember"
                 selected={dmMode === "human"}
                 onChoose={() => {
@@ -982,12 +984,13 @@ export default function HeroOnboarding({
                   onSetDmMode("human");
                 }}
               />
+            </div>
 
-              <GuidePathCard
+            <div style={{ animation: "plaqueFloat 8s ease-in-out infinite" }}>
+              <GuideOverlayCard
                 title="Solace — Keeper of the Chronicle"
                 kicker="The Stewarded Path"
-                body="A guide of continuity, consequence, and measured cadence. Solace stewards the descent with balance, memory, and a clear sense of what the journey becomes."
-                pathLine="Choose this path for rune-lit guidance, narrative continuity, and a chronicle that remembers the shape of your choices."
+                body="A guide of continuity, consequence, and memory. Solace stewards the descent with balance, cadence, and clarity."
                 accent="azure"
                 selected={dmMode === "solace-neutral"}
                 onChoose={() => {
@@ -996,206 +999,29 @@ export default function HeroOnboarding({
                 }}
               />
             </div>
-
-            <div
-              style={{
-                display: "grid",
-                gap: 12,
-                animation: "onboardingFadeUp 500ms ease both",
-              }}
-            >
-              <div
-                style={{
-                  padding: "14px 16px",
-                  borderRadius: 16,
-                  border: "1px solid rgba(255,255,255,0.08)",
-                  background:
-                    "linear-gradient(180deg, rgba(255,255,255,0.035), rgba(255,255,255,0.02))",
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 10,
-                  flexWrap: "wrap",
-                }}
-              >
-                <span
-                  style={{
-                    width: 10,
-                    height: 10,
-                    borderRadius: 999,
-                    background:
-                      dmMode === "solace-neutral"
-                        ? "rgba(138,180,255,0.92)"
-                        : dmMode === "human"
-                          ? "rgba(255,180,108,0.92)"
-                          : "rgba(255,255,255,0.66)",
-                    boxShadow:
-                      dmMode === "solace-neutral"
-                        ? "0 0 18px rgba(138,180,255,0.34)"
-                        : dmMode === "human"
-                          ? "0 0 18px rgba(255,180,108,0.34)"
-                          : "0 0 10px rgba(255,255,255,0.16)",
-                  }}
-                />
-                <div style={{ fontSize: 13.25, opacity: 0.84 }}>{dmHint}</div>
-              </div>
-
-              {showFellowshipStep && (
-                <div
-                  style={{
-                    padding: "18px 18px 16px",
-                    borderRadius: 18,
-                    border: "1px solid rgba(255,255,255,0.08)",
-                    background:
-                      "linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.02))",
-                    display: "grid",
-                    gap: 12,
-                  }}
-                >
-                  <div style={{ display: "grid", gap: 6 }}>
-                    <div
-                      style={{
-                        fontSize: 12,
-                        fontWeight: 900,
-                        letterSpacing: 0.6,
-                        textTransform: "uppercase",
-                        color: "rgba(198,208,228,0.72)",
-                      }}
-                    >
-                      Fellowship
-                    </div>
-
-                    <div
-                      style={{
-                        fontSize: 24,
-                        fontWeight: 950,
-                        lineHeight: 1.06,
-                      }}
-                    >
-                      You Begin Alone
-                    </div>
-                  </div>
-
-                  <div style={{ fontSize: 14, lineHeight: 1.65, opacity: 0.82, maxWidth: 900 }}>
-                    One hero crosses the threshold first. Companions are not declared here. They are earned through trust, survival, and sacrifice.
-                  </div>
-
-                  <FellowshipPips
-                    active={activePartySize}
-                    unlocked={unlockedPartySlots}
-                    max={maxPartySlots}
-                  />
-
-                  <div style={{ fontSize: 12.75, lineHeight: 1.62, opacity: 0.74 }}>
-                    Rare heroes may survive impossible things alone, but true completion remains sealed until the full fellowship of six stands assembled.
-                  </div>
-                </div>
-              )}
-            </div>
           </div>
 
           <div
-            className="hero-scene-panel"
+            className="hero-viewport-bottom"
             style={{
-              position: "relative",
-              minHeight: 560,
-              borderRadius: 26,
-              overflow: "hidden",
-              border: "1px solid rgba(255,255,255,0.10)",
-              background: "rgba(0,0,0,0.38)",
-              boxShadow: "0 22px 60px rgba(0,0,0,0.46)",
-              animation: "onboardingFadeUp 420ms ease both",
+              position: "absolute",
+              left: 28,
+              right: 28,
+              bottom: 24,
+              display: "grid",
+              gap: 14,
             }}
           >
-            {heroImageOk ? (
-              <img
-                src={heroImageSrc}
-                alt="Enter the dungeon"
-                onError={onHeroImageError}
-                style={{
-                  position: "absolute",
-                  inset: 0,
-                  width: "100%",
-                  height: "100%",
-                  objectFit: "cover",
-                  display: "block",
-                  opacity: 0.94,
-                  animation: "heroTorchPulse 6s ease-in-out infinite",
-                  transform: "scale(1.035)",
-                }}
-              />
-            ) : (
-              <div
-                style={{
-                  position: "absolute",
-                  inset: 0,
-                  background:
-                    "radial-gradient(1200px 600px at 70% 40%, rgba(255,190,120,0.12), rgba(0,0,0,0) 60%), radial-gradient(900px 500px at 40% 65%, rgba(140,170,255,0.10), rgba(0,0,0,0) 55%), linear-gradient(180deg, rgba(255,255,255,0.06), rgba(0,0,0,0.10))",
-                }}
-              />
-            )}
-
             <div
               style={{
-                position: "absolute",
-                inset: 0,
-                background:
-                  "linear-gradient(180deg, rgba(0,0,0,0.18) 0%, rgba(0,0,0,0.12) 18%, rgba(0,0,0,0.58) 100%), linear-gradient(90deg, rgba(0,0,0,0.54) 0%, rgba(0,0,0,0.16) 30%, rgba(0,0,0,0.18) 70%, rgba(0,0,0,0.58) 100%)",
-                pointerEvents: "none",
-              }}
-            />
-
-            <div
-              style={{
-                position: "absolute",
-                inset: 0,
-                background:
-                  "radial-gradient(720px 380px at 66% 34%, rgba(255,170,90,0.14), rgba(0,0,0,0) 62%), radial-gradient(520px 280px at 35% 70%, rgba(120,150,255,0.12), rgba(0,0,0,0) 60%)",
-                mixBlendMode: "screen",
-                pointerEvents: "none",
-                opacity: 0.94,
-              }}
-            />
-
-            <div
-              aria-hidden
-              style={{
-                position: "absolute",
-                inset: 0,
-                background:
-                  "radial-gradient(circle at 50% 78%, rgba(235,245,255,0.18) 0%, rgba(160,180,220,0.08) 18%, rgba(0,0,0,0) 42%)",
-                mixBlendMode: "screen",
-                animation: "heroMistShift 8s ease-in-out infinite",
-                pointerEvents: "none",
-              }}
-            />
-
-            <div
-              aria-hidden
-              style={{
-                position: "absolute",
-                inset: 0,
-                background:
-                  "radial-gradient(circle at 52% 20%, rgba(138,180,255,0.11) 0%, rgba(138,180,255,0) 26%)",
-                animation: "thresholdGlow 4.4s ease-in-out infinite",
-                pointerEvents: "none",
-              }}
-            />
-
-            <div
-              className="hero-onboarding-body"
-              style={{
-                position: "absolute",
-                left: 18,
-                right: 18,
-                bottom: 18,
-                padding: "22px 20px 18px",
-                borderRadius: 20,
+                maxWidth: 720,
+                padding: "20px 20px 18px",
+                borderRadius: 22,
                 border: "1px solid rgba(255,255,255,0.12)",
-                background: "linear-gradient(180deg, rgba(8,8,10,0.26), rgba(8,8,10,0.72))",
+                background: "linear-gradient(180deg, rgba(8,8,10,0.28), rgba(8,8,10,0.74))",
                 backdropFilter: "blur(12px)",
+                WebkitBackdropFilter: "blur(12px)",
                 boxShadow: "0 14px 42px rgba(0,0,0,0.45)",
-                display: "grid",
-                gap: 10,
               }}
             >
               <div
@@ -1211,11 +1037,13 @@ export default function HeroOnboarding({
               </div>
 
               <div
+                className="hero-viewport-bottom-title"
                 style={{
-                  fontSize: 30,
+                  marginTop: 8,
+                  fontSize: 34,
                   fontWeight: 950,
                   lineHeight: 0.98,
-                  letterSpacing: 0.1,
+                  letterSpacing: 0.08,
                   textShadow: "0 6px 22px rgba(0,0,0,0.34)",
                 }}
               >
@@ -1224,10 +1052,11 @@ export default function HeroOnboarding({
 
               <div
                 style={{
-                  fontSize: 14,
-                  lineHeight: 1.65,
-                  opacity: 0.82,
-                  maxWidth: 480,
+                  marginTop: 10,
+                  fontSize: 14.5,
+                  lineHeight: 1.66,
+                  opacity: 0.84,
+                  maxWidth: 560,
                 }}
               >
                 {showEnterStep
@@ -1238,7 +1067,7 @@ export default function HeroOnboarding({
               {showEnterStep ? (
                 <div
                   style={{
-                    marginTop: 6,
+                    marginTop: 16,
                     display: "flex",
                     alignItems: "center",
                     gap: 14,
@@ -1257,8 +1086,8 @@ export default function HeroOnboarding({
                     }}
                     disabled={!canEnter}
                     style={{
-                      padding: "15px 22px",
-                      borderRadius: 15,
+                      padding: "16px 24px",
+                      borderRadius: 16,
                       fontWeight: 950,
                       letterSpacing: 0.35,
                       textTransform: "uppercase",
@@ -1280,15 +1109,61 @@ export default function HeroOnboarding({
                   </button>
 
                   <div style={{ fontSize: 12.75, opacity: 0.76 }}>
-                    Next: accept the scene and declare the lone hero who descends first.
+                    {dmHint}
                   </div>
                 </div>
               ) : (
-                <div style={{ marginTop: 6, fontSize: 12.75, opacity: 0.76 }}>
+                <div style={{ marginTop: 14, fontSize: 12.75, opacity: 0.76 }}>
                   Declare a guide to continue.
                 </div>
               )}
             </div>
+
+            {showFellowshipStep && (
+              <div
+                style={{
+                  maxWidth: 720,
+                  padding: "16px 18px",
+                  borderRadius: 18,
+                  border: "1px solid rgba(255,255,255,0.10)",
+                  background: "linear-gradient(180deg, rgba(8,8,10,0.24), rgba(8,8,10,0.66))",
+                  backdropFilter: "blur(10px)",
+                  WebkitBackdropFilter: "blur(10px)",
+                  display: "grid",
+                  gap: 10,
+                }}
+              >
+                <div
+                  style={{
+                    fontSize: 12,
+                    fontWeight: 900,
+                    letterSpacing: 0.68,
+                    textTransform: "uppercase",
+                    color: "rgba(198,208,228,0.72)",
+                  }}
+                >
+                  Fellowship
+                </div>
+
+                <div style={{ fontSize: 22, fontWeight: 950, lineHeight: 1.02 }}>
+                  You Begin Alone
+                </div>
+
+                <div style={{ fontSize: 13.5, lineHeight: 1.6, opacity: 0.82 }}>
+                  One hero crosses the threshold first. Companions are earned through trust, survival, and sacrifice.
+                </div>
+
+                <FellowshipPips
+                  active={activePartySize}
+                  unlocked={unlockedPartySlots}
+                  max={maxPartySlots}
+                />
+
+                <div style={{ fontSize: 12.5, lineHeight: 1.56, opacity: 0.74 }}>
+                  True completion remains sealed until the full fellowship of six stands assembled.
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
