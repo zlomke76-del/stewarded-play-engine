@@ -10,63 +10,43 @@ export const SFX = {
   heroSelectionLoop: "/assets/audio/sfx_hero_selection_01.mp3",
 } as const;
 
-function toLowerSafe(value: string) {
-  return String(value ?? "").trim().toLowerCase();
-}
+/* ------------------------------------------------ */
+/* Hero Selection Music Controller */
+/* ------------------------------------------------ */
 
-function normalizeToken(value: string) {
-  return String(value ?? "")
-    .trim()
-    .toLowerCase()
-    .replace(/[\s-]+/g, "_");
-}
+let heroSelectionAudio: HTMLAudioElement | null = null;
 
-function getSpeciesFolder(species: string) {
-  const resolvedSpecies = getResolvedSpecies(species);
+export function startHeroSelectionLoop(volume = 0.55) {
+  try {
+    if (heroSelectionAudio) return;
 
-  if (resolvedSpecies === "Elf") return "Elf";
-  if (resolvedSpecies === "Dwarf") return "Dwarf";
-  if (resolvedSpecies === "Halfling") return "Halfling";
-  return "Human";
-}
+    const audio = new Audio(SFX.heroSelectionLoop);
+    audio.loop = true;
+    audio.volume = volume;
 
-function getPortraitToken(portrait: "Male" | "Female") {
-  return portrait === "Female" ? "female" : "male";
-}
+    heroSelectionAudio = audio;
 
-function buildHeroModelCandidates(
-  species: string,
-  className: string,
-  portrait: "Male" | "Female"
-) {
-  const resolvedSpecies = getResolvedSpecies(species);
-  const resolvedClass = getResolvedClass(className);
-  const speciesFolder = getSpeciesFolder(resolvedSpecies);
-  const speciesToken = normalizeToken(resolvedSpecies);
-  const classToken = normalizeToken(resolvedClass);
-  const sexToken = getPortraitToken(portrait);
-
-  const candidates: string[] = [];
-
-  if (speciesFolder !== "Human") {
-    candidates.push(
-      `/assets/hero3d/${speciesFolder}/${speciesToken}_${classToken}_full_${sexToken}_01.glb`,
-      `/assets/hero3d/${speciesFolder}/${speciesToken}_${classToken}_full_${sexToken}.glb`
-    );
+    void audio.play().catch(() => {});
+  } catch {
+    // fail silently
   }
-
-  candidates.push(
-    `/assets/hero3d/Human/${classToken}_full_${sexToken}_01.glb`,
-    `/assets/hero3d/Human/${classToken}_full_${sexToken}.glb`
-  );
-
-  return candidates.filter(
-    (path, index, arr) =>
-      path.includes("_full_") &&
-      !path.includes("_base_") &&
-      arr.indexOf(path) === index
-  );
 }
+
+export function stopHeroSelectionLoop() {
+  try {
+    if (!heroSelectionAudio) return;
+
+    heroSelectionAudio.pause();
+    heroSelectionAudio.currentTime = 0;
+    heroSelectionAudio = null;
+  } catch {
+    // fail silently
+  }
+}
+
+/* ------------------------------------------------ */
+/* Generic SFX helper */
+/* ------------------------------------------------ */
 
 export function playSfx(src: string, volume = 0.66) {
   try {
@@ -77,6 +57,10 @@ export function playSfx(src: string, volume = 0.66) {
     // fail silently
   }
 }
+
+/* ------------------------------------------------ */
+/* Value Normalization */
+/* ------------------------------------------------ */
 
 export function normalizeClassValue(v: string) {
   return (v ?? "").trim();
@@ -89,8 +73,9 @@ export function normalizeSpeciesValue(v: string) {
 export function getResolvedSpecies(value?: string) {
   const normalized = normalizeSpeciesValue(value ?? "");
   if (!normalized) return "Human";
+
   return (
-    SAFE_SPECIES.find((x) => toLowerSafe(x) === toLowerSafe(normalized)) ??
+    SAFE_SPECIES.find((x) => x.toLowerCase() === normalized.toLowerCase()) ??
     normalized
   );
 }
@@ -98,12 +83,17 @@ export function getResolvedSpecies(value?: string) {
 export function getResolvedClass(value?: string) {
   const normalized = normalizeClassValue(value ?? "");
   if (!normalized) return "Warrior";
+
   return (
     SAFE_CLASS_ARCHETYPES.find(
-      (x) => toLowerSafe(x) === toLowerSafe(normalized)
+      (x) => x.toLowerCase() === normalized.toLowerCase()
     ) ?? normalized
   );
 }
+
+/* ------------------------------------------------ */
+/* Loadout Resolution */
+/* ------------------------------------------------ */
 
 export function getResolvedLoadout(row: PartyMember) {
   const resolvedClass = getResolvedClass(row.className);
@@ -124,6 +114,10 @@ export function getResolvedLoadout(row: PartyMember) {
     resolvedSpecies,
   };
 }
+
+/* ------------------------------------------------ */
+/* Base Class Stats */
+/* ------------------------------------------------ */
 
 export function getBaseStatsForClass(className: string) {
   const table: Record<
@@ -147,6 +141,10 @@ export function getBaseStatsForClass(className: string) {
 
   return table[className] ?? { ac: 14, hpMax: 12, initiativeMod: 1 };
 }
+
+/* ------------------------------------------------ */
+/* Build Focus Stat Adjustments */
+/* ------------------------------------------------ */
 
 export function applyBuildFocusToStats(
   base: { ac: number; hpMax: number; initiativeMod: number },
@@ -179,6 +177,10 @@ export function applyBuildFocusToStats(
   return base;
 }
 
+/* ------------------------------------------------ */
+/* Build Focus Inference */
+/* ------------------------------------------------ */
+
 export function inferBuildFocus(
   row: PartyMember,
   resolvedClass: string
@@ -187,6 +189,7 @@ export function inferBuildFocus(
 
   if (row.initiativeMod >= base.initiativeMod + 2) return "swift";
   if (row.hpMax >= base.hpMax + 2) return "hardy";
+
   if (
     row.ac >= base.ac + 1 &&
     row.initiativeMod <= base.initiativeMod - 1
@@ -197,6 +200,10 @@ export function inferBuildFocus(
   return "balanced";
 }
 
+/* ------------------------------------------------ */
+/* Portrait Positioning */
+/* ------------------------------------------------ */
+
 export function getPortraitObjectPosition(
   kind: "intro" | "card" | "name" | "oath" | "thumb"
 ) {
@@ -204,18 +211,60 @@ export function getPortraitObjectPosition(
   if (kind === "oath") return "center 14%";
   if (kind === "name") return "center 16%";
   if (kind === "thumb") return "center 16%";
+
   return "center 18%";
 }
+
+/* ------------------------------------------------ */
+/* 3D Hero Model Resolver */
+/* ------------------------------------------------ */
 
 export function getGlbPathForPortrait(
   species: string,
   className: string,
   portrait: "Male" | "Female"
 ) {
-  const candidates = buildHeroModelCandidates(species, className, portrait);
+  const resolvedSpecies = getResolvedSpecies(species);
+  const resolvedClass = getResolvedClass(className);
 
-  return candidates[0] ?? null;
+  const sex = portrait === "Female" ? "female" : "male";
+
+  const speciesToken = resolvedSpecies.toLowerCase();
+  const classToken = resolvedClass.toLowerCase();
+
+  const speciesFolder =
+    resolvedSpecies === "Elf"
+      ? "Elf"
+      : resolvedSpecies === "Dwarf"
+      ? "Dwarf"
+      : resolvedSpecies === "Halfling"
+      ? "Halfling"
+      : "Human";
+
+  const candidates: string[] = [];
+
+  if (speciesFolder !== "Human") {
+    candidates.push(
+      `/assets/hero3d/${speciesFolder}/${speciesToken}_${classToken}_full_${sex}_01.glb`,
+      `/assets/hero3d/${speciesFolder}/${speciesToken}_${classToken}_full_${sex}.glb`
+    );
+  }
+
+  candidates.push(
+    `/assets/hero3d/Human/${classToken}_full_${sex}_01.glb`,
+    `/assets/hero3d/Human/${classToken}_full_${sex}.glb`
+  );
+
+  const valid = candidates.find(
+    (p) => p.includes("_full_") && !p.includes("_base_")
+  );
+
+  return valid ?? null;
 }
+
+/* ------------------------------------------------ */
+/* UI Palette Helpers */
+/* ------------------------------------------------ */
 
 export function getFocusPalette(focus: BuildFocus, active: boolean) {
   const palettes: Record<
