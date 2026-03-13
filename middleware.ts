@@ -1,5 +1,5 @@
 // middleware.ts
-// bump: v7  <-- forces Vercel edge rebuild
+// bump: v8  <-- forces Vercel edge rebuild
 
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
@@ -15,20 +15,30 @@ function applyCSP(res: NextResponse) {
       "default-src 'self'",
       "script-src 'self' 'unsafe-eval' 'unsafe-inline'",
       "style-src 'self' 'unsafe-inline'",
-      "img-src 'self' https: data:",
-      "font-src 'self' https:",
-      "connect-src 'self' https:",
-      "media-src 'self' https:",
+      "img-src 'self' https: data: blob:",
+      "font-src 'self' https: data:",
+      "connect-src 'self' https: blob: https://www.gstatic.com",
+      "media-src 'self' https: data: blob:",
       "frame-src 'self'",
+      "worker-src 'self' blob:",
     ].join("; ")
   );
 }
 
 export async function middleware(req: NextRequest) {
+  const pathname = req.nextUrl.pathname;
+
+  // --------------------------------------------------
+  // 🌐 Public demo route with CSP only
+  // --------------------------------------------------
+  if (pathname.startsWith("/demo")) {
+    const res = NextResponse.next();
+    applyCSP(res);
+    return res;
+  }
+
   const res = NextResponse.next();
   applyCSP(res);
-
-  const pathname = req.nextUrl.pathname;
 
   // --------------------------------------------------
   // 🔓 Allow auth entry + callback
@@ -80,5 +90,5 @@ export async function middleware(req: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/app/:path*", "/w/:path*", "/auth/:path*"],
+  matcher: ["/app/:path*", "/w/:path*", "/auth/:path*", "/demo/:path*", "/demo"],
 };
