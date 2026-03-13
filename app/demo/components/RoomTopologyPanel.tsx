@@ -45,7 +45,9 @@ function buildRouteAction(route: RouteView) {
   }
 
   if (route.type === "locked_door") {
-    return route.locked ? `Face the sealed way to ${target}` : `Pass through to ${target}`;
+    return route.locked
+      ? `Face the sealed way to ${target}`
+      : `Pass through to ${target}`;
   }
 
   if (route.type === "door") {
@@ -92,7 +94,10 @@ function buildRouteMood(route: RouteView) {
     return "A quieter route that may offer refuge, ritual, or recovery.";
   }
 
-  if (route.targetType === "trial_chamber" || route.targetType === "ritual_chamber") {
+  if (
+    route.targetType === "trial_chamber" ||
+    route.targetType === "ritual_chamber"
+  ) {
     return "A chamber that suggests judgment, puzzle logic, or consequence.";
   }
 
@@ -110,6 +115,19 @@ function buildRouteMeta(route: RouteView) {
   return parts.join(" · ");
 }
 
+function buildImmediateRead(currentRoomTitle: string, roomNarrative: string) {
+  const lines = String(roomNarrative ?? "")
+    .split(/\n+/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  if (lines.length > 0) {
+    return lines[0];
+  }
+
+  return `You stand within ${currentRoomTitle}.`;
+}
+
 export default function RoomTopologyPanel(props: Props) {
   const {
     currentRoomVisualKey,
@@ -125,8 +143,16 @@ export default function RoomTopologyPanel(props: Props) {
   } = props;
 
   const selectedRoute = useMemo(() => {
-    return roomConnectionsView.find((route) => route.id === selectedRouteId) ?? roomConnectionsView[0] ?? null;
+    return (
+      roomConnectionsView.find((route) => route.id === selectedRouteId) ??
+      roomConnectionsView[0] ??
+      null
+    );
   }, [roomConnectionsView, selectedRouteId]);
+
+  const immediateRead = useMemo(() => {
+    return buildImmediateRead(currentRoomTitle, roomNarrative);
+  }, [currentRoomTitle, roomNarrative]);
 
   return (
     <div style={{ display: "grid", gap: 16 }}>
@@ -200,15 +226,14 @@ export default function RoomTopologyPanel(props: Props) {
           </div>
 
           <div
-            className="muted"
             style={{
               lineHeight: 1.72,
-              whiteSpace: "pre-line",
               animation: "roomTextIn 420ms ease",
-              color: "rgba(232,235,242,0.84)",
+              color: "rgba(232,235,242,0.88)",
+              fontSize: 15,
             }}
           >
-            {roomNarrative}
+            {immediateRead}
           </div>
 
           {currentFeatures.length > 0 ? (
@@ -238,52 +263,15 @@ export default function RoomTopologyPanel(props: Props) {
             </div>
           ) : null}
         </div>
-
-        {roomFeatureNarrative.length > 0 ? (
-          <details
-            style={{
-              borderRadius: 14,
-              border: "1px solid rgba(255,255,255,0.08)",
-              background: "rgba(255,255,255,0.03)",
-              overflow: "hidden",
-            }}
-          >
-            <summary
-              style={{
-                cursor: "pointer",
-                padding: "12px 14px",
-                fontSize: 11,
-                letterSpacing: 0.75,
-                textTransform: "uppercase",
-                opacity: 0.64,
-              }}
-            >
-              Notable Details
-            </summary>
-
-            <div
-              style={{
-                padding: "0 14px 14px",
-                display: "grid",
-                gap: 8,
-              }}
-            >
-              {roomFeatureNarrative.map((line, idx) => (
-                <div key={`${idx}-${line}`} style={{ lineHeight: 1.6, opacity: 0.9 }}>
-                  • {line}
-                </div>
-              ))}
-            </div>
-          </details>
-        ) : null}
       </div>
 
       <div
         style={{
           padding: 14,
           borderRadius: 18,
-          border: "1px solid rgba(255,255,255,0.08)",
-          background: "rgba(255,255,255,0.03)",
+          border: "1px solid rgba(214,188,120,0.12)",
+          background:
+            "linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.03))",
           display: "grid",
           gap: 12,
         }}
@@ -297,9 +285,11 @@ export default function RoomTopologyPanel(props: Props) {
               opacity: 0.58,
             }}
           >
-            Paths Forward
+            What do you do?
           </div>
-          <div style={{ fontSize: 16, fontWeight: 900 }}>Choose the route that deserves attention.</div>
+          <div style={{ fontSize: 16, fontWeight: 900 }}>
+            Choose the route that deserves attention.
+          </div>
         </div>
 
         {roomConnectionsView.length === 0 ? (
@@ -310,7 +300,6 @@ export default function RoomTopologyPanel(props: Props) {
               border: "1px solid rgba(255,255,255,0.08)",
               background: "rgba(255,255,255,0.03)",
             }}
-            className="muted"
           >
             No routes are currently available from this room.
           </div>
@@ -376,7 +365,9 @@ export default function RoomTopologyPanel(props: Props) {
                       </div>
 
                       <div style={{ display: "grid", gap: 4, minWidth: 0 }}>
-                        <div style={{ fontWeight: 900, lineHeight: 1.35 }}>{actionLabel}</div>
+                        <div style={{ fontWeight: 900, lineHeight: 1.35 }}>
+                          {actionLabel}
+                        </div>
 
                         <div
                           style={{
@@ -456,7 +447,6 @@ export default function RoomTopologyPanel(props: Props) {
                   </div>
 
                   <div
-                    className="muted"
                     style={{
                       fontSize: 13,
                       lineHeight: 1.6,
@@ -497,7 +487,10 @@ export default function RoomTopologyPanel(props: Props) {
                       }}
                     >
                       {roomExitNarrative.map((line, idx) => (
-                        <div key={`${idx}-${line}`} style={{ lineHeight: 1.6, opacity: 0.9 }}>
+                        <div
+                          key={`${idx}-${line}`}
+                          style={{ lineHeight: 1.6, opacity: 0.9 }}
+                        >
                           • {line}
                         </div>
                       ))}
@@ -509,6 +502,67 @@ export default function RoomTopologyPanel(props: Props) {
           </>
         )}
       </div>
+
+      <details
+        style={{
+          borderRadius: 14,
+          border: "1px solid rgba(255,255,255,0.08)",
+          background: "rgba(255,255,255,0.03)",
+          overflow: "hidden",
+        }}
+      >
+        <summary
+          style={{
+            cursor: "pointer",
+            padding: "12px 14px",
+            fontSize: 11,
+            letterSpacing: 0.75,
+            textTransform: "uppercase",
+            opacity: 0.64,
+          }}
+        >
+          Chamber Details
+        </summary>
+
+        <div
+          style={{
+            padding: "0 14px 14px",
+            display: "grid",
+            gap: 12,
+          }}
+        >
+          <div
+            style={{
+              lineHeight: 1.72,
+              whiteSpace: "pre-line",
+              color: "rgba(232,235,242,0.84)",
+            }}
+          >
+            {roomNarrative}
+          </div>
+
+          {roomFeatureNarrative.length > 0 ? (
+            <div style={{ display: "grid", gap: 8 }}>
+              <div
+                style={{
+                  fontSize: 11,
+                  letterSpacing: 0.75,
+                  textTransform: "uppercase",
+                  opacity: 0.58,
+                }}
+              >
+                Notable Details
+              </div>
+
+              {roomFeatureNarrative.map((line, idx) => (
+                <div key={`${idx}-${line}`} style={{ lineHeight: 1.6, opacity: 0.9 }}>
+                  • {line}
+                </div>
+              ))}
+            </div>
+          ) : null}
+        </div>
+      </details>
     </div>
   );
 }
