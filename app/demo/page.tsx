@@ -462,36 +462,6 @@ export default function DemoPage() {
                     completionRequiresFullFellowship={demo.progression.campaign.completionRequiresFullParty}
                   />
                 )}
-
-                {demo.showCompactHero && demo.presentationPhase !== "chronicle" && (
-                  <HeroOnboarding
-                    presentationMode="compact"
-                    heroTitle="Echoes of Fate"
-                    heroSubtitle="Every action leaves an echo."
-                    dmMode={demo.dmMode}
-                    onSetDmMode={(nextMode) => {
-                      demo.setDmMode(nextMode);
-                      demo.setEnteredDungeon(false);
-                      demo.setTableAccepted(false);
-                      demo.setGameplayFocusStep("pressure");
-                      demo.setActiveSection("mode");
-                      demo.setPartyDraft((prev: any) => prev ?? null);
-                    }}
-                    onEnter={demo.enterDungeon}
-                    canEnter={demo.dmMode !== null}
-                    heroImageSrc={demo.HERO_IMAGE_SRC}
-                    heroImageOk={demo.heroImageOk}
-                    onHeroImageError={() => demo.setHeroImageOk(false)}
-                    chapterState={demo.chapterState as any}
-                    onJump={(k) => jumpTo(k)}
-                    outcomesCount={demo.outcomesCount}
-                    canonCount={demo.canonCount}
-                    activePartySize={demo.progression.party.activeSlots}
-                    unlockedPartySlots={demo.progression.party.unlockedSlots}
-                    maxPartySlots={demo.progression.party.maxSlots}
-                    completionRequiresFullFellowship={demo.progression.campaign.completionRequiresFullParty}
-                  />
-                )}
               </div>
             )}
 
