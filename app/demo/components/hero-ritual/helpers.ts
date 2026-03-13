@@ -70,6 +70,27 @@ export function normalizeSpeciesValue(v: string) {
   return (v ?? "").trim();
 }
 
+function normalizeToken(value: string) {
+  return String(value ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/[\s-]+/g, "_");
+}
+
+function getSpeciesFolderName(species: string) {
+  const resolvedSpecies = getResolvedSpecies(species);
+  const normalized = normalizeToken(resolvedSpecies);
+
+  if (normalized === "half_elf") return "Half_Elf";
+  if (normalized === "half_orc") return "Half_Orc";
+  if (normalized === "dragonborn") return "Dragonborn";
+  if (normalized === "dwarf") return "Dwarf";
+  if (normalized === "elf") return "Elf";
+  if (normalized === "gnome") return "Gnome";
+  if (normalized === "halfling") return "Halfling";
+  return "Human";
+}
+
 export function getResolvedSpecies(value?: string) {
   const normalized = normalizeSpeciesValue(value ?? "");
   if (!normalized) return "Human";
@@ -227,36 +248,27 @@ export function getGlbPathForPortrait(
   const resolvedSpecies = getResolvedSpecies(species);
   const resolvedClass = getResolvedClass(className);
 
-  const sex = portrait === "Female" ? "female" : "male";
-
-  const speciesToken = resolvedSpecies.toLowerCase();
-  const classToken = resolvedClass.toLowerCase();
-
-  const speciesFolder =
-    resolvedSpecies === "Elf"
-      ? "Elf"
-      : resolvedSpecies === "Dwarf"
-      ? "Dwarf"
-      : resolvedSpecies === "Halfling"
-      ? "Halfling"
-      : "Human";
+  const speciesFolder = getSpeciesFolderName(resolvedSpecies);
+  const speciesToken = normalizeToken(resolvedSpecies);
+  const classToken = normalizeToken(resolvedClass);
+  const sexToken = portrait === "Female" ? "female" : "male";
 
   const candidates: string[] = [];
 
   if (speciesFolder !== "Human") {
     candidates.push(
-      `/assets/hero3d/${speciesFolder}/${speciesToken}_${classToken}_full_${sex}_01.glb`,
-      `/assets/hero3d/${speciesFolder}/${speciesToken}_${classToken}_full_${sex}.glb`
+      `/assets/hero3d/${speciesFolder}/${speciesToken}_${classToken}_full_${sexToken}_01.glb`,
+      `/assets/hero3d/${speciesFolder}/${speciesToken}_${classToken}_full_${sexToken}.glb`
     );
   }
 
   candidates.push(
-    `/assets/hero3d/Human/${classToken}_full_${sex}_01.glb`,
-    `/assets/hero3d/Human/${classToken}_full_${sex}.glb`
+    `/assets/hero3d/Human/${classToken}_full_${sexToken}_01.glb`,
+    `/assets/hero3d/Human/${classToken}_full_${sexToken}.glb`
   );
 
   const valid = candidates.find(
-    (p) => p.includes("_full_") && !p.includes("_base_")
+    (path) => path.includes("_full_") && !path.includes("_base_")
   );
 
   return valid ?? null;
