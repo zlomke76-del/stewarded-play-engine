@@ -26,32 +26,32 @@ function getViewerTuning(height: number | string) {
 
   if (numericHeight !== null && numericHeight >= 380) {
     return {
-      cameraOrbit: "0deg 78deg 2.12m",
+      cameraOrbit: "0deg 78deg 2.28m",
       fieldOfView: "24deg",
-      minCameraOrbit: "auto 62deg 1.9m",
-      maxCameraOrbit: "auto 92deg 2.5m",
+      minCameraOrbit: "auto 62deg 2.02m",
+      maxCameraOrbit: "auto 92deg 2.7m",
       minFieldOfView: "18deg",
       maxFieldOfView: "30deg",
-      posterScale: "scale(1.08)",
+      posterScale: "scale(1.06)",
       stagePaddingTop: "1%",
       pedestalHeight: "20%",
       pedestalWidth: "60%",
-      modelScale: "scale(0.96)",
+      modelScale: "scale(0.93)",
     };
   }
 
   return {
-    cameraOrbit: "0deg 78deg 2.02m",
+    cameraOrbit: "0deg 78deg 2.12m",
     fieldOfView: "25deg",
-    minCameraOrbit: "auto 62deg 1.8m",
-    maxCameraOrbit: "auto 92deg 2.4m",
+    minCameraOrbit: "auto 62deg 1.9m",
+    maxCameraOrbit: "auto 92deg 2.5m",
     minFieldOfView: "19deg",
     maxFieldOfView: "31deg",
-    posterScale: "scale(1.04)",
+    posterScale: "scale(1.02)",
     stagePaddingTop: "2%",
     pedestalHeight: "18%",
     pedestalWidth: "58%",
-    modelScale: "scale(0.98)",
+    modelScale: "scale(0.96)",
   };
 }
 
