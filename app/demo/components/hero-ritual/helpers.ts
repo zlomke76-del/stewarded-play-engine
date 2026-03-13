@@ -1,12 +1,6 @@
 import { resolvePartyLoadout } from "@/lib/skills/loadoutResolver";
-import type {
-  BuildFocus,
-  PartyMember,
-} from "./types";
-import {
-  SAFE_CLASS_ARCHETYPES,
-  SAFE_SPECIES,
-} from "./types";
+import type { BuildFocus, PartyMember } from "./types";
+import { SAFE_CLASS_ARCHETYPES, SAFE_SPECIES } from "./types";
 
 export const SFX = {
   buttonClick: "/assets/audio/sfx_button_click_01.mp3",
@@ -16,8 +10,8 @@ export const SFX = {
   heroSelectionLoop: "/assets/audio/sfx_hero_selection_01.mp3",
 } as const;
 
-export const ELF_WARRIOR_FEMALE_GLB =
-  "/assets/hero3d/elf_warrior_female.glb";
+export const ELF_WARRIOR_FEMALE_GLB = "/assets/hero3d/elf_warrior_female.glb";
+export const ELF_WARRIOR_MALE_GLB = "/assets/hero3d/elf_warrior_male.glb";
 
 export function playSfx(src: string, volume = 0.66) {
   try {
@@ -157,16 +151,20 @@ export function getPortraitObjectPosition(
   return "center 18%";
 }
 
-export function shouldUseElfWarriorFemaleModel(
+export function getGlbPathForPortrait(
   species: string,
   className: string,
   portrait: "Male" | "Female"
 ) {
-  return (
-    getResolvedSpecies(species) === "Elf" &&
-    getResolvedClass(className) === "Warrior" &&
-    portrait === "Female"
-  );
+  const resolvedSpecies = getResolvedSpecies(species);
+  const resolvedClass = getResolvedClass(className);
+
+  if (resolvedSpecies === "Elf" && resolvedClass === "Warrior") {
+    if (portrait === "Female") return ELF_WARRIOR_FEMALE_GLB;
+    if (portrait === "Male") return ELF_WARRIOR_MALE_GLB;
+  }
+
+  return null;
 }
 
 export function getFocusPalette(focus: BuildFocus, active: boolean) {
