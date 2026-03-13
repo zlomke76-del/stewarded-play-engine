@@ -3,13 +3,14 @@
 // ------------------------------------------------------------
 // HeroOnboarding.tsx
 // ------------------------------------------------------------
-// Direction:
-// - full mode is now a cinematic threshold scene
-// - the dungeon image carries the emotional weight
-// - Human / Solace are overlay path plaques on top of the scene
-// - copy is shorter, more mythic, less dashboard-like
-// - CTA appears as a ceremonial continuation after a guide is chosen
-// - compact mode remains functional and progression-oriented
+// Final threshold pass:
+// - full mode is a larger cinematic scene
+// - lighter outer shell, less boxed-in web UI feeling
+// - overlay path plaques are larger and lower in the scene
+// - copy is leaner
+// - bottom panel stays minimal until a guide is chosen
+// - after selection, the lower panel transforms into the true CTA state
+// - compact mode remains progression-oriented and stable
 // ------------------------------------------------------------
 
 import React, { useMemo } from "react";
@@ -215,27 +216,29 @@ function GuideOverlayCard({
     <div
       style={{
         position: "relative",
-        borderRadius: 20,
+        borderRadius: 24,
         overflow: "hidden",
         border: selected
           ? isAzure
             ? "1px solid rgba(138,180,255,0.42)"
             : "1px solid rgba(255,196,132,0.42)"
-          : "1px solid rgba(255,255,255,0.12)",
+          : "1px solid rgba(255,255,255,0.11)",
         background: selected
           ? isAzure
-            ? "linear-gradient(180deg, rgba(16,28,52,0.78), rgba(8,10,16,0.76))"
-            : "linear-gradient(180deg, rgba(48,26,12,0.78), rgba(10,10,12,0.76))"
-          : "linear-gradient(180deg, rgba(12,12,16,0.66), rgba(8,8,10,0.74))",
+            ? "linear-gradient(180deg, rgba(18,28,54,0.72), rgba(8,10,16,0.80))"
+            : "linear-gradient(180deg, rgba(48,28,14,0.72), rgba(10,10,12,0.80))"
+          : "linear-gradient(180deg, rgba(10,11,15,0.60), rgba(8,8,10,0.76))",
         backdropFilter: "blur(12px)",
         WebkitBackdropFilter: "blur(12px)",
         boxShadow: selected
           ? isAzure
-            ? "0 16px 42px rgba(0,0,0,0.34), 0 0 28px rgba(138,180,255,0.14)"
-            : "0 16px 42px rgba(0,0,0,0.34), 0 0 28px rgba(255,166,82,0.12)"
+            ? "0 18px 46px rgba(0,0,0,0.34), 0 0 28px rgba(138,180,255,0.14)"
+            : "0 18px 46px rgba(0,0,0,0.34), 0 0 28px rgba(255,166,82,0.12)"
           : "0 14px 34px rgba(0,0,0,0.26)",
         transform: selected ? "translateY(-2px)" : "translateY(0px)",
-        transition: "transform 180ms ease, border-color 180ms ease, box-shadow 220ms ease, background 220ms ease",
+        transition:
+          "transform 180ms ease, border-color 180ms ease, box-shadow 220ms ease, background 220ms ease, opacity 180ms ease",
+        opacity: selected ? 1 : 0.96,
       }}
     >
       <div
@@ -244,13 +247,13 @@ function GuideOverlayCard({
           position: "absolute",
           inset: 0,
           background: isAzure
-            ? "radial-gradient(440px 180px at 82% 8%, rgba(138,180,255,0.16), rgba(0,0,0,0) 60%)"
-            : "radial-gradient(440px 180px at 18% 8%, rgba(255,168,94,0.18), rgba(0,0,0,0) 60%)",
+            ? "radial-gradient(460px 180px at 82% 8%, rgba(138,180,255,0.16), rgba(0,0,0,0) 60%)"
+            : "radial-gradient(460px 180px at 18% 8%, rgba(255,168,94,0.18), rgba(0,0,0,0) 60%)",
           pointerEvents: "none",
         }}
       />
 
-      <div style={{ position: "relative", zIndex: 1, padding: "18px 18px 16px", display: "grid", gap: 14 }}>
+      <div style={{ position: "relative", zIndex: 1, padding: "20px 20px 18px", display: "grid", gap: 14 }}>
         <div style={{ display: "grid", gap: 8 }}>
           <div
             style={{
@@ -265,7 +268,7 @@ function GuideOverlayCard({
               style={{
                 fontSize: 11,
                 fontWeight: 900,
-                letterSpacing: 0.7,
+                letterSpacing: 0.72,
                 textTransform: "uppercase",
                 color: selected
                   ? isAzure
@@ -304,11 +307,12 @@ function GuideOverlayCard({
 
           <div
             style={{
-              fontSize: 28,
+              fontSize: 32,
               fontWeight: 950,
               lineHeight: 0.98,
-              letterSpacing: 0.1,
+              letterSpacing: 0.08,
               textShadow: "0 6px 18px rgba(0,0,0,0.34)",
+              maxWidth: 420,
             }}
           >
             {title}
@@ -317,7 +321,7 @@ function GuideOverlayCard({
 
         <div
           style={{
-            fontSize: 13.5,
+            fontSize: 14,
             lineHeight: 1.62,
             opacity: 0.86,
             maxWidth: 420,
@@ -331,8 +335,8 @@ function GuideOverlayCard({
           onClick={onChoose}
           style={{
             justifySelf: "start",
-            padding: "12px 16px",
-            borderRadius: 14,
+            padding: "13px 18px",
+            borderRadius: 16,
             border: selected
               ? isAzure
                 ? "1px solid rgba(138,180,255,0.30)"
@@ -680,21 +684,26 @@ export default function HeroOnboarding({
 
   const showFellowshipStep = dmMode !== null;
   const showEnterStep = dmMode !== null;
+  const selectedModeTitle =
+    dmMode === "human"
+      ? "Human Dungeon Master"
+      : dmMode === "solace-neutral"
+        ? "Solace — Keeper of the Chronicle"
+        : null;
 
   return (
     <section
       className="card"
       style={{
         position: "relative",
-        background: "linear-gradient(180deg, rgba(10,11,14,0.78), rgba(7,8,10,0.92))",
-        border: "1px solid rgba(255,255,255,0.08)",
+        background: "transparent",
+        border: "none",
         borderRadius: 28,
-        padding: "32px 28px 24px",
-        marginTop: 14,
-        boxShadow: "0 28px 90px rgba(0,0,0,0.48)",
-        overflow: "hidden",
-        maxWidth: 1340,
+        padding: "16px 0 10px",
+        marginTop: 6,
+        maxWidth: 1420,
         marginInline: "auto",
+        overflow: "visible",
       }}
     >
       <style jsx>{`
@@ -748,7 +757,19 @@ export default function HeroOnboarding({
           }
         }
 
-        @keyframes plaqueFloat {
+        @keyframes plaqueFloatA {
+          0% {
+            transform: translateY(0px);
+          }
+          50% {
+            transform: translateY(-4px);
+          }
+          100% {
+            transform: translateY(0px);
+          }
+        }
+
+        @keyframes plaqueFloatB {
           0% {
             transform: translateY(0px);
           }
@@ -760,29 +781,34 @@ export default function HeroOnboarding({
           }
         }
 
-        @media (max-width: 1180px) {
+        @media (max-width: 1260px) {
           .hero-overlay-choices {
             grid-template-columns: 1fr !important;
-            left: 20px !important;
-            right: 20px !important;
-            top: 20px !important;
-            max-width: none !important;
+            left: 28px !important;
+            right: 28px !important;
+            top: 170px !important;
+            max-width: 520px !important;
+            justify-content: start !important;
+          }
+
+          .hero-scene-panel {
+            min-height: 980px !important;
           }
 
           .hero-viewport-bottom {
-            left: 20px !important;
-            right: 20px !important;
-            bottom: 20px !important;
-          }
-
-          .hero-onboarding-shell {
-            gap: 20px !important;
+            left: 28px !important;
+            right: 28px !important;
+            bottom: 24px !important;
           }
         }
 
         @media (max-width: 760px) {
+          .hero-onboarding-root {
+            gap: 14px !important;
+          }
+
           .hero-title {
-            font-size: 32px !important;
+            font-size: 34px !important;
           }
 
           .hero-subtitle {
@@ -790,48 +816,38 @@ export default function HeroOnboarding({
           }
 
           .hero-scene-panel {
-            min-height: 760px !important;
-          }
-
-          .hero-onboarding-shell {
-            gap: 18px !important;
-          }
-
-          .hero-onboarding-root {
-            padding: 22px 16px 18px !important;
+            min-height: 920px !important;
             border-radius: 22px !important;
           }
 
+          .hero-overlay-choices {
+            left: 16px !important;
+            right: 16px !important;
+            top: 142px !important;
+            gap: 12px !important;
+          }
+
+          .hero-viewport-bottom {
+            left: 16px !important;
+            right: 16px !important;
+            bottom: 16px !important;
+          }
+
           .hero-viewport-bottom-title {
-            font-size: 24px !important;
+            font-size: 26px !important;
           }
         }
       `}</style>
 
-      <div
-        aria-hidden
-        style={{
-          position: "absolute",
-          inset: "-120px",
-          background:
-            "radial-gradient(840px 460px at 50% -4%, rgba(110,140,255,0.10), transparent 72%), radial-gradient(760px 400px at 0% 34%, rgba(255,128,42,0.08), transparent 70%), radial-gradient(760px 400px at 100% 34%, rgba(255,170,90,0.06), transparent 70%)",
-          pointerEvents: "none",
-          zIndex: 0,
-        }}
-      />
-
-      <div
-        className="hero-onboarding-root"
-        style={{ position: "relative", zIndex: 1, display: "grid", gap: 24 }}
-      >
-        <div className="hero-onboarding-shell" style={{ display: "grid", gap: 12, animation: "onboardingFadeUp 320ms ease both" }}>
+      <div className="hero-onboarding-root" style={{ position: "relative", zIndex: 1, display: "grid", gap: 18 }}>
+        <div style={{ display: "grid", gap: 8, animation: "onboardingFadeUp 300ms ease both" }}>
           <div
             className="hero-title"
             style={{
-              fontSize: 50,
+              fontSize: 54,
               fontWeight: 950,
-              letterSpacing: 0.15,
-              lineHeight: 0.94,
+              letterSpacing: 0.12,
+              lineHeight: 0.92,
               textShadow: "0 10px 32px rgba(0,0,0,0.42)",
             }}
           >
@@ -841,17 +857,17 @@ export default function HeroOnboarding({
           <div
             style={{
               display: "grid",
-              gap: 8,
-              maxWidth: 920,
+              gap: 6,
+              maxWidth: 860,
             }}
           >
             <div
               style={{
-                fontSize: 12,
+                fontSize: 11,
                 fontWeight: 900,
-                letterSpacing: 0.8,
+                letterSpacing: 0.82,
                 textTransform: "uppercase",
-                color: "rgba(196,206,228,0.74)",
+                color: "rgba(196,206,228,0.70)",
               }}
             >
               A Threshold of Fate
@@ -860,8 +876,8 @@ export default function HeroOnboarding({
             <div
               className="hero-subtitle"
               style={{
-                fontSize: 19,
-                lineHeight: 1.58,
+                fontSize: 18,
+                lineHeight: 1.56,
                 opacity: 0.88,
               }}
             >
@@ -874,12 +890,12 @@ export default function HeroOnboarding({
           className="hero-scene-panel"
           style={{
             position: "relative",
-            minHeight: 640,
-            borderRadius: 28,
+            minHeight: 820,
+            borderRadius: 30,
             overflow: "hidden",
-            border: "1px solid rgba(255,255,255,0.10)",
-            background: "rgba(0,0,0,0.38)",
-            boxShadow: "0 24px 64px rgba(0,0,0,0.46)",
+            border: "1px solid rgba(255,255,255,0.08)",
+            background: "rgba(0,0,0,0.28)",
+            boxShadow: "0 30px 80px rgba(0,0,0,0.48)",
             animation: "onboardingFadeUp 420ms ease both",
           }}
         >
@@ -895,9 +911,9 @@ export default function HeroOnboarding({
                 height: "100%",
                 objectFit: "cover",
                 display: "block",
-                opacity: 0.96,
+                opacity: 0.98,
                 animation: "heroTorchPulse 6s ease-in-out infinite",
-                transform: "scale(1.04)",
+                transform: "scale(1.05)",
               }}
             />
           ) : (
@@ -916,7 +932,7 @@ export default function HeroOnboarding({
               position: "absolute",
               inset: 0,
               background:
-                "linear-gradient(180deg, rgba(0,0,0,0.18) 0%, rgba(0,0,0,0.10) 20%, rgba(0,0,0,0.62) 100%), linear-gradient(90deg, rgba(0,0,0,0.60) 0%, rgba(0,0,0,0.14) 28%, rgba(0,0,0,0.14) 72%, rgba(0,0,0,0.60) 100%)",
+                "linear-gradient(180deg, rgba(0,0,0,0.16) 0%, rgba(0,0,0,0.08) 24%, rgba(0,0,0,0.62) 100%), linear-gradient(90deg, rgba(0,0,0,0.56) 0%, rgba(0,0,0,0.10) 30%, rgba(0,0,0,0.10) 70%, rgba(0,0,0,0.56) 100%)",
               pointerEvents: "none",
             }}
           />
@@ -962,17 +978,17 @@ export default function HeroOnboarding({
             className="hero-overlay-choices"
             style={{
               position: "absolute",
-              left: 28,
-              right: 28,
-              top: 28,
+              left: 34,
+              right: 34,
+              top: 220,
               display: "grid",
-              gridTemplateColumns: "repeat(2, minmax(0, 360px))",
+              gridTemplateColumns: "repeat(2, minmax(0, 420px))",
               justifyContent: "space-between",
-              gap: 16,
+              gap: 18,
               alignItems: "start",
             }}
           >
-            <div style={{ animation: "plaqueFloat 7s ease-in-out infinite" }}>
+            <div style={{ animation: "plaqueFloatA 7.2s ease-in-out infinite" }}>
               <GuideOverlayCard
                 title="Human Dungeon Master"
                 kicker="The Mortal Path"
@@ -986,7 +1002,7 @@ export default function HeroOnboarding({
               />
             </div>
 
-            <div style={{ animation: "plaqueFloat 8s ease-in-out infinite" }}>
+            <div style={{ animation: "plaqueFloatB 8.2s ease-in-out infinite" }}>
               <GuideOverlayCard
                 title="Solace — Keeper of the Chronicle"
                 kicker="The Stewarded Path"
@@ -1005,164 +1021,213 @@ export default function HeroOnboarding({
             className="hero-viewport-bottom"
             style={{
               position: "absolute",
-              left: 28,
-              right: 28,
-              bottom: 24,
+              left: 34,
+              right: 34,
+              bottom: 28,
               display: "grid",
               gap: 14,
             }}
           >
-            <div
-              style={{
-                maxWidth: 720,
-                padding: "20px 20px 18px",
-                borderRadius: 22,
-                border: "1px solid rgba(255,255,255,0.12)",
-                background: "linear-gradient(180deg, rgba(8,8,10,0.28), rgba(8,8,10,0.74))",
-                backdropFilter: "blur(12px)",
-                WebkitBackdropFilter: "blur(12px)",
-                boxShadow: "0 14px 42px rgba(0,0,0,0.45)",
-              }}
-            >
+            {!showEnterStep ? (
               <div
                 style={{
-                  fontSize: 12,
-                  fontWeight: 900,
-                  letterSpacing: 0.72,
-                  textTransform: "uppercase",
-                  color: "rgba(198,208,228,0.72)",
-                }}
-              >
-                The Gate Stands Open
-              </div>
-
-              <div
-                className="hero-viewport-bottom-title"
-                style={{
-                  marginTop: 8,
-                  fontSize: 34,
-                  fontWeight: 950,
-                  lineHeight: 0.98,
-                  letterSpacing: 0.08,
-                  textShadow: "0 6px 22px rgba(0,0,0,0.34)",
-                }}
-              >
-                {showEnterStep ? "Step Into the Dungeon" : "Choose Your Guide"}
-              </div>
-
-              <div
-                style={{
-                  marginTop: 10,
-                  fontSize: 14.5,
-                  lineHeight: 1.66,
-                  opacity: 0.84,
-                  maxWidth: 560,
-                }}
-              >
-                {showEnterStep
-                  ? "You enter with one hero only. The depths will decide whether strength or fellowship comes first."
-                  : "Choose the voice that will walk beside the threshold, and the first echo of fate will answer."}
-              </div>
-
-              {showEnterStep ? (
-                <div
-                  style={{
-                    marginTop: 16,
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 14,
-                    flexWrap: "wrap",
-                  }}
-                >
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (!canEnter) {
-                        playSfx(SFX.uiFailure, 0.54);
-                        return;
-                      }
-                      playSfx(SFX.uiSuccess, 0.68);
-                      onEnter();
-                    }}
-                    disabled={!canEnter}
-                    style={{
-                      padding: "16px 24px",
-                      borderRadius: 16,
-                      fontWeight: 950,
-                      letterSpacing: 0.35,
-                      textTransform: "uppercase",
-                      border: canEnter
-                        ? "1px solid rgba(255,224,188,0.28)"
-                        : "1px solid rgba(255,255,255,0.14)",
-                      background: canEnter
-                        ? "linear-gradient(180deg, rgba(255,230,198,0.16), rgba(186,96,28,0.14) 48%, rgba(40,18,8,0.68) 100%)"
-                        : "rgba(255,255,255,0.04)",
-                      color: "rgba(255,245,230,0.98)",
-                      cursor: canEnter ? "pointer" : "not-allowed",
-                      opacity: canEnter ? 1 : 0.6,
-                      boxShadow: canEnter
-                        ? "0 0 24px rgba(255,166,82,0.14), 0 14px 34px rgba(0,0,0,0.28)"
-                        : "none",
-                    }}
-                  >
-                    Enter the Dungeon
-                  </button>
-
-                  <div style={{ fontSize: 12.75, opacity: 0.76 }}>
-                    {dmHint}
-                  </div>
-                </div>
-              ) : (
-                <div style={{ marginTop: 14, fontSize: 12.75, opacity: 0.76 }}>
-                  Declare a guide to continue.
-                </div>
-              )}
-            </div>
-
-            {showFellowshipStep && (
-              <div
-                style={{
-                  maxWidth: 720,
-                  padding: "16px 18px",
-                  borderRadius: 18,
+                  maxWidth: 620,
+                  padding: "16px 18px 14px",
+                  borderRadius: 20,
                   border: "1px solid rgba(255,255,255,0.10)",
-                  background: "linear-gradient(180deg, rgba(8,8,10,0.24), rgba(8,8,10,0.66))",
+                  background: "linear-gradient(180deg, rgba(8,8,10,0.18), rgba(8,8,10,0.58))",
                   backdropFilter: "blur(10px)",
                   WebkitBackdropFilter: "blur(10px)",
-                  display: "grid",
-                  gap: 10,
+                  boxShadow: "0 12px 34px rgba(0,0,0,0.36)",
                 }}
               >
                 <div
                   style={{
                     fontSize: 12,
                     fontWeight: 900,
-                    letterSpacing: 0.68,
+                    letterSpacing: 0.72,
                     textTransform: "uppercase",
                     color: "rgba(198,208,228,0.72)",
                   }}
                 >
-                  Fellowship
+                  The Gate Stands Open
                 </div>
 
-                <div style={{ fontSize: 22, fontWeight: 950, lineHeight: 1.02 }}>
-                  You Begin Alone
+                <div
+                  className="hero-viewport-bottom-title"
+                  style={{
+                    marginTop: 8,
+                    fontSize: 30,
+                    fontWeight: 950,
+                    lineHeight: 0.98,
+                    letterSpacing: 0.08,
+                    textShadow: "0 6px 22px rgba(0,0,0,0.34)",
+                  }}
+                >
+                  Choose Your Guide
                 </div>
 
-                <div style={{ fontSize: 13.5, lineHeight: 1.6, opacity: 0.82 }}>
-                  One hero crosses the threshold first. Companions are earned through trust, survival, and sacrifice.
+                <div
+                  style={{
+                    marginTop: 8,
+                    fontSize: 14,
+                    lineHeight: 1.62,
+                    opacity: 0.84,
+                    maxWidth: 500,
+                  }}
+                >
+                  Choose the voice that will walk beside the threshold.
                 </div>
 
-                <FellowshipPips
-                  active={activePartySize}
-                  unlocked={unlockedPartySlots}
-                  max={maxPartySlots}
-                />
-
-                <div style={{ fontSize: 12.5, lineHeight: 1.56, opacity: 0.74 }}>
-                  True completion remains sealed until the full fellowship of six stands assembled.
-                </div>
+                <div style={{ marginTop: 12, fontSize: 12.75, opacity: 0.76 }}>{dmHint}</div>
               </div>
+            ) : (
+              <>
+                <div
+                  style={{
+                    maxWidth: 760,
+                    padding: "22px 22px 20px",
+                    borderRadius: 24,
+                    border: "1px solid rgba(255,255,255,0.12)",
+                    background: "linear-gradient(180deg, rgba(8,8,10,0.28), rgba(8,8,10,0.74))",
+                    backdropFilter: "blur(12px)",
+                    WebkitBackdropFilter: "blur(12px)",
+                    boxShadow: "0 14px 42px rgba(0,0,0,0.45)",
+                  }}
+                >
+                  <div
+                    style={{
+                      fontSize: 12,
+                      fontWeight: 900,
+                      letterSpacing: 0.72,
+                      textTransform: "uppercase",
+                      color: "rgba(198,208,228,0.72)",
+                    }}
+                  >
+                    The Gate Stands Open
+                  </div>
+
+                  <div
+                    className="hero-viewport-bottom-title"
+                    style={{
+                      marginTop: 8,
+                      fontSize: 36,
+                      fontWeight: 950,
+                      lineHeight: 0.98,
+                      letterSpacing: 0.08,
+                      textShadow: "0 6px 22px rgba(0,0,0,0.34)",
+                    }}
+                  >
+                    Step Into the Dungeon
+                  </div>
+
+                  <div
+                    style={{
+                      marginTop: 10,
+                      fontSize: 14.5,
+                      lineHeight: 1.66,
+                      opacity: 0.84,
+                      maxWidth: 580,
+                    }}
+                  >
+                    You descend with one hero only. The depths will decide whether strength or fellowship comes first.
+                  </div>
+
+                  <div
+                    style={{
+                      marginTop: 14,
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 14,
+                      flexWrap: "wrap",
+                    }}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (!canEnter) {
+                          playSfx(SFX.uiFailure, 0.54);
+                          return;
+                        }
+                        playSfx(SFX.uiSuccess, 0.68);
+                        onEnter();
+                      }}
+                      disabled={!canEnter}
+                      style={{
+                        padding: "16px 24px",
+                        borderRadius: 16,
+                        fontWeight: 950,
+                        letterSpacing: 0.35,
+                        textTransform: "uppercase",
+                        border: canEnter
+                          ? "1px solid rgba(255,224,188,0.28)"
+                          : "1px solid rgba(255,255,255,0.14)",
+                        background: canEnter
+                          ? "linear-gradient(180deg, rgba(255,230,198,0.16), rgba(186,96,28,0.14) 48%, rgba(40,18,8,0.68) 100%)"
+                          : "rgba(255,255,255,0.04)",
+                        color: "rgba(255,245,230,0.98)",
+                        cursor: canEnter ? "pointer" : "not-allowed",
+                        opacity: canEnter ? 1 : 0.6,
+                        boxShadow: canEnter
+                          ? "0 0 24px rgba(255,166,82,0.14), 0 14px 34px rgba(0,0,0,0.28)"
+                          : "none",
+                      }}
+                    >
+                      Enter the Dungeon
+                    </button>
+
+                    <div style={{ fontSize: 12.75, opacity: 0.76 }}>
+                      Chosen guide: <strong>{selectedModeTitle}</strong>
+                    </div>
+                  </div>
+                </div>
+
+                {showFellowshipStep && (
+                  <div
+                    style={{
+                      maxWidth: 760,
+                      padding: "16px 18px",
+                      borderRadius: 18,
+                      border: "1px solid rgba(255,255,255,0.10)",
+                      background: "linear-gradient(180deg, rgba(8,8,10,0.22), rgba(8,8,10,0.62))",
+                      backdropFilter: "blur(10px)",
+                      WebkitBackdropFilter: "blur(10px)",
+                      display: "grid",
+                      gap: 10,
+                    }}
+                  >
+                    <div
+                      style={{
+                        fontSize: 12,
+                        fontWeight: 900,
+                        letterSpacing: 0.68,
+                        textTransform: "uppercase",
+                        color: "rgba(198,208,228,0.72)",
+                      }}
+                    >
+                      Fellowship
+                    </div>
+
+                    <div style={{ fontSize: 22, fontWeight: 950, lineHeight: 1.02 }}>
+                      You Begin Alone
+                    </div>
+
+                    <div style={{ fontSize: 13.5, lineHeight: 1.6, opacity: 0.82 }}>
+                      One hero crosses the threshold first. Companions are earned through trust, survival, and sacrifice.
+                    </div>
+
+                    <FellowshipPips
+                      active={activePartySize}
+                      unlocked={unlockedPartySlots}
+                      max={maxPartySlots}
+                    />
+
+                    <div style={{ fontSize: 12.5, lineHeight: 1.56, opacity: 0.74 }}>
+                      True completion remains sealed until the full fellowship of six stands assembled.
+                    </div>
+                  </div>
+                )}
+              </>
             )}
           </div>
         </div>
@@ -1173,7 +1238,7 @@ export default function HeroOnboarding({
             justifyContent: "space-between",
             flexWrap: "wrap",
             gap: 10,
-            animation: "onboardingFadeUp 560ms ease both",
+            animation: "onboardingFadeUp 540ms ease both",
           }}
         >
           <div className="muted" style={{ fontSize: 12 }}>
