@@ -997,7 +997,7 @@ export default function GameplayViewport({ demo }: Props) {
             </div>
 
             {demo.gameplayAllowsPressure ? (
-              <div id={anchorId("pressure-support")} style={{ scrollMarginTop: 90 }}>
+              <div id="pressure-support" style={{ scrollMarginTop: 90 }}>
                 <GameStateAdvisoryPanel
                   currentRoomTitle={demo.currentRoomTitle}
                   currentFloorLabel={demo.currentFloor.label}
@@ -1010,7 +1010,7 @@ export default function GameplayViewport({ demo }: Props) {
             ) : null}
 
             {demo.gameplayAllowsMap ? (
-              <div id={anchorId("map-support")} style={{ scrollMarginTop: 90 }}>
+              <div id="map-support" style={{ scrollMarginTop: 90 }}>
                 <RoomTopologyPanel
                   currentRoomVisualKey={demo.currentRoomVisualKey}
                   currentRoomTitle={demo.currentRoomTitle}
@@ -1027,7 +1027,7 @@ export default function GameplayViewport({ demo }: Props) {
             ) : null}
 
             {demo.combatActive ? (
-              <div id={anchorId("combat-support")} style={{ scrollMarginTop: 90 }}>
+              <div id="combat-support" style={{ scrollMarginTop: 90 }}>
                 <GameplayCombatPanel demo={demo} />
               </div>
             ) : null}
