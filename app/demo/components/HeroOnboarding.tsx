@@ -10,6 +10,7 @@
 // - fellowship is pushed lower and simplified
 // - copy reduced slightly inside plaques
 // - compact mode remains stable
+// - title/header block dropped slightly for better breathing room
 // ------------------------------------------------------------
 
 import React, { useMemo } from "react";
@@ -699,7 +700,7 @@ export default function HeroOnboarding({
         border: "none",
         borderRadius: 28,
         padding: "16px 0 10px",
-        marginTop: 6,
+        marginTop: "clamp(70px, 8vh, 120px)",
         maxWidth: 1420,
         marginInline: "auto",
         overflow: "visible",
