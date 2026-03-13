@@ -21,6 +21,7 @@ import {
 } from "./types";
 import {
   SFX,
+  applyBuildFocusToStats,
   getBaseStatsForClass,
   getFocusPalette,
   getFocusTitleColor,
@@ -167,24 +168,14 @@ export default function HeroRitualFlow({
   }
 
   function renderFocusDeltaSummary(focus: BuildFocus) {
-    const nextStats = getBaseStatsForClass(resolvedClass);
-    let ac = nextStats.ac;
-    let hp = nextStats.hpMax;
-    let init = nextStats.initiativeMod;
+    const nextStats = applyBuildFocusToStats(
+      getBaseStatsForClass(resolvedClass),
+      focus
+    );
 
-    if (focus === "guardian") {
-      ac = Math.min(18, ac + 1);
-      init = Math.max(-2, init - 1);
-    } else if (focus === "swift") {
-      ac = Math.max(10, ac - 1);
-      init = Math.min(6, init + 2);
-    } else if (focus === "hardy") {
-      hp = hp + 2;
-    }
-
-    const acDelta = ac - nextStats.ac;
-    const hpDelta = hp - nextStats.hpMax;
-    const initDelta = init - nextStats.initiativeMod;
+    const acDelta = nextStats.ac - baseStats.ac;
+    const hpDelta = nextStats.hpMax - baseStats.hpMax;
+    const initDelta = nextStats.initiativeMod - baseStats.initiativeMod;
 
     const chips: string[] = [];
     if (acDelta !== 0) chips.push(`AC ${acDelta > 0 ? `+${acDelta}` : acDelta}`);
