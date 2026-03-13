@@ -236,6 +236,15 @@ export default function DemoPage() {
     demo.partyLocked &&
     !demo.showGameplay;
 
+  const tavernHero = demo.partyMembers?.[0] ?? null;
+  const tavernHeroName =
+    typeof tavernHero?.name === "string" && tavernHero.name.trim().length > 0
+      ? tavernHero.name.trim()
+      : "Unknown";
+  const tavernHeroTitle = "Wanderer";
+  const tavernHeroLevel = demo.progression.hero.level ?? 1;
+  const tavernHeroEcho = 0;
+
   return (
     <AmbientBackground>
       <style jsx global>{`
@@ -507,6 +516,10 @@ export default function DemoPage() {
             {shouldShowTavern && (
               <div id="echoes-tavern-anchor" style={{ scrollMarginTop: 90, marginTop: 16 }}>
                 <TavernHub
+                  heroName={tavernHeroName}
+                  heroTitle={tavernHeroTitle}
+                  heroLevel={tavernHeroLevel}
+                  echoCount={tavernHeroEcho}
                   onBeginDescent={() => {
                     demo.setEnteredDungeon(true);
                     demo.setGameplayFocusStep("pressure");
