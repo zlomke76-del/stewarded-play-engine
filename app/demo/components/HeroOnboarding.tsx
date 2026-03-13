@@ -3,14 +3,13 @@
 // ------------------------------------------------------------
 // HeroOnboarding.tsx
 // ------------------------------------------------------------
-// Final threshold pass:
-// - full mode is a larger cinematic scene
-// - lighter outer shell, less boxed-in web UI feeling
-// - overlay path plaques are larger and lower in the scene
-// - copy is leaner
-// - bottom panel stays minimal until a guide is chosen
-// - after selection, the lower panel transforms into the true CTA state
-// - compact mode remains progression-oriented and stable
+// Layout discipline pass:
+// - choice moment separated from descent moment
+// - guide plaques sit higher in the scene
+// - CTA slab is narrower and more altar-like
+// - fellowship is pushed lower and simplified
+// - copy reduced slightly inside plaques
+// - compact mode remains stable
 // ------------------------------------------------------------
 
 import React, { useMemo } from "react";
@@ -227,7 +226,7 @@ function GuideOverlayCard({
           ? isAzure
             ? "linear-gradient(180deg, rgba(18,28,54,0.72), rgba(8,10,16,0.80))"
             : "linear-gradient(180deg, rgba(48,28,14,0.72), rgba(10,10,12,0.80))"
-          : "linear-gradient(180deg, rgba(10,11,15,0.60), rgba(8,8,10,0.76))",
+          : "linear-gradient(180deg, rgba(10,11,15,0.58), rgba(8,8,10,0.76))",
         backdropFilter: "blur(12px)",
         WebkitBackdropFilter: "blur(12px)",
         boxShadow: selected
@@ -307,7 +306,7 @@ function GuideOverlayCard({
 
           <div
             style={{
-              fontSize: 32,
+              fontSize: 31,
               fontWeight: 950,
               lineHeight: 0.98,
               letterSpacing: 0.08,
@@ -321,10 +320,10 @@ function GuideOverlayCard({
 
         <div
           style={{
-            fontSize: 14,
-            lineHeight: 1.62,
+            fontSize: 13.5,
+            lineHeight: 1.6,
             opacity: 0.86,
-            maxWidth: 420,
+            maxWidth: 400,
           }}
         >
           {body}
@@ -786,13 +785,13 @@ export default function HeroOnboarding({
             grid-template-columns: 1fr !important;
             left: 28px !important;
             right: 28px !important;
-            top: 170px !important;
+            top: 140px !important;
             max-width: 520px !important;
             justify-content: start !important;
           }
 
           .hero-scene-panel {
-            min-height: 980px !important;
+            min-height: 1040px !important;
           }
 
           .hero-viewport-bottom {
@@ -816,14 +815,14 @@ export default function HeroOnboarding({
           }
 
           .hero-scene-panel {
-            min-height: 920px !important;
+            min-height: 980px !important;
             border-radius: 22px !important;
           }
 
           .hero-overlay-choices {
             left: 16px !important;
             right: 16px !important;
-            top: 142px !important;
+            top: 122px !important;
             gap: 12px !important;
           }
 
@@ -834,7 +833,7 @@ export default function HeroOnboarding({
           }
 
           .hero-viewport-bottom-title {
-            font-size: 26px !important;
+            font-size: 24px !important;
           }
         }
       `}</style>
@@ -890,7 +889,7 @@ export default function HeroOnboarding({
           className="hero-scene-panel"
           style={{
             position: "relative",
-            minHeight: 820,
+            minHeight: 860,
             borderRadius: 30,
             overflow: "hidden",
             border: "1px solid rgba(255,255,255,0.08)",
@@ -932,7 +931,7 @@ export default function HeroOnboarding({
               position: "absolute",
               inset: 0,
               background:
-                "linear-gradient(180deg, rgba(0,0,0,0.16) 0%, rgba(0,0,0,0.08) 24%, rgba(0,0,0,0.62) 100%), linear-gradient(90deg, rgba(0,0,0,0.56) 0%, rgba(0,0,0,0.10) 30%, rgba(0,0,0,0.10) 70%, rgba(0,0,0,0.56) 100%)",
+                "linear-gradient(180deg, rgba(0,0,0,0.14) 0%, rgba(0,0,0,0.08) 24%, rgba(0,0,0,0.64) 100%), linear-gradient(90deg, rgba(0,0,0,0.56) 0%, rgba(0,0,0,0.10) 30%, rgba(0,0,0,0.10) 70%, rgba(0,0,0,0.56) 100%)",
               pointerEvents: "none",
             }}
           />
@@ -980,7 +979,7 @@ export default function HeroOnboarding({
               position: "absolute",
               left: 34,
               right: 34,
-              top: 220,
+              top: 110,
               display: "grid",
               gridTemplateColumns: "repeat(2, minmax(0, 420px))",
               justifyContent: "space-between",
@@ -992,7 +991,7 @@ export default function HeroOnboarding({
               <GuideOverlayCard
                 title="Human Dungeon Master"
                 kicker="The Mortal Path"
-                body="A living guide of instinct, judgment, and improvisation. The dungeon breathes through authored rulings and human surprise."
+                body="A living guide of instinct and improvisation. The dungeon breathes through authored rulings and human surprise."
                 accent="ember"
                 selected={dmMode === "human"}
                 onChoose={() => {
@@ -1006,7 +1005,7 @@ export default function HeroOnboarding({
               <GuideOverlayCard
                 title="Solace — Keeper of the Chronicle"
                 kicker="The Stewarded Path"
-                body="A guide of continuity, consequence, and memory. Solace stewards the descent with balance, cadence, and clarity."
+                body="A guide of continuity and memory. Solace stewards the descent with balance, cadence, and clarity."
                 accent="azure"
                 selected={dmMode === "solace-neutral"}
                 onChoose={() => {
@@ -1025,13 +1024,14 @@ export default function HeroOnboarding({
               right: 34,
               bottom: 28,
               display: "grid",
-              gap: 14,
+              gap: 18,
+              justifyItems: "center",
             }}
           >
             {!showEnterStep ? (
               <div
                 style={{
-                  maxWidth: 620,
+                  width: "min(100%, 560px)",
                   padding: "16px 18px 14px",
                   borderRadius: 20,
                   border: "1px solid rgba(255,255,255,0.10)",
@@ -1073,7 +1073,7 @@ export default function HeroOnboarding({
                     fontSize: 14,
                     lineHeight: 1.62,
                     opacity: 0.84,
-                    maxWidth: 500,
+                    maxWidth: 460,
                   }}
                 >
                   Choose the voice that will walk beside the threshold.
@@ -1085,7 +1085,7 @@ export default function HeroOnboarding({
               <>
                 <div
                   style={{
-                    maxWidth: 760,
+                    width: "min(100%, 620px)",
                     padding: "22px 22px 20px",
                     borderRadius: 24,
                     border: "1px solid rgba(255,255,255,0.12)",
@@ -1127,7 +1127,7 @@ export default function HeroOnboarding({
                       fontSize: 14.5,
                       lineHeight: 1.66,
                       opacity: 0.84,
-                      maxWidth: 580,
+                      maxWidth: 520,
                     }}
                   >
                     You descend with one hero only. The depths will decide whether strength or fellowship comes first.
@@ -1185,15 +1185,15 @@ export default function HeroOnboarding({
                 {showFellowshipStep && (
                   <div
                     style={{
-                      maxWidth: 760,
-                      padding: "16px 18px",
+                      width: "min(100%, 780px)",
+                      padding: "14px 16px",
                       borderRadius: 18,
                       border: "1px solid rgba(255,255,255,0.10)",
-                      background: "linear-gradient(180deg, rgba(8,8,10,0.22), rgba(8,8,10,0.62))",
+                      background: "linear-gradient(180deg, rgba(8,8,10,0.18), rgba(8,8,10,0.56))",
                       backdropFilter: "blur(10px)",
                       WebkitBackdropFilter: "blur(10px)",
                       display: "grid",
-                      gap: 10,
+                      gap: 8,
                     }}
                   >
                     <div
@@ -1208,11 +1208,11 @@ export default function HeroOnboarding({
                       Fellowship
                     </div>
 
-                    <div style={{ fontSize: 22, fontWeight: 950, lineHeight: 1.02 }}>
+                    <div style={{ fontSize: 21, fontWeight: 950, lineHeight: 1.02 }}>
                       You Begin Alone
                     </div>
 
-                    <div style={{ fontSize: 13.5, lineHeight: 1.6, opacity: 0.82 }}>
+                    <div style={{ fontSize: 13.25, lineHeight: 1.56, opacity: 0.82 }}>
                       One hero crosses the threshold first. Companions are earned through trust, survival, and sacrifice.
                     </div>
 
@@ -1222,7 +1222,7 @@ export default function HeroOnboarding({
                       max={maxPartySlots}
                     />
 
-                    <div style={{ fontSize: 12.5, lineHeight: 1.56, opacity: 0.74 }}>
+                    <div style={{ fontSize: 12.25, lineHeight: 1.52, opacity: 0.74 }}>
                       True completion remains sealed until the full fellowship of six stands assembled.
                     </div>
                   </div>
