@@ -24,7 +24,7 @@ function formatTavernEcho(totalScore: number, bestThrowScore: number) {
   if (totalScore >= 160) return "Word spreads that your aim is steady.";
   if (totalScore >= 90) return "A few nods follow your name.";
   if (totalScore > 0) return "You leave behind a modest impression.";
-  return "No one remembers every throw. Only the sharp ones.";
+  return "The hearth is warm, the lane is ready, and the dungeon can wait one more breath.";
 }
 
 function ActionButton(props: {
@@ -33,7 +33,6 @@ function ActionButton(props: {
   tone?: "primary" | "secondary";
 }) {
   const { label, onClick, tone = "secondary" } = props;
-
   const isPrimary = tone === "primary";
 
   return (
@@ -93,8 +92,8 @@ function GlassCard(props: {
         minWidth,
         padding: "14px 16px",
         borderRadius: 16,
-        background: "rgba(8,8,8,0.48)",
-        border: "1px solid rgba(255,255,255,0.12)",
+        background: "rgba(8,8,8,0.42)",
+        border: "1px solid rgba(255,255,255,0.10)",
         backdropFilter: "blur(8px)",
         WebkitBackdropFilter: "blur(8px)",
         boxSizing: "border-box",
@@ -103,7 +102,7 @@ function GlassCard(props: {
       <div
         style={{
           fontSize: 11,
-          opacity: 0.68,
+          opacity: 0.66,
           textTransform: "uppercase",
           letterSpacing: 0.7,
         }}
@@ -133,7 +132,6 @@ export default function TavernHub({
   const [mode, setMode] = useState<HubMode>("hub");
   const [mounted, setMounted] = useState(false);
   const [showOverlay, setShowOverlay] = useState(true);
-  const [showKeeperWelcome, setShowKeeperWelcome] = useState(true);
 
   const [lastRoundSummary, setLastRoundSummary] = useState<{
     totalScore: number;
@@ -250,11 +248,13 @@ export default function TavernHub({
     );
   }, [lastRoundSummary]);
 
-  const chronicleLine = useMemo(() => {
-    if (lastRoundSummary) {
-      return `Best remembered mark: ${lastRoundSummary.bestThrowLabel}.`;
-    }
-    return "No throws have entered the Chronicle yet.";
+  const chronicleSummary = useMemo(() => {
+    return `${heroName} · ${heroTitle} · Level ${heroLevel} · Echo ${echoCount}`;
+  }, [echoCount, heroLevel, heroName, heroTitle]);
+
+  const echoSummary = useMemo(() => {
+    if (!lastRoundSummary) return "No throws remembered yet.";
+    return `${lastRoundSummary.bestThrowLabel} · ${lastRoundSummary.totalScore} total`;
   }, [lastRoundSummary]);
 
   return (
@@ -265,7 +265,7 @@ export default function TavernHub({
         margin: "0 auto",
         paddingTop: 8,
         display: "grid",
-        gap: 24,
+        gap: 18,
         color: "rgba(255,245,230,0.96)",
         boxSizing: "border-box",
       }}
@@ -273,23 +273,23 @@ export default function TavernHub({
       <style jsx>{`
         @keyframes tavernFlicker {
           0% {
-            opacity: 0.26;
+            opacity: 0.22;
             transform: scale(1) translate3d(0, 0, 0);
           }
           25% {
-            opacity: 0.32;
-            transform: scale(1.015) translate3d(0.3%, -0.2%, 0);
+            opacity: 0.28;
+            transform: scale(1.012) translate3d(0.25%, -0.15%, 0);
           }
           50% {
-            opacity: 0.22;
-            transform: scale(1.01) translate3d(-0.2%, 0.2%, 0);
+            opacity: 0.18;
+            transform: scale(1.008) translate3d(-0.15%, 0.15%, 0);
           }
           75% {
-            opacity: 0.3;
-            transform: scale(1.02) translate3d(0.25%, 0.1%, 0);
+            opacity: 0.26;
+            transform: scale(1.016) translate3d(0.18%, 0.08%, 0);
           }
           100% {
-            opacity: 0.26;
+            opacity: 0.22;
             transform: scale(1) translate3d(0, 0, 0);
           }
         }
@@ -300,7 +300,7 @@ export default function TavernHub({
             opacity: 0;
           }
           15% {
-            opacity: 0.5;
+            opacity: 0.42;
           }
           100% {
             transform: translate3d(18px, -110px, 0) scale(1.12);
@@ -314,7 +314,7 @@ export default function TavernHub({
             opacity: 0;
           }
           20% {
-            opacity: 0.42;
+            opacity: 0.34;
           }
           100% {
             transform: translate3d(-14px, -95px, 0) scale(1.08);
@@ -349,7 +349,7 @@ export default function TavernHub({
             bottom: 18px !important;
           }
 
-          .tavern-lore-grid {
+          .tavern-meta-grid {
             grid-template-columns: 1fr !important;
           }
         }
@@ -398,6 +398,10 @@ export default function TavernHub({
             width: 23% !important;
             height: 28% !important;
           }
+
+          .tavern-meta-row {
+            font-size: 13px !important;
+          }
         }
       `}</style>
 
@@ -407,7 +411,7 @@ export default function TavernHub({
             className="tavern-hub-header"
             style={{
               display: "grid",
-              gap: 12,
+              gap: 10,
               paddingTop: 4,
             }}
           >
@@ -477,7 +481,7 @@ export default function TavernHub({
                 position: "absolute",
                 inset: 0,
                 background:
-                  "radial-gradient(circle at 15% 34%, rgba(255,165,82,0.24), rgba(255,165,82,0) 24%), radial-gradient(circle at 84% 28%, rgba(255,177,84,0.22), rgba(255,177,84,0) 20%), radial-gradient(circle at 58% 20%, rgba(255,133,56,0.08), rgba(255,133,56,0) 18%)",
+                  "radial-gradient(circle at 15% 34%, rgba(255,165,82,0.22), rgba(255,165,82,0) 24%), radial-gradient(circle at 84% 28%, rgba(255,177,84,0.20), rgba(255,177,84,0) 20%), radial-gradient(circle at 58% 20%, rgba(255,133,56,0.07), rgba(255,133,56,0) 18%)",
                 mixBlendMode: "screen",
                 animation: "tavernFlicker 4200ms ease-in-out infinite",
                 pointerEvents: "none",
@@ -493,9 +497,9 @@ export default function TavernHub({
                 width: 10,
                 height: 10,
                 borderRadius: "999px",
-                background: "rgba(255,199,120,0.65)",
+                background: "rgba(255,199,120,0.58)",
                 filter: "blur(0.4px)",
-                boxShadow: "0 0 18px rgba(255,170,88,0.5)",
+                boxShadow: "0 0 18px rgba(255,170,88,0.42)",
                 animation: "emberRiseA 3600ms linear infinite",
                 pointerEvents: "none",
               }}
@@ -510,9 +514,9 @@ export default function TavernHub({
                 width: 8,
                 height: 8,
                 borderRadius: "999px",
-                background: "rgba(255,210,138,0.54)",
+                background: "rgba(255,210,138,0.46)",
                 filter: "blur(0.3px)",
-                boxShadow: "0 0 14px rgba(255,170,88,0.45)",
+                boxShadow: "0 0 14px rgba(255,170,88,0.36)",
                 animation: "emberRiseB 4200ms linear infinite",
                 animationDelay: "900ms",
                 pointerEvents: "none",
@@ -528,9 +532,9 @@ export default function TavernHub({
                 width: 9,
                 height: 9,
                 borderRadius: "999px",
-                background: "rgba(255,191,105,0.56)",
+                background: "rgba(255,191,105,0.46)",
                 filter: "blur(0.35px)",
-                boxShadow: "0 0 16px rgba(255,170,88,0.42)",
+                boxShadow: "0 0 16px rgba(255,170,88,0.34)",
                 animation: "emberRiseA 3900ms linear infinite",
                 animationDelay: "1400ms",
                 pointerEvents: "none",
@@ -633,167 +637,6 @@ export default function TavernHub({
             </div>
 
             <div
-              style={{
-                position: "absolute",
-                left: 28,
-                right: 28,
-                top: 106,
-                display: "flex",
-                justifyContent: "space-between",
-                gap: 14,
-                flexWrap: "wrap",
-                alignItems: "start",
-                pointerEvents: "none",
-              }}
-            >
-              <div
-                style={{
-                  maxWidth: 420,
-                  padding: "14px 16px",
-                  borderRadius: 16,
-                  background: "rgba(10,10,10,0.46)",
-                  border: "1px solid rgba(255,255,255,0.10)",
-                  backdropFilter: "blur(8px)",
-                  WebkitBackdropFilter: "blur(8px)",
-                  boxSizing: "border-box",
-                }}
-              >
-                <div
-                  style={{
-                    fontSize: 11,
-                    opacity: 0.68,
-                    textTransform: "uppercase",
-                    letterSpacing: 0.7,
-                  }}
-                >
-                  The Chronicle
-                </div>
-
-                <div
-                  style={{
-                    marginTop: 8,
-                    fontSize: 22,
-                    fontWeight: 900,
-                    lineHeight: 1.05,
-                    textShadow: "0 6px 18px rgba(0,0,0,0.28)",
-                  }}
-                >
-                  {heroName}
-                </div>
-
-                <div
-                  style={{
-                    marginTop: 4,
-                    fontSize: 14,
-                    opacity: 0.82,
-                    fontWeight: 700,
-                  }}
-                >
-                  {heroTitle}
-                </div>
-
-                <div
-                  style={{
-                    marginTop: 10,
-                    display: "flex",
-                    gap: 10,
-                    flexWrap: "wrap",
-                    fontSize: 13,
-                    opacity: 0.84,
-                  }}
-                >
-                  <span>Level {heroLevel}</span>
-                  <span>•</span>
-                  <span>Echo {echoCount}</span>
-                </div>
-
-                <div
-                  style={{
-                    marginTop: 10,
-                    fontSize: 13,
-                    lineHeight: 1.55,
-                    opacity: 0.76,
-                  }}
-                >
-                  {chronicleLine}
-                </div>
-              </div>
-            </div>
-
-            {showKeeperWelcome ? (
-              <div
-                style={{
-                  position: "absolute",
-                  left: 28,
-                  right: 28,
-                  bottom: 112,
-                  display: "flex",
-                  justifyContent: "flex-start",
-                  pointerEvents: "none",
-                }}
-              >
-                <div
-                  style={{
-                    maxWidth: 640,
-                    padding: "16px 18px",
-                    borderRadius: 18,
-                    background: "rgba(7,7,7,0.62)",
-                    border: "1px solid rgba(255,255,255,0.12)",
-                    backdropFilter: "blur(10px)",
-                    WebkitBackdropFilter: "blur(10px)",
-                    boxShadow: "0 20px 44px rgba(0,0,0,0.28)",
-                    pointerEvents: "auto",
-                  }}
-                >
-                  <div
-                    style={{
-                      fontSize: 11,
-                      opacity: 0.68,
-                      textTransform: "uppercase",
-                      letterSpacing: 0.7,
-                    }}
-                  >
-                    Tavern Keeper
-                  </div>
-
-                  <div
-                    style={{
-                      marginTop: 8,
-                      fontSize: 15,
-                      lineHeight: 1.7,
-                      opacity: 0.92,
-                    }}
-                  >
-                    You look new to the stone below. Most who rush the dungeon
-                    regret it. Best steady your hand first.
-                  </div>
-
-                  <div
-                    style={{
-                      marginTop: 14,
-                      display: "flex",
-                      gap: 10,
-                      flexWrap: "wrap",
-                    }}
-                  >
-                    <ActionButton
-                      label="Step To The Axe Lane"
-                      tone="primary"
-                      onClick={() => {
-                        setShowKeeperWelcome(false);
-                        setMode("axe-lane");
-                      }}
-                    />
-                    <ActionButton
-                      label="I Will Choose My Pace"
-                      onClick={() => setShowKeeperWelcome(false)}
-                    />
-                  </div>
-                </div>
-              </div>
-            ) : null}
-
-            <div
               className="tavern-stage-bottom"
               style={{
                 position: "absolute",
@@ -807,10 +650,26 @@ export default function TavernHub({
                 alignItems: "end",
               }}
             >
-              <GlassCard title="House Whisper" maxWidth={580}>
-                Some heroes sharpen steel. Some steady the hand. The wise do
-                both before the dungeon learns their name.
-              </GlassCard>
+              <div
+                style={{
+                  display: "grid",
+                  gap: 8,
+                  maxWidth: 520,
+                }}
+              >
+                <div
+                  style={{
+                    fontSize: 13,
+                    fontStyle: "italic",
+                    lineHeight: 1.6,
+                    opacity: 0.82,
+                    textShadow: "0 4px 18px rgba(0,0,0,0.28)",
+                  }}
+                >
+                  Some heroes sharpen steel. Some steady the hand. The wise do
+                  both before the dungeon learns their name.
+                </div>
+              </div>
 
               <div
                 className="tavern-stage-actions"
@@ -847,16 +706,16 @@ export default function TavernHub({
           </div>
 
           <div
-            className="tavern-lore-grid"
+            className="tavern-meta-grid"
             style={{
               display: "grid",
-              gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+              gridTemplateColumns: "1.2fr 0.8fr 1fr",
               gap: 14,
             }}
           >
             <div
               style={{
-                padding: 18,
+                padding: 16,
                 borderRadius: 16,
                 background: "rgba(255,255,255,0.04)",
                 border: "1px solid rgba(255,255,255,0.08)",
@@ -866,7 +725,71 @@ export default function TavernHub({
               <div
                 style={{
                   fontSize: 11,
-                  opacity: 0.68,
+                  opacity: 0.66,
+                  textTransform: "uppercase",
+                  letterSpacing: 0.7,
+                }}
+              >
+                The Chronicle
+              </div>
+              <div
+                className="tavern-meta-row"
+                style={{
+                  marginTop: 8,
+                  fontSize: 14,
+                  lineHeight: 1.6,
+                  opacity: 0.86,
+                }}
+              >
+                {chronicleSummary}
+              </div>
+            </div>
+
+            <div
+              style={{
+                padding: 16,
+                borderRadius: 16,
+                background: "rgba(255,255,255,0.04)",
+                border: "1px solid rgba(255,255,255,0.08)",
+                boxShadow: "inset 0 1px 0 rgba(255,255,255,0.03)",
+              }}
+            >
+              <div
+                style={{
+                  fontSize: 11,
+                  opacity: 0.66,
+                  textTransform: "uppercase",
+                  letterSpacing: 0.7,
+                }}
+              >
+                Echo
+              </div>
+              <div
+                className="tavern-meta-row"
+                style={{
+                  marginTop: 8,
+                  fontSize: 14,
+                  lineHeight: 1.6,
+                  opacity: 0.86,
+                }}
+              >
+                {echoSummary}
+              </div>
+            </div>
+
+            <div
+              style={{
+                padding: 16,
+                borderRadius: 16,
+                background: "rgba(255,255,255,0.04)",
+                border: "1px solid rgba(255,255,255,0.08)",
+                boxShadow: "inset 0 1px 0 rgba(255,255,255,0.03)",
+              }}
+            >
+              <div
+                style={{
+                  fontSize: 11,
+                  opacity: 0.66,
                   textTransform: "uppercase",
                   letterSpacing: 0.7,
                 }}
@@ -874,6 +797,7 @@ export default function TavernHub({
                 Safe Ground
               </div>
               <div
+                className="tavern-meta-row"
                 style={{
                   marginTop: 8,
                   fontSize: 14,
@@ -883,71 +807,6 @@ export default function TavernHub({
               >
                 No pressure. No pursuit. A place to read the room, hear rumors,
                 and choose your pace.
-              </div>
-            </div>
-
-            <div
-              style={{
-                padding: 18,
-                borderRadius: 16,
-                background: "rgba(255,255,255,0.04)",
-                border: "1px solid rgba(255,255,255,0.08)",
-                boxShadow: "inset 0 1px 0 rgba(255,255,255,0.03)",
-              }}
-            >
-              <div
-                style={{
-                  fontSize: 11,
-                  opacity: 0.68,
-                  textTransform: "uppercase",
-                  letterSpacing: 0.7,
-                }}
-              >
-                Steel Before Stone
-              </div>
-              <div
-                style={{
-                  marginTop: 8,
-                  fontSize: 14,
-                  lineHeight: 1.6,
-                  opacity: 0.84,
-                }}
-              >
-                The lane is training, ritual, and reputation all at once. A
-                throw can be practice or prophecy.
-              </div>
-            </div>
-
-            <div
-              style={{
-                padding: 18,
-                borderRadius: 16,
-                background: "rgba(255,255,255,0.04)",
-                border: "1px solid rgba(255,255,255,0.08)",
-                boxShadow: "inset 0 1px 0 rgba(255,255,255,0.03)",
-              }}
-            >
-              <div
-                style={{
-                  fontSize: 11,
-                  opacity: 0.68,
-                  textTransform: "uppercase",
-                  letterSpacing: 0.7,
-                }}
-              >
-                Echo
-              </div>
-              <div
-                style={{
-                  marginTop: 8,
-                  fontSize: 14,
-                  lineHeight: 1.6,
-                  opacity: 0.84,
-                }}
-              >
-                {lastRoundSummary
-                  ? `${lastRoundSummary.bestThrowLabel} · ${lastRoundSummary.totalScore} total`
-                  : "No throws remembered yet."}
               </div>
             </div>
           </div>
@@ -993,7 +852,6 @@ export default function TavernHub({
                 bestThrowScore: summary.bestThrow?.score ?? 0,
                 bestThrowLabel: summary.bestThrow?.label ?? "No Mark",
               });
-              setShowKeeperWelcome(false);
             }}
           />
 
