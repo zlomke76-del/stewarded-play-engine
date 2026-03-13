@@ -5,6 +5,10 @@ import TavernAxeThrow from "./TavernAxeThrow";
 
 type Props = {
   onBeginDescent?: () => void;
+  heroName?: string;
+  heroTitle?: string;
+  heroLevel?: number;
+  echoCount?: number;
 };
 
 type HubMode = "hub" | "axe-lane";
@@ -119,10 +123,17 @@ function GlassCard(props: {
   );
 }
 
-export default function TavernHub({ onBeginDescent }: Props) {
+export default function TavernHub({
+  onBeginDescent,
+  heroName = "The Wanderer",
+  heroTitle = "Unproven",
+  heroLevel = 1,
+  echoCount = 0,
+}: Props) {
   const [mode, setMode] = useState<HubMode>("hub");
   const [mounted, setMounted] = useState(false);
   const [showOverlay, setShowOverlay] = useState(true);
+  const [showKeeperWelcome, setShowKeeperWelcome] = useState(true);
 
   const [lastRoundSummary, setLastRoundSummary] = useState<{
     totalScore: number;
@@ -239,6 +250,13 @@ export default function TavernHub({ onBeginDescent }: Props) {
     );
   }, [lastRoundSummary]);
 
+  const chronicleLine = useMemo(() => {
+    if (lastRoundSummary) {
+      return `Best remembered mark: ${lastRoundSummary.bestThrowLabel}.`;
+    }
+    return "No throws have entered the Chronicle yet.";
+  }, [lastRoundSummary]);
+
   return (
     <section
       style={{
@@ -253,6 +271,57 @@ export default function TavernHub({ onBeginDescent }: Props) {
       }}
     >
       <style jsx>{`
+        @keyframes tavernFlicker {
+          0% {
+            opacity: 0.26;
+            transform: scale(1) translate3d(0, 0, 0);
+          }
+          25% {
+            opacity: 0.32;
+            transform: scale(1.015) translate3d(0.3%, -0.2%, 0);
+          }
+          50% {
+            opacity: 0.22;
+            transform: scale(1.01) translate3d(-0.2%, 0.2%, 0);
+          }
+          75% {
+            opacity: 0.3;
+            transform: scale(1.02) translate3d(0.25%, 0.1%, 0);
+          }
+          100% {
+            opacity: 0.26;
+            transform: scale(1) translate3d(0, 0, 0);
+          }
+        }
+
+        @keyframes emberRiseA {
+          0% {
+            transform: translate3d(0, 8px, 0) scale(0.9);
+            opacity: 0;
+          }
+          15% {
+            opacity: 0.5;
+          }
+          100% {
+            transform: translate3d(18px, -110px, 0) scale(1.12);
+            opacity: 0;
+          }
+        }
+
+        @keyframes emberRiseB {
+          0% {
+            transform: translate3d(0, 10px, 0) scale(0.85);
+            opacity: 0;
+          }
+          20% {
+            opacity: 0.42;
+          }
+          100% {
+            transform: translate3d(-14px, -95px, 0) scale(1.08);
+            opacity: 0;
+          }
+        }
+
         @media (max-width: 1120px) {
           .tavern-hub-header {
             gap: 10px !important;
@@ -403,6 +472,72 @@ export default function TavernHub({ onBeginDescent }: Props) {
             />
 
             <div
+              aria-hidden="true"
+              style={{
+                position: "absolute",
+                inset: 0,
+                background:
+                  "radial-gradient(circle at 15% 34%, rgba(255,165,82,0.24), rgba(255,165,82,0) 24%), radial-gradient(circle at 84% 28%, rgba(255,177,84,0.22), rgba(255,177,84,0) 20%), radial-gradient(circle at 58% 20%, rgba(255,133,56,0.08), rgba(255,133,56,0) 18%)",
+                mixBlendMode: "screen",
+                animation: "tavernFlicker 4200ms ease-in-out infinite",
+                pointerEvents: "none",
+              }}
+            />
+
+            <div
+              aria-hidden="true"
+              style={{
+                position: "absolute",
+                left: "11.5%",
+                bottom: "19%",
+                width: 10,
+                height: 10,
+                borderRadius: "999px",
+                background: "rgba(255,199,120,0.65)",
+                filter: "blur(0.4px)",
+                boxShadow: "0 0 18px rgba(255,170,88,0.5)",
+                animation: "emberRiseA 3600ms linear infinite",
+                pointerEvents: "none",
+              }}
+            />
+
+            <div
+              aria-hidden="true"
+              style={{
+                position: "absolute",
+                left: "15.2%",
+                bottom: "22%",
+                width: 8,
+                height: 8,
+                borderRadius: "999px",
+                background: "rgba(255,210,138,0.54)",
+                filter: "blur(0.3px)",
+                boxShadow: "0 0 14px rgba(255,170,88,0.45)",
+                animation: "emberRiseB 4200ms linear infinite",
+                animationDelay: "900ms",
+                pointerEvents: "none",
+              }}
+            />
+
+            <div
+              aria-hidden="true"
+              style={{
+                position: "absolute",
+                left: "83.8%",
+                bottom: "30%",
+                width: 9,
+                height: 9,
+                borderRadius: "999px",
+                background: "rgba(255,191,105,0.56)",
+                filter: "blur(0.35px)",
+                boxShadow: "0 0 16px rgba(255,170,88,0.42)",
+                animation: "emberRiseA 3900ms linear infinite",
+                animationDelay: "1400ms",
+                pointerEvents: "none",
+              }}
+            />
+
+            <div
               style={{
                 position: "absolute",
                 inset: 0,
@@ -496,6 +631,167 @@ export default function TavernHub({ onBeginDescent }: Props) {
                 </div>
               </GlassCard>
             </div>
+
+            <div
+              style={{
+                position: "absolute",
+                left: 28,
+                right: 28,
+                top: 106,
+                display: "flex",
+                justifyContent: "space-between",
+                gap: 14,
+                flexWrap: "wrap",
+                alignItems: "start",
+                pointerEvents: "none",
+              }}
+            >
+              <div
+                style={{
+                  maxWidth: 420,
+                  padding: "14px 16px",
+                  borderRadius: 16,
+                  background: "rgba(10,10,10,0.46)",
+                  border: "1px solid rgba(255,255,255,0.10)",
+                  backdropFilter: "blur(8px)",
+                  WebkitBackdropFilter: "blur(8px)",
+                  boxSizing: "border-box",
+                }}
+              >
+                <div
+                  style={{
+                    fontSize: 11,
+                    opacity: 0.68,
+                    textTransform: "uppercase",
+                    letterSpacing: 0.7,
+                  }}
+                >
+                  The Chronicle
+                </div>
+
+                <div
+                  style={{
+                    marginTop: 8,
+                    fontSize: 22,
+                    fontWeight: 900,
+                    lineHeight: 1.05,
+                    textShadow: "0 6px 18px rgba(0,0,0,0.28)",
+                  }}
+                >
+                  {heroName}
+                </div>
+
+                <div
+                  style={{
+                    marginTop: 4,
+                    fontSize: 14,
+                    opacity: 0.82,
+                    fontWeight: 700,
+                  }}
+                >
+                  {heroTitle}
+                </div>
+
+                <div
+                  style={{
+                    marginTop: 10,
+                    display: "flex",
+                    gap: 10,
+                    flexWrap: "wrap",
+                    fontSize: 13,
+                    opacity: 0.84,
+                  }}
+                >
+                  <span>Level {heroLevel}</span>
+                  <span>•</span>
+                  <span>Echo {echoCount}</span>
+                </div>
+
+                <div
+                  style={{
+                    marginTop: 10,
+                    fontSize: 13,
+                    lineHeight: 1.55,
+                    opacity: 0.76,
+                  }}
+                >
+                  {chronicleLine}
+                </div>
+              </div>
+            </div>
+
+            {showKeeperWelcome ? (
+              <div
+                style={{
+                  position: "absolute",
+                  left: 28,
+                  right: 28,
+                  bottom: 112,
+                  display: "flex",
+                  justifyContent: "flex-start",
+                  pointerEvents: "none",
+                }}
+              >
+                <div
+                  style={{
+                    maxWidth: 640,
+                    padding: "16px 18px",
+                    borderRadius: 18,
+                    background: "rgba(7,7,7,0.62)",
+                    border: "1px solid rgba(255,255,255,0.12)",
+                    backdropFilter: "blur(10px)",
+                    WebkitBackdropFilter: "blur(10px)",
+                    boxShadow: "0 20px 44px rgba(0,0,0,0.28)",
+                    pointerEvents: "auto",
+                  }}
+                >
+                  <div
+                    style={{
+                      fontSize: 11,
+                      opacity: 0.68,
+                      textTransform: "uppercase",
+                      letterSpacing: 0.7,
+                    }}
+                  >
+                    Tavern Keeper
+                  </div>
+
+                  <div
+                    style={{
+                      marginTop: 8,
+                      fontSize: 15,
+                      lineHeight: 1.7,
+                      opacity: 0.92,
+                    }}
+                  >
+                    You look new to the stone below. Most who rush the dungeon
+                    regret it. Best steady your hand first.
+                  </div>
+
+                  <div
+                    style={{
+                      marginTop: 14,
+                      display: "flex",
+                      gap: 10,
+                      flexWrap: "wrap",
+                    }}
+                  >
+                    <ActionButton
+                      label="Step To The Axe Lane"
+                      tone="primary"
+                      onClick={() => {
+                        setShowKeeperWelcome(false);
+                        setMode("axe-lane");
+                      }}
+                    />
+                    <ActionButton
+                      label="I Will Choose My Pace"
+                      onClick={() => setShowKeeperWelcome(false)}
+                    />
+                  </div>
+                </div>
+              </div>
+            ) : null}
 
             <div
               className="tavern-stage-bottom"
@@ -697,6 +993,7 @@ export default function TavernHub({ onBeginDescent }: Props) {
                 bestThrowScore: summary.bestThrow?.score ?? 0,
                 bestThrowLabel: summary.bestThrow?.label ?? "No Mark",
               });
+              setShowKeeperWelcome(false);
             }}
           />
 
