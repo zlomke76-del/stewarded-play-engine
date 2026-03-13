@@ -14,16 +14,108 @@ const TAVERN_AMBIENCE_A = "/assets/audio/sfx_tavern_01.mp3";
 const TAVERN_AMBIENCE_B = "/assets/audio/sfx_tavern_02.mp3";
 const TAVERN_BEER = "/assets/audio/sfx_tavern_beer_01.mp3";
 
-function clamp(n: number, min: number, max: number) {
-  return Math.max(min, Math.min(max, n));
-}
-
 function formatTavernEcho(totalScore: number, bestThrowScore: number) {
   if (bestThrowScore >= 100) return "The tavern remembers a champion's hand.";
   if (totalScore >= 160) return "Word spreads that your aim is steady.";
   if (totalScore >= 90) return "A few nods follow your name.";
   if (totalScore > 0) return "You leave behind a modest impression.";
   return "No one remembers every throw. Only the sharp ones.";
+}
+
+function ActionButton(props: {
+  label: string;
+  onClick?: () => void;
+  tone?: "primary" | "secondary";
+}) {
+  const { label, onClick, tone = "secondary" } = props;
+
+  const isPrimary = tone === "primary";
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      style={{
+        height: 54,
+        padding: "0 20px",
+        borderRadius: 14,
+        border: isPrimary
+          ? "1px solid rgba(255,214,150,0.28)"
+          : "1px solid rgba(255,255,255,0.14)",
+        background: isPrimary
+          ? "linear-gradient(180deg, rgba(122,78,38,0.98), rgba(84,52,28,0.98))"
+          : "rgba(10,10,10,0.58)",
+        color: "rgba(255,247,233,0.96)",
+        fontWeight: 900,
+        letterSpacing: 0.2,
+        cursor: "pointer",
+        boxShadow: isPrimary ? "0 16px 30px rgba(0,0,0,0.32)" : "none",
+        transition:
+          "transform 140ms ease, filter 140ms ease, box-shadow 160ms ease, border-color 160ms ease",
+      }}
+      onMouseEnter={(e) => {
+        e.currentTarget.style.transform = "translateY(-1px)";
+        e.currentTarget.style.filter = "brightness(1.04)";
+        if (isPrimary) {
+          e.currentTarget.style.boxShadow = "0 20px 38px rgba(0,0,0,0.36)";
+        }
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.transform = "translateY(0)";
+        e.currentTarget.style.filter = "none";
+        if (isPrimary) {
+          e.currentTarget.style.boxShadow = "0 16px 30px rgba(0,0,0,0.32)";
+        }
+      }}
+    >
+      {label}
+    </button>
+  );
+}
+
+function GlassCard(props: {
+  title: string;
+  children: React.ReactNode;
+  maxWidth?: number | string;
+  minWidth?: number | string;
+}) {
+  const { title, children, maxWidth, minWidth } = props;
+
+  return (
+    <div
+      style={{
+        maxWidth,
+        minWidth,
+        padding: "14px 16px",
+        borderRadius: 16,
+        background: "rgba(8,8,8,0.48)",
+        border: "1px solid rgba(255,255,255,0.12)",
+        backdropFilter: "blur(8px)",
+        WebkitBackdropFilter: "blur(8px)",
+        boxSizing: "border-box",
+      }}
+    >
+      <div
+        style={{
+          fontSize: 11,
+          opacity: 0.68,
+          textTransform: "uppercase",
+          letterSpacing: 0.7,
+        }}
+      >
+        {title}
+      </div>
+      <div
+        style={{
+          marginTop: 6,
+          fontSize: 14,
+          lineHeight: 1.55,
+        }}
+      >
+        {children}
+      </div>
+    </div>
+  );
 }
 
 export default function TavernHub({ onBeginDescent }: Props) {
@@ -96,38 +188,154 @@ export default function TavernHub({ onBeginDescent }: Props) {
     if (!lastRoundSummary) {
       return "The hearth is warm, the lane is ready, and the dungeon can wait one more breath.";
     }
-    return formatTavernEcho(lastRoundSummary.totalScore, lastRoundSummary.bestThrowScore);
+    return formatTavernEcho(
+      lastRoundSummary.totalScore,
+      lastRoundSummary.bestThrowScore
+    );
   }, [lastRoundSummary]);
 
   return (
     <section
       style={{
         width: "100%",
+        maxWidth: 1520,
+        margin: "0 auto",
+        paddingTop: 8,
         display: "grid",
-        gap: 22,
+        gap: 24,
         color: "rgba(255,245,230,0.96)",
+        boxSizing: "border-box",
       }}
     >
+      <style jsx>{`
+        @media (max-width: 1120px) {
+          .tavern-hub-header {
+            gap: 10px !important;
+          }
+
+          .tavern-hub-title {
+            font-size: 38px !important;
+          }
+
+          .tavern-hub-stage {
+            aspect-ratio: 16 / 10 !important;
+          }
+
+          .tavern-stage-top,
+          .tavern-stage-bottom {
+            left: 18px !important;
+            right: 18px !important;
+          }
+
+          .tavern-stage-top {
+            top: 18px !important;
+          }
+
+          .tavern-stage-bottom {
+            bottom: 18px !important;
+          }
+
+          .tavern-lore-grid {
+            grid-template-columns: 1fr !important;
+          }
+        }
+
+        @media (max-width: 820px) {
+          .tavern-hub-title {
+            font-size: 30px !important;
+          }
+
+          .tavern-hub-subtitle {
+            font-size: 14px !important;
+          }
+
+          .tavern-hub-stage {
+            aspect-ratio: 4 / 5 !important;
+            border-radius: 20px !important;
+          }
+
+          .tavern-stage-top,
+          .tavern-stage-bottom {
+            left: 14px !important;
+            right: 14px !important;
+            gap: 10px !important;
+          }
+
+          .tavern-stage-top {
+            top: 14px !important;
+          }
+
+          .tavern-stage-bottom {
+            bottom: 14px !important;
+          }
+
+          .tavern-stage-actions {
+            width: 100% !important;
+          }
+
+          .tavern-stage-actions > :global(button),
+          .tavern-stage-actions > button {
+            flex: 1 1 100% !important;
+          }
+
+          .tavern-lane-hotspot {
+            left: 66.5% !important;
+            top: 30.5% !important;
+            width: 23% !important;
+            height: 28% !important;
+          }
+        }
+      `}</style>
+
       {mode === "hub" ? (
         <>
-          <div style={{ display: "grid", gap: 8 }}>
-            <div style={{ fontSize: 28, fontWeight: 900 }}>The Tavern Before the Descent</div>
-            <div style={{ maxWidth: 860, fontSize: 15, opacity: 0.8, lineHeight: 1.6 }}>
-              A warm room before a cold journey. Drink, listen, test your hand, and decide whether your next step belongs
-              to the lane or the dark below.
+          <div
+            className="tavern-hub-header"
+            style={{
+              display: "grid",
+              gap: 12,
+              paddingTop: 4,
+            }}
+          >
+            <div
+              className="tavern-hub-title"
+              style={{
+                fontSize: 44,
+                fontWeight: 950,
+                letterSpacing: 0.2,
+                lineHeight: 0.98,
+                textShadow: "0 8px 28px rgba(0,0,0,0.34)",
+              }}
+            >
+              The Tavern Before the Descent
+            </div>
+
+            <div
+              className="tavern-hub-subtitle"
+              style={{
+                maxWidth: 960,
+                fontSize: 16,
+                opacity: 0.84,
+                lineHeight: 1.7,
+              }}
+            >
+              A warm room before a cold journey. Drink, listen, test your hand,
+              and decide whether your next step belongs to the lane or the dark
+              below.
             </div>
           </div>
 
           <div
+            className="tavern-hub-stage"
             style={{
               position: "relative",
               width: "100%",
-              maxWidth: 1440,
-              aspectRatio: "16 / 9",
-              borderRadius: 24,
+              maxWidth: 1520,
+              aspectRatio: "16 / 8.8",
+              borderRadius: 28,
               overflow: "hidden",
               border: "1px solid rgba(255,255,255,0.12)",
-              boxShadow: "0 36px 90px rgba(0,0,0,0.46)",
+              boxShadow: "0 42px 110px rgba(0,0,0,0.50)",
               background: "#120b07",
             }}
           >
@@ -145,7 +353,7 @@ export default function TavernHub({ onBeginDescent }: Props) {
                   ? "translate3d(-1.5%, -0.8%, 0) scale(1.045)"
                   : "translate3d(0%, 0%, 0) scale(1.08)",
                 transition: "transform 2600ms ease-out",
-                filter: "brightness(0.95) saturate(1.03)",
+                filter: "brightness(0.96) saturate(1.04)",
               }}
             />
 
@@ -154,7 +362,7 @@ export default function TavernHub({ onBeginDescent }: Props) {
                 position: "absolute",
                 inset: 0,
                 background:
-                  "linear-gradient(180deg, rgba(7,4,3,0.16) 0%, rgba(7,4,3,0.10) 35%, rgba(7,4,3,0.38) 100%)",
+                  "linear-gradient(180deg, rgba(7,4,3,0.10) 0%, rgba(7,4,3,0.06) 28%, rgba(7,4,3,0.34) 100%)",
               }}
             />
 
@@ -162,11 +370,13 @@ export default function TavernHub({ onBeginDescent }: Props) {
               style={{
                 position: "absolute",
                 inset: 0,
-                boxShadow: "inset 0 0 160px rgba(0,0,0,0.30)",
+                boxShadow:
+                  "inset 0 0 180px rgba(0,0,0,0.34), inset 0 -80px 120px rgba(0,0,0,0.22)",
               }}
             />
 
             <button
+              className="tavern-lane-hotspot"
               type="button"
               aria-label="Go to the axe lane"
               onClick={() => setMode("axe-lane")}
@@ -179,19 +389,23 @@ export default function TavernHub({ onBeginDescent }: Props) {
                 borderRadius: 18,
                 border: "1px solid rgba(255,225,166,0.25)",
                 background: "rgba(255,198,104,0.05)",
-                boxShadow: "0 0 0 1px rgba(255,214,150,0.08), 0 0 40px rgba(255,189,92,0.08)",
+                boxShadow:
+                  "0 0 0 1px rgba(255,214,150,0.08), 0 0 40px rgba(255,189,92,0.08)",
                 cursor: "pointer",
-                transition: "transform 140ms ease, background 140ms ease, box-shadow 140ms ease",
+                transition:
+                  "transform 140ms ease, background 140ms ease, box-shadow 140ms ease",
               }}
               onMouseEnter={(e) => {
                 e.currentTarget.style.transform = "scale(1.02)";
                 e.currentTarget.style.background = "rgba(255,198,104,0.10)";
-                e.currentTarget.style.boxShadow = "0 0 0 1px rgba(255,214,150,0.12), 0 0 48px rgba(255,189,92,0.18)";
+                e.currentTarget.style.boxShadow =
+                  "0 0 0 1px rgba(255,214,150,0.12), 0 0 48px rgba(255,189,92,0.18)";
               }}
               onMouseLeave={(e) => {
                 e.currentTarget.style.transform = "scale(1)";
                 e.currentTarget.style.background = "rgba(255,198,104,0.05)";
-                e.currentTarget.style.boxShadow = "0 0 0 1px rgba(255,214,150,0.08), 0 0 40px rgba(255,189,92,0.08)";
+                e.currentTarget.style.boxShadow =
+                  "0 0 0 1px rgba(255,214,150,0.08), 0 0 40px rgba(255,189,92,0.08)";
               }}
             >
               <span
@@ -214,118 +428,67 @@ export default function TavernHub({ onBeginDescent }: Props) {
             </button>
 
             <div
+              className="tavern-stage-top"
               style={{
                 position: "absolute",
-                left: 24,
-                right: 24,
-                top: 24,
-                display: "flex",
-                justifyContent: "space-between",
-                gap: 12,
-                flexWrap: "wrap",
-              }}
-            >
-              <div
-                style={{
-                  maxWidth: 540,
-                  padding: "14px 16px",
-                  borderRadius: 16,
-                  background: "rgba(8,8,8,0.46)",
-                  border: "1px solid rgba(255,255,255,0.12)",
-                  backdropFilter: "blur(7px)",
-                }}
-              >
-                <div style={{ fontSize: 11, opacity: 0.68, textTransform: "uppercase", letterSpacing: 0.7 }}>
-                  Tavern Read
-                </div>
-                <div style={{ marginTop: 6, fontSize: 14, lineHeight: 1.55 }}>
-                  {tavernEcho}
-                </div>
-              </div>
-
-              <div
-                style={{
-                  padding: "14px 16px",
-                  borderRadius: 16,
-                  background: "rgba(8,8,8,0.46)",
-                  border: "1px solid rgba(255,255,255,0.12)",
-                  backdropFilter: "blur(7px)",
-                  minWidth: 200,
-                }}
-              >
-                <div style={{ fontSize: 11, opacity: 0.68, textTransform: "uppercase", letterSpacing: 0.7 }}>
-                  Tonight's Mood
-                </div>
-                <div style={{ marginTop: 6, fontSize: 16, fontWeight: 900 }}>Warm Steel · Low Firelight</div>
-              </div>
-            </div>
-
-            <div
-              style={{
-                position: "absolute",
-                left: 24,
-                right: 24,
-                bottom: 24,
+                left: 28,
+                right: 28,
+                top: 26,
                 display: "flex",
                 justifyContent: "space-between",
                 gap: 14,
                 flexWrap: "wrap",
+                alignItems: "start",
+              }}
+            >
+              <GlassCard title="Tavern Read" maxWidth={620}>
+                {tavernEcho}
+              </GlassCard>
+
+              <GlassCard title="Tonight's Mood" minWidth={240}>
+                <div style={{ fontSize: 17, fontWeight: 900 }}>
+                  Warm Steel · Low Firelight
+                </div>
+              </GlassCard>
+            </div>
+
+            <div
+              className="tavern-stage-bottom"
+              style={{
+                position: "absolute",
+                left: 28,
+                right: 28,
+                bottom: 26,
+                display: "flex",
+                justifyContent: "space-between",
+                gap: 16,
+                flexWrap: "wrap",
                 alignItems: "end",
               }}
             >
+              <GlassCard title="House Whisper" maxWidth={580}>
+                Some heroes sharpen steel. Some steady the hand. The wise do
+                both before the dungeon learns their name.
+              </GlassCard>
+
               <div
+                className="tavern-stage-actions"
                 style={{
-                  maxWidth: 520,
-                  padding: "14px 16px",
-                  borderRadius: 16,
-                  background: "rgba(8,8,8,0.52)",
-                  border: "1px solid rgba(255,255,255,0.12)",
-                  backdropFilter: "blur(7px)",
+                  display: "flex",
+                  gap: 12,
+                  flexWrap: "wrap",
+                  alignItems: "center",
                 }}
               >
-                <div style={{ fontSize: 11, opacity: 0.68, textTransform: "uppercase", letterSpacing: 0.7 }}>
-                  House Whisper
-                </div>
-                <div style={{ marginTop: 6, fontSize: 14, lineHeight: 1.55 }}>
-                  Some heroes sharpen steel. Some steady the hand. The wise do both before the dungeon learns their name.
-                </div>
-              </div>
-
-              <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
-                <button
-                  type="button"
+                <ActionButton
+                  label="Step To The Axe Lane"
+                  tone="primary"
                   onClick={() => setMode("axe-lane")}
-                  style={{
-                    height: 52,
-                    padding: "0 18px",
-                    borderRadius: 14,
-                    border: "1px solid rgba(255,214,150,0.26)",
-                    background: "linear-gradient(180deg, rgba(122,78,38,0.96), rgba(84,52,28,0.96))",
-                    color: "rgba(255,247,233,0.96)",
-                    fontWeight: 900,
-                    cursor: "pointer",
-                    boxShadow: "0 16px 30px rgba(0,0,0,0.32)",
-                  }}
-                >
-                  Step To The Axe Lane
-                </button>
-
-                <button
-                  type="button"
+                />
+                <ActionButton
+                  label="Begin The Descent"
                   onClick={onBeginDescent}
-                  style={{
-                    height: 52,
-                    padding: "0 18px",
-                    borderRadius: 14,
-                    border: "1px solid rgba(255,255,255,0.14)",
-                    background: "rgba(10,10,10,0.56)",
-                    color: "rgba(255,247,233,0.94)",
-                    fontWeight: 900,
-                    cursor: "pointer",
-                  }}
-                >
-                  Begin The Descent
-                </button>
+                />
               </div>
             </div>
 
@@ -343,6 +506,7 @@ export default function TavernHub({ onBeginDescent }: Props) {
           </div>
 
           <div
+            className="tavern-lore-grid"
             style={{
               display: "grid",
               gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
@@ -351,48 +515,95 @@ export default function TavernHub({ onBeginDescent }: Props) {
           >
             <div
               style={{
-                padding: 16,
+                padding: 18,
                 borderRadius: 16,
                 background: "rgba(255,255,255,0.04)",
                 border: "1px solid rgba(255,255,255,0.08)",
+                boxShadow: "inset 0 1px 0 rgba(255,255,255,0.03)",
               }}
             >
-              <div style={{ fontSize: 11, opacity: 0.68, textTransform: "uppercase", letterSpacing: 0.7 }}>
+              <div
+                style={{
+                  fontSize: 11,
+                  opacity: 0.68,
+                  textTransform: "uppercase",
+                  letterSpacing: 0.7,
+                }}
+              >
                 Safe Ground
               </div>
-              <div style={{ marginTop: 8, fontSize: 14, lineHeight: 1.55, opacity: 0.82 }}>
-                No pressure. No pursuit. A place to read the room, hear rumors, and choose your pace.
+              <div
+                style={{
+                  marginTop: 8,
+                  fontSize: 14,
+                  lineHeight: 1.6,
+                  opacity: 0.84,
+                }}
+              >
+                No pressure. No pursuit. A place to read the room, hear rumors,
+                and choose your pace.
               </div>
             </div>
 
             <div
               style={{
-                padding: 16,
+                padding: 18,
                 borderRadius: 16,
                 background: "rgba(255,255,255,0.04)",
                 border: "1px solid rgba(255,255,255,0.08)",
+                boxShadow: "inset 0 1px 0 rgba(255,255,255,0.03)",
               }}
             >
-              <div style={{ fontSize: 11, opacity: 0.68, textTransform: "uppercase", letterSpacing: 0.7 }}>
+              <div
+                style={{
+                  fontSize: 11,
+                  opacity: 0.68,
+                  textTransform: "uppercase",
+                  letterSpacing: 0.7,
+                }}
+              >
                 Steel Before Stone
               </div>
-              <div style={{ marginTop: 8, fontSize: 14, lineHeight: 1.55, opacity: 0.82 }}>
-                The lane is training, ritual, and reputation all at once. A throw can be practice or prophecy.
+              <div
+                style={{
+                  marginTop: 8,
+                  fontSize: 14,
+                  lineHeight: 1.6,
+                  opacity: 0.84,
+                }}
+              >
+                The lane is training, ritual, and reputation all at once. A
+                throw can be practice or prophecy.
               </div>
             </div>
 
             <div
               style={{
-                padding: 16,
+                padding: 18,
                 borderRadius: 16,
                 background: "rgba(255,255,255,0.04)",
                 border: "1px solid rgba(255,255,255,0.08)",
+                boxShadow: "inset 0 1px 0 rgba(255,255,255,0.03)",
               }}
             >
-              <div style={{ fontSize: 11, opacity: 0.68, textTransform: "uppercase", letterSpacing: 0.7 }}>
+              <div
+                style={{
+                  fontSize: 11,
+                  opacity: 0.68,
+                  textTransform: "uppercase",
+                  letterSpacing: 0.7,
+                }}
+              >
                 Echo
               </div>
-              <div style={{ marginTop: 8, fontSize: 14, lineHeight: 1.55, opacity: 0.82 }}>
+              <div
+                style={{
+                  marginTop: 8,
+                  fontSize: 14,
+                  lineHeight: 1.6,
+                  opacity: 0.84,
+                }}
+              >
                 {lastRoundSummary
                   ? `${lastRoundSummary.bestThrowLabel} · ${lastRoundSummary.totalScore} total`
                   : "No throws remembered yet."}
@@ -402,30 +613,34 @@ export default function TavernHub({ onBeginDescent }: Props) {
         </>
       ) : (
         <>
-          <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap", alignItems: "end" }}>
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              gap: 12,
+              flexWrap: "wrap",
+              alignItems: "end",
+            }}
+          >
             <div style={{ display: "grid", gap: 8 }}>
-              <div style={{ fontSize: 28, fontWeight: 900 }}>Axe Lane</div>
-              <div style={{ maxWidth: 860, fontSize: 15, opacity: 0.8, lineHeight: 1.6 }}>
-                The room narrows. The voices dull. Only the target, the breath, and the hand remain.
+              <div style={{ fontSize: 32, fontWeight: 900 }}>Axe Lane</div>
+              <div
+                style={{
+                  maxWidth: 860,
+                  fontSize: 15,
+                  opacity: 0.82,
+                  lineHeight: 1.6,
+                }}
+              >
+                The room narrows. The voices dull. Only the target, the breath,
+                and the hand remain.
               </div>
             </div>
 
-            <button
-              type="button"
+            <ActionButton
+              label="Return To Tavern"
               onClick={() => setMode("hub")}
-              style={{
-                height: 50,
-                padding: "0 18px",
-                borderRadius: 14,
-                border: "1px solid rgba(255,255,255,0.14)",
-                background: "rgba(10,10,10,0.56)",
-                color: "rgba(255,247,233,0.94)",
-                fontWeight: 900,
-                cursor: "pointer",
-              }}
-            >
-              Return To Tavern
-            </button>
+            />
           </div>
 
           <TavernAxeThrow
@@ -441,40 +656,16 @@ export default function TavernHub({ onBeginDescent }: Props) {
           />
 
           <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
-            <button
-              type="button"
+            <ActionButton
+              label="Back To The Room"
               onClick={() => setMode("hub")}
-              style={{
-                height: 50,
-                padding: "0 18px",
-                borderRadius: 14,
-                border: "1px solid rgba(255,255,255,0.14)",
-                background: "rgba(10,10,10,0.56)",
-                color: "rgba(255,247,233,0.94)",
-                fontWeight: 900,
-                cursor: "pointer",
-              }}
-            >
-              Back To The Room
-            </button>
+            />
 
-            <button
-              type="button"
+            <ActionButton
+              label="Descend From Here"
+              tone="primary"
               onClick={onBeginDescent}
-              style={{
-                height: 50,
-                padding: "0 18px",
-                borderRadius: 14,
-                border: "1px solid rgba(255,214,150,0.26)",
-                background: "linear-gradient(180deg, rgba(122,78,38,0.96), rgba(84,52,28,0.96))",
-                color: "rgba(255,247,233,0.96)",
-                fontWeight: 900,
-                cursor: "pointer",
-                boxShadow: "0 16px 30px rgba(0,0,0,0.32)",
-              }}
-            >
-              Descend From Here
-            </button>
+            />
           </div>
         </>
       )}
