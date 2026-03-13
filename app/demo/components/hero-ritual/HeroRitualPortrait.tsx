@@ -1,10 +1,7 @@
 "use client";
 
 import React, { useMemo, useState } from "react";
-import {
-  ELF_WARRIOR_FEMALE_GLB,
-  shouldUseElfWarriorFemaleModel,
-} from "./helpers";
+import { getGlbPathForPortrait } from "./helpers";
 import type { PortraitType } from "./types";
 
 type Props = {
@@ -30,17 +27,19 @@ export default function HeroRitualPortrait({
 }: Props) {
   const [imageFailed, setImageFailed] = useState(false);
 
-  const canUseBundledModelViewer = useMemo(() => {
+  const glbPath = useMemo(
+    () => getGlbPathForPortrait(species, className, portrait),
+    [species, className, portrait]
+  );
+
+  const canUseModelViewer = useMemo(() => {
     if (typeof window === "undefined") return false;
     return Boolean(window.customElements?.get("model-viewer"));
   }, []);
 
-  const useModel =
-    !imageFailed &&
-    canUseBundledModelViewer &&
-    shouldUseElfWarriorFemaleModel(species, className, portrait);
+  const shouldRenderModel = Boolean(glbPath && canUseModelViewer && !imageFailed);
 
-  if (useModel) {
+  if (shouldRenderModel && glbPath) {
     return (
       <div
         style={{
@@ -51,7 +50,7 @@ export default function HeroRitualPortrait({
         }}
       >
         {React.createElement("model-viewer" as any, {
-          src: ELF_WARRIOR_FEMALE_GLB,
+          src: glbPath,
           alt,
           "camera-controls": true,
           "touch-action": "pan-y",
