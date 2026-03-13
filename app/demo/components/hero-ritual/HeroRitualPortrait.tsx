@@ -1,8 +1,9 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { getGlbPathForPortrait } from "./helpers";
 import type { PortraitType } from "./types";
+import ModelViewerBootstrap from "./ModelViewerBootstrap";
 
 type Props = {
   species: string;
@@ -26,18 +27,45 @@ export default function HeroRitualPortrait({
   objectPosition,
 }: Props) {
   const [imageFailed, setImageFailed] = useState(false);
+  const [modelViewerReady, setModelViewerReady] = useState(false);
 
   const glbPath = useMemo(
     () => getGlbPathForPortrait(species, className, portrait),
     [species, className, portrait]
   );
 
-  const canUseModelViewer = useMemo(() => {
-    if (typeof window === "undefined") return false;
-    return Boolean(window.customElements?.get("model-viewer"));
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    let cancelled = false;
+    let attempts = 0;
+    const maxAttempts = 20;
+
+    function checkReady() {
+      if (cancelled) return;
+
+      const ready = Boolean(window.customElements?.get("model-viewer"));
+      if (ready) {
+        setModelViewerReady(true);
+        return;
+      }
+
+      attempts += 1;
+      if (attempts < maxAttempts) {
+        window.setTimeout(checkReady, 150);
+      }
+    }
+
+    checkReady();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
-  const shouldRenderModel = Boolean(glbPath && canUseModelViewer && !imageFailed);
+  const shouldRenderModel = Boolean(
+    glbPath && modelViewerReady && !imageFailed
+  );
 
   if (shouldRenderModel && glbPath) {
     return (
@@ -45,10 +73,13 @@ export default function HeroRitualPortrait({
         style={{
           width: "100%",
           height,
+          position: "relative",
           background:
-            "radial-gradient(circle at center, rgba(255,255,255,0.04), rgba(0,0,0,0.02))",
+            "radial-gradient(circle at center, rgba(255,255,255,0.05), rgba(0,0,0,0.02))",
         }}
       >
+        <ModelViewerBootstrap />
+
         {React.createElement("model-viewer" as any, {
           src: glbPath,
           alt,
@@ -60,11 +91,15 @@ export default function HeroRitualPortrait({
           "environment-image": "neutral",
           "camera-orbit": "0deg 82deg 2.2m",
           "field-of-view": "28deg",
+          autoplay: true,
           style: {
             width: "100%",
             height: "100%",
             display: "block",
             background: "transparent",
+          },
+          onError: () => {
+            setImageFailed(true);
           },
         })}
       </div>
@@ -72,26 +107,36 @@ export default function HeroRitualPortrait({
   }
 
   return (
-    <img
-      src={imageSrc}
-      alt={alt}
+    <div
       style={{
         width: "100%",
         height,
-        objectFit: "cover",
-        objectPosition,
-        display: "block",
+        position: "relative",
       }}
-      onError={(e) => {
-        const img = e.currentTarget;
-        if (!fallbackImageSrc) return;
-        if (img.src.endsWith(fallbackImageSrc)) return;
+    >
+      <ModelViewerBootstrap />
 
-        setImageFailed(true);
-        img.onerror = null;
-        img.src = fallbackImageSrc;
-        img.style.objectPosition = objectPosition;
-      }}
-    />
+      <img
+        src={imageSrc}
+        alt={alt}
+        style={{
+          width: "100%",
+          height: "100%",
+          objectFit: "cover",
+          objectPosition,
+          display: "block",
+        }}
+        onError={(e) => {
+          const img = e.currentTarget;
+          if (!fallbackImageSrc) return;
+          if (img.src.endsWith(fallbackImageSrc)) return;
+
+          setImageFailed(true);
+          img.onerror = null;
+          img.src = fallbackImageSrc;
+          img.style.objectPosition = objectPosition;
+        }}
+      />
+    </div>
   );
 }
