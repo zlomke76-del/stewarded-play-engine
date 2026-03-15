@@ -3,12 +3,8 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { getPortraitPath } from "@/lib/portraits/getPortraitPath";
 import {
-  BUILD_FOCUS_META,
-  BUILD_FOCUS_OPTIONS,
-  CLASS_META,
   SAFE_CLASS_ARCHETYPES,
   SAFE_SPECIES,
-  SPECIES_META,
   type BuildFocus,
   type ClassMeta,
   type FocusMeta,
@@ -24,19 +20,17 @@ import {
   applyBuildFocusToStats,
   getBaseStatsForClass,
   getFocusPalette,
-  getFocusTitleColor,
-  getPortraitObjectPosition,
   playSfx,
 } from "./helpers";
 import {
-  RitualChoiceCard,
-  RitualFrame,
-  RitualStepPills,
-  SectionPill,
-  StatChip,
-  TinyLabel,
-} from "./HeroRitualUI";
-import HeroRitualPortrait from "./HeroRitualPortrait";
+  ClassPanel,
+  FocusPanel,
+  IntroPanel,
+  NamePanel,
+  OathPanel,
+  SexPanel,
+  SpeciesPanel,
+} from "./HeroRitualPanels";
 
 type Props = {
   heroCreationStep: HeroCreationStep;
@@ -72,7 +66,7 @@ function chunkIntoPages<T>(items: readonly T[], size: number) {
   return pages;
 }
 
-const FOCUS_RITUAL_COPY: Record<
+export const FOCUS_RITUAL_COPY: Record<
   BuildFocus,
   {
     doctrine: string;
@@ -107,7 +101,7 @@ const FOCUS_RITUAL_COPY: Record<
   },
 };
 
-const CLASS_RITUAL_COPY: Partial<
+export const CLASS_RITUAL_COPY: Partial<
   Record<
     string,
     {
@@ -199,78 +193,6 @@ export default function HeroRitualFlow({
   const [classPageIndex, setClassPageIndex] = useState(0);
   const [hoveredFocus, setHoveredFocus] = useState<BuildFocus | null>(null);
 
-  const ritualStageStyle: React.CSSProperties = {
-    transition: "opacity 260ms ease, transform 260ms ease",
-    opacity: 1,
-    transform: "translateY(0)",
-    minWidth: 0,
-  };
-
-  const controlButtonBase: React.CSSProperties = {
-    padding: "11px 14px",
-    borderRadius: 12,
-    fontWeight: 850,
-    letterSpacing: 0.2,
-    cursor: "pointer",
-    transition:
-      "transform 140ms ease, filter 140ms ease, box-shadow 140ms ease, opacity 140ms ease",
-  };
-
-  const inputStyle: React.CSSProperties = {
-    width: "100%",
-    minWidth: 0,
-    boxSizing: "border-box",
-    padding: "10px 12px",
-    borderRadius: 10,
-    border: "1px solid rgba(255,255,255,0.12)",
-    background: "rgba(255,255,255,0.06)",
-    color: "inherit",
-    outline: "none",
-  };
-
-  const helperCardStyle: React.CSSProperties = {
-    padding: "12px 14px",
-    borderRadius: 14,
-    border: "1px solid rgba(255,255,255,0.08)",
-    background: "rgba(255,255,255,0.03)",
-    display: "grid",
-    gap: 8,
-    boxSizing: "border-box",
-    minWidth: 0,
-  };
-
-  const ritualPanelStyle: React.CSSProperties = {
-    borderRadius: 20,
-    border: "1px solid rgba(255,255,255,0.10)",
-    background:
-      "radial-gradient(circle at top, rgba(255,188,112,0.08), transparent 28%), linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.02))",
-    padding: 22,
-    boxShadow: "inset 0 1px 0 rgba(255,255,255,0.03)",
-    maxWidth: 1240,
-    margin: "0 auto",
-    width: "100%",
-    boxSizing: "border-box",
-    overflow: "hidden",
-    minWidth: 0,
-  };
-
-  const oathPanelStyle: React.CSSProperties = {
-    borderRadius: 24,
-    border: "1px solid rgba(255,205,126,0.14)",
-    background:
-      "radial-gradient(circle at 50% 8%, rgba(255,209,130,0.12), rgba(255,209,130,0.02) 28%, rgba(0,0,0,0) 52%), linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.02))",
-    padding: "22px 22px 24px",
-    boxShadow:
-      "0 0 50px rgba(255,168,62,0.10), inset 0 1px 0 rgba(255,255,255,0.04)",
-    maxWidth: 1440,
-    margin: "0 auto",
-    width: "100%",
-    boxSizing: "border-box",
-    overflow: "hidden",
-    position: "relative",
-    minWidth: 0,
-  };
-
   const speciesPages = useMemo(() => chunkIntoPages(SAFE_SPECIES, 3), []);
   const classPages = useMemo(() => chunkIntoPages(SAFE_CLASS_ARCHETYPES, 4), []);
 
@@ -291,20 +213,6 @@ export default function HeroRitualFlow({
       setClassPageIndex(Math.floor(classIndex / 4));
     }
   }, [resolvedClass]);
-
-  useEffect(() => {
-    if (heroCreationStep !== "species") return;
-    if (speciesPageIndex > speciesPages.length - 1) {
-      setSpeciesPageIndex(0);
-    }
-  }, [heroCreationStep, speciesPageIndex, speciesPages.length]);
-
-  useEffect(() => {
-    if (heroCreationStep !== "class") return;
-    if (classPageIndex > classPages.length - 1) {
-      setClassPageIndex(0);
-    }
-  }, [heroCreationStep, classPageIndex, classPages.length]);
 
   useEffect(() => {
     if (heroCreationStep !== "focus") return;
@@ -408,1575 +316,236 @@ export default function HeroRitualFlow({
   switch (heroCreationStep) {
     case "intro":
       return (
-        <div key="ritual-intro" style={ritualStageStyle}>
-          <RitualFrame
-            title="Echoes of Fate"
-            subtitle={
-              <>
-                The tavern grows quiet.
-                <br />
-                One hero will begin the descent.
-                <br />
-                Their name will enter the Chronicle.
-              </>
-            }
-            footer={
-              <div style={{ display: "flex", justifyContent: "center" }}>
-                <button
-                  type="button"
-                  onClick={() => {
-                    playSfx(SFX.buttonClick, 0.6);
-                    setHeroCreationStep("sex");
-                  }}
-                  disabled={!editable}
-                  style={{
-                    ...controlButtonBase,
-                    padding: "14px 22px",
-                    border: "1px solid rgba(255,205,126,0.28)",
-                    background: editable
-                      ? "linear-gradient(180deg, rgba(255,201,116,0.98), rgba(218,132,47,0.98))"
-                      : "linear-gradient(180deg, rgba(107,89,69,0.7), rgba(74,55,39,0.74))",
-                    color: editable ? "#2f1606" : "rgba(244,227,201,0.75)",
-                    boxShadow: editable
-                      ? "0 0 20px rgba(255,160,60,0.35), 0 10px 28px rgba(255,145,42,0.18), inset 0 1px 0 rgba(255,244,220,0.72)"
-                      : "none",
-                    opacity: editable ? 1 : 0.62,
-                    cursor: editable ? "pointer" : "not-allowed",
-                    minWidth: 220,
-                  }}
-                >
-                  Begin the Chronicle
-                </button>
-              </div>
-            }
-          >
-            <div style={{ display: "grid", gap: 16, minWidth: 0 }}>
-              <RitualStepPills currentStep={heroCreationStep} />
-
-              <div
-                style={{
-                  display: "grid",
-                  justifyItems: "center",
-                  gap: 18,
-                  padding: "10px 0 6px",
-                  minWidth: 0,
-                }}
-              >
-                <div
-                  style={{
-                    width: "min(100%, 760px)",
-                    borderRadius: 20,
-                    overflow: "hidden",
-                    border: "1px solid rgba(255,255,255,0.10)",
-                    background: "rgba(255,255,255,0.03)",
-                    boxShadow: "0 18px 46px rgba(0,0,0,0.24)",
-                    position: "relative",
-                    boxSizing: "border-box",
-                  }}
-                >
-                  <img
-                    src="/assets/V3/Dungeon/Tavern/tavern_01.png"
-                    alt="The tavern grows quiet"
-                    style={{
-                      width: "100%",
-                      height: 320,
-                      objectFit: "cover",
-                      objectPosition: getPortraitObjectPosition("intro"),
-                      display: "block",
-                    }}
-                    onError={(e) => {
-                      const img = e.currentTarget;
-                      img.onerror = null;
-                      img.src = fallbackPortraitPath;
-                      img.style.objectPosition =
-                        getPortraitObjectPosition("intro");
-                    }}
-                  />
-                  <div
-                    style={{
-                      position: "absolute",
-                      inset: 0,
-                      background:
-                        "linear-gradient(to bottom, rgba(0,0,0,0.08) 18%, rgba(0,0,0,0.22) 60%, rgba(0,0,0,0.52) 100%)",
-                      pointerEvents: "none",
-                    }}
-                  />
-                </div>
-
-                <div
-                  style={{
-                    fontSize: 14,
-                    opacity: 0.78,
-                    maxWidth: 700,
-                    textAlign: "center",
-                    lineHeight: 1.7,
-                  }}
-                >
-                  The first name set into canon will carry forward into every
-                  future descent. Choose slowly.
-                </div>
-              </div>
-            </div>
-          </RitualFrame>
-        </div>
+        <IntroPanel
+          currentStep={heroCreationStep}
+          editable={editable}
+          fallbackPortraitPath={fallbackPortraitPath}
+          onBegin={() => {
+            playSfx(SFX.buttonClick, 0.6);
+            setHeroCreationStep("sex");
+          }}
+        />
       );
 
     case "sex":
       return (
-        <div key="ritual-sex" style={ritualStageStyle}>
-          <RitualFrame
-            title="Choose a Form"
-            subtitle="Set the first face of your hero. This determines which portrait line follows through the ritual."
-            footer={
-              <div
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  gap: 12,
-                  flexWrap: "wrap",
-                }}
-              >
-                <button
-                  type="button"
-                  onClick={() => {
-                    playSfx(SFX.buttonClick, 0.54);
-                    goToPreviousStep();
-                  }}
-                  style={{
-                    ...controlButtonBase,
-                    border: "1px solid rgba(255,255,255,0.12)",
-                    background: "rgba(255,255,255,0.05)",
-                    color: "inherit",
-                  }}
-                >
-                  Back
-                </button>
-                <div
-                  style={{ fontSize: 12, opacity: 0.72, alignSelf: "center" }}
-                >
-                  Select the portrait line to continue.
-                </div>
-              </div>
+        <SexPanel
+          currentStep={heroCreationStep}
+          editable={editable}
+          row={row}
+          resolvedSpecies={resolvedSpecies}
+          resolvedClass={resolvedClass}
+          fallbackPortraitPath={fallbackPortraitPath}
+          onBack={() => {
+            playSfx(SFX.buttonClick, 0.54);
+            goToPreviousStep();
+          }}
+          onSelectPortrait={(portrait) => {
+            if (!editable) {
+              playSfx(SFX.uiFailure, 0.5);
+              return;
             }
-          >
-            <div style={{ display: "grid", gap: 16, minWidth: 0 }}>
-              <RitualStepPills currentStep={heroCreationStep} />
-
-              <div
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))",
-                  gap: 18,
-                  width: "100%",
-                  minWidth: 0,
-                  alignItems: "stretch",
-                }}
-              >
-                {(["Male", "Female"] as const).map((portrait) => {
-                  const selected = row?.portrait === portrait;
-                  const imageSrc = getPortraitPath(
-                    resolvedSpecies,
-                    resolvedClass,
-                    portrait
-                  );
-
-                  return (
-                    <RitualChoiceCard
-                      key={portrait}
-                      title={portrait}
-                      subtitle={
-                        portrait === "Male"
-                          ? "A rugged line of portraits for your hero's journey."
-                          : "A fierce line of portraits for your hero's journey."
-                      }
-                      imageSrc={imageSrc}
-                      fallbackImageSrc={fallbackPortraitPath}
-                      species={resolvedSpecies}
-                      className={resolvedClass}
-                      portrait={portrait}
-                      selected={selected}
-                      disabled={!editable}
-                      details={
-                        <div
-                          style={{
-                            fontSize: 12,
-                            opacity: 0.72,
-                            lineHeight: 1.5,
-                          }}
-                        >
-                          This choice controls the portrait set shown during
-                          species, class, name, and oath.
-                        </div>
-                      }
-                      onClick={() => {
-                        if (!editable) {
-                          playSfx(SFX.uiFailure, 0.5);
-                          return;
-                        }
-                        setPortrait(portrait);
-                        setRitualProgress((prev) => ({
-                          ...prev,
-                          sexConfirmed: true,
-                        }));
-                        setHeroCreationStep("species");
-                      }}
-                    />
-                  );
-                })}
-              </div>
-            </div>
-          </RitualFrame>
-        </div>
+            setPortrait(portrait);
+            setRitualProgress((prev) => ({
+              ...prev,
+              sexConfirmed: true,
+            }));
+            setHeroCreationStep("species");
+          }}
+        />
       );
 
     case "species":
       return (
-        <div key="ritual-species" style={ritualStageStyle}>
-          <RitualFrame
-            title="Choose a Species"
-            subtitle="Identity begins with lineage. Here the player should understand not just the fantasy, but the practical shape of the build."
-            footer={
-              <div
-                style={{
-                  display: "grid",
-                  gap: 12,
-                  width: "100%",
-                  minWidth: 0,
-                }}
-              >
-                <div
-                  style={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    gap: 12,
-                    flexWrap: "wrap",
-                    alignItems: "center",
-                  }}
-                >
-                  <button
-                    type="button"
-                    onClick={() => {
-                      playSfx(SFX.buttonClick, 0.54);
-                      goToPreviousStep();
-                    }}
-                    style={{
-                      ...controlButtonBase,
-                      border: "1px solid rgba(255,255,255,0.12)",
-                      background: "rgba(255,255,255,0.05)",
-                      color: "inherit",
-                    }}
-                  >
-                    Back
-                  </button>
-
-                  <div
-                    style={{ fontSize: 12, opacity: 0.72, alignSelf: "center" }}
-                  >
-                    Compare strengths, tradeoffs, and playstyle fit.
-                  </div>
-                </div>
-
-                <div
-                  style={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    gap: 12,
-                    flexWrap: "wrap",
-                    alignItems: "center",
-                  }}
-                >
-                  <SectionPill tone="warn">
-                    <strong>Species Set</strong> {speciesPageIndex + 1} of{" "}
-                    {speciesPages.length}
-                  </SectionPill>
-
-                  <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        playSfx(SFX.buttonClick, 0.5);
-                        setSpeciesPageIndex((prev) => Math.max(0, prev - 1));
-                      }}
-                      disabled={speciesPageIndex === 0}
-                      style={{
-                        ...controlButtonBase,
-                        border: "1px solid rgba(255,255,255,0.12)",
-                        background: "rgba(255,255,255,0.05)",
-                        color: "inherit",
-                        opacity: speciesPageIndex === 0 ? 0.5 : 1,
-                        cursor:
-                          speciesPageIndex === 0 ? "not-allowed" : "pointer",
-                        minWidth: 110,
-                      }}
-                    >
-                      Previous 3
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => {
-                        playSfx(SFX.buttonClick, 0.5);
-                        setSpeciesPageIndex((prev) =>
-                          Math.min(speciesPages.length - 1, prev + 1)
-                        );
-                      }}
-                      disabled={speciesPageIndex >= speciesPages.length - 1}
-                      style={{
-                        ...controlButtonBase,
-                        border: "1px solid rgba(255,205,126,0.22)",
-                        background: "rgba(255,196,118,0.08)",
-                        color: "inherit",
-                        opacity:
-                          speciesPageIndex >= speciesPages.length - 1 ? 0.5 : 1,
-                        cursor:
-                          speciesPageIndex >= speciesPages.length - 1
-                            ? "not-allowed"
-                            : "pointer",
-                        minWidth: 110,
-                      }}
-                    >
-                      Next 3
-                    </button>
-                  </div>
-                </div>
-              </div>
+        <SpeciesPanel
+          currentStep={heroCreationStep}
+          editable={editable}
+          row={row}
+          resolvedSpecies={resolvedSpecies}
+          resolvedClass={resolvedClass}
+          visibleSpecies={visibleSpecies}
+          speciesPageIndex={speciesPageIndex}
+          speciesPageCount={speciesPages.length}
+          fallbackPortraitPath={fallbackPortraitPath}
+          onBack={() => {
+            playSfx(SFX.buttonClick, 0.54);
+            goToPreviousStep();
+          }}
+          onPrevPage={() => {
+            playSfx(SFX.buttonClick, 0.5);
+            setSpeciesPageIndex((prev) => Math.max(0, prev - 1));
+          }}
+          onNextPage={() => {
+            playSfx(SFX.buttonClick, 0.5);
+            setSpeciesPageIndex((prev) =>
+              Math.min(speciesPages.length - 1, prev + 1)
+            );
+          }}
+          onSelectSpecies={(species) => {
+            if (!editable) {
+              playSfx(SFX.uiFailure, 0.5);
+              return;
             }
-          >
-            <div style={{ display: "grid", gap: 16, minWidth: 0 }}>
-              <RitualStepPills currentStep={heroCreationStep} />
-
-              <div
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
-                  gap: 18,
-                  width: "100%",
-                  minWidth: 0,
-                  alignItems: "stretch",
-                }}
-              >
-                {visibleSpecies.map((species) => {
-                  const imageSrc = getPortraitPath(
-                    species,
-                    resolvedClass,
-                    row?.portrait ?? "Male"
-                  );
-                  const selected =
-                    resolvedSpecies.toLowerCase() === species.toLowerCase();
-                  const meta = SPECIES_META[species] ?? SPECIES_META.Human;
-
-                  return (
-                    <RitualChoiceCard
-                      key={species}
-                      title={species}
-                      subtitle={meta.fantasy}
-                      imageSrc={imageSrc}
-                      fallbackImageSrc={fallbackPortraitPath}
-                      species={species}
-                      className={resolvedClass}
-                      portrait={row?.portrait ?? "Male"}
-                      selected={selected}
-                      disabled={!editable}
-                      details={
-                        <>
-                          <div
-                            style={{
-                              fontSize: 12,
-                              opacity: 0.88,
-                              lineHeight: 1.5,
-                            }}
-                          >
-                            <strong>Strengths:</strong>{" "}
-                            {meta.strengths.join(" · ")}
-                          </div>
-                          <div
-                            style={{
-                              fontSize: 12,
-                              opacity: 0.78,
-                              lineHeight: 1.5,
-                            }}
-                          >
-                            <strong>Tradeoff:</strong> {meta.tradeoff}
-                          </div>
-                          <div
-                            style={{
-                              fontSize: 12,
-                              opacity: 0.72,
-                              lineHeight: 1.5,
-                            }}
-                          >
-                            <strong>Best for:</strong> {meta.bestFor}
-                          </div>
-                        </>
-                      }
-                      onClick={() => {
-                        if (!editable) {
-                          playSfx(SFX.uiFailure, 0.5);
-                          return;
-                        }
-                        playSfx(SFX.buttonClick, 0.56);
-                        setSpecies(species);
-                        setRitualProgress((prev) => ({
-                          ...prev,
-                          speciesConfirmed: true,
-                        }));
-                        setHeroCreationStep("class");
-                      }}
-                    />
-                  );
-                })}
-              </div>
-            </div>
-          </RitualFrame>
-        </div>
+            playSfx(SFX.buttonClick, 0.56);
+            setSpecies(species);
+            setRitualProgress((prev) => ({
+              ...prev,
+              speciesConfirmed: true,
+            }));
+            setHeroCreationStep("class");
+          }}
+        />
       );
 
     case "class":
       return (
-        <div key="ritual-class" style={ritualStageStyle}>
-          <RitualFrame
-            title="Choose a Class"
-            subtitle="Choose the path your hero will carry into the first descent."
-            footer={
-              <div
-                style={{
-                  display: "grid",
-                  gap: 12,
-                  width: "100%",
-                  minWidth: 0,
-                }}
-              >
-                <div
-                  style={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    gap: 12,
-                    flexWrap: "wrap",
-                    alignItems: "center",
-                  }}
-                >
-                  <button
-                    type="button"
-                    onClick={() => {
-                      playSfx(SFX.buttonClick, 0.54);
-                      goToPreviousStep();
-                    }}
-                    style={{
-                      ...controlButtonBase,
-                      border: "1px solid rgba(255,255,255,0.12)",
-                      background: "rgba(255,255,255,0.05)",
-                      color: "inherit",
-                    }}
-                  >
-                    Back
-                  </button>
-
-                  <div
-                    style={{ fontSize: 12, opacity: 0.72, alignSelf: "center" }}
-                  >
-                    Four archetypes at a time. Read less. Feel the role faster.
-                  </div>
-                </div>
-
-                <div
-                  style={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    gap: 12,
-                    flexWrap: "wrap",
-                    alignItems: "center",
-                  }}
-                >
-                  <SectionPill tone="warn">
-                    <strong>Class Set</strong> {classPageIndex + 1} of{" "}
-                    {classPages.length}
-                  </SectionPill>
-
-                  <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        playSfx(SFX.buttonClick, 0.5);
-                        setClassPageIndex((prev) => Math.max(0, prev - 1));
-                      }}
-                      disabled={classPageIndex === 0}
-                      style={{
-                        ...controlButtonBase,
-                        border: "1px solid rgba(255,255,255,0.12)",
-                        background: "rgba(255,255,255,0.05)",
-                        color: "inherit",
-                        opacity: classPageIndex === 0 ? 0.5 : 1,
-                        cursor:
-                          classPageIndex === 0 ? "not-allowed" : "pointer",
-                        minWidth: 110,
-                      }}
-                    >
-                      Previous 4
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => {
-                        playSfx(SFX.buttonClick, 0.5);
-                        setClassPageIndex((prev) =>
-                          Math.min(classPages.length - 1, prev + 1)
-                        );
-                      }}
-                      disabled={classPageIndex >= classPages.length - 1}
-                      style={{
-                        ...controlButtonBase,
-                        border: "1px solid rgba(255,205,126,0.22)",
-                        background: "rgba(255,196,118,0.08)",
-                        color: "inherit",
-                        opacity:
-                          classPageIndex >= classPages.length - 1 ? 0.5 : 1,
-                        cursor:
-                          classPageIndex >= classPages.length - 1
-                            ? "not-allowed"
-                            : "pointer",
-                        minWidth: 110,
-                      }}
-                    >
-                      Next 4
-                    </button>
-                  </div>
-                </div>
-              </div>
+        <ClassPanel
+          currentStep={heroCreationStep}
+          editable={editable}
+          row={row}
+          resolvedSpecies={resolvedSpecies}
+          resolvedClass={resolvedClass}
+          visibleClasses={visibleClasses}
+          classPageIndex={classPageIndex}
+          classPageCount={classPages.length}
+          fallbackPortraitPath={fallbackPortraitPath}
+          renderClassStepCallout={renderClassStepCallout}
+          onBack={() => {
+            playSfx(SFX.buttonClick, 0.54);
+            goToPreviousStep();
+          }}
+          onPrevPage={() => {
+            playSfx(SFX.buttonClick, 0.5);
+            setClassPageIndex((prev) => Math.max(0, prev - 1));
+          }}
+          onNextPage={() => {
+            playSfx(SFX.buttonClick, 0.5);
+            setClassPageIndex((prev) =>
+              Math.min(classPages.length - 1, prev + 1)
+            );
+          }}
+          onSelectClass={(className) => {
+            if (!editable) {
+              playSfx(SFX.uiFailure, 0.5);
+              return;
             }
-          >
-            <div style={{ display: "grid", gap: 16, minWidth: 0 }}>
-              <RitualStepPills currentStep={heroCreationStep} />
-
-              <div
-                style={{
-                  ...helperCardStyle,
-                  border: "1px solid rgba(255,196,118,0.14)",
-                  background:
-                    "radial-gradient(circle at 50% 0%, rgba(255,196,118,0.10), rgba(255,255,255,0.02) 42%), linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.02))",
-                }}
-              >
-                <div style={{ fontSize: 14, fontWeight: 900 }}>
-                  Chosen lineage, awaiting its path
-                </div>
-                <div style={{ fontSize: 13, opacity: 0.82, lineHeight: 1.65 }}>
-                  <strong>{resolvedSpecies}</strong> stands ready. The next choice
-                  determines how this hero enters danger, what role they carry,
-                  and which focus pairings will shape the first descent.
-                </div>
-              </div>
-
-              <div
-                style={{
-                  display: "grid",
-                  gridTemplateColumns:
-                    visibleClasses.length === 4
-                      ? "repeat(2, minmax(0, 1fr))"
-                      : "repeat(auto-fit, minmax(280px, 1fr))",
-                  gap: 18,
-                  width: "100%",
-                  minWidth: 0,
-                  alignItems: "stretch",
-                }}
-              >
-                {visibleClasses.map((className) => {
-                  const imageSrc = getPortraitPath(
-                    resolvedSpecies,
-                    className,
-                    row?.portrait ?? "Male"
-                  );
-                  const selected =
-                    resolvedClass.toLowerCase() === className.toLowerCase();
-                  const meta = CLASS_META[className] ?? CLASS_META.Warrior;
-
-                  return (
-                    <RitualChoiceCard
-                      key={className}
-                      title={className}
-                      subtitle={meta.fantasy}
-                      imageSrc={imageSrc}
-                      fallbackImageSrc={fallbackPortraitPath}
-                      species={resolvedSpecies}
-                      className={className}
-                      portrait={row?.portrait ?? "Male"}
-                      selected={selected}
-                      disabled={!editable}
-                      details={
-                        <>
-                          {renderClassStepCallout(className)}
-                          <div
-                            style={{
-                              fontSize: 12,
-                              opacity: 0.88,
-                              lineHeight: 1.5,
-                            }}
-                          >
-                            <strong>Role:</strong> {meta.role}
-                          </div>
-                          <div
-                            style={{
-                              fontSize: 12,
-                              opacity: 0.88,
-                              lineHeight: 1.5,
-                            }}
-                          >
-                            <strong>Difficulty:</strong> {meta.difficulty}
-                          </div>
-                          <div
-                            style={{
-                              fontSize: 12,
-                              opacity: 0.84,
-                              lineHeight: 1.5,
-                            }}
-                          >
-                            <strong>Strengths:</strong>{" "}
-                            {meta.strengths.join(" · ")}
-                          </div>
-                          <div
-                            style={{
-                              fontSize: 12,
-                              opacity: 0.76,
-                              lineHeight: 1.5,
-                            }}
-                          >
-                            <strong>Tradeoff:</strong> {meta.tradeoff}
-                          </div>
-                          <div
-                            style={{
-                              fontSize: 12,
-                              opacity: 0.72,
-                              lineHeight: 1.5,
-                            }}
-                          >
-                            <strong>Best focus:</strong> {meta.bestFocus}
-                          </div>
-                        </>
-                      }
-                      onClick={() => {
-                        if (!editable) {
-                          playSfx(SFX.uiFailure, 0.5);
-                          return;
-                        }
-                        playSfx(SFX.buttonClick, 0.56);
-                        setClass(className);
-                        setRitualProgress((prev) => ({
-                          ...prev,
-                          classConfirmed: true,
-                        }));
-                        setHeroCreationStep("focus");
-                      }}
-                    />
-                  );
-                })}
-              </div>
-            </div>
-          </RitualFrame>
-        </div>
+            playSfx(SFX.buttonClick, 0.56);
+            setClass(className);
+            setRitualProgress((prev) => ({
+              ...prev,
+              classConfirmed: true,
+            }));
+            setHeroCreationStep("focus");
+          }}
+        />
       );
 
     case "focus":
       return (
-        <div key="ritual-focus" style={ritualStageStyle}>
-          <article style={ritualPanelStyle}>
-            <div style={{ display: "grid", gap: 18, minWidth: 0 }}>
-              <div style={{ display: "grid", gap: 8, minWidth: 0 }}>
-                <div
-                  style={{
-                    fontSize: 34,
-                    fontWeight: 950,
-                    letterSpacing: 0.2,
-                    lineHeight: 1.02,
-                  }}
-                >
-                  Choose a Focus
-                </div>
-                <div
-                  style={{
-                    fontSize: 14,
-                    opacity: 0.84,
-                    lineHeight: 1.7,
-                    maxWidth: 760,
-                  }}
-                >
-                  Every hero survives by a stance. Choose how this one enters
-                  danger.
-                </div>
-              </div>
-
-              <RitualStepPills currentStep={heroCreationStep} />
-
-              <div
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "minmax(420px, 1.22fr) minmax(360px, 1fr)",
-                  gap: 18,
-                  alignItems: "stretch",
-                  minWidth: 0,
-                }}
-              >
-                <div
-                  style={{
-                    borderRadius: 22,
-                    overflow: "hidden",
-                    border: previewFocusPalette.border,
-                    background:
-                      "radial-gradient(circle at 50% 18%, rgba(255,224,178,0.12), rgba(255,224,178,0.02) 24%, rgba(0,0,0,0) 44%), linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.02))",
-                    boxShadow:
-                      previewFocusPalette.shadow ||
-                      "0 18px 44px rgba(0,0,0,0.24)",
-                    minWidth: 0,
-                    boxSizing: "border-box",
-                  }}
-                >
-                  <div
-                    style={{
-                      padding: 16,
-                      borderBottom: "1px solid rgba(255,255,255,0.08)",
-                      display: "grid",
-                      gap: 10,
-                    }}
-                  >
-                    <div
-                      style={{
-                        display: "flex",
-                        justifyContent: "space-between",
-                        gap: 12,
-                        flexWrap: "wrap",
-                        alignItems: "center",
-                      }}
-                    >
-                      <SectionPill tone="warn">
-                        <strong>{previewFocusCopy.chosenLabel}</strong>
-                      </SectionPill>
-
-                      <div
-                        style={{
-                          fontSize: 12,
-                          opacity: 0.74,
-                        }}
-                      >
-                        {resolvedSpecies} {resolvedClass} · {row?.portrait ?? "Male"}
-                      </div>
-                    </div>
-
-                    <div style={{ display: "grid", gap: 6 }}>
-                      <div
-                        style={{
-                          fontSize: 34,
-                          fontWeight: 950,
-                          lineHeight: 1.04,
-                          color: getFocusTitleColor(previewFocus),
-                        }}
-                      >
-                        {
-                          BUILD_FOCUS_OPTIONS.find((x) => x.id === previewFocus)
-                            ?.icon
-                        }{" "}
-                        {
-                          BUILD_FOCUS_OPTIONS.find((x) => x.id === previewFocus)
-                            ?.label
-                        }
-                      </div>
-                      <div
-                        style={{
-                          fontSize: 19,
-                          fontWeight: 800,
-                          opacity: 0.92,
-                        }}
-                      >
-                        {previewFocusCopy.doctrine}
-                      </div>
-                      <div
-                        style={{
-                          fontSize: 13,
-                          opacity: 0.78,
-                          lineHeight: 1.65,
-                          maxWidth: 560,
-                        }}
-                      >
-                        {previewFocusCopy.vow}
-                      </div>
-                    </div>
-                  </div>
-
-                  <HeroRitualPortrait
-                    species={resolvedSpecies}
-                    className={resolvedClass}
-                    portrait={row?.portrait ?? "Male"}
-                    imageSrc={portraitPath}
-                    fallbackImageSrc={fallbackPortraitPath}
-                    alt={`${display} focus portrait`}
-                    height={430}
-                    objectPosition={getPortraitObjectPosition("oath")}
-                  />
-
-                  <div
-                    style={{
-                      padding: 16,
-                      borderTop: "1px solid rgba(255,255,255,0.08)",
-                      display: "grid",
-                      gap: 12,
-                    }}
-                  >
-                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                      <SectionPill>
-                        <strong>Shift</strong> {renderFocusDeltaSummary(previewFocus)}
-                      </SectionPill>
-                      <SectionPill>
-                        <strong>Role</strong> {resolvedClassMeta.role}
-                      </SectionPill>
-                      <SectionPill>
-                        <strong>Base</strong> {resolvedSpeciesMeta.bestFor}
-                      </SectionPill>
-                    </div>
-
-                    <div
-                      style={{
-                        fontSize: 13,
-                        opacity: 0.8,
-                        lineHeight: 1.65,
-                      }}
-                    >
-                      <strong>Consequence:</strong> {previewFocusCopy.consequence}
-                    </div>
-
-                    <div
-                      style={{
-                        display: "grid",
-                        gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
-                        gap: 10,
-                        minWidth: 0,
-                      }}
-                    >
-                      {(() => {
-                        const stats = applyBuildFocusToStats(baseStats, previewFocus);
-                        return (
-                          <>
-                            <StatChip label="AC" value={stats.ac} />
-                            <StatChip label="HP Max" value={stats.hpMax} />
-                            <StatChip label="Init" value={stats.initiativeMod} />
-                          </>
-                        );
-                      })()}
-                    </div>
-                  </div>
-                </div>
-
-                <div style={{ display: "grid", gap: 14, minWidth: 0 }}>
-                  <div
-                    style={{
-                      display: "grid",
-                      gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
-                      gap: 14,
-                      minWidth: 0,
-                    }}
-                  >
-                    {BUILD_FOCUS_OPTIONS.map((option) => {
-                      const active = currentFocus === option.id;
-                      const hovered = hoveredFocus === option.id;
-                      const meta = BUILD_FOCUS_META[option.id];
-                      const palette = getFocusPalette(option.id, active || hovered);
-                      const copy = FOCUS_RITUAL_COPY[option.id];
-
-                      return (
-                        <button
-                          key={option.id}
-                          type="button"
-                          onMouseEnter={() => setHoveredFocus(option.id)}
-                          onMouseLeave={() => setHoveredFocus(null)}
-                          onFocus={() => setHoveredFocus(option.id)}
-                          onBlur={() => setHoveredFocus(null)}
-                          onClick={() => {
-                            if (!editable) {
-                              playSfx(SFX.uiFailure, 0.5);
-                              return;
-                            }
-                            playSfx(SFX.uiSuccess, 0.62);
-                            setBuildFocus(option.id);
-                            setRitualProgress((prev) => ({
-                              ...prev,
-                              focusConfirmed: true,
-                            }));
-                            setHeroCreationStep("name");
-                          }}
-                          disabled={!editable}
-                          style={{
-                            textAlign: "left",
-                            padding: 18,
-                            borderRadius: 20,
-                            border: palette.border,
-                            background: palette.background,
-                            boxShadow: palette.shadow,
-                            color: "inherit",
-                            cursor: editable ? "pointer" : "not-allowed",
-                            opacity: editable ? 1 : 0.6,
-                            display: "grid",
-                            gap: 10,
-                            transition:
-                              "transform 140ms ease, box-shadow 140ms ease, border-color 140ms ease, filter 140ms ease",
-                            minWidth: 0,
-                            boxSizing: "border-box",
-                            transform:
-                              active || hovered
-                                ? "translateY(-3px)"
-                                : "translateY(0)",
-                            minHeight: 220,
-                            alignContent: "start",
-                          }}
-                        >
-                          <div
-                            style={{
-                              display: "flex",
-                              justifyContent: "space-between",
-                              gap: 8,
-                              alignItems: "center",
-                            }}
-                          >
-                            <div
-                              style={{
-                                fontSize: 22,
-                                fontWeight: 950,
-                                color: getFocusTitleColor(option.id),
-                              }}
-                            >
-                              {option.icon} {option.label}
-                            </div>
-
-                            {active ? (
-                              <span
-                                style={{
-                                  fontSize: 10,
-                                  fontWeight: 900,
-                                  textTransform: "uppercase",
-                                  letterSpacing: "0.12em",
-                                  padding: "6px 8px",
-                                  borderRadius: 999,
-                                  border: "1px solid rgba(255,255,255,0.16)",
-                                  background: "rgba(255,255,255,0.08)",
-                                }}
-                              >
-                                Bound
-                              </span>
-                            ) : null}
-                          </div>
-
-                          <div
-                            style={{
-                              fontSize: 14,
-                              fontWeight: 800,
-                              lineHeight: 1.35,
-                              opacity: 0.94,
-                            }}
-                          >
-                            {copy.doctrine}
-                          </div>
-
-                          <div
-                            style={{
-                              fontSize: 12,
-                              opacity: 0.9,
-                              lineHeight: 1.5,
-                            }}
-                          >
-                            <strong>Shift:</strong> {renderFocusDeltaSummary(option.id)}
-                          </div>
-
-                          <div
-                            style={{
-                              fontSize: 12,
-                              opacity: 0.8,
-                              lineHeight: 1.55,
-                            }}
-                          >
-                            <strong>Vow:</strong> {copy.consequence}
-                          </div>
-
-                          <div
-                            style={{
-                              fontSize: 12,
-                              opacity: 0.72,
-                              lineHeight: 1.55,
-                            }}
-                          >
-                            <strong>For:</strong> {meta.bestFor}
-                          </div>
-                        </button>
-                      );
-                    })}
-                  </div>
-
-                  <div
-                    style={{
-                      ...helperCardStyle,
-                      border: "1px solid rgba(255,255,255,0.10)",
-                      background:
-                        "linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.02))",
-                    }}
-                  >
-                    <div style={{ fontSize: 14, fontWeight: 900 }}>
-                      What this stance changes
-                    </div>
-                    <div style={{ fontSize: 13, opacity: 0.82, lineHeight: 1.65 }}>
-                      Your class remains <strong>{resolvedClass}</strong>. Your
-                      lineage remains <strong>{resolvedSpecies}</strong>. Focus only
-                      changes how this hero survives pressure, controls tempo, and
-                      carries their power into the first descent.
-                    </div>
-                  </div>
-
-                  <div
-                    style={{
-                      display: "flex",
-                      justifyContent: "space-between",
-                      gap: 12,
-                      flexWrap: "wrap",
-                      alignItems: "center",
-                      paddingTop: 6,
-                    }}
-                  >
-                    <button
-                      type="button"
-                      onClick={() => {
-                        playSfx(SFX.buttonClick, 0.54);
-                        goToPreviousStep();
-                      }}
-                      style={{
-                        ...controlButtonBase,
-                        border: "1px solid rgba(255,255,255,0.12)",
-                        background: "rgba(255,255,255,0.05)",
-                        color: "inherit",
-                      }}
-                    >
-                      Back
-                    </button>
-
-                    <div
-                      style={{
-                        fontSize: 12,
-                        opacity: 0.72,
-                        alignSelf: "center",
-                      }}
-                    >
-                      Hover a stance to feel its doctrine. Click to bind it.
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </article>
-        </div>
+        <FocusPanel
+          currentStep={heroCreationStep}
+          editable={editable}
+          row={row}
+          display={display}
+          resolvedSpecies={resolvedSpecies}
+          resolvedClass={resolvedClass}
+          resolvedSpeciesMeta={resolvedSpeciesMeta}
+          resolvedClassMeta={resolvedClassMeta}
+          portraitPath={portraitPath}
+          fallbackPortraitPath={fallbackPortraitPath}
+          currentFocus={currentFocus}
+          hoveredFocus={hoveredFocus}
+          previewFocus={previewFocus}
+          previewFocusCopy={previewFocusCopy}
+          previewFocusPalette={previewFocusPalette}
+          baseStats={baseStats}
+          renderFocusDeltaSummary={renderFocusDeltaSummary}
+          onBack={() => {
+            playSfx(SFX.buttonClick, 0.54);
+            goToPreviousStep();
+          }}
+          onHoverFocus={setHoveredFocus}
+          onSelectFocus={(focus) => {
+            if (!editable) {
+              playSfx(SFX.uiFailure, 0.5);
+              return;
+            }
+            playSfx(SFX.uiSuccess, 0.62);
+            setBuildFocus(focus);
+            setRitualProgress((prev) => ({
+              ...prev,
+              focusConfirmed: true,
+            }));
+            setHeroCreationStep("name");
+          }}
+        />
       );
 
     case "name":
       return (
-        <div key="ritual-name" style={ritualStageStyle}>
-          <RitualFrame
-            title="Name the Hero"
-            subtitle="A name binds memory to fate. This is the first voice the Chronicle will remember."
-            footer={
-              <div
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  gap: 12,
-                  flexWrap: "wrap",
-                }}
-              >
-                <button
-                  type="button"
-                  onClick={() => {
-                    playSfx(SFX.buttonClick, 0.54);
-                    goToPreviousStep();
-                  }}
-                  style={{
-                    ...controlButtonBase,
-                    border: "1px solid rgba(255,255,255,0.12)",
-                    background: "rgba(255,255,255,0.05)",
-                    color: "inherit",
-                  }}
-                >
-                  Back
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (!canContinueFromName) {
-                      playSfx(SFX.uiFailure, 0.5);
-                      return;
-                    }
-                    playSfx(SFX.uiSuccess, 0.64);
-                    setHeroCreationStep("confirm");
-                  }}
-                  disabled={!canContinueFromName}
-                  style={{
-                    ...controlButtonBase,
-                    border: "1px solid rgba(255,205,126,0.28)",
-                    background: canContinueFromName
-                      ? "linear-gradient(180deg, rgba(255,201,116,0.98), rgba(218,132,47,0.98))"
-                      : "linear-gradient(180deg, rgba(107,89,69,0.7), rgba(74,55,39,0.74))",
-                    color: canContinueFromName
-                      ? "#2f1606"
-                      : "rgba(244,227,201,0.75)",
-                    opacity: canContinueFromName ? 1 : 0.62,
-                    cursor: canContinueFromName ? "pointer" : "not-allowed",
-                    minWidth: 140,
-                  }}
-                >
-                  Continue
-                </button>
-              </div>
+        <NamePanel
+          currentStep={heroCreationStep}
+          editable={editable}
+          row={row}
+          display={display}
+          resolvedSpecies={resolvedSpecies}
+          resolvedClass={resolvedClass}
+          resolvedSpeciesMeta={resolvedSpeciesMeta}
+          resolvedClassMeta={resolvedClassMeta}
+          resolvedFocusMeta={resolvedFocusMeta}
+          currentFocus={currentFocus}
+          portraitPath={portraitPath}
+          fallbackPortraitPath={fallbackPortraitPath}
+          canContinueFromName={canContinueFromName}
+          onBack={() => {
+            playSfx(SFX.buttonClick, 0.54);
+            goToPreviousStep();
+          }}
+          onChangeName={(name) => setHeroField({ name })}
+          onContinue={() => {
+            if (!canContinueFromName) {
+              playSfx(SFX.uiFailure, 0.5);
+              return;
             }
-          >
-            <div style={{ display: "grid", gap: 16, minWidth: 0 }}>
-              <RitualStepPills currentStep={heroCreationStep} />
-
-              <div
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
-                  gap: 20,
-                  alignItems: "start",
-                  minWidth: 0,
-                }}
-              >
-                <div style={{ display: "grid", gap: 14, minWidth: 0 }}>
-                  <div style={{ display: "grid", gap: 10, minWidth: 0 }}>
-                    <TinyLabel>Hero Name</TinyLabel>
-                    <input
-                      value={row?.name ?? ""}
-                      disabled={!editable}
-                      onChange={(e) => setHeroField({ name: e.target.value })}
-                      placeholder="The Lone Hero"
-                      style={{
-                        ...inputStyle,
-                        padding: "14px 16px",
-                        fontSize: 18,
-                        borderRadius: 14,
-                      }}
-                    />
-                    <div
-                      style={{ fontSize: 13, opacity: 0.74, lineHeight: 1.6 }}
-                    >
-                      {(row?.name ?? "").trim().length > 0 ? (
-                        <>
-                          Current Chronicle entry: <strong>{display}</strong>
-                        </>
-                      ) : (
-                        <>Choose a true name before continuing.</>
-                      )}
-                    </div>
-                  </div>
-
-                  <div style={helperCardStyle}>
-                    <div style={{ fontSize: 13, fontWeight: 800 }}>
-                      Current Build Summary
-                    </div>
-                    <div style={{ fontSize: 13, opacity: 0.82, lineHeight: 1.6 }}>
-                      <strong>{resolvedSpecies}</strong> {resolvedClass} ·{" "}
-                      <strong>
-                        {BUILD_FOCUS_OPTIONS.find((x) => x.id === currentFocus)
-                          ?.label ?? ""}
-                      </strong>
-                    </div>
-                    <div style={{ fontSize: 12, opacity: 0.76, lineHeight: 1.6 }}>
-                      {resolvedSpeciesMeta.bestFor} · {resolvedClassMeta.role} ·{" "}
-                      {resolvedFocusMeta.bestFor}
-                    </div>
-                  </div>
-                </div>
-
-                <div
-                  style={{
-                    borderRadius: 18,
-                    overflow: "hidden",
-                    border: "1px solid rgba(255,255,255,0.10)",
-                    background: "rgba(255,255,255,0.03)",
-                    minWidth: 0,
-                    boxSizing: "border-box",
-                  }}
-                >
-                  <HeroRitualPortrait
-                    species={resolvedSpecies}
-                    className={resolvedClass}
-                    portrait={row?.portrait ?? "Male"}
-                    imageSrc={portraitPath}
-                    fallbackImageSrc={fallbackPortraitPath}
-                    alt={`${display} portrait`}
-                    height={320}
-                    objectPosition={getPortraitObjectPosition("name")}
-                  />
-                </div>
-              </div>
-            </div>
-          </RitualFrame>
-        </div>
+            playSfx(SFX.uiSuccess, 0.64);
+            setHeroCreationStep("confirm");
+          }}
+        />
       );
 
     case "confirm":
       return (
-        <div key="ritual-confirm" style={ritualStageStyle}>
-          <article style={oathPanelStyle}>
-            <div
-              aria-hidden="true"
-              style={{
-                position: "absolute",
-                top: 12,
-                left: "50%",
-                transform: "translateX(-50%)",
-                width: 260,
-                height: 260,
-                borderRadius: "50%",
-                border: "1px solid rgba(255,210,140,0.10)",
-                boxShadow:
-                  "0 0 80px rgba(255,176,64,0.10), inset 0 0 40px rgba(255,220,160,0.04)",
-                opacity: 0.9,
-                pointerEvents: "none",
-              }}
-            />
-            <div
-              aria-hidden="true"
-              style={{
-                position: "absolute",
-                top: 34,
-                left: "50%",
-                transform: "translateX(-50%)",
-                width: 190,
-                height: 190,
-                borderRadius: "50%",
-                border: "1px solid rgba(255,210,140,0.08)",
-                opacity: 0.8,
-                pointerEvents: "none",
-              }}
-            />
-            <div
-              aria-hidden="true"
-              style={{
-                position: "absolute",
-                top: 26,
-                left: 24,
-                right: 24,
-                height: 1,
-                background:
-                  "linear-gradient(90deg, rgba(255,255,255,0), rgba(255,210,140,0.22), rgba(255,255,255,0))",
-                pointerEvents: "none",
-              }}
-            />
-            <div
-              aria-hidden="true"
-              style={{
-                position: "absolute",
-                top: 104,
-                left: 36,
-                width: 72,
-                height: 72,
-                borderRadius: "50%",
-                background:
-                  "radial-gradient(circle, rgba(255,170,70,0.18) 0%, rgba(255,170,70,0.04) 45%, rgba(0,0,0,0) 70%)",
-                filter: "blur(12px)",
-                pointerEvents: "none",
-              }}
-            />
-            <div
-              aria-hidden="true"
-              style={{
-                position: "absolute",
-                bottom: 52,
-                right: 48,
-                width: 96,
-                height: 96,
-                borderRadius: "50%",
-                background:
-                  "radial-gradient(circle, rgba(255,196,118,0.14) 0%, rgba(255,196,118,0.04) 46%, rgba(0,0,0,0) 72%)",
-                filter: "blur(16px)",
-                pointerEvents: "none",
-              }}
-            />
-
-            <div style={{ display: "grid", gap: 20, minWidth: 0, position: "relative", zIndex: 1 }}>
-              <div
-                style={{
-                  display: "grid",
-                  gap: 6,
-                  justifyItems: "center",
-                  textAlign: "center",
-                  marginBottom: 4,
-                }}
-              >
-                <div
-                  style={{
-                    fontSize: 11,
-                    textTransform: "uppercase",
-                    letterSpacing: "0.24em",
-                    opacity: 0.62,
-                    fontWeight: 900,
-                  }}
-                >
-                  Chronicle Entry
-                </div>
-
-                <div
-                  style={{
-                    fontSize: 68,
-                    lineHeight: 0.9,
-                    fontWeight: 1000,
-                    letterSpacing: "0.08em",
-                    textTransform: "uppercase",
-                    background:
-                      "linear-gradient(180deg, rgba(255,242,214,0.98) 0%, rgba(255,214,134,0.98) 42%, rgba(229,143,54,0.98) 100%)",
-                    WebkitBackgroundClip: "text",
-                    backgroundClip: "text",
-                    color: "transparent",
-                    textShadow:
-                      "0 0 26px rgba(255,176,64,0.18), 0 3px 22px rgba(0,0,0,0.35)",
-                  }}
-                >
-                  The Oath
-                </div>
-
-                <div
-                  style={{
-                    width: 260,
-                    height: 1,
-                    background:
-                      "linear-gradient(90deg, rgba(255,255,255,0), rgba(255,210,140,0.28), rgba(255,255,255,0))",
-                  }}
-                />
-
-                <div
-                  style={{
-                    fontSize: 13,
-                    opacity: 0.78,
-                    lineHeight: 1.6,
-                    maxWidth: 720,
-                  }}
-                >
-                  Spoken into the Chronicle. Bound before witness. Carried into
-                  the first descent.
-                </div>
-              </div>
-
-              <div
-                style={{
-                  display: "grid",
-                  gridTemplateColumns:
-                    "minmax(520px, 1.28fr) minmax(340px, 0.9fr)",
-                  gap: 26,
-                  alignItems: "start",
-                  minWidth: 0,
-                }}
-              >
-                <div
-                  style={{
-                    borderRadius: 24,
-                    overflow: "hidden",
-                    border: "1px solid rgba(255,205,126,0.18)",
-                    background:
-                      "radial-gradient(circle at 50% 18%, rgba(255,224,178,0.12), rgba(255,224,178,0.02) 24%, rgba(0,0,0,0) 44%), linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.02))",
-                    boxShadow:
-                      "0 0 60px rgba(255,176,64,0.10), 0 22px 48px rgba(0,0,0,0.28)",
-                    minWidth: 0,
-                    boxSizing: "border-box",
-                  }}
-                >
-                  <HeroRitualPortrait
-                    species={resolvedSpecies}
-                    className={resolvedClass}
-                    portrait={row?.portrait ?? "Male"}
-                    imageSrc={portraitPath}
-                    fallbackImageSrc={fallbackPortraitPath}
-                    alt={`${display} portrait`}
-                    height={620}
-                    objectPosition={getPortraitObjectPosition("oath")}
-                  />
-                </div>
-
-                <div style={{ display: "grid", gap: 16, minWidth: 0 }}>
-                  <div style={{ display: "grid", gap: 8 }}>
-                    <div
-                      style={{
-                        fontSize: 48,
-                        fontWeight: 1000,
-                        lineHeight: 0.94,
-                      }}
-                    >
-                      {display}
-                    </div>
-                    <div style={{ fontSize: 18, opacity: 0.84 }}>
-                      {resolvedSpecies} {resolvedClass}
-                    </div>
-                    <div
-                      style={{
-                        fontSize: 13,
-                        opacity: 0.76,
-                        lineHeight: 1.6,
-                      }}
-                    >
-                      This name enters canon as the first witness to the
-                      descent.
-                    </div>
-                  </div>
-
-                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                    <SectionPill tone="warn">
-                      <strong>Focus</strong>{" "}
-                      {BUILD_FOCUS_OPTIONS.find((x) => x.id === currentFocus)
-                        ?.label ?? "Balanced"}
-                    </SectionPill>
-                    <SectionPill>
-                      <strong>Portrait</strong> {row?.portrait ?? "Male"}
-                    </SectionPill>
-                    <SectionPill>
-                      <strong>Role</strong> {resolvedClassMeta.role}
-                    </SectionPill>
-                  </div>
-
-                  <div
-                    style={{
-                      display: "grid",
-                      gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
-                      gap: 10,
-                      minWidth: 0,
-                    }}
-                  >
-                    <StatChip
-                      label="AC"
-                      value={`${row?.ac ?? baseStats.ac}${focusDeltaAc ? ` (${focusDeltaAc > 0 ? `+${focusDeltaAc}` : focusDeltaAc})` : ""}`}
-                    />
-                    <StatChip
-                      label="HP Max"
-                      value={`${row?.hpMax ?? baseStats.hpMax}${focusDeltaHp ? ` (${focusDeltaHp > 0 ? `+${focusDeltaHp}` : focusDeltaHp})` : ""}`}
-                    />
-                    <StatChip
-                      label="Init"
-                      value={`${row?.initiativeMod ?? baseStats.initiativeMod}${focusDeltaInit ? ` (${focusDeltaInit > 0 ? `+${focusDeltaInit}` : focusDeltaInit})` : ""}`}
-                    />
-                  </div>
-
-                  <div style={helperCardStyle}>
-                    <div style={{ fontSize: 14, fontWeight: 900 }}>
-                      What this build does well
-                    </div>
-                    <div style={{ fontSize: 13, opacity: 0.84, lineHeight: 1.65 }}>
-                      • {resolvedSpeciesMeta.strengths[0]}
-                      <br />
-                      • {resolvedClassMeta.strengths[0]}
-                      <br />
-                      • {resolvedFocusMeta.gains[0]}
-                    </div>
-                  </div>
-
-                  <div style={helperCardStyle}>
-                    <div style={{ fontSize: 14, fontWeight: 900 }}>Tradeoffs</div>
-                    <div style={{ fontSize: 13, opacity: 0.8, lineHeight: 1.65 }}>
-                      • {resolvedSpeciesMeta.tradeoff}
-                      <br />
-                      • {resolvedClassMeta.tradeoff}
-                      <br />
-                      • {resolvedFocusMeta.tradeoff}
-                    </div>
-                  </div>
-
-                  <div style={helperCardStyle}>
-                    <div style={{ fontSize: 14, fontWeight: 900 }}>
-                      Recommended playstyle
-                    </div>
-                    <div style={{ fontSize: 13, opacity: 0.82, lineHeight: 1.65 }}>
-                      This hero fits{" "}
-                      <strong>
-                        {resolvedSpeciesMeta.bestFor.toLowerCase()}
-                      </strong>
-                      , operates as a{" "}
-                      <strong>{resolvedClassMeta.role.toLowerCase()}</strong>, and
-                      is best used for{" "}
-                      <strong>{resolvedFocusMeta.bestFor.toLowerCase()}</strong>.
-                    </div>
-                  </div>
-
-                  <div
-                    style={{
-                      display: "flex",
-                      justifyContent: "space-between",
-                      gap: 12,
-                      flexWrap: "wrap",
-                      alignItems: "center",
-                      paddingTop: 6,
-                    }}
-                  >
-                    <button
-                      type="button"
-                      onClick={() => {
-                        playSfx(SFX.buttonClick, 0.54);
-                        goToPreviousStep();
-                      }}
-                      style={{
-                        ...controlButtonBase,
-                        border: "1px solid rgba(255,255,255,0.12)",
-                        background: "rgba(255,255,255,0.05)",
-                        color: "inherit",
-                      }}
-                    >
-                      Back
-                    </button>
-
-                    <div
-                      style={{
-                        display: "flex",
-                        gap: 10,
-                        flexWrap: "wrap",
-                        alignItems: "center",
-                      }}
-                    >
-                      <button
-                        onClick={() => {
-                          if (!canEnterChronicle || partyLocked || !partyDraft) {
-                            playSfx(SFX.uiFailure, 0.5);
-                            return;
-                          }
-                          onCommitChronicle();
-                        }}
-                        disabled={!canEnterChronicle || partyLocked || !partyDraft}
-                        style={{
-                          ...controlButtonBase,
-                          border: "1px solid rgba(255,205,126,0.28)",
-                          background:
-                            canEnterChronicle && !partyLocked && !!partyDraft
-                              ? "linear-gradient(180deg, rgba(255,201,116,0.98), rgba(218,132,47,0.98))"
-                              : "linear-gradient(180deg, rgba(107,89,69,0.7), rgba(74,55,39,0.74))",
-                          color:
-                            canEnterChronicle && !partyLocked && !!partyDraft
-                              ? "#2f1606"
-                              : "rgba(244,227,201,0.75)",
-                          boxShadow:
-                            canEnterChronicle && !partyLocked && !!partyDraft
-                              ? "0 10px 28px rgba(255,145,42,0.18), inset 0 1px 0 rgba(255,244,220,0.72)"
-                              : "none",
-                          opacity:
-                            canEnterChronicle && !partyLocked && !!partyDraft
-                              ? 1
-                              : 0.62,
-                          cursor:
-                            canEnterChronicle && !partyLocked && !!partyDraft
-                              ? "pointer"
-                              : "not-allowed",
-                          minWidth: 230,
-                        }}
-                      >
-                        Enter the Chronicle
-                      </button>
-
-                      <span style={{ fontSize: 12, opacity: 0.72 }}>
-                        {canEnterChronicle
-                          ? "Ritual complete"
-                          : "Complete every choice to continue"}
-                        {partyLockedByCombat ? " · Combat lock active" : ""}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </article>
-        </div>
+        <OathPanel
+          row={row}
+          display={display}
+          resolvedSpecies={resolvedSpecies}
+          resolvedClass={resolvedClass}
+          resolvedSpeciesMeta={resolvedSpeciesMeta}
+          resolvedClassMeta={resolvedClassMeta}
+          resolvedFocusMeta={resolvedFocusMeta}
+          currentFocus={currentFocus}
+          portraitPath={portraitPath}
+          fallbackPortraitPath={fallbackPortraitPath}
+          baseStats={baseStats}
+          focusDeltaAc={focusDeltaAc}
+          focusDeltaHp={focusDeltaHp}
+          focusDeltaInit={focusDeltaInit}
+          canEnterChronicle={canEnterChronicle}
+          partyLocked={partyLocked}
+          partyDraft={partyDraft}
+          partyLockedByCombat={partyLockedByCombat}
+          onBack={() => {
+            playSfx(SFX.buttonClick, 0.54);
+            goToPreviousStep();
+          }}
+          onCommit={() => {
+            if (!canEnterChronicle || partyLocked || !partyDraft) {
+              playSfx(SFX.uiFailure, 0.5);
+              return;
+            }
+            onCommitChronicle();
+          }}
+        />
       );
 
     default:
