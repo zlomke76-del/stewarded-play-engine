@@ -11,6 +11,12 @@
 // - copy reduced slightly inside plaques
 // - compact mode remains stable
 // - title/header block dropped slightly for better breathing room
+//
+// Title treatment refinement:
+// - Echoes of Fate title now uses a Chronicle-style ceremonial hierarchy
+// - added pre-title + subline framing
+// - upgraded title glow / gradient / spacing to echo THE OATH energy
+// - no structural gameplay changes
 // ------------------------------------------------------------
 
 import React, { useMemo } from "react";
@@ -781,6 +787,27 @@ export default function HeroOnboarding({
           }
         }
 
+        @keyframes titleEmberGlow {
+          0% {
+            text-shadow:
+              0 10px 30px rgba(0, 0, 0, 0.48),
+              0 0 14px rgba(255, 190, 120, 0.12),
+              0 0 28px rgba(255, 190, 120, 0.06);
+          }
+          50% {
+            text-shadow:
+              0 12px 36px rgba(0, 0, 0, 0.52),
+              0 0 18px rgba(255, 204, 148, 0.18),
+              0 0 36px rgba(255, 170, 90, 0.08);
+          }
+          100% {
+            text-shadow:
+              0 10px 30px rgba(0, 0, 0, 0.48),
+              0 0 14px rgba(255, 190, 120, 0.12),
+              0 0 28px rgba(255, 190, 120, 0.06);
+          }
+        }
+
         @media (max-width: 1260px) {
           .hero-overlay-choices {
             grid-template-columns: 1fr !important;
@@ -808,11 +835,17 @@ export default function HeroOnboarding({
           }
 
           .hero-title {
-            font-size: 34px !important;
+            font-size: 38px !important;
+            letter-spacing: 0.04em !important;
           }
 
           .hero-subtitle {
             font-size: 16px !important;
+          }
+
+          .hero-title-kicker {
+            font-size: 10px !important;
+            letter-spacing: 0.5em !important;
           }
 
           .hero-scene-panel {
@@ -840,15 +873,64 @@ export default function HeroOnboarding({
       `}</style>
 
       <div className="hero-onboarding-root" style={{ position: "relative", zIndex: 1, display: "grid", gap: 18 }}>
-        <div style={{ display: "grid", gap: 8, animation: "onboardingFadeUp 300ms ease both" }}>
+        <div
+          style={{
+            position: "relative",
+            display: "grid",
+            gap: 10,
+            maxWidth: 920,
+            animation: "onboardingFadeUp 300ms ease both",
+          }}
+        >
+          <div
+            aria-hidden
+            style={{
+              position: "absolute",
+              left: -28,
+              top: -16,
+              width: 520,
+              height: 180,
+              background:
+                "radial-gradient(ellipse at left center, rgba(255,186,118,0.14), rgba(255,186,118,0.05) 38%, rgba(0,0,0,0) 72%)",
+              filter: "blur(14px)",
+              pointerEvents: "none",
+            }}
+          />
+
+          <div
+            className="hero-title-kicker"
+            style={{
+              position: "relative",
+              zIndex: 1,
+              fontSize: 11,
+              fontWeight: 900,
+              letterSpacing: 0.72,
+              textTransform: "uppercase",
+              color: "rgba(214, 196, 164, 0.82)",
+              textShadow: "0 4px 14px rgba(0,0,0,0.34)",
+            }}
+          >
+            Chronicle Entry
+          </div>
+
           <div
             className="hero-title"
             style={{
-              fontSize: 54,
+              position: "relative",
+              zIndex: 1,
+              fontSize: 68,
               fontWeight: 950,
-              letterSpacing: 0.12,
               lineHeight: 0.92,
-              textShadow: "0 10px 32px rgba(0,0,0,0.42)",
+              letterSpacing: 0.08,
+              textTransform: "uppercase",
+              background:
+                "linear-gradient(180deg, rgba(255,245,226,0.98) 0%, rgba(244,214,158,0.98) 38%, rgba(193,133,67,0.98) 100%)",
+              WebkitBackgroundClip: "text",
+              backgroundClip: "text",
+              WebkitTextFillColor: "transparent",
+              color: "transparent",
+              animation: "titleEmberGlow 5.6s ease-in-out infinite",
+              filter: "drop-shadow(0 2px 0 rgba(255,236,198,0.08))",
             }}
           >
             {heroTitle}
@@ -857,10 +939,20 @@ export default function HeroOnboarding({
           <div
             style={{
               display: "grid",
-              gap: 6,
+              gap: 8,
               maxWidth: 860,
             }}
           >
+            <div
+              style={{
+                width: "min(100%, 560px)",
+                height: 1,
+                background:
+                  "linear-gradient(90deg, rgba(255,214,160,0.0) 0%, rgba(255,214,160,0.34) 18%, rgba(255,214,160,0.10) 100%)",
+                boxShadow: "0 0 14px rgba(255,180,98,0.08)",
+              }}
+            />
+
             <div
               style={{
                 fontSize: 11,
@@ -879,6 +971,8 @@ export default function HeroOnboarding({
                 fontSize: 18,
                 lineHeight: 1.56,
                 opacity: 0.88,
+                maxWidth: 760,
+                textShadow: "0 6px 18px rgba(0,0,0,0.22)",
               }}
             >
               {heroSubtitle}
