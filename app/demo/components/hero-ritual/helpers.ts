@@ -88,6 +88,7 @@ function getSpeciesFolderName(species: string) {
   if (normalized === "elf") return "Elf";
   if (normalized === "gnome") return "Gnome";
   if (normalized === "halfling") return "Halfling";
+  if (normalized === "tiefling") return "Tiefling";
   return "Human";
 }
 
