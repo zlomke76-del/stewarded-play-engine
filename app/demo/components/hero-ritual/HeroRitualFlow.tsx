@@ -107,6 +107,69 @@ const FOCUS_RITUAL_COPY: Record<
   },
 };
 
+const CLASS_RITUAL_COPY: Partial<
+  Record<
+    string,
+    {
+      doctrine: string;
+      callout: string;
+    }
+  >
+> = {
+  Warrior: {
+    doctrine: "Stand where others break.",
+    callout: "Reliable frontline pressure with simple, decisive rhythm.",
+  },
+  Rogue: {
+    doctrine: "Cut where no shield can turn.",
+    callout: "Precision, timing, and opportunistic burst.",
+  },
+  Mage: {
+    doctrine: "Shape the fight before steel arrives.",
+    callout: "Arcane burst and battlefield control.",
+  },
+  Cleric: {
+    doctrine: "Keep the flame alive.",
+    callout: "Stable support, protection, and endurance.",
+  },
+  Ranger: {
+    doctrine: "Hunt from motion, not from safety.",
+    callout: "Skirmish pressure, range, and flexible tempo.",
+  },
+  Paladin: {
+    doctrine: "Carry judgment into the front line.",
+    callout: "Holy durability with heroic frontline presence.",
+  },
+  Bard: {
+    doctrine: "Turn rhythm into advantage.",
+    callout: "Hybrid influence, support, and clever tempo.",
+  },
+  Druid: {
+    doctrine: "Endure and adapt.",
+    callout: "Steady hybrid control for long-form fights.",
+  },
+  Monk: {
+    doctrine: "Become motion itself.",
+    callout: "Fast pressure with disciplined mobility.",
+  },
+  Artificer: {
+    doctrine: "Outbuild the danger.",
+    callout: "Technical utility and battlefield invention.",
+  },
+  Barbarian: {
+    doctrine: "Break through by force.",
+    callout: "Raw survivability and relentless aggression.",
+  },
+  Sorcerer: {
+    doctrine: "Unleash power before it slips away.",
+    callout: "Explosive magical identity and high-risk burst.",
+  },
+  Warlock: {
+    doctrine: "Command what should command you.",
+    callout: "Dark pressure tools with strong identity.",
+  },
+};
+
 export default function HeroRitualFlow({
   heroCreationStep,
   setHeroCreationStep,
@@ -177,7 +240,7 @@ export default function HeroRitualFlow({
   };
 
   const speciesPages = useMemo(() => chunkIntoPages(SAFE_SPECIES, 3), []);
-  const classPages = useMemo(() => chunkIntoPages(SAFE_CLASS_ARCHETYPES, 3), []);
+  const classPages = useMemo(() => chunkIntoPages(SAFE_CLASS_ARCHETYPES, 4), []);
 
   useEffect(() => {
     const speciesIndex = SAFE_SPECIES.findIndex(
@@ -193,7 +256,7 @@ export default function HeroRitualFlow({
       (className) => className.toLowerCase() === resolvedClass.toLowerCase()
     );
     if (classIndex >= 0) {
-      setClassPageIndex(Math.floor(classIndex / 3));
+      setClassPageIndex(Math.floor(classIndex / 4));
     }
   }, [resolvedClass]);
 
@@ -280,6 +343,35 @@ export default function HeroRitualFlow({
     if (chips.length === 0) chips.push("No stat shift");
 
     return chips.join(" · ");
+  }
+
+  function renderClassStepCallout(className: string) {
+    const copy = CLASS_RITUAL_COPY[className];
+    if (!copy) return null;
+
+    return (
+      <>
+        <div
+          style={{
+            fontSize: 13,
+            opacity: 0.92,
+            lineHeight: 1.45,
+            fontWeight: 800,
+          }}
+        >
+          {copy.doctrine}
+        </div>
+        <div
+          style={{
+            fontSize: 12,
+            opacity: 0.74,
+            lineHeight: 1.55,
+          }}
+        >
+          {copy.callout}
+        </div>
+      </>
+    );
   }
 
   switch (heroCreationStep) {
@@ -713,7 +805,7 @@ export default function HeroRitualFlow({
         <div key="ritual-class" style={ritualStageStyle}>
           <RitualFrame
             title="Choose a Class"
-            subtitle="This should tell the player how the hero fights, how difficult the role is, and which focus pairings make sense."
+            subtitle="Choose the path your hero will carry into the first descent."
             footer={
               <div
                 style={{
@@ -751,7 +843,7 @@ export default function HeroRitualFlow({
                   <div
                     style={{ fontSize: 12, opacity: 0.72, alignSelf: "center" }}
                   >
-                    Compare role, difficulty, strengths, and synergy.
+                    Four archetypes at a time. Read less. Feel the role faster.
                   </div>
                 </div>
 
@@ -788,7 +880,7 @@ export default function HeroRitualFlow({
                         minWidth: 110,
                       }}
                     >
-                      Previous 3
+                      Previous 4
                     </button>
 
                     <button
@@ -814,7 +906,7 @@ export default function HeroRitualFlow({
                         minWidth: 110,
                       }}
                     >
-                      Next 3
+                      Next 4
                     </button>
                   </div>
                 </div>
@@ -826,8 +918,29 @@ export default function HeroRitualFlow({
 
               <div
                 style={{
+                  ...helperCardStyle,
+                  border: "1px solid rgba(255,196,118,0.14)",
+                  background:
+                    "radial-gradient(circle at 50% 0%, rgba(255,196,118,0.10), rgba(255,255,255,0.02) 42%), linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.02))",
+                }}
+              >
+                <div style={{ fontSize: 14, fontWeight: 900 }}>
+                  Chosen lineage, awaiting its path
+                </div>
+                <div style={{ fontSize: 13, opacity: 0.82, lineHeight: 1.65 }}>
+                  <strong>{resolvedSpecies}</strong> stands ready. The next choice
+                  determines how this hero enters danger, what role they carry,
+                  and which focus pairings will shape the first descent.
+                </div>
+              </div>
+
+              <div
+                style={{
                   display: "grid",
-                  gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
+                  gridTemplateColumns:
+                    visibleClasses.length === 4
+                      ? "repeat(2, minmax(0, 1fr))"
+                      : "repeat(auto-fit, minmax(280px, 1fr))",
                   gap: 18,
                   width: "100%",
                   minWidth: 0,
@@ -858,6 +971,7 @@ export default function HeroRitualFlow({
                       disabled={!editable}
                       details={
                         <>
+                          {renderClassStepCallout(className)}
                           <div
                             style={{
                               fontSize: 12,
@@ -1033,8 +1147,14 @@ export default function HeroRitualFlow({
                           color: getFocusTitleColor(previewFocus),
                         }}
                       >
-                        {BUILD_FOCUS_OPTIONS.find((x) => x.id === previewFocus)?.icon}{" "}
-                        {BUILD_FOCUS_OPTIONS.find((x) => x.id === previewFocus)?.label}
+                        {
+                          BUILD_FOCUS_OPTIONS.find((x) => x.id === previewFocus)
+                            ?.icon
+                        }{" "}
+                        {
+                          BUILD_FOCUS_OPTIONS.find((x) => x.id === previewFocus)
+                            ?.label
+                        }
                       </div>
                       <div
                         style={{
@@ -1440,7 +1560,7 @@ export default function HeroRitualFlow({
         <div key="ritual-confirm" style={ritualStageStyle}>
           <RitualFrame
             title="The Oath"
-            subtitle="A new name enters the Chronicle."
+            subtitle="Spoken into the Chronicle. Bound to the first descent."
             footer={
               <div
                 style={{
@@ -1506,7 +1626,7 @@ export default function HeroRitualFlow({
                         canEnterChronicle && !partyLocked && !!partyDraft
                           ? "pointer"
                           : "not-allowed",
-                      minWidth: 210,
+                      minWidth: 230,
                     }}
                   >
                     Enter the Chronicle
@@ -1522,127 +1642,299 @@ export default function HeroRitualFlow({
               </div>
             }
           >
-            <div style={{ display: "grid", gap: 16, minWidth: 0 }}>
+            <div style={{ display: "grid", gap: 20, minWidth: 0 }}>
               <RitualStepPills currentStep={heroCreationStep} />
 
               <div
                 style={{
-                  display: "grid",
-                  gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
-                  gap: 20,
-                  alignItems: "start",
-                  minWidth: 0,
+                  position: "relative",
+                  borderRadius: 22,
+                  overflow: "hidden",
+                  border: "1px solid rgba(255,205,126,0.14)",
+                  background:
+                    "radial-gradient(circle at 50% 8%, rgba(255,209,130,0.12), rgba(255,209,130,0.02) 28%, rgba(0,0,0,0) 52%), linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.02))",
+                  padding: "20px 20px 22px",
+                  boxShadow:
+                    "0 0 50px rgba(255,168,62,0.10), inset 0 1px 0 rgba(255,255,255,0.04)",
                 }}
               >
                 <div
+                  aria-hidden="true"
                   style={{
-                    borderRadius: 20,
-                    overflow: "hidden",
-                    border: "1px solid rgba(255,255,255,0.10)",
-                    background: "rgba(255,255,255,0.03)",
+                    position: "absolute",
+                    top: 12,
+                    left: "50%",
+                    transform: "translateX(-50%)",
+                    width: 260,
+                    height: 260,
+                    borderRadius: "50%",
+                    border: "1px solid rgba(255,210,140,0.10)",
                     boxShadow:
-                      "0 0 40px rgba(255,180,80,0.18), 0 18px 40px rgba(0,0,0,0.24)",
-                    minWidth: 0,
-                    boxSizing: "border-box",
+                      "0 0 80px rgba(255,176,64,0.10), inset 0 0 40px rgba(255,220,160,0.04)",
+                    opacity: 0.9,
+                    pointerEvents: "none",
+                  }}
+                />
+                <div
+                  aria-hidden="true"
+                  style={{
+                    position: "absolute",
+                    top: 34,
+                    left: "50%",
+                    transform: "translateX(-50%)",
+                    width: 190,
+                    height: 190,
+                    borderRadius: "50%",
+                    border: "1px solid rgba(255,210,140,0.08)",
+                    opacity: 0.8,
+                    pointerEvents: "none",
+                  }}
+                />
+                <div
+                  aria-hidden="true"
+                  style={{
+                    position: "absolute",
+                    top: 26,
+                    left: 24,
+                    right: 24,
+                    height: 1,
+                    background:
+                      "linear-gradient(90deg, rgba(255,255,255,0), rgba(255,210,140,0.22), rgba(255,255,255,0))",
+                    pointerEvents: "none",
+                  }}
+                />
+                <div
+                  aria-hidden="true"
+                  style={{
+                    position: "absolute",
+                    top: 104,
+                    left: 36,
+                    width: 72,
+                    height: 72,
+                    borderRadius: "50%",
+                    background:
+                      "radial-gradient(circle, rgba(255,170,70,0.18) 0%, rgba(255,170,70,0.04) 45%, rgba(0,0,0,0) 70%)",
+                    filter: "blur(12px)",
+                    pointerEvents: "none",
+                  }}
+                />
+                <div
+                  aria-hidden="true"
+                  style={{
+                    position: "absolute",
+                    bottom: 52,
+                    right: 48,
+                    width: 96,
+                    height: 96,
+                    borderRadius: "50%",
+                    background:
+                      "radial-gradient(circle, rgba(255,196,118,0.14) 0%, rgba(255,196,118,0.04) 46%, rgba(0,0,0,0) 72%)",
+                    filter: "blur(16px)",
+                    pointerEvents: "none",
+                  }}
+                />
+
+                <div
+                  style={{
+                    display: "grid",
+                    gap: 6,
+                    justifyItems: "center",
+                    textAlign: "center",
+                    marginBottom: 18,
+                    position: "relative",
+                    zIndex: 1,
                   }}
                 >
-                  <HeroRitualPortrait
-                    species={resolvedSpecies}
-                    className={resolvedClass}
-                    portrait={row?.portrait ?? "Male"}
-                    imageSrc={portraitPath}
-                    fallbackImageSrc={fallbackPortraitPath}
-                    alt={`${display} portrait`}
-                    height={400}
-                    objectPosition={getPortraitObjectPosition("oath")}
-                  />
-                </div>
-
-                <div style={{ display: "grid", gap: 16, minWidth: 0 }}>
-                  <div>
-                    <div
-                      style={{ fontSize: 36, fontWeight: 950, lineHeight: 1.05 }}
-                    >
-                      {display}
-                    </div>
-                    <div style={{ marginTop: 8, fontSize: 16, opacity: 0.82 }}>
-                      {resolvedSpecies} {resolvedClass}
-                    </div>
-                  </div>
-
-                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                    <SectionPill>
-                      <strong>Focus</strong>{" "}
-                      {BUILD_FOCUS_OPTIONS.find((x) => x.id === currentFocus)
-                        ?.label ?? "Balanced"}
-                    </SectionPill>
-                    <SectionPill>
-                      <strong>Portrait</strong> {row?.portrait ?? "Male"}
-                    </SectionPill>
-                    <SectionPill tone="warn">
-                      <strong>Role</strong> {resolvedClassMeta.role}
-                    </SectionPill>
+                  <div
+                    style={{
+                      fontSize: 11,
+                      textTransform: "uppercase",
+                      letterSpacing: "0.24em",
+                      opacity: 0.62,
+                      fontWeight: 900,
+                    }}
+                  >
+                    Chronicle Entry
                   </div>
 
                   <div
                     style={{
-                      display: "grid",
-                      gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))",
-                      gap: 10,
-                      minWidth: 0,
+                      fontSize: 60,
+                      lineHeight: 0.92,
+                      fontWeight: 1000,
+                      letterSpacing: "0.08em",
+                      textTransform: "uppercase",
+                      background:
+                        "linear-gradient(180deg, rgba(255,242,214,0.98) 0%, rgba(255,214,134,0.98) 42%, rgba(229,143,54,0.98) 100%)",
+                      WebkitBackgroundClip: "text",
+                      backgroundClip: "text",
+                      color: "transparent",
+                      textShadow:
+                        "0 0 26px rgba(255,176,64,0.18), 0 3px 22px rgba(0,0,0,0.35)",
                     }}
                   >
-                    <StatChip
-                      label="AC"
-                      value={`${row?.ac ?? baseStats.ac}${focusDeltaAc ? ` (${focusDeltaAc > 0 ? `+${focusDeltaAc}` : focusDeltaAc})` : ""}`}
-                    />
-                    <StatChip
-                      label="HP Max"
-                      value={`${row?.hpMax ?? baseStats.hpMax}${focusDeltaHp ? ` (${focusDeltaHp > 0 ? `+${focusDeltaHp}` : focusDeltaHp})` : ""}`}
-                    />
-                    <StatChip
-                      label="Init"
-                      value={`${row?.initiativeMod ?? baseStats.initiativeMod}${focusDeltaInit ? ` (${focusDeltaInit > 0 ? `+${focusDeltaInit}` : focusDeltaInit})` : ""}`}
+                    The Oath
+                  </div>
+
+                  <div
+                    style={{
+                      width: 260,
+                      height: 1,
+                      background:
+                        "linear-gradient(90deg, rgba(255,255,255,0), rgba(255,210,140,0.28), rgba(255,255,255,0))",
+                    }}
+                  />
+
+                  <div
+                    style={{
+                      fontSize: 13,
+                      opacity: 0.78,
+                      lineHeight: 1.6,
+                      maxWidth: 720,
+                    }}
+                  >
+                    Spoken into the Chronicle. Bound before witness. Carried into
+                    the first descent.
+                  </div>
+                </div>
+
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns:
+                      "minmax(420px, 1.22fr) minmax(320px, 0.92fr)",
+                    gap: 24,
+                    alignItems: "start",
+                    minWidth: 0,
+                    position: "relative",
+                    zIndex: 1,
+                  }}
+                >
+                  <div
+                    style={{
+                      borderRadius: 24,
+                      overflow: "hidden",
+                      border: "1px solid rgba(255,205,126,0.18)",
+                      background:
+                        "radial-gradient(circle at 50% 18%, rgba(255,224,178,0.12), rgba(255,224,178,0.02) 24%, rgba(0,0,0,0) 44%), linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.02))",
+                      boxShadow:
+                        "0 0 60px rgba(255,176,64,0.10), 0 22px 48px rgba(0,0,0,0.28)",
+                      minWidth: 0,
+                      boxSizing: "border-box",
+                    }}
+                  >
+                    <HeroRitualPortrait
+                      species={resolvedSpecies}
+                      className={resolvedClass}
+                      portrait={row?.portrait ?? "Male"}
+                      imageSrc={portraitPath}
+                      fallbackImageSrc={fallbackPortraitPath}
+                      alt={`${display} portrait`}
+                      height={560}
+                      objectPosition={getPortraitObjectPosition("oath")}
                     />
                   </div>
 
-                  <div style={helperCardStyle}>
-                    <div style={{ fontSize: 14, fontWeight: 900 }}>
-                      What this build does well
+                  <div style={{ display: "grid", gap: 16, minWidth: 0 }}>
+                    <div style={{ display: "grid", gap: 8 }}>
+                      <div
+                        style={{
+                          fontSize: 44,
+                          fontWeight: 1000,
+                          lineHeight: 0.96,
+                        }}
+                      >
+                        {display}
+                      </div>
+                      <div style={{ fontSize: 18, opacity: 0.84 }}>
+                        {resolvedSpecies} {resolvedClass}
+                      </div>
+                      <div
+                        style={{
+                          fontSize: 13,
+                          opacity: 0.76,
+                          lineHeight: 1.6,
+                        }}
+                      >
+                        This name enters canon as the first witness to the
+                        descent.
+                      </div>
                     </div>
-                    <div style={{ fontSize: 13, opacity: 0.84, lineHeight: 1.65 }}>
-                      • {resolvedSpeciesMeta.strengths[0]}
-                      <br />
-                      • {resolvedClassMeta.strengths[0]}
-                      <br />
-                      • {resolvedFocusMeta.gains[0]}
-                    </div>
-                  </div>
 
-                  <div style={helperCardStyle}>
-                    <div style={{ fontSize: 14, fontWeight: 900 }}>Tradeoffs</div>
-                    <div style={{ fontSize: 13, opacity: 0.8, lineHeight: 1.65 }}>
-                      • {resolvedSpeciesMeta.tradeoff}
-                      <br />
-                      • {resolvedClassMeta.tradeoff}
-                      <br />
-                      • {resolvedFocusMeta.tradeoff}
+                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                      <SectionPill tone="warn">
+                        <strong>Focus</strong>{" "}
+                        {BUILD_FOCUS_OPTIONS.find((x) => x.id === currentFocus)
+                          ?.label ?? "Balanced"}
+                      </SectionPill>
+                      <SectionPill>
+                        <strong>Portrait</strong> {row?.portrait ?? "Male"}
+                      </SectionPill>
+                      <SectionPill>
+                        <strong>Role</strong> {resolvedClassMeta.role}
+                      </SectionPill>
                     </div>
-                  </div>
 
-                  <div style={helperCardStyle}>
-                    <div style={{ fontSize: 14, fontWeight: 900 }}>
-                      Recommended playstyle
+                    <div
+                      style={{
+                        display: "grid",
+                        gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+                        gap: 10,
+                        minWidth: 0,
+                      }}
+                    >
+                      <StatChip
+                        label="AC"
+                        value={`${row?.ac ?? baseStats.ac}${focusDeltaAc ? ` (${focusDeltaAc > 0 ? `+${focusDeltaAc}` : focusDeltaAc})` : ""}`}
+                      />
+                      <StatChip
+                        label="HP Max"
+                        value={`${row?.hpMax ?? baseStats.hpMax}${focusDeltaHp ? ` (${focusDeltaHp > 0 ? `+${focusDeltaHp}` : focusDeltaHp})` : ""}`}
+                      />
+                      <StatChip
+                        label="Init"
+                        value={`${row?.initiativeMod ?? baseStats.initiativeMod}${focusDeltaInit ? ` (${focusDeltaInit > 0 ? `+${focusDeltaInit}` : focusDeltaInit})` : ""}`}
+                      />
                     </div>
-                    <div style={{ fontSize: 13, opacity: 0.82, lineHeight: 1.65 }}>
-                      This hero fits{" "}
-                      <strong>
-                        {resolvedSpeciesMeta.bestFor.toLowerCase()}
-                      </strong>
-                      , operates as a{" "}
-                      <strong>{resolvedClassMeta.role.toLowerCase()}</strong>, and
-                      is best used for{" "}
-                      <strong>{resolvedFocusMeta.bestFor.toLowerCase()}</strong>.
+
+                    <div style={helperCardStyle}>
+                      <div style={{ fontSize: 14, fontWeight: 900 }}>
+                        What this build does well
+                      </div>
+                      <div style={{ fontSize: 13, opacity: 0.84, lineHeight: 1.65 }}>
+                        • {resolvedSpeciesMeta.strengths[0]}
+                        <br />
+                        • {resolvedClassMeta.strengths[0]}
+                        <br />
+                        • {resolvedFocusMeta.gains[0]}
+                      </div>
+                    </div>
+
+                    <div style={helperCardStyle}>
+                      <div style={{ fontSize: 14, fontWeight: 900 }}>Tradeoffs</div>
+                      <div style={{ fontSize: 13, opacity: 0.8, lineHeight: 1.65 }}>
+                        • {resolvedSpeciesMeta.tradeoff}
+                        <br />
+                        • {resolvedClassMeta.tradeoff}
+                        <br />
+                        • {resolvedFocusMeta.tradeoff}
+                      </div>
+                    </div>
+
+                    <div style={helperCardStyle}>
+                      <div style={{ fontSize: 14, fontWeight: 900 }}>
+                        Recommended playstyle
+                      </div>
+                      <div style={{ fontSize: 13, opacity: 0.82, lineHeight: 1.65 }}>
+                        This hero fits{" "}
+                        <strong>
+                          {resolvedSpeciesMeta.bestFor.toLowerCase()}
+                        </strong>
+                        , operates as a{" "}
+                        <strong>{resolvedClassMeta.role.toLowerCase()}</strong>, and
+                        is best used for{" "}
+                        <strong>{resolvedFocusMeta.bestFor.toLowerCase()}</strong>.
+                      </div>
                     </div>
                   </div>
                 </div>
