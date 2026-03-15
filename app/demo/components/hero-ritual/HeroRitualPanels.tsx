@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import { getPortraitPath } from "@/lib/portraits/getPortraitPath";
 import {
   BUILD_FOCUS_META,
   BUILD_FOCUS_OPTIONS,
@@ -237,7 +238,11 @@ export function SexPanel({
       >
         {(["Male", "Female"] as const).map((portrait) => {
           const selected = row?.portrait === portrait;
-          const imageSrc = `/assets/portraits/${resolvedSpecies}_${resolvedClass}_${portrait}.png`;
+          const imageSrc = getPortraitPath(
+            resolvedSpecies,
+            resolvedClass,
+            portrait
+          );
 
           return (
             <RitualChoiceCard
@@ -408,7 +413,11 @@ export function SpeciesPanel({
         }}
       >
         {visibleSpecies.map((species) => {
-          const imageSrc = `/assets/portraits/${species}_${resolvedClass}_${row?.portrait ?? "Male"}.png`;
+          const imageSrc = getPortraitPath(
+            species,
+            resolvedClass,
+            row?.portrait ?? "Male"
+          );
           const selected =
             resolvedSpecies.toLowerCase() === species.toLowerCase();
           const meta = SPECIES_META[species] ?? SPECIES_META.Human;
@@ -621,7 +630,11 @@ export function ClassPanel({
         }}
       >
         {visibleClasses.map((className) => {
-          const imageSrc = `/assets/portraits/${resolvedSpecies}_${className}_${row?.portrait ?? "Male"}.png`;
+          const imageSrc = getPortraitPath(
+            resolvedSpecies,
+            className,
+            row?.portrait ?? "Male"
+          );
           const selected =
             resolvedClass.toLowerCase() === className.toLowerCase();
           const meta = CLASS_META[className] ?? CLASS_META.Warrior;
