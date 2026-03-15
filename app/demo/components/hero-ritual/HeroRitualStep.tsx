@@ -55,36 +55,42 @@ export function StandardRitualStep({
   children,
   footer,
 }: StandardStepProps) {
+  const showHeader = currentStep !== "confirm";
+
   return (
     <article style={standardPanelStyle}>
       <div style={{ display: "grid", gap: 18, minWidth: 0 }}>
-        <div style={{ display: "grid", gap: 8, minWidth: 0 }}>
-          <div
-            style={{
-              fontSize: 34,
-              fontWeight: 950,
-              letterSpacing: 0.2,
-              lineHeight: 1.02,
-            }}
-          >
-            {title}
-          </div>
+        {showHeader && (
+          <>
+            <div style={{ display: "grid", gap: 8, minWidth: 0 }}>
+              <div
+                style={{
+                  fontSize: 34,
+                  fontWeight: 950,
+                  letterSpacing: 0.2,
+                  lineHeight: 1.02,
+                }}
+              >
+                {title}
+              </div>
 
-          {subtitle ? (
-            <div
-              style={{
-                fontSize: 14,
-                opacity: 0.84,
-                lineHeight: 1.7,
-                maxWidth: 820,
-              }}
-            >
-              {subtitle}
+              {subtitle ? (
+                <div
+                  style={{
+                    fontSize: 14,
+                    opacity: 0.84,
+                    lineHeight: 1.7,
+                    maxWidth: 820,
+                  }}
+                >
+                  {subtitle}
+                </div>
+              ) : null}
             </div>
-          ) : null}
-        </div>
 
-        <RitualStepPills currentStep={currentStep} />
+            <RitualStepPills currentStep={currentStep} />
+          </>
+        )}
 
         {children}
 
