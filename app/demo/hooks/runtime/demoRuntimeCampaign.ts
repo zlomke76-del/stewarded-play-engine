@@ -116,14 +116,12 @@ export function createBeginDungeonDescent(args: {
 
 export function createEnterDungeon(args: {
   canEnterDungeon: boolean;
-  playIntro: () => void;
   setEnteredDungeonState: SetState<boolean>;
   setDungeonDescentConfirmed: SetState<boolean>;
   setActiveSection: SetState<DemoSectionId>;
 }) {
   const {
     canEnterDungeon,
-    playIntro,
     setEnteredDungeonState,
     setDungeonDescentConfirmed,
     setActiveSection,
@@ -131,7 +129,6 @@ export function createEnterDungeon(args: {
 
   return function enterDungeon() {
     if (!canEnterDungeon) return;
-    playIntro();
     setEnteredDungeonState(true);
     setDungeonDescentConfirmed(false);
     setActiveSection("table");
