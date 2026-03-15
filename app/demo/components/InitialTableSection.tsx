@@ -32,6 +32,7 @@ const START_DELAY_MS = 420;
 const FADE_STAGGER_MS = 120;
 const SEAL_REVEAL_DELAY_MS = 280;
 const EMBER_COUNT = 10;
+const DESCENT_TRANSITION_DELAY_MS = 900;
 
 function playSfx(src: string, volume = 0.68) {
   try {
@@ -80,6 +81,7 @@ export default function InitialTableSection({
   const revealTimerRef = useRef<number | null>(null);
   const startTimerRef = useRef<number | null>(null);
   const sealTimerRef = useRef<number | null>(null);
+  const acceptTimerRef = useRef<number | null>(null);
   const activeQuillAudioRef = useRef<HTMLAudioElement | null>(null);
   const nextQuillVariantRef = useRef<"a" | "b">("a");
   const sealSfxPlayedRef = useRef(false);
@@ -98,6 +100,7 @@ export default function InitialTableSection({
   const [showWaxSeal, setShowWaxSeal] = useState(false);
   const [sealPulseActive, setSealPulseActive] = useState(false);
   const [showEmberBurst, setShowEmberBurst] = useState(false);
+  const [isAccepting, setIsAccepting] = useState(false);
 
   const writingComplete =
     narrationLines.length === 0 || revealedCount >= narrationLines.length;
@@ -149,6 +152,10 @@ export default function InitialTableSection({
       window.clearTimeout(sealTimerRef.current);
       sealTimerRef.current = null;
     }
+    if (acceptTimerRef.current !== null) {
+      window.clearTimeout(acceptTimerRef.current);
+      acceptTimerRef.current = null;
+    }
   }
 
   function triggerSealMoment() {
@@ -170,6 +177,23 @@ export default function InitialTableSection({
     }
   }
 
+  function handleAccept() {
+    if (isAccepting) return;
+
+    if (dmMode === "solace-neutral" && !writingComplete) {
+      playSfx(SFX.uiFailure, 0.58);
+      return;
+    }
+
+    setIsAccepting(true);
+    playSfx(SFX.uiSuccess, 0.72);
+    playSfx(SFX.stoneDoor, 0.56);
+
+    acceptTimerRef.current = window.setTimeout(() => {
+      onAccept();
+    }, DESCENT_TRANSITION_DELAY_MS);
+  }
+
   useEffect(() => {
     if (dmMode !== "solace-neutral" || tableAccepted || !initialTable) {
       clearAllTimers();
@@ -180,6 +204,7 @@ export default function InitialTableSection({
       setShowWaxSeal(false);
       setSealPulseActive(false);
       setShowEmberBurst(false);
+      setIsAccepting(false);
       sealSfxPlayedRef.current = false;
       return;
     }
@@ -190,6 +215,7 @@ export default function InitialTableSection({
     setShowWaxSeal(false);
     setSealPulseActive(false);
     setShowEmberBurst(false);
+    setIsAccepting(false);
     nextQuillVariantRef.current = "a";
     sealSfxPlayedRef.current = false;
 
@@ -266,6 +292,13 @@ export default function InitialTableSection({
       }
     };
   }, [writingComplete, dmMode, showWaxSeal]);
+
+  useEffect(() => {
+    return () => {
+      clearAllTimers();
+      stopQuillSound();
+    };
+  }, []);
 
   if (dmMode === null) return <Disclaimer />;
 
@@ -896,58 +929,58 @@ export default function InitialTableSection({
           </div>
 
           <button
-            onClick={() => {
-              if (!writingComplete) {
-                playSfx(SFX.uiFailure, 0.58);
-                return;
-              }
-              playSfx(SFX.uiSuccess, 0.72);
-              playSfx(SFX.stoneDoor, 0.56);
-              onAccept();
-            }}
-            disabled={!writingComplete}
+            onClick={handleAccept}
+            disabled={!writingComplete || isAccepting}
             style={{
               minWidth: 240,
               padding: "14px 22px",
               borderRadius: 14,
               border: "1px solid rgba(255,203,122,0.42)",
-              background: writingComplete
-                ? "linear-gradient(180deg, rgba(255,201,116,0.98), rgba(218,132,47,0.98))"
-                : "linear-gradient(180deg, rgba(107,89,69,0.7), rgba(74,55,39,0.74))",
-              color: writingComplete ? "#2f1606" : "rgba(244,227,201,0.75)",
+              background:
+                writingComplete && !isAccepting
+                  ? "linear-gradient(180deg, rgba(255,201,116,0.98), rgba(218,132,47,0.98))"
+                  : "linear-gradient(180deg, rgba(107,89,69,0.7), rgba(74,55,39,0.74))",
+              color:
+                writingComplete && !isAccepting
+                  ? "#2f1606"
+                  : "rgba(244,227,201,0.75)",
               fontSize: 15,
               fontWeight: 800,
               letterSpacing: "0.04em",
-              boxShadow: writingComplete
-                ? "0 0 0 1px rgba(255,224,163,0.08), 0 10px 28px rgba(255,145,42,0.22), inset 0 1px 0 rgba(255,244,220,0.72)"
-                : "inset 0 1px 0 rgba(255,255,255,0.05)",
-              cursor: writingComplete ? "pointer" : "not-allowed",
-              opacity: writingComplete ? 1 : 0.62,
-              transform: writingComplete ? "translateY(0)" : "none",
+              boxShadow:
+                writingComplete && !isAccepting
+                  ? "0 0 0 1px rgba(255,224,163,0.08), 0 10px 28px rgba(255,145,42,0.22), inset 0 1px 0 rgba(255,244,220,0.72)"
+                  : "inset 0 1px 0 rgba(255,255,255,0.05)",
+              cursor:
+                writingComplete && !isAccepting ? "pointer" : "not-allowed",
+              opacity: writingComplete && !isAccepting ? 1 : 0.62,
+              transform: writingComplete && !isAccepting ? "translateY(0)" : "none",
               transition:
                 "transform 160ms ease, box-shadow 160ms ease, filter 160ms ease, opacity 160ms ease",
             }}
             title={
               writingComplete
-                ? ACCEPT_LABEL
+                ? isAccepting
+                  ? "The descent is opening..."
+                  : ACCEPT_LABEL
                 : "Wait for the chronicle to finish, or use Skip Writing."
             }
             onMouseEnter={(e) => {
-              if (!writingComplete) return;
+              if (!writingComplete || isAccepting) return;
               e.currentTarget.style.transform = "translateY(-1px)";
               e.currentTarget.style.filter = "brightness(1.03)";
               e.currentTarget.style.boxShadow =
                 "0 0 0 1px rgba(255,224,163,0.08), 0 14px 36px rgba(255,145,42,0.28), inset 0 1px 0 rgba(255,244,220,0.76)";
             }}
             onMouseLeave={(e) => {
-              if (!writingComplete) return;
+              if (!writingComplete || isAccepting) return;
               e.currentTarget.style.transform = "translateY(0)";
               e.currentTarget.style.filter = "none";
               e.currentTarget.style.boxShadow =
                 "0 0 0 1px rgba(255,224,163,0.08), 0 10px 28px rgba(255,145,42,0.22), inset 0 1px 0 rgba(255,244,220,0.72)";
             }}
           >
-            {ACCEPT_LABEL}
+            {isAccepting ? "Opening the Descent..." : ACCEPT_LABEL}
           </button>
         </div>
 
@@ -961,7 +994,9 @@ export default function InitialTableSection({
           }}
         >
           {writingComplete
-            ? "Step below and let the dungeon answer."
+            ? isAccepting
+              ? "Stone answers the seal."
+              : "Step below and let the dungeon answer."
             : "The descent awaits the sealing of the chronicle."}
         </div>
 
@@ -1065,42 +1100,45 @@ export default function InitialTableSection({
         }}
       >
         <button
-          onClick={() => {
-            playSfx(SFX.uiSuccess, 0.72);
-            playSfx(SFX.stoneDoor, 0.56);
-            onAccept();
-          }}
+          onClick={handleAccept}
+          disabled={isAccepting}
           style={{
             minWidth: 240,
             padding: "14px 22px",
             borderRadius: 14,
             border: "1px solid rgba(255,203,122,0.42)",
             background:
-              "linear-gradient(180deg, rgba(255,201,116,0.98), rgba(218,132,47,0.98))",
-            color: "#2f1606",
+              !isAccepting
+                ? "linear-gradient(180deg, rgba(255,201,116,0.98), rgba(218,132,47,0.98))"
+                : "linear-gradient(180deg, rgba(107,89,69,0.7), rgba(74,55,39,0.74))",
+            color: !isAccepting ? "#2f1606" : "rgba(244,227,201,0.75)",
             fontSize: 15,
             fontWeight: 800,
             letterSpacing: "0.04em",
-            boxShadow:
-              "0 0 0 1px rgba(255,224,163,0.08), 0 10px 28px rgba(255,145,42,0.22), inset 0 1px 0 rgba(255,244,220,0.72)",
-            cursor: "pointer",
+            boxShadow: !isAccepting
+              ? "0 0 0 1px rgba(255,224,163,0.08), 0 10px 28px rgba(255,145,42,0.22), inset 0 1px 0 rgba(255,244,220,0.72)"
+              : "inset 0 1px 0 rgba(255,255,255,0.05)",
+            cursor: !isAccepting ? "pointer" : "not-allowed",
             transition:
               "transform 160ms ease, box-shadow 160ms ease, filter 160ms ease",
+            opacity: !isAccepting ? 1 : 0.62,
           }}
           onMouseEnter={(e) => {
+            if (isAccepting) return;
             e.currentTarget.style.transform = "translateY(-1px)";
             e.currentTarget.style.filter = "brightness(1.03)";
             e.currentTarget.style.boxShadow =
               "0 0 0 1px rgba(255,224,163,0.08), 0 14px 36px rgba(255,145,42,0.28), inset 0 1px 0 rgba(255,244,220,0.76)";
           }}
           onMouseLeave={(e) => {
+            if (isAccepting) return;
             e.currentTarget.style.transform = "translateY(0)";
             e.currentTarget.style.filter = "none";
             e.currentTarget.style.boxShadow =
               "0 0 0 1px rgba(255,224,163,0.08), 0 10px 28px rgba(255,145,42,0.22), inset 0 1px 0 rgba(255,244,220,0.72)";
           }}
         >
-          {ACCEPT_LABEL}
+          {isAccepting ? "Opening the Descent..." : ACCEPT_LABEL}
         </button>
       </div>
 
@@ -1113,7 +1151,9 @@ export default function InitialTableSection({
           letterSpacing: "0.03em",
         }}
       >
-        Step below and let the dungeon answer.
+        {isAccepting
+          ? "Stone answers the seal."
+          : "Step below and let the dungeon answer."}
       </div>
     </CardSection>
   );
