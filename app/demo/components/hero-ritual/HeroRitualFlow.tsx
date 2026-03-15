@@ -364,8 +364,8 @@ export default function HeroRitualFlow({
           resolvedSpecies={resolvedSpecies}
           resolvedClass={resolvedClass}
           visibleSpecies={visibleSpecies}
-          speciesPageIndex={speciesPageIndex}
-          speciesPageCount={speciesPages.length}
+          pageIndex={speciesPageIndex}
+          pageCount={speciesPages.length}
           fallbackPortraitPath={fallbackPortraitPath}
           onBack={() => {
             playSfx(SFX.buttonClick, 0.54);
@@ -406,8 +406,8 @@ export default function HeroRitualFlow({
           resolvedSpecies={resolvedSpecies}
           resolvedClass={resolvedClass}
           visibleClasses={visibleClasses}
-          classPageIndex={classPageIndex}
-          classPageCount={classPages.length}
+          pageIndex={classPageIndex}
+          pageCount={classPages.length}
           fallbackPortraitPath={fallbackPortraitPath}
           renderClassStepCallout={renderClassStepCallout}
           onBack={() => {
