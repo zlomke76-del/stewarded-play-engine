@@ -355,13 +355,6 @@ export function useDemoRuntime() {
     () =>
       createEnterDungeon({
         canEnterDungeon,
-        playIntro: () =>
-          playIntroTheme({
-            introAudioRef,
-            bgmAudioRef,
-            currentMusicModeRef,
-            loop: true,
-          }),
         setEnteredDungeonState,
         setDungeonDescentConfirmed,
         setActiveSection,
