@@ -16,7 +16,7 @@ export const SFX = {
 
 let heroSelectionAudio: HTMLAudioElement | null = null;
 
-export function startHeroSelectionLoop(volume = 0.55) {
+export function startHeroSelectionLoop(volume = 0.45) {
   try {
     if (heroSelectionAudio) return;
 
