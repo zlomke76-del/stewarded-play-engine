@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { getPortraitPath } from "@/lib/portraits/getPortraitPath";
 import {
   BUILD_FOCUS_META,
@@ -64,6 +64,14 @@ type Props = {
   onCommitChronicle: () => void;
 };
 
+function chunkIntoPages<T>(items: readonly T[], size: number) {
+  const pages: T[][] = [];
+  for (let i = 0; i < items.length; i += size) {
+    pages.push(items.slice(i, i + size) as T[]);
+  }
+  return pages;
+}
+
 export default function HeroRitualFlow({
   heroCreationStep,
   setHeroCreationStep,
@@ -89,6 +97,9 @@ export default function HeroRitualFlow({
   setHeroField,
   onCommitChronicle,
 }: Props) {
+  const [speciesPageIndex, setSpeciesPageIndex] = useState(0);
+  const [classPageIndex, setClassPageIndex] = useState(0);
+
   const ritualStageStyle: React.CSSProperties = {
     transition: "opacity 260ms ease, transform 260ms ease",
     opacity: 1,
@@ -129,6 +140,41 @@ export default function HeroRitualFlow({
     minWidth: 0,
   };
 
+  const speciesPages = useMemo(() => chunkIntoPages(SAFE_SPECIES, 3), []);
+  const classPages = useMemo(() => chunkIntoPages(SAFE_CLASS_ARCHETYPES, 3), []);
+
+  useEffect(() => {
+    const speciesIndex = SAFE_SPECIES.findIndex(
+      (species) => species.toLowerCase() === resolvedSpecies.toLowerCase()
+    );
+    if (speciesIndex >= 0) {
+      setSpeciesPageIndex(Math.floor(speciesIndex / 3));
+    }
+  }, [resolvedSpecies]);
+
+  useEffect(() => {
+    const classIndex = SAFE_CLASS_ARCHETYPES.findIndex(
+      (className) => className.toLowerCase() === resolvedClass.toLowerCase()
+    );
+    if (classIndex >= 0) {
+      setClassPageIndex(Math.floor(classIndex / 3));
+    }
+  }, [resolvedClass]);
+
+  useEffect(() => {
+    if (heroCreationStep !== "species") return;
+    if (speciesPageIndex > speciesPages.length - 1) {
+      setSpeciesPageIndex(0);
+    }
+  }, [heroCreationStep, speciesPageIndex, speciesPages.length]);
+
+  useEffect(() => {
+    if (heroCreationStep !== "class") return;
+    if (classPageIndex > classPages.length - 1) {
+      setClassPageIndex(0);
+    }
+  }, [heroCreationStep, classPageIndex, classPages.length]);
+
   const baseStats = getBaseStatsForClass(resolvedClass);
   const focusDeltaAc = (row?.ac ?? baseStats.ac) - baseStats.ac;
   const focusDeltaHp = (row?.hpMax ?? baseStats.hpMax) - baseStats.hpMax;
@@ -154,6 +200,9 @@ export default function HeroRitualFlow({
     "Warrior",
     row?.portrait ?? "Male"
   );
+
+  const visibleSpecies = speciesPages[speciesPageIndex] ?? [];
+  const visibleClasses = classPages[classPageIndex] ?? [];
 
   function goToPreviousStep() {
     setHeroCreationStep((prev) => {
@@ -348,7 +397,7 @@ export default function HeroRitualFlow({
               <div
                 style={{
                   display: "grid",
-                  gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
+                  gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))",
                   gap: 18,
                   width: "100%",
                   minWidth: 0,
@@ -421,32 +470,105 @@ export default function HeroRitualFlow({
             footer={
               <div
                 style={{
-                  display: "flex",
-                  justifyContent: "space-between",
+                  display: "grid",
                   gap: 12,
-                  flexWrap: "wrap",
+                  width: "100%",
+                  minWidth: 0,
                 }}
               >
-                <button
-                  type="button"
-                  onClick={() => {
-                    playSfx(SFX.buttonClick, 0.54);
-                    goToPreviousStep();
-                  }}
+                <div
                   style={{
-                    ...controlButtonBase,
-                    border: "1px solid rgba(255,255,255,0.12)",
-                    background: "rgba(255,255,255,0.05)",
-                    color: "inherit",
+                    display: "flex",
+                    justifyContent: "space-between",
+                    gap: 12,
+                    flexWrap: "wrap",
+                    alignItems: "center",
                   }}
                 >
-                  Back
-                </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      playSfx(SFX.buttonClick, 0.54);
+                      goToPreviousStep();
+                    }}
+                    style={{
+                      ...controlButtonBase,
+                      border: "1px solid rgba(255,255,255,0.12)",
+                      background: "rgba(255,255,255,0.05)",
+                      color: "inherit",
+                    }}
+                  >
+                    Back
+                  </button>
+
+                  <div
+                    style={{ fontSize: 12, opacity: 0.72, alignSelf: "center" }}
+                  >
+                    Compare strengths, tradeoffs, and playstyle fit.
+                  </div>
+                </div>
 
                 <div
-                  style={{ fontSize: 12, opacity: 0.72, alignSelf: "center" }}
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    gap: 12,
+                    flexWrap: "wrap",
+                    alignItems: "center",
+                  }}
                 >
-                  Compare strengths, tradeoffs, and playstyle fit.
+                  <SectionPill tone="warn">
+                    <strong>Species Set</strong> {speciesPageIndex + 1} of{" "}
+                    {speciesPages.length}
+                  </SectionPill>
+
+                  <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        playSfx(SFX.buttonClick, 0.5);
+                        setSpeciesPageIndex((prev) => Math.max(0, prev - 1));
+                      }}
+                      disabled={speciesPageIndex === 0}
+                      style={{
+                        ...controlButtonBase,
+                        border: "1px solid rgba(255,255,255,0.12)",
+                        background: "rgba(255,255,255,0.05)",
+                        color: "inherit",
+                        opacity: speciesPageIndex === 0 ? 0.5 : 1,
+                        cursor: speciesPageIndex === 0 ? "not-allowed" : "pointer",
+                        minWidth: 110,
+                      }}
+                    >
+                      Previous 3
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        playSfx(SFX.buttonClick, 0.5);
+                        setSpeciesPageIndex((prev) =>
+                          Math.min(speciesPages.length - 1, prev + 1)
+                        );
+                      }}
+                      disabled={speciesPageIndex >= speciesPages.length - 1}
+                      style={{
+                        ...controlButtonBase,
+                        border: "1px solid rgba(255,205,126,0.22)",
+                        background: "rgba(255,196,118,0.08)",
+                        color: "inherit",
+                        opacity:
+                          speciesPageIndex >= speciesPages.length - 1 ? 0.5 : 1,
+                        cursor:
+                          speciesPageIndex >= speciesPages.length - 1
+                            ? "not-allowed"
+                            : "pointer",
+                        minWidth: 110,
+                      }}
+                    >
+                      Next 3
+                    </button>
+                  </div>
                 </div>
               </div>
             }
@@ -457,14 +579,14 @@ export default function HeroRitualFlow({
               <div
                 style={{
                   display: "grid",
-                  gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-                  gap: 14,
+                  gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
+                  gap: 18,
                   width: "100%",
                   minWidth: 0,
                   alignItems: "stretch",
                 }}
               >
-                {SAFE_SPECIES.map((species) => {
+                {visibleSpecies.map((species) => {
                   const imageSrc = getPortraitPath(
                     species,
                     resolvedClass,
@@ -549,32 +671,105 @@ export default function HeroRitualFlow({
             footer={
               <div
                 style={{
-                  display: "flex",
-                  justifyContent: "space-between",
+                  display: "grid",
                   gap: 12,
-                  flexWrap: "wrap",
+                  width: "100%",
+                  minWidth: 0,
                 }}
               >
-                <button
-                  type="button"
-                  onClick={() => {
-                    playSfx(SFX.buttonClick, 0.54);
-                    goToPreviousStep();
-                  }}
+                <div
                   style={{
-                    ...controlButtonBase,
-                    border: "1px solid rgba(255,255,255,0.12)",
-                    background: "rgba(255,255,255,0.05)",
-                    color: "inherit",
+                    display: "flex",
+                    justifyContent: "space-between",
+                    gap: 12,
+                    flexWrap: "wrap",
+                    alignItems: "center",
                   }}
                 >
-                  Back
-                </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      playSfx(SFX.buttonClick, 0.54);
+                      goToPreviousStep();
+                    }}
+                    style={{
+                      ...controlButtonBase,
+                      border: "1px solid rgba(255,255,255,0.12)",
+                      background: "rgba(255,255,255,0.05)",
+                      color: "inherit",
+                    }}
+                  >
+                    Back
+                  </button>
+
+                  <div
+                    style={{ fontSize: 12, opacity: 0.72, alignSelf: "center" }}
+                  >
+                    Compare role, difficulty, strengths, and synergy.
+                  </div>
+                </div>
 
                 <div
-                  style={{ fontSize: 12, opacity: 0.72, alignSelf: "center" }}
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    gap: 12,
+                    flexWrap: "wrap",
+                    alignItems: "center",
+                  }}
                 >
-                  Compare role, difficulty, strengths, and synergy.
+                  <SectionPill tone="warn">
+                    <strong>Class Set</strong> {classPageIndex + 1} of{" "}
+                    {classPages.length}
+                  </SectionPill>
+
+                  <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        playSfx(SFX.buttonClick, 0.5);
+                        setClassPageIndex((prev) => Math.max(0, prev - 1));
+                      }}
+                      disabled={classPageIndex === 0}
+                      style={{
+                        ...controlButtonBase,
+                        border: "1px solid rgba(255,255,255,0.12)",
+                        background: "rgba(255,255,255,0.05)",
+                        color: "inherit",
+                        opacity: classPageIndex === 0 ? 0.5 : 1,
+                        cursor: classPageIndex === 0 ? "not-allowed" : "pointer",
+                        minWidth: 110,
+                      }}
+                    >
+                      Previous 3
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        playSfx(SFX.buttonClick, 0.5);
+                        setClassPageIndex((prev) =>
+                          Math.min(classPages.length - 1, prev + 1)
+                        );
+                      }}
+                      disabled={classPageIndex >= classPages.length - 1}
+                      style={{
+                        ...controlButtonBase,
+                        border: "1px solid rgba(255,205,126,0.22)",
+                        background: "rgba(255,196,118,0.08)",
+                        color: "inherit",
+                        opacity:
+                          classPageIndex >= classPages.length - 1 ? 0.5 : 1,
+                        cursor:
+                          classPageIndex >= classPages.length - 1
+                            ? "not-allowed"
+                            : "pointer",
+                        minWidth: 110,
+                      }}
+                    >
+                      Next 3
+                    </button>
+                  </div>
                 </div>
               </div>
             }
@@ -585,14 +780,14 @@ export default function HeroRitualFlow({
               <div
                 style={{
                   display: "grid",
-                  gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
-                  gap: 14,
+                  gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
+                  gap: 18,
                   width: "100%",
                   minWidth: 0,
                   alignItems: "stretch",
                 }}
               >
-                {SAFE_CLASS_ARCHETYPES.map((className) => {
+                {visibleClasses.map((className) => {
                   const imageSrc = getPortraitPath(
                     resolvedSpecies,
                     className,
