@@ -72,6 +72,41 @@ function chunkIntoPages<T>(items: readonly T[], size: number) {
   return pages;
 }
 
+const FOCUS_RITUAL_COPY: Record<
+  BuildFocus,
+  {
+    doctrine: string;
+    vow: string;
+    consequence: string;
+    chosenLabel: string;
+  }
+> = {
+  balanced: {
+    doctrine: "Yield nothing to extremes.",
+    vow: "You walk the middle path, giving up dramatic edges for steadiness under pressure.",
+    consequence: "No sharp weakness. No sharp advantage.",
+    chosenLabel: "Chosen Stance: Balanced",
+  },
+  guardian: {
+    doctrine: "Hold the line.",
+    vow: "You enter danger with discipline first, trusting armor and resolve before speed.",
+    consequence: "Harder to break. Slower to answer.",
+    chosenLabel: "Chosen Stance: Guardian",
+  },
+  swift: {
+    doctrine: "Strike before fear settles.",
+    vow: "You trust tempo over armor, moving first and forcing danger to react to you.",
+    consequence: "Faster to act. Easier to punish if caught.",
+    chosenLabel: "Chosen Stance: Swift",
+  },
+  hardy: {
+    doctrine: "Endure what should kill you.",
+    vow: "You choose survival over elegance and carry extra life into long, punishing fights.",
+    consequence: "More staying power. Less tempo advantage.",
+    chosenLabel: "Chosen Stance: Hardy",
+  },
+};
+
 export default function HeroRitualFlow({
   heroCreationStep,
   setHeroCreationStep,
@@ -99,6 +134,7 @@ export default function HeroRitualFlow({
 }: Props) {
   const [speciesPageIndex, setSpeciesPageIndex] = useState(0);
   const [classPageIndex, setClassPageIndex] = useState(0);
+  const [hoveredFocus, setHoveredFocus] = useState<BuildFocus | null>(null);
 
   const ritualStageStyle: React.CSSProperties = {
     transition: "opacity 260ms ease, transform 260ms ease",
@@ -175,6 +211,11 @@ export default function HeroRitualFlow({
     }
   }, [heroCreationStep, classPageIndex, classPages.length]);
 
+  useEffect(() => {
+    if (heroCreationStep !== "focus") return;
+    setHoveredFocus(null);
+  }, [heroCreationStep]);
+
   const baseStats = getBaseStatsForClass(resolvedClass);
   const focusDeltaAc = (row?.ac ?? baseStats.ac) - baseStats.ac;
   const focusDeltaHp = (row?.hpMax ?? baseStats.hpMax) - baseStats.hpMax;
@@ -203,6 +244,10 @@ export default function HeroRitualFlow({
 
   const visibleSpecies = speciesPages[speciesPageIndex] ?? [];
   const visibleClasses = classPages[classPageIndex] ?? [];
+  const previewFocus = hoveredFocus ?? currentFocus;
+  const previewFocusMeta = BUILD_FOCUS_META[previewFocus];
+  const previewFocusCopy = FOCUS_RITUAL_COPY[previewFocus];
+  const previewFocusPalette = getFocusPalette(previewFocus, true);
 
   function goToPreviousStep() {
     setHeroCreationStep((prev) => {
@@ -536,7 +581,8 @@ export default function HeroRitualFlow({
                         background: "rgba(255,255,255,0.05)",
                         color: "inherit",
                         opacity: speciesPageIndex === 0 ? 0.5 : 1,
-                        cursor: speciesPageIndex === 0 ? "not-allowed" : "pointer",
+                        cursor:
+                          speciesPageIndex === 0 ? "not-allowed" : "pointer",
                         minWidth: 110,
                       }}
                     >
@@ -737,7 +783,8 @@ export default function HeroRitualFlow({
                         background: "rgba(255,255,255,0.05)",
                         color: "inherit",
                         opacity: classPageIndex === 0 ? 0.5 : 1,
-                        cursor: classPageIndex === 0 ? "not-allowed" : "pointer",
+                        cursor:
+                          classPageIndex === 0 ? "not-allowed" : "pointer",
                         minWidth: 110,
                       }}
                     >
@@ -886,7 +933,7 @@ export default function HeroRitualFlow({
         <div key="ritual-focus" style={ritualStageStyle}>
           <RitualFrame
             title="Choose a Focus"
-            subtitle="This is the stance your hero carries into danger. The player should understand the exact gains and the exact cost."
+            subtitle="Every hero survives by a stance. Choose how this one enters danger."
             footer={
               <div
                 style={{
@@ -915,101 +962,327 @@ export default function HeroRitualFlow({
                 <div
                   style={{ fontSize: 12, opacity: 0.72, alignSelf: "center" }}
                 >
-                  Choose the stat tradeoff that best fits the build.
+                  Hover a stance to feel its doctrine. Click to bind it.
                 </div>
               </div>
             }
           >
-            <div style={{ display: "grid", gap: 16, minWidth: 0 }}>
+            <div style={{ display: "grid", gap: 18, minWidth: 0 }}>
               <RitualStepPills currentStep={heroCreationStep} />
 
               <div
                 style={{
                   display: "grid",
-                  gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
-                  gap: 14,
-                  width: "100%",
+                  gridTemplateColumns: "minmax(320px, 1.2fr) minmax(320px, 1fr)",
+                  gap: 18,
+                  alignItems: "stretch",
                   minWidth: 0,
                 }}
               >
-                {BUILD_FOCUS_OPTIONS.map((option) => {
-                  const active = currentFocus === option.id;
-                  const meta = BUILD_FOCUS_META[option.id];
-                  const palette = getFocusPalette(option.id, active);
-
-                  return (
-                    <button
-                      key={option.id}
-                      type="button"
-                      onClick={() => {
-                        if (!editable) {
-                          playSfx(SFX.uiFailure, 0.5);
-                          return;
-                        }
-                        setBuildFocus(option.id);
-                        setRitualProgress((prev) => ({
-                          ...prev,
-                          focusConfirmed: true,
-                        }));
-                        setHeroCreationStep("name");
-                      }}
-                      disabled={!editable}
+                <div
+                  style={{
+                    borderRadius: 22,
+                    overflow: "hidden",
+                    border: previewFocusPalette.border,
+                    background:
+                      "radial-gradient(circle at 50% 18%, rgba(255,224,178,0.12), rgba(255,224,178,0.02) 24%, rgba(0,0,0,0) 44%), linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.02))",
+                    boxShadow:
+                      previewFocusPalette.shadow ||
+                      "0 18px 44px rgba(0,0,0,0.24)",
+                    minWidth: 0,
+                    boxSizing: "border-box",
+                  }}
+                >
+                  <div
+                    style={{
+                      padding: 16,
+                      borderBottom: "1px solid rgba(255,255,255,0.08)",
+                      display: "grid",
+                      gap: 10,
+                    }}
+                  >
+                    <div
                       style={{
-                        textAlign: "left",
-                        padding: 18,
-                        borderRadius: 18,
-                        border: palette.border,
-                        background: palette.background,
-                        boxShadow: palette.shadow,
-                        color: "inherit",
-                        cursor: editable ? "pointer" : "not-allowed",
-                        opacity: editable ? 1 : 0.6,
-                        display: "grid",
-                        gap: 10,
-                        transition:
-                          "transform 140ms ease, box-shadow 140ms ease, border-color 140ms ease",
-                        minWidth: 0,
-                        boxSizing: "border-box",
+                        display: "flex",
+                        justifyContent: "space-between",
+                        gap: 12,
+                        flexWrap: "wrap",
+                        alignItems: "center",
                       }}
                     >
+                      <SectionPill tone="warn">
+                        <strong>{previewFocusCopy.chosenLabel}</strong>
+                      </SectionPill>
+
+                      <div
+                        style={{
+                          fontSize: 12,
+                          opacity: 0.74,
+                        }}
+                      >
+                        {resolvedSpecies} {resolvedClass} · {row?.portrait ?? "Male"}
+                      </div>
+                    </div>
+
+                    <div style={{ display: "grid", gap: 6 }}>
+                      <div
+                        style={{
+                          fontSize: 30,
+                          fontWeight: 950,
+                          lineHeight: 1.05,
+                          color: getFocusTitleColor(previewFocus),
+                        }}
+                      >
+                        {BUILD_FOCUS_OPTIONS.find((x) => x.id === previewFocus)?.icon}{" "}
+                        {BUILD_FOCUS_OPTIONS.find((x) => x.id === previewFocus)?.label}
+                      </div>
                       <div
                         style={{
                           fontSize: 18,
-                          fontWeight: 900,
-                          color: getFocusTitleColor(option.id),
+                          fontWeight: 800,
+                          opacity: 0.92,
                         }}
                       >
-                        {option.icon} {option.label}
+                        {previewFocusCopy.doctrine}
                       </div>
                       <div
-                        style={{ fontSize: 13, opacity: 0.82, lineHeight: 1.6 }}
+                        style={{
+                          fontSize: 13,
+                          opacity: 0.78,
+                          lineHeight: 1.65,
+                          maxWidth: 560,
+                        }}
                       >
-                        {meta.hint}
+                        {previewFocusCopy.vow}
                       </div>
-                      <div
-                        style={{ fontSize: 12, opacity: 0.88, lineHeight: 1.5 }}
-                      >
-                        <strong>Shift:</strong>{" "}
-                        {renderFocusDeltaSummary(option.id)}
-                      </div>
-                      <div
-                        style={{ fontSize: 12, opacity: 0.84, lineHeight: 1.5 }}
-                      >
-                        <strong>Gains:</strong> {meta.gains.join(" · ")}
-                      </div>
-                      <div
-                        style={{ fontSize: 12, opacity: 0.76, lineHeight: 1.5 }}
-                      >
-                        <strong>Tradeoff:</strong> {meta.tradeoff}
-                      </div>
-                      <div
-                        style={{ fontSize: 12, opacity: 0.72, lineHeight: 1.5 }}
-                      >
-                        <strong>Best for:</strong> {meta.bestFor}
-                      </div>
-                    </button>
-                  );
-                })}
+                    </div>
+                  </div>
+
+                  <HeroRitualPortrait
+                    species={resolvedSpecies}
+                    className={resolvedClass}
+                    portrait={row?.portrait ?? "Male"}
+                    imageSrc={portraitPath}
+                    fallbackImageSrc={fallbackPortraitPath}
+                    alt={`${display} focus portrait`}
+                    height={380}
+                    objectPosition={getPortraitObjectPosition("oath")}
+                  />
+
+                  <div
+                    style={{
+                      padding: 16,
+                      borderTop: "1px solid rgba(255,255,255,0.08)",
+                      display: "grid",
+                      gap: 12,
+                    }}
+                  >
+                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                      <SectionPill>
+                        <strong>Shift</strong> {renderFocusDeltaSummary(previewFocus)}
+                      </SectionPill>
+                      <SectionPill>
+                        <strong>Role</strong> {resolvedClassMeta.role}
+                      </SectionPill>
+                      <SectionPill>
+                        <strong>Base</strong> {resolvedSpeciesMeta.bestFor}
+                      </SectionPill>
+                    </div>
+
+                    <div
+                      style={{
+                        fontSize: 13,
+                        opacity: 0.8,
+                        lineHeight: 1.65,
+                      }}
+                    >
+                      <strong>Consequence:</strong> {previewFocusCopy.consequence}
+                    </div>
+
+                    <div
+                      style={{
+                        display: "grid",
+                        gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))",
+                        gap: 10,
+                        minWidth: 0,
+                      }}
+                    >
+                      {(() => {
+                        const stats = applyBuildFocusToStats(baseStats, previewFocus);
+                        return (
+                          <>
+                            <StatChip label="AC" value={stats.ac} />
+                            <StatChip label="HP Max" value={stats.hpMax} />
+                            <StatChip label="Init" value={stats.initiativeMod} />
+                          </>
+                        );
+                      })()}
+                    </div>
+                  </div>
+                </div>
+
+                <div style={{ display: "grid", gap: 14, minWidth: 0 }}>
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+                      gap: 14,
+                      minWidth: 0,
+                    }}
+                  >
+                    {BUILD_FOCUS_OPTIONS.map((option) => {
+                      const active = currentFocus === option.id;
+                      const hovered = hoveredFocus === option.id;
+                      const meta = BUILD_FOCUS_META[option.id];
+                      const palette = getFocusPalette(option.id, active || hovered);
+                      const copy = FOCUS_RITUAL_COPY[option.id];
+
+                      return (
+                        <button
+                          key={option.id}
+                          type="button"
+                          onMouseEnter={() => setHoveredFocus(option.id)}
+                          onMouseLeave={() => setHoveredFocus(null)}
+                          onFocus={() => setHoveredFocus(option.id)}
+                          onBlur={() => setHoveredFocus(null)}
+                          onClick={() => {
+                            if (!editable) {
+                              playSfx(SFX.uiFailure, 0.5);
+                              return;
+                            }
+                            playSfx(SFX.uiSuccess, 0.62);
+                            setBuildFocus(option.id);
+                            setRitualProgress((prev) => ({
+                              ...prev,
+                              focusConfirmed: true,
+                            }));
+                            setHeroCreationStep("name");
+                          }}
+                          disabled={!editable}
+                          style={{
+                            textAlign: "left",
+                            padding: 18,
+                            borderRadius: 20,
+                            border: palette.border,
+                            background: palette.background,
+                            boxShadow: palette.shadow,
+                            color: "inherit",
+                            cursor: editable ? "pointer" : "not-allowed",
+                            opacity: editable ? 1 : 0.6,
+                            display: "grid",
+                            gap: 10,
+                            transition:
+                              "transform 140ms ease, box-shadow 140ms ease, border-color 140ms ease, filter 140ms ease",
+                            minWidth: 0,
+                            boxSizing: "border-box",
+                            transform:
+                              active || hovered
+                                ? "translateY(-3px)"
+                                : "translateY(0)",
+                            minHeight: 220,
+                            alignContent: "start",
+                          }}
+                        >
+                          <div
+                            style={{
+                              display: "flex",
+                              justifyContent: "space-between",
+                              gap: 8,
+                              alignItems: "center",
+                            }}
+                          >
+                            <div
+                              style={{
+                                fontSize: 22,
+                                fontWeight: 950,
+                                color: getFocusTitleColor(option.id),
+                              }}
+                            >
+                              {option.icon} {option.label}
+                            </div>
+
+                            {active ? (
+                              <span
+                                style={{
+                                  fontSize: 10,
+                                  fontWeight: 900,
+                                  textTransform: "uppercase",
+                                  letterSpacing: "0.12em",
+                                  padding: "6px 8px",
+                                  borderRadius: 999,
+                                  border: "1px solid rgba(255,255,255,0.16)",
+                                  background: "rgba(255,255,255,0.08)",
+                                }}
+                              >
+                                Bound
+                              </span>
+                            ) : null}
+                          </div>
+
+                          <div
+                            style={{
+                              fontSize: 14,
+                              fontWeight: 800,
+                              lineHeight: 1.35,
+                              opacity: 0.94,
+                            }}
+                          >
+                            {copy.doctrine}
+                          </div>
+
+                          <div
+                            style={{
+                              fontSize: 12,
+                              opacity: 0.9,
+                              lineHeight: 1.5,
+                            }}
+                          >
+                            <strong>Shift:</strong> {renderFocusDeltaSummary(option.id)}
+                          </div>
+
+                          <div
+                            style={{
+                              fontSize: 12,
+                              opacity: 0.8,
+                              lineHeight: 1.55,
+                            }}
+                          >
+                            <strong>Vow:</strong> {copy.consequence}
+                          </div>
+
+                          <div
+                            style={{
+                              fontSize: 12,
+                              opacity: 0.72,
+                              lineHeight: 1.55,
+                            }}
+                          >
+                            <strong>For:</strong> {meta.bestFor}
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  <div
+                    style={{
+                      ...helperCardStyle,
+                      border: "1px solid rgba(255,255,255,0.10)",
+                      background:
+                        "linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.02))",
+                    }}
+                  >
+                    <div style={{ fontSize: 14, fontWeight: 900 }}>
+                      What this stance changes
+                    </div>
+                    <div style={{ fontSize: 13, opacity: 0.82, lineHeight: 1.65 }}>
+                      Your class remains <strong>{resolvedClass}</strong>. Your
+                      lineage remains <strong>{resolvedSpecies}</strong>. Focus only
+                      changes how this hero survives pressure, controls tempo, and
+                      carries their power into the first descent.
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
           </RitualFrame>
