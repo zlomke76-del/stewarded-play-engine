@@ -17,6 +17,11 @@
 // - added pre-title + subline framing
 // - upgraded title glow / gradient / spacing to echo THE OATH energy
 // - no structural gameplay changes
+//
+// Guide plaque art refinement:
+// - embedded DM / Solace cover art directly into the guide plaques
+// - low-opacity portrait treatment with dark readability overlays
+// - warm / cool identity separation reinforced visually
 // ------------------------------------------------------------
 
 import React, { useMemo } from "react";
@@ -217,6 +222,10 @@ function GuideOverlayCard({
   onChoose: () => void;
 }) {
   const isAzure = accent === "azure";
+  const imageSrc = isAzure
+    ? "/assets/cover/solace_cover_image_01.png"
+    : "/assets/cover/dm_cover_image_01.png";
+  const imagePosition = isAzure ? "85% center" : "20% center";
 
   return (
     <div
@@ -247,6 +256,42 @@ function GuideOverlayCard({
         opacity: selected ? 1 : 0.96,
       }}
     >
+      <img
+        src={imageSrc}
+        alt=""
+        aria-hidden
+        style={{
+          position: "absolute",
+          inset: 0,
+          width: "100%",
+          height: "100%",
+          objectFit: "cover",
+          objectPosition: imagePosition,
+          opacity: selected ? 0.28 : 0.22,
+          transform: "scale(1.06)",
+          filter: isAzure
+            ? "saturate(0.92) brightness(0.82) contrast(1.08)"
+            : "saturate(0.95) brightness(0.76) contrast(1.06)",
+          pointerEvents: "none",
+        }}
+      />
+
+      <div
+        aria-hidden
+        style={{
+          position: "absolute",
+          inset: 0,
+          background: isAzure
+            ? selected
+              ? "linear-gradient(90deg, rgba(5,8,14,0.94) 0%, rgba(7,10,18,0.78) 42%, rgba(14,26,56,0.40) 100%)"
+              : "linear-gradient(90deg, rgba(5,8,14,0.94) 0%, rgba(7,10,18,0.82) 42%, rgba(14,26,56,0.30) 100%)"
+            : selected
+              ? "linear-gradient(90deg, rgba(10,7,5,0.94) 0%, rgba(14,10,7,0.78) 42%, rgba(58,28,12,0.32) 100%)"
+              : "linear-gradient(90deg, rgba(10,7,5,0.94) 0%, rgba(14,10,7,0.82) 42%, rgba(58,28,12,0.24) 100%)",
+          pointerEvents: "none",
+        }}
+      />
+
       <div
         aria-hidden
         style={{
@@ -255,6 +300,18 @@ function GuideOverlayCard({
           background: isAzure
             ? "radial-gradient(460px 180px at 82% 8%, rgba(138,180,255,0.16), rgba(0,0,0,0) 60%)"
             : "radial-gradient(460px 180px at 18% 8%, rgba(255,168,94,0.18), rgba(0,0,0,0) 60%)",
+          pointerEvents: "none",
+        }}
+      />
+
+      <div
+        aria-hidden
+        style={{
+          position: "absolute",
+          inset: 0,
+          background: isAzure
+            ? "linear-gradient(180deg, rgba(255,255,255,0.02), rgba(0,0,0,0.12) 34%, rgba(0,0,0,0.28) 100%)"
+            : "linear-gradient(180deg, rgba(255,234,210,0.02), rgba(0,0,0,0.10) 34%, rgba(0,0,0,0.30) 100%)",
           pointerEvents: "none",
         }}
       />
