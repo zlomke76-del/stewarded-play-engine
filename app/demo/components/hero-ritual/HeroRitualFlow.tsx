@@ -239,6 +239,38 @@ export default function HeroRitualFlow({
     minWidth: 0,
   };
 
+  const ritualPanelStyle: React.CSSProperties = {
+    borderRadius: 20,
+    border: "1px solid rgba(255,255,255,0.10)",
+    background:
+      "radial-gradient(circle at top, rgba(255,188,112,0.08), transparent 28%), linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.02))",
+    padding: 22,
+    boxShadow: "inset 0 1px 0 rgba(255,255,255,0.03)",
+    maxWidth: 1240,
+    margin: "0 auto",
+    width: "100%",
+    boxSizing: "border-box",
+    overflow: "hidden",
+    minWidth: 0,
+  };
+
+  const oathPanelStyle: React.CSSProperties = {
+    borderRadius: 24,
+    border: "1px solid rgba(255,205,126,0.14)",
+    background:
+      "radial-gradient(circle at 50% 8%, rgba(255,209,130,0.12), rgba(255,209,130,0.02) 28%, rgba(0,0,0,0) 52%), linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.02))",
+    padding: "22px 22px 24px",
+    boxShadow:
+      "0 0 50px rgba(255,168,62,0.10), inset 0 1px 0 rgba(255,255,255,0.04)",
+    maxWidth: 1440,
+    margin: "0 auto",
+    width: "100%",
+    boxSizing: "border-box",
+    overflow: "hidden",
+    position: "relative",
+    minWidth: 0,
+  };
+
   const speciesPages = useMemo(() => chunkIntoPages(SAFE_SPECIES, 3), []);
   const classPages = useMemo(() => chunkIntoPages(SAFE_CLASS_ARCHETYPES, 4), []);
 
@@ -308,7 +340,6 @@ export default function HeroRitualFlow({
   const visibleSpecies = speciesPages[speciesPageIndex] ?? [];
   const visibleClasses = classPages[classPageIndex] ?? [];
   const previewFocus = hoveredFocus ?? currentFocus;
-  const previewFocusMeta = BUILD_FOCUS_META[previewFocus];
   const previewFocusCopy = FOCUS_RITUAL_COPY[previewFocus];
   const previewFocusPalette = getFocusPalette(previewFocus, true);
 
@@ -1045,49 +1076,38 @@ export default function HeroRitualFlow({
     case "focus":
       return (
         <div key="ritual-focus" style={ritualStageStyle}>
-          <RitualFrame
-            title="Choose a Focus"
-            subtitle="Every hero survives by a stance. Choose how this one enters danger."
-            footer={
-              <div
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  gap: 12,
-                  flexWrap: "wrap",
-                }}
-              >
-                <button
-                  type="button"
-                  onClick={() => {
-                    playSfx(SFX.buttonClick, 0.54);
-                    goToPreviousStep();
-                  }}
-                  style={{
-                    ...controlButtonBase,
-                    border: "1px solid rgba(255,255,255,0.12)",
-                    background: "rgba(255,255,255,0.05)",
-                    color: "inherit",
-                  }}
-                >
-                  Back
-                </button>
-
+          <article style={ritualPanelStyle}>
+            <div style={{ display: "grid", gap: 18, minWidth: 0 }}>
+              <div style={{ display: "grid", gap: 8, minWidth: 0 }}>
                 <div
-                  style={{ fontSize: 12, opacity: 0.72, alignSelf: "center" }}
+                  style={{
+                    fontSize: 34,
+                    fontWeight: 950,
+                    letterSpacing: 0.2,
+                    lineHeight: 1.02,
+                  }}
                 >
-                  Hover a stance to feel its doctrine. Click to bind it.
+                  Choose a Focus
+                </div>
+                <div
+                  style={{
+                    fontSize: 14,
+                    opacity: 0.84,
+                    lineHeight: 1.7,
+                    maxWidth: 760,
+                  }}
+                >
+                  Every hero survives by a stance. Choose how this one enters
+                  danger.
                 </div>
               </div>
-            }
-          >
-            <div style={{ display: "grid", gap: 18, minWidth: 0 }}>
+
               <RitualStepPills currentStep={heroCreationStep} />
 
               <div
                 style={{
                   display: "grid",
-                  gridTemplateColumns: "minmax(320px, 1.2fr) minmax(320px, 1fr)",
+                  gridTemplateColumns: "minmax(420px, 1.22fr) minmax(360px, 1fr)",
                   gap: 18,
                   alignItems: "stretch",
                   minWidth: 0,
@@ -1141,9 +1161,9 @@ export default function HeroRitualFlow({
                     <div style={{ display: "grid", gap: 6 }}>
                       <div
                         style={{
-                          fontSize: 30,
+                          fontSize: 34,
                           fontWeight: 950,
-                          lineHeight: 1.05,
+                          lineHeight: 1.04,
                           color: getFocusTitleColor(previewFocus),
                         }}
                       >
@@ -1158,7 +1178,7 @@ export default function HeroRitualFlow({
                       </div>
                       <div
                         style={{
-                          fontSize: 18,
+                          fontSize: 19,
                           fontWeight: 800,
                           opacity: 0.92,
                         }}
@@ -1185,7 +1205,7 @@ export default function HeroRitualFlow({
                     imageSrc={portraitPath}
                     fallbackImageSrc={fallbackPortraitPath}
                     alt={`${display} focus portrait`}
-                    height={380}
+                    height={430}
                     objectPosition={getPortraitObjectPosition("oath")}
                   />
 
@@ -1222,7 +1242,7 @@ export default function HeroRitualFlow({
                     <div
                       style={{
                         display: "grid",
-                        gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))",
+                        gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
                         gap: 10,
                         minWidth: 0,
                       }}
@@ -1245,7 +1265,7 @@ export default function HeroRitualFlow({
                   <div
                     style={{
                       display: "grid",
-                      gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+                      gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
                       gap: 14,
                       minWidth: 0,
                     }}
@@ -1402,10 +1422,47 @@ export default function HeroRitualFlow({
                       carries their power into the first descent.
                     </div>
                   </div>
+
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      gap: 12,
+                      flexWrap: "wrap",
+                      alignItems: "center",
+                      paddingTop: 6,
+                    }}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => {
+                        playSfx(SFX.buttonClick, 0.54);
+                        goToPreviousStep();
+                      }}
+                      style={{
+                        ...controlButtonBase,
+                        border: "1px solid rgba(255,255,255,0.12)",
+                        background: "rgba(255,255,255,0.05)",
+                        color: "inherit",
+                      }}
+                    >
+                      Back
+                    </button>
+
+                    <div
+                      style={{
+                        fontSize: 12,
+                        opacity: 0.72,
+                        alignSelf: "center",
+                      }}
+                    >
+                      Hover a stance to feel its doctrine. Click to bind it.
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
-          </RitualFrame>
+          </article>
         </div>
       );
 
@@ -1558,389 +1615,367 @@ export default function HeroRitualFlow({
     case "confirm":
       return (
         <div key="ritual-confirm" style={ritualStageStyle}>
-          <RitualFrame
-            title="The Oath"
-            subtitle="Spoken into the Chronicle. Bound to the first descent."
-            footer={
+          <article style={oathPanelStyle}>
+            <div
+              aria-hidden="true"
+              style={{
+                position: "absolute",
+                top: 12,
+                left: "50%",
+                transform: "translateX(-50%)",
+                width: 260,
+                height: 260,
+                borderRadius: "50%",
+                border: "1px solid rgba(255,210,140,0.10)",
+                boxShadow:
+                  "0 0 80px rgba(255,176,64,0.10), inset 0 0 40px rgba(255,220,160,0.04)",
+                opacity: 0.9,
+                pointerEvents: "none",
+              }}
+            />
+            <div
+              aria-hidden="true"
+              style={{
+                position: "absolute",
+                top: 34,
+                left: "50%",
+                transform: "translateX(-50%)",
+                width: 190,
+                height: 190,
+                borderRadius: "50%",
+                border: "1px solid rgba(255,210,140,0.08)",
+                opacity: 0.8,
+                pointerEvents: "none",
+              }}
+            />
+            <div
+              aria-hidden="true"
+              style={{
+                position: "absolute",
+                top: 26,
+                left: 24,
+                right: 24,
+                height: 1,
+                background:
+                  "linear-gradient(90deg, rgba(255,255,255,0), rgba(255,210,140,0.22), rgba(255,255,255,0))",
+                pointerEvents: "none",
+              }}
+            />
+            <div
+              aria-hidden="true"
+              style={{
+                position: "absolute",
+                top: 104,
+                left: 36,
+                width: 72,
+                height: 72,
+                borderRadius: "50%",
+                background:
+                  "radial-gradient(circle, rgba(255,170,70,0.18) 0%, rgba(255,170,70,0.04) 45%, rgba(0,0,0,0) 70%)",
+                filter: "blur(12px)",
+                pointerEvents: "none",
+              }}
+            />
+            <div
+              aria-hidden="true"
+              style={{
+                position: "absolute",
+                bottom: 52,
+                right: 48,
+                width: 96,
+                height: 96,
+                borderRadius: "50%",
+                background:
+                  "radial-gradient(circle, rgba(255,196,118,0.14) 0%, rgba(255,196,118,0.04) 46%, rgba(0,0,0,0) 72%)",
+                filter: "blur(16px)",
+                pointerEvents: "none",
+              }}
+            />
+
+            <div style={{ display: "grid", gap: 20, minWidth: 0, position: "relative", zIndex: 1 }}>
               <div
                 style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  gap: 12,
-                  flexWrap: "wrap",
+                  display: "grid",
+                  gap: 6,
+                  justifyItems: "center",
+                  textAlign: "center",
+                  marginBottom: 4,
                 }}
               >
-                <button
-                  type="button"
-                  onClick={() => {
-                    playSfx(SFX.buttonClick, 0.54);
-                    goToPreviousStep();
-                  }}
-                  style={{
-                    ...controlButtonBase,
-                    border: "1px solid rgba(255,255,255,0.12)",
-                    background: "rgba(255,255,255,0.05)",
-                    color: "inherit",
-                  }}
-                >
-                  Back
-                </button>
-
                 <div
                   style={{
-                    display: "flex",
-                    gap: 10,
-                    flexWrap: "wrap",
-                    alignItems: "center",
+                    fontSize: 11,
+                    textTransform: "uppercase",
+                    letterSpacing: "0.24em",
+                    opacity: 0.62,
+                    fontWeight: 900,
                   }}
                 >
-                  <button
-                    onClick={() => {
-                      if (!canEnterChronicle || partyLocked || !partyDraft) {
-                        playSfx(SFX.uiFailure, 0.5);
-                        return;
-                      }
-                      onCommitChronicle();
-                    }}
-                    disabled={!canEnterChronicle || partyLocked || !partyDraft}
-                    style={{
-                      ...controlButtonBase,
-                      border: "1px solid rgba(255,205,126,0.28)",
-                      background:
-                        canEnterChronicle && !partyLocked && !!partyDraft
-                          ? "linear-gradient(180deg, rgba(255,201,116,0.98), rgba(218,132,47,0.98))"
-                          : "linear-gradient(180deg, rgba(107,89,69,0.7), rgba(74,55,39,0.74))",
-                      color:
-                        canEnterChronicle && !partyLocked && !!partyDraft
-                          ? "#2f1606"
-                          : "rgba(244,227,201,0.75)",
-                      boxShadow:
-                        canEnterChronicle && !partyLocked && !!partyDraft
-                          ? "0 10px 28px rgba(255,145,42,0.18), inset 0 1px 0 rgba(255,244,220,0.72)"
-                          : "none",
-                      opacity:
-                        canEnterChronicle && !partyLocked && !!partyDraft
-                          ? 1
-                          : 0.62,
-                      cursor:
-                        canEnterChronicle && !partyLocked && !!partyDraft
-                          ? "pointer"
-                          : "not-allowed",
-                      minWidth: 230,
-                    }}
-                  >
-                    Enter the Chronicle
-                  </button>
-
-                  <span style={{ fontSize: 12, opacity: 0.72 }}>
-                    {canEnterChronicle
-                      ? "Ritual complete"
-                      : "Complete every choice to continue"}
-                    {partyLockedByCombat ? " · Combat lock active" : ""}
-                  </span>
+                  Chronicle Entry
                 </div>
-              </div>
-            }
-          >
-            <div style={{ display: "grid", gap: 20, minWidth: 0 }}>
-              <RitualStepPills currentStep={heroCreationStep} />
 
-              <div
-                style={{
-                  position: "relative",
-                  borderRadius: 22,
-                  overflow: "hidden",
-                  border: "1px solid rgba(255,205,126,0.14)",
-                  background:
-                    "radial-gradient(circle at 50% 8%, rgba(255,209,130,0.12), rgba(255,209,130,0.02) 28%, rgba(0,0,0,0) 52%), linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.02))",
-                  padding: "20px 20px 22px",
-                  boxShadow:
-                    "0 0 50px rgba(255,168,62,0.10), inset 0 1px 0 rgba(255,255,255,0.04)",
-                }}
-              >
                 <div
-                  aria-hidden="true"
                   style={{
-                    position: "absolute",
-                    top: 12,
-                    left: "50%",
-                    transform: "translateX(-50%)",
+                    fontSize: 68,
+                    lineHeight: 0.9,
+                    fontWeight: 1000,
+                    letterSpacing: "0.08em",
+                    textTransform: "uppercase",
+                    background:
+                      "linear-gradient(180deg, rgba(255,242,214,0.98) 0%, rgba(255,214,134,0.98) 42%, rgba(229,143,54,0.98) 100%)",
+                    WebkitBackgroundClip: "text",
+                    backgroundClip: "text",
+                    color: "transparent",
+                    textShadow:
+                      "0 0 26px rgba(255,176,64,0.18), 0 3px 22px rgba(0,0,0,0.35)",
+                  }}
+                >
+                  The Oath
+                </div>
+
+                <div
+                  style={{
                     width: 260,
-                    height: 260,
-                    borderRadius: "50%",
-                    border: "1px solid rgba(255,210,140,0.10)",
-                    boxShadow:
-                      "0 0 80px rgba(255,176,64,0.10), inset 0 0 40px rgba(255,220,160,0.04)",
-                    opacity: 0.9,
-                    pointerEvents: "none",
-                  }}
-                />
-                <div
-                  aria-hidden="true"
-                  style={{
-                    position: "absolute",
-                    top: 34,
-                    left: "50%",
-                    transform: "translateX(-50%)",
-                    width: 190,
-                    height: 190,
-                    borderRadius: "50%",
-                    border: "1px solid rgba(255,210,140,0.08)",
-                    opacity: 0.8,
-                    pointerEvents: "none",
-                  }}
-                />
-                <div
-                  aria-hidden="true"
-                  style={{
-                    position: "absolute",
-                    top: 26,
-                    left: 24,
-                    right: 24,
                     height: 1,
                     background:
-                      "linear-gradient(90deg, rgba(255,255,255,0), rgba(255,210,140,0.22), rgba(255,255,255,0))",
-                    pointerEvents: "none",
-                  }}
-                />
-                <div
-                  aria-hidden="true"
-                  style={{
-                    position: "absolute",
-                    top: 104,
-                    left: 36,
-                    width: 72,
-                    height: 72,
-                    borderRadius: "50%",
-                    background:
-                      "radial-gradient(circle, rgba(255,170,70,0.18) 0%, rgba(255,170,70,0.04) 45%, rgba(0,0,0,0) 70%)",
-                    filter: "blur(12px)",
-                    pointerEvents: "none",
-                  }}
-                />
-                <div
-                  aria-hidden="true"
-                  style={{
-                    position: "absolute",
-                    bottom: 52,
-                    right: 48,
-                    width: 96,
-                    height: 96,
-                    borderRadius: "50%",
-                    background:
-                      "radial-gradient(circle, rgba(255,196,118,0.14) 0%, rgba(255,196,118,0.04) 46%, rgba(0,0,0,0) 72%)",
-                    filter: "blur(16px)",
-                    pointerEvents: "none",
+                      "linear-gradient(90deg, rgba(255,255,255,0), rgba(255,210,140,0.28), rgba(255,255,255,0))",
                   }}
                 />
 
                 <div
                   style={{
-                    display: "grid",
-                    gap: 6,
-                    justifyItems: "center",
-                    textAlign: "center",
-                    marginBottom: 18,
-                    position: "relative",
-                    zIndex: 1,
+                    fontSize: 13,
+                    opacity: 0.78,
+                    lineHeight: 1.6,
+                    maxWidth: 720,
                   }}
                 >
-                  <div
-                    style={{
-                      fontSize: 11,
-                      textTransform: "uppercase",
-                      letterSpacing: "0.24em",
-                      opacity: 0.62,
-                      fontWeight: 900,
-                    }}
-                  >
-                    Chronicle Entry
-                  </div>
+                  Spoken into the Chronicle. Bound before witness. Carried into
+                  the first descent.
+                </div>
+              </div>
 
-                  <div
-                    style={{
-                      fontSize: 60,
-                      lineHeight: 0.92,
-                      fontWeight: 1000,
-                      letterSpacing: "0.08em",
-                      textTransform: "uppercase",
-                      background:
-                        "linear-gradient(180deg, rgba(255,242,214,0.98) 0%, rgba(255,214,134,0.98) 42%, rgba(229,143,54,0.98) 100%)",
-                      WebkitBackgroundClip: "text",
-                      backgroundClip: "text",
-                      color: "transparent",
-                      textShadow:
-                        "0 0 26px rgba(255,176,64,0.18), 0 3px 22px rgba(0,0,0,0.35)",
-                    }}
-                  >
-                    The Oath
-                  </div>
-
-                  <div
-                    style={{
-                      width: 260,
-                      height: 1,
-                      background:
-                        "linear-gradient(90deg, rgba(255,255,255,0), rgba(255,210,140,0.28), rgba(255,255,255,0))",
-                    }}
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns:
+                    "minmax(520px, 1.28fr) minmax(340px, 0.9fr)",
+                  gap: 26,
+                  alignItems: "start",
+                  minWidth: 0,
+                }}
+              >
+                <div
+                  style={{
+                    borderRadius: 24,
+                    overflow: "hidden",
+                    border: "1px solid rgba(255,205,126,0.18)",
+                    background:
+                      "radial-gradient(circle at 50% 18%, rgba(255,224,178,0.12), rgba(255,224,178,0.02) 24%, rgba(0,0,0,0) 44%), linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.02))",
+                    boxShadow:
+                      "0 0 60px rgba(255,176,64,0.10), 0 22px 48px rgba(0,0,0,0.28)",
+                    minWidth: 0,
+                    boxSizing: "border-box",
+                  }}
+                >
+                  <HeroRitualPortrait
+                    species={resolvedSpecies}
+                    className={resolvedClass}
+                    portrait={row?.portrait ?? "Male"}
+                    imageSrc={portraitPath}
+                    fallbackImageSrc={fallbackPortraitPath}
+                    alt={`${display} portrait`}
+                    height={620}
+                    objectPosition={getPortraitObjectPosition("oath")}
                   />
-
-                  <div
-                    style={{
-                      fontSize: 13,
-                      opacity: 0.78,
-                      lineHeight: 1.6,
-                      maxWidth: 720,
-                    }}
-                  >
-                    Spoken into the Chronicle. Bound before witness. Carried into
-                    the first descent.
-                  </div>
                 </div>
 
-                <div
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns:
-                      "minmax(420px, 1.22fr) minmax(320px, 0.92fr)",
-                    gap: 24,
-                    alignItems: "start",
-                    minWidth: 0,
-                    position: "relative",
-                    zIndex: 1,
-                  }}
-                >
+                <div style={{ display: "grid", gap: 16, minWidth: 0 }}>
+                  <div style={{ display: "grid", gap: 8 }}>
+                    <div
+                      style={{
+                        fontSize: 48,
+                        fontWeight: 1000,
+                        lineHeight: 0.94,
+                      }}
+                    >
+                      {display}
+                    </div>
+                    <div style={{ fontSize: 18, opacity: 0.84 }}>
+                      {resolvedSpecies} {resolvedClass}
+                    </div>
+                    <div
+                      style={{
+                        fontSize: 13,
+                        opacity: 0.76,
+                        lineHeight: 1.6,
+                      }}
+                    >
+                      This name enters canon as the first witness to the
+                      descent.
+                    </div>
+                  </div>
+
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                    <SectionPill tone="warn">
+                      <strong>Focus</strong>{" "}
+                      {BUILD_FOCUS_OPTIONS.find((x) => x.id === currentFocus)
+                        ?.label ?? "Balanced"}
+                    </SectionPill>
+                    <SectionPill>
+                      <strong>Portrait</strong> {row?.portrait ?? "Male"}
+                    </SectionPill>
+                    <SectionPill>
+                      <strong>Role</strong> {resolvedClassMeta.role}
+                    </SectionPill>
+                  </div>
+
                   <div
                     style={{
-                      borderRadius: 24,
-                      overflow: "hidden",
-                      border: "1px solid rgba(255,205,126,0.18)",
-                      background:
-                        "radial-gradient(circle at 50% 18%, rgba(255,224,178,0.12), rgba(255,224,178,0.02) 24%, rgba(0,0,0,0) 44%), linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.02))",
-                      boxShadow:
-                        "0 0 60px rgba(255,176,64,0.10), 0 22px 48px rgba(0,0,0,0.28)",
+                      display: "grid",
+                      gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+                      gap: 10,
                       minWidth: 0,
-                      boxSizing: "border-box",
                     }}
                   >
-                    <HeroRitualPortrait
-                      species={resolvedSpecies}
-                      className={resolvedClass}
-                      portrait={row?.portrait ?? "Male"}
-                      imageSrc={portraitPath}
-                      fallbackImageSrc={fallbackPortraitPath}
-                      alt={`${display} portrait`}
-                      height={560}
-                      objectPosition={getPortraitObjectPosition("oath")}
+                    <StatChip
+                      label="AC"
+                      value={`${row?.ac ?? baseStats.ac}${focusDeltaAc ? ` (${focusDeltaAc > 0 ? `+${focusDeltaAc}` : focusDeltaAc})` : ""}`}
+                    />
+                    <StatChip
+                      label="HP Max"
+                      value={`${row?.hpMax ?? baseStats.hpMax}${focusDeltaHp ? ` (${focusDeltaHp > 0 ? `+${focusDeltaHp}` : focusDeltaHp})` : ""}`}
+                    />
+                    <StatChip
+                      label="Init"
+                      value={`${row?.initiativeMod ?? baseStats.initiativeMod}${focusDeltaInit ? ` (${focusDeltaInit > 0 ? `+${focusDeltaInit}` : focusDeltaInit})` : ""}`}
                     />
                   </div>
 
-                  <div style={{ display: "grid", gap: 16, minWidth: 0 }}>
-                    <div style={{ display: "grid", gap: 8 }}>
-                      <div
-                        style={{
-                          fontSize: 44,
-                          fontWeight: 1000,
-                          lineHeight: 0.96,
-                        }}
-                      >
-                        {display}
-                      </div>
-                      <div style={{ fontSize: 18, opacity: 0.84 }}>
-                        {resolvedSpecies} {resolvedClass}
-                      </div>
-                      <div
-                        style={{
-                          fontSize: 13,
-                          opacity: 0.76,
-                          lineHeight: 1.6,
-                        }}
-                      >
-                        This name enters canon as the first witness to the
-                        descent.
-                      </div>
+                  <div style={helperCardStyle}>
+                    <div style={{ fontSize: 14, fontWeight: 900 }}>
+                      What this build does well
                     </div>
+                    <div style={{ fontSize: 13, opacity: 0.84, lineHeight: 1.65 }}>
+                      • {resolvedSpeciesMeta.strengths[0]}
+                      <br />
+                      • {resolvedClassMeta.strengths[0]}
+                      <br />
+                      • {resolvedFocusMeta.gains[0]}
+                    </div>
+                  </div>
 
-                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                      <SectionPill tone="warn">
-                        <strong>Focus</strong>{" "}
-                        {BUILD_FOCUS_OPTIONS.find((x) => x.id === currentFocus)
-                          ?.label ?? "Balanced"}
-                      </SectionPill>
-                      <SectionPill>
-                        <strong>Portrait</strong> {row?.portrait ?? "Male"}
-                      </SectionPill>
-                      <SectionPill>
-                        <strong>Role</strong> {resolvedClassMeta.role}
-                      </SectionPill>
+                  <div style={helperCardStyle}>
+                    <div style={{ fontSize: 14, fontWeight: 900 }}>Tradeoffs</div>
+                    <div style={{ fontSize: 13, opacity: 0.8, lineHeight: 1.65 }}>
+                      • {resolvedSpeciesMeta.tradeoff}
+                      <br />
+                      • {resolvedClassMeta.tradeoff}
+                      <br />
+                      • {resolvedFocusMeta.tradeoff}
                     </div>
+                  </div>
+
+                  <div style={helperCardStyle}>
+                    <div style={{ fontSize: 14, fontWeight: 900 }}>
+                      Recommended playstyle
+                    </div>
+                    <div style={{ fontSize: 13, opacity: 0.82, lineHeight: 1.65 }}>
+                      This hero fits{" "}
+                      <strong>
+                        {resolvedSpeciesMeta.bestFor.toLowerCase()}
+                      </strong>
+                      , operates as a{" "}
+                      <strong>{resolvedClassMeta.role.toLowerCase()}</strong>, and
+                      is best used for{" "}
+                      <strong>{resolvedFocusMeta.bestFor.toLowerCase()}</strong>.
+                    </div>
+                  </div>
+
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      gap: 12,
+                      flexWrap: "wrap",
+                      alignItems: "center",
+                      paddingTop: 6,
+                    }}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => {
+                        playSfx(SFX.buttonClick, 0.54);
+                        goToPreviousStep();
+                      }}
+                      style={{
+                        ...controlButtonBase,
+                        border: "1px solid rgba(255,255,255,0.12)",
+                        background: "rgba(255,255,255,0.05)",
+                        color: "inherit",
+                      }}
+                    >
+                      Back
+                    </button>
 
                     <div
                       style={{
-                        display: "grid",
-                        gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+                        display: "flex",
                         gap: 10,
-                        minWidth: 0,
+                        flexWrap: "wrap",
+                        alignItems: "center",
                       }}
                     >
-                      <StatChip
-                        label="AC"
-                        value={`${row?.ac ?? baseStats.ac}${focusDeltaAc ? ` (${focusDeltaAc > 0 ? `+${focusDeltaAc}` : focusDeltaAc})` : ""}`}
-                      />
-                      <StatChip
-                        label="HP Max"
-                        value={`${row?.hpMax ?? baseStats.hpMax}${focusDeltaHp ? ` (${focusDeltaHp > 0 ? `+${focusDeltaHp}` : focusDeltaHp})` : ""}`}
-                      />
-                      <StatChip
-                        label="Init"
-                        value={`${row?.initiativeMod ?? baseStats.initiativeMod}${focusDeltaInit ? ` (${focusDeltaInit > 0 ? `+${focusDeltaInit}` : focusDeltaInit})` : ""}`}
-                      />
-                    </div>
+                      <button
+                        onClick={() => {
+                          if (!canEnterChronicle || partyLocked || !partyDraft) {
+                            playSfx(SFX.uiFailure, 0.5);
+                            return;
+                          }
+                          onCommitChronicle();
+                        }}
+                        disabled={!canEnterChronicle || partyLocked || !partyDraft}
+                        style={{
+                          ...controlButtonBase,
+                          border: "1px solid rgba(255,205,126,0.28)",
+                          background:
+                            canEnterChronicle && !partyLocked && !!partyDraft
+                              ? "linear-gradient(180deg, rgba(255,201,116,0.98), rgba(218,132,47,0.98))"
+                              : "linear-gradient(180deg, rgba(107,89,69,0.7), rgba(74,55,39,0.74))",
+                          color:
+                            canEnterChronicle && !partyLocked && !!partyDraft
+                              ? "#2f1606"
+                              : "rgba(244,227,201,0.75)",
+                          boxShadow:
+                            canEnterChronicle && !partyLocked && !!partyDraft
+                              ? "0 10px 28px rgba(255,145,42,0.18), inset 0 1px 0 rgba(255,244,220,0.72)"
+                              : "none",
+                          opacity:
+                            canEnterChronicle && !partyLocked && !!partyDraft
+                              ? 1
+                              : 0.62,
+                          cursor:
+                            canEnterChronicle && !partyLocked && !!partyDraft
+                              ? "pointer"
+                              : "not-allowed",
+                          minWidth: 230,
+                        }}
+                      >
+                        Enter the Chronicle
+                      </button>
 
-                    <div style={helperCardStyle}>
-                      <div style={{ fontSize: 14, fontWeight: 900 }}>
-                        What this build does well
-                      </div>
-                      <div style={{ fontSize: 13, opacity: 0.84, lineHeight: 1.65 }}>
-                        • {resolvedSpeciesMeta.strengths[0]}
-                        <br />
-                        • {resolvedClassMeta.strengths[0]}
-                        <br />
-                        • {resolvedFocusMeta.gains[0]}
-                      </div>
-                    </div>
-
-                    <div style={helperCardStyle}>
-                      <div style={{ fontSize: 14, fontWeight: 900 }}>Tradeoffs</div>
-                      <div style={{ fontSize: 13, opacity: 0.8, lineHeight: 1.65 }}>
-                        • {resolvedSpeciesMeta.tradeoff}
-                        <br />
-                        • {resolvedClassMeta.tradeoff}
-                        <br />
-                        • {resolvedFocusMeta.tradeoff}
-                      </div>
-                    </div>
-
-                    <div style={helperCardStyle}>
-                      <div style={{ fontSize: 14, fontWeight: 900 }}>
-                        Recommended playstyle
-                      </div>
-                      <div style={{ fontSize: 13, opacity: 0.82, lineHeight: 1.65 }}>
-                        This hero fits{" "}
-                        <strong>
-                          {resolvedSpeciesMeta.bestFor.toLowerCase()}
-                        </strong>
-                        , operates as a{" "}
-                        <strong>{resolvedClassMeta.role.toLowerCase()}</strong>, and
-                        is best used for{" "}
-                        <strong>{resolvedFocusMeta.bestFor.toLowerCase()}</strong>.
-                      </div>
+                      <span style={{ fontSize: 12, opacity: 0.72 }}>
+                        {canEnterChronicle
+                          ? "Ritual complete"
+                          : "Complete every choice to continue"}
+                        {partyLockedByCombat ? " · Combat lock active" : ""}
+                      </span>
                     </div>
                   </div>
                 </div>
               </div>
             </div>
-          </RitualFrame>
+          </article>
         </div>
       );
 
