@@ -15,10 +15,7 @@ import {
   type PartyMember,
   type SpeciesMeta,
 } from "./types";
-import {
-  getFocusTitleColor,
-  getPortraitObjectPosition,
-} from "./helpers";
+import { getFocusTitleColor, getPortraitObjectPosition } from "./helpers";
 import {
   RitualChoiceCard,
   SectionPill,
@@ -26,7 +23,7 @@ import {
   TinyLabel,
 } from "./HeroRitualUI";
 import HeroRitualPortrait from "./HeroRitualPortrait";
-import { StandardRitualStep } from "./HeroRitualStep";
+import { StandardRitualStep, OathRitualStep } from "./HeroRitualStep";
 
 const controlButtonBase: React.CSSProperties = {
   padding: "11px 14px",
@@ -51,15 +48,22 @@ const inputStyle: React.CSSProperties = {
 };
 
 const helperCardStyle: React.CSSProperties = {
-  padding: "14px 16px",
+  padding: "12px 14px",
   borderRadius: 14,
   border: "1px solid rgba(255,255,255,0.08)",
   background: "rgba(255,255,255,0.03)",
   display: "grid",
-  gap: 10,
+  gap: 8,
   boxSizing: "border-box",
   minWidth: 0,
+};
+
+const oathInfoCardStyle: React.CSSProperties = {
+  ...helperCardStyle,
   width: "100%",
+  minWidth: 0,
+  overflow: "hidden",
+  wordBreak: "break-word",
 };
 
 type StandardStepBase = {
@@ -1390,24 +1394,7 @@ export function OathPanel({
   onCommit,
 }: OathPanelProps) {
   return (
-    <article
-      style={{
-        position: "relative",
-        borderRadius: 24,
-        border: "1px solid rgba(255,205,126,0.14)",
-        background:
-          "radial-gradient(circle at 50% 8%, rgba(255,209,130,0.12), rgba(255,209,130,0.02) 28%, rgba(0,0,0,0) 52%), linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.02))",
-        padding: "22px 22px 24px",
-        boxShadow:
-          "0 0 50px rgba(255,168,62,0.10), inset 0 1px 0 rgba(255,255,255,0.04)",
-        maxWidth: 1500,
-        margin: "0 auto",
-        width: "100%",
-        boxSizing: "border-box",
-        overflow: "hidden",
-        minWidth: 0,
-      }}
-    >
+    <OathRitualStep>
       <div
         aria-hidden="true"
         style={{
@@ -1487,7 +1474,7 @@ export function OathPanel({
       <div
         style={{
           display: "grid",
-          gap: 22,
+          gap: 20,
           minWidth: 0,
           position: "relative",
           zIndex: 1,
@@ -1499,7 +1486,7 @@ export function OathPanel({
             gap: 6,
             justifyItems: "center",
             textAlign: "center",
-            marginBottom: 2,
+            marginBottom: 4,
           }}
         >
           <div
@@ -1558,8 +1545,8 @@ export function OathPanel({
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: "minmax(500px, 1.15fr) minmax(430px, 1fr)",
-            gap: 28,
+            gridTemplateColumns: "minmax(420px, 1.22fr) minmax(380px, 0.98fr)",
+            gap: 22,
             alignItems: "start",
             minWidth: 0,
           }}
@@ -1598,17 +1585,10 @@ export function OathPanel({
               alignContent: "start",
             }}
           >
-            <div
-              style={{
-                display: "grid",
-                gap: 8,
-                padding: "4px 2px 0",
-                minWidth: 0,
-              }}
-            >
+            <div style={{ display: "grid", gap: 8, minWidth: 0 }}>
               <div
                 style={{
-                  fontSize: 46,
+                  fontSize: 48,
                   fontWeight: 1000,
                   lineHeight: 0.94,
                   wordBreak: "break-word",
@@ -1618,9 +1598,8 @@ export function OathPanel({
               </div>
               <div
                 style={{
-                  fontSize: 19,
-                  opacity: 0.86,
-                  lineHeight: 1.3,
+                  fontSize: 18,
+                  opacity: 0.84,
                   wordBreak: "break-word",
                 }}
               >
@@ -1629,15 +1608,23 @@ export function OathPanel({
               <div
                 style={{
                   fontSize: 13,
-                  opacity: 0.74,
+                  opacity: 0.76,
                   lineHeight: 1.6,
+                  wordBreak: "break-word",
                 }}
               >
                 This name enters canon as the first witness to the descent.
               </div>
             </div>
 
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <div
+              style={{
+                display: "flex",
+                gap: 8,
+                flexWrap: "wrap",
+                alignItems: "flex-start",
+              }}
+            >
               <SectionPill tone="warn">
                 <strong>Focus</strong>{" "}
                 {BUILD_FOCUS_OPTIONS.find((x) => x.id === currentFocus)?.label ??
@@ -1657,27 +1644,43 @@ export function OathPanel({
                 gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
                 gap: 10,
                 minWidth: 0,
+                width: "100%",
               }}
             >
               <StatChip
                 label="AC"
-                value={`${row?.ac ?? baseStats.ac}${focusDeltaAc ? ` (${focusDeltaAc > 0 ? `+${focusDeltaAc}` : focusDeltaAc})` : ""}`}
+                value={`${row?.ac ?? baseStats.ac}${
+                  focusDeltaAc ? ` (${focusDeltaAc > 0 ? `+${focusDeltaAc}` : focusDeltaAc})` : ""
+                }`}
               />
               <StatChip
                 label="HP Max"
-                value={`${row?.hpMax ?? baseStats.hpMax}${focusDeltaHp ? ` (${focusDeltaHp > 0 ? `+${focusDeltaHp}` : focusDeltaHp})` : ""}`}
+                value={`${row?.hpMax ?? baseStats.hpMax}${
+                  focusDeltaHp ? ` (${focusDeltaHp > 0 ? `+${focusDeltaHp}` : focusDeltaHp})` : ""
+                }`}
               />
               <StatChip
                 label="Init"
-                value={`${row?.initiativeMod ?? baseStats.initiativeMod}${focusDeltaInit ? ` (${focusDeltaInit > 0 ? `+${focusDeltaInit}` : focusDeltaInit})` : ""}`}
+                value={`${row?.initiativeMod ?? baseStats.initiativeMod}${
+                  focusDeltaInit
+                    ? ` (${focusDeltaInit > 0 ? `+${focusDeltaInit}` : focusDeltaInit})`
+                    : ""
+                }`}
               />
             </div>
 
-            <div style={helperCardStyle}>
+            <div style={oathInfoCardStyle}>
               <div style={{ fontSize: 14, fontWeight: 900 }}>
                 What this build does well
               </div>
-              <div style={{ fontSize: 13, opacity: 0.84, lineHeight: 1.65 }}>
+              <div
+                style={{
+                  fontSize: 13,
+                  opacity: 0.84,
+                  lineHeight: 1.65,
+                  wordBreak: "break-word",
+                }}
+              >
                 • {resolvedSpeciesMeta.strengths[0]}
                 <br />
                 • {resolvedClassMeta.strengths[0]}
@@ -1686,9 +1689,16 @@ export function OathPanel({
               </div>
             </div>
 
-            <div style={helperCardStyle}>
+            <div style={oathInfoCardStyle}>
               <div style={{ fontSize: 14, fontWeight: 900 }}>Tradeoffs</div>
-              <div style={{ fontSize: 13, opacity: 0.8, lineHeight: 1.65 }}>
+              <div
+                style={{
+                  fontSize: 13,
+                  opacity: 0.8,
+                  lineHeight: 1.65,
+                  wordBreak: "break-word",
+                }}
+              >
                 • {resolvedSpeciesMeta.tradeoff}
                 <br />
                 • {resolvedClassMeta.tradeoff}
@@ -1697,11 +1707,18 @@ export function OathPanel({
               </div>
             </div>
 
-            <div style={helperCardStyle}>
+            <div style={oathInfoCardStyle}>
               <div style={{ fontSize: 14, fontWeight: 900 }}>
                 Recommended playstyle
               </div>
-              <div style={{ fontSize: 13, opacity: 0.82, lineHeight: 1.7 }}>
+              <div
+                style={{
+                  fontSize: 13,
+                  opacity: 0.82,
+                  lineHeight: 1.65,
+                  wordBreak: "break-word",
+                }}
+              >
                 This hero fits{" "}
                 <strong>{resolvedSpeciesMeta.bestFor.toLowerCase()}</strong>,
                 operates as a{" "}
@@ -1713,34 +1730,34 @@ export function OathPanel({
 
             <div
               style={{
-                display: "grid",
-                gridTemplateColumns: "1fr",
+                display: "flex",
+                justifyContent: "space-between",
                 gap: 12,
-                paddingTop: 4,
-                minWidth: 0,
+                flexWrap: "wrap",
+                alignItems: "center",
+                paddingTop: 6,
               }}
             >
-              <div style={{ display: "flex", justifyContent: "flex-start" }}>
-                <button
-                  type="button"
-                  onClick={onBack}
-                  style={{
-                    ...controlButtonBase,
-                    border: "1px solid rgba(255,255,255,0.12)",
-                    background: "rgba(255,255,255,0.05)",
-                    color: "inherit",
-                  }}
-                >
-                  Back
-                </button>
-              </div>
+              <button
+                type="button"
+                onClick={onBack}
+                style={{
+                  ...controlButtonBase,
+                  border: "1px solid rgba(255,255,255,0.12)",
+                  background: "rgba(255,255,255,0.05)",
+                  color: "inherit",
+                }}
+              >
+                Back
+              </button>
 
               <div
                 style={{
-                  display: "grid",
-                  gridTemplateColumns: "1fr",
+                  display: "flex",
                   gap: 10,
-                  alignItems: "start",
+                  flexWrap: "wrap",
+                  alignItems: "center",
+                  justifyContent: "flex-end",
                 }}
               >
                 <button
@@ -1761,7 +1778,6 @@ export function OathPanel({
                     opacity: canEnterChronicle ? 1 : 0.62,
                     cursor: canEnterChronicle ? "pointer" : "not-allowed",
                     minWidth: 230,
-                    justifySelf: "start",
                   }}
                 >
                   Enter the Chronicle
@@ -1771,8 +1787,8 @@ export function OathPanel({
                   style={{
                     fontSize: 12,
                     opacity: 0.72,
-                    textAlign: "left",
-                    lineHeight: 1.5,
+                    whiteSpace: "normal",
+                    wordBreak: "break-word",
                   }}
                 >
                   {canEnterChronicle
@@ -1785,6 +1801,6 @@ export function OathPanel({
           </div>
         </div>
       </div>
-    </article>
+    </OathRitualStep>
   );
 }
