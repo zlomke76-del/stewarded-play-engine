@@ -1066,10 +1066,11 @@ export function FocusPanel({
                 >
                   <div
                     style={{
-                      display: "flex",
-                      justifyContent: "space-between",
-                      gap: 8,
-                      alignItems: "center",
+                      display: "grid",
+                      gridTemplateColumns: active ? "minmax(0, 1fr) auto" : "minmax(0, 1fr)",
+                      gap: 10,
+                      alignItems: "start",
+                      minWidth: 0,
                     }}
                   >
                     <div
@@ -1077,6 +1078,8 @@ export function FocusPanel({
                         fontSize: 22,
                         fontWeight: 950,
                         color: getFocusTitleColor(option.id),
+                        lineHeight: 1.18,
+                        minWidth: 0,
                       }}
                     >
                       {option.icon} {option.label}
@@ -1085,14 +1088,19 @@ export function FocusPanel({
                     {active ? (
                       <span
                         style={{
-                          fontSize: 10,
+                          justifySelf: "end",
+                          alignSelf: "start",
+                          fontSize: 9,
                           fontWeight: 900,
                           textTransform: "uppercase",
                           letterSpacing: "0.12em",
-                          padding: "6px 8px",
+                          padding: "4px 8px",
                           borderRadius: 999,
                           border: "1px solid rgba(255,255,255,0.16)",
                           background: "rgba(255,255,255,0.08)",
+                          lineHeight: 1,
+                          marginTop: 2,
+                          whiteSpace: "nowrap",
                         }}
                       >
                         Bound
