@@ -153,7 +153,7 @@ export default function TavernHub({
 
     ambienceARef.current = new Audio(TAVERN_AMBIENCE_A);
     ambienceARef.current.loop = true;
-    ambienceARef.current.volume = 0.3;
+    ambienceARef.current.volume = 0.25;
     ambienceARef.current.play().catch(() => {});
 
     ambienceBRef.current = new Audio(TAVERN_AMBIENCE_B);
@@ -163,7 +163,7 @@ export default function TavernHub({
 
     backgroundLoopRef.current = new Audio(TAVERN_BACKGROUND_LOOP);
     backgroundLoopRef.current.loop = true;
-    backgroundLoopRef.current.volume = 0.1;
+    backgroundLoopRef.current.volume = 0.2;
     backgroundLoopRef.current.play().catch(() => {});
 
     beerRef.current = new Audio(TAVERN_BEER);
