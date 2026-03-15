@@ -501,7 +501,7 @@ export default function HeroRitualFlow({
             playSfx(SFX.buttonClick, 0.54);
             goToPreviousStep();
           }}
-          onSetHeroField={(patch) => setHeroField(patch)}
+          onChangeName={(name) => setHeroField({ name })}
           onContinue={() => {
             if (!canContinueFromName) {
               playSfx(SFX.uiFailure, 0.5);
