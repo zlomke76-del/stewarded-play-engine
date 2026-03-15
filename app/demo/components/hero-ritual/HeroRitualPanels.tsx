@@ -1,7 +1,6 @@
 "use client";
 
 import React from "react";
-import { getPortraitPath } from "@/lib/portraits/getPortraitPath";
 import {
   BUILD_FOCUS_META,
   BUILD_FOCUS_OPTIONS,
@@ -15,10 +14,7 @@ import {
   type PartyMember,
   type SpeciesMeta,
 } from "./types";
-import {
-  getFocusTitleColor,
-  getPortraitObjectPosition,
-} from "./helpers";
+import { getFocusTitleColor, getPortraitObjectPosition } from "./helpers";
 import {
   RitualChoiceCard,
   SectionPill,
@@ -26,7 +22,7 @@ import {
   TinyLabel,
 } from "./HeroRitualUI";
 import HeroRitualPortrait from "./HeroRitualPortrait";
-import { StandardRitualStep, OathRitualStep } from "./HeroRitualStep";
+import { StandardRitualStep } from "./HeroRitualStep";
 
 const controlButtonBase: React.CSSProperties = {
   padding: "11px 14px",
@@ -241,11 +237,7 @@ export function SexPanel({
       >
         {(["Male", "Female"] as const).map((portrait) => {
           const selected = row?.portrait === portrait;
-          const imageSrc = getPortraitPath(
-            resolvedSpecies,
-            resolvedClass,
-            portrait
-          );
+          const imageSrc = `/assets/portraits/${resolvedSpecies}_${resolvedClass}_${portrait}.png`;
 
           return (
             <RitualChoiceCard
@@ -416,11 +408,7 @@ export function SpeciesPanel({
         }}
       >
         {visibleSpecies.map((species) => {
-          const imageSrc = getPortraitPath(
-            species,
-            resolvedClass,
-            row?.portrait ?? "Male"
-          );
+          const imageSrc = `/assets/portraits/${species}_${resolvedClass}_${row?.portrait ?? "Male"}.png`;
           const selected =
             resolvedSpecies.toLowerCase() === species.toLowerCase();
           const meta = SPECIES_META[species] ?? SPECIES_META.Human;
@@ -633,11 +621,7 @@ export function ClassPanel({
         }}
       >
         {visibleClasses.map((className) => {
-          const imageSrc = getPortraitPath(
-            resolvedSpecies,
-            className,
-            row?.portrait ?? "Male"
-          );
+          const imageSrc = `/assets/portraits/${resolvedSpecies}_${className}_${row?.portrait ?? "Male"}.png`;
           const selected =
             resolvedClass.toLowerCase() === className.toLowerCase();
           const meta = CLASS_META[className] ?? CLASS_META.Warrior;
@@ -1204,7 +1188,7 @@ type NamePanelProps = StandardStepBase & {
   portraitPath: string;
   fallbackPortraitPath: string;
   canContinueFromName: boolean;
-  onSetHeroField: (patch: Partial<PartyMember>) => void;
+  onChangeName: (name: string) => void;
   onContinue: () => void;
 };
 
@@ -1222,7 +1206,7 @@ export function NamePanel({
   portraitPath,
   fallbackPortraitPath,
   canContinueFromName,
-  onSetHeroField,
+  onChangeName,
   onContinue,
 }: NamePanelProps) {
   return (
@@ -1282,7 +1266,7 @@ export function NamePanel({
             <TinyLabel>Hero Name</TinyLabel>
             <input
               value={row?.name ?? ""}
-              onChange={(e) => onSetHeroField({ name: e.target.value })}
+              onChange={(e) => onChangeName(e.target.value)}
               placeholder="The Lone Hero"
               style={{
                 ...inputStyle,
@@ -1291,9 +1275,7 @@ export function NamePanel({
                 borderRadius: 14,
               }}
             />
-            <div
-              style={{ fontSize: 13, opacity: 0.74, lineHeight: 1.6 }}
-            >
+            <div style={{ fontSize: 13, opacity: 0.74, lineHeight: 1.6 }}>
               {(row?.name ?? "").trim().length > 0 ? (
                 <>
                   Current Chronicle entry: <strong>{display}</strong>
@@ -1391,7 +1373,24 @@ export function OathPanel({
   onCommit,
 }: OathPanelProps) {
   return (
-    <OathRitualStep>
+    <article
+      style={{
+        position: "relative",
+        borderRadius: 24,
+        border: "1px solid rgba(255,205,126,0.14)",
+        background:
+          "radial-gradient(circle at 50% 8%, rgba(255,209,130,0.12), rgba(255,209,130,0.02) 28%, rgba(0,0,0,0) 52%), linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.02))",
+        padding: "22px 22px 24px",
+        boxShadow:
+          "0 0 50px rgba(255,168,62,0.10), inset 0 1px 0 rgba(255,255,255,0.04)",
+        maxWidth: 1500,
+        margin: "0 auto",
+        width: "100%",
+        boxSizing: "border-box",
+        overflow: "hidden",
+        minWidth: 0,
+      }}
+    >
       <div
         aria-hidden="true"
         style={{
@@ -1471,7 +1470,7 @@ export function OathPanel({
       <div
         style={{
           display: "grid",
-          gap: 20,
+          gap: 22,
           minWidth: 0,
           position: "relative",
           zIndex: 1,
@@ -1483,7 +1482,7 @@ export function OathPanel({
             gap: 6,
             justifyItems: "center",
             textAlign: "center",
-            marginBottom: 4,
+            marginBottom: 2,
           }}
         >
           <div
@@ -1542,8 +1541,8 @@ export function OathPanel({
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: "minmax(520px, 1.28fr) minmax(340px, 0.9fr)",
-            gap: 26,
+            gridTemplateColumns: "minmax(560px, 1.35fr) minmax(360px, 0.85fr)",
+            gap: 24,
             alignItems: "start",
             minWidth: 0,
           }}
@@ -1568,29 +1567,42 @@ export function OathPanel({
               imageSrc={portraitPath}
               fallbackImageSrc={fallbackPortraitPath}
               alt={`${display} portrait`}
-              height={620}
+              height={660}
               objectPosition={getPortraitObjectPosition("oath")}
             />
           </div>
 
-          <div style={{ display: "grid", gap: 16, minWidth: 0 }}>
-            <div style={{ display: "grid", gap: 8 }}>
+          <div style={{ display: "grid", gap: 14, minWidth: 0 }}>
+            <div
+              style={{
+                display: "grid",
+                gap: 8,
+                padding: "4px 2px 0",
+              }}
+            >
               <div
                 style={{
-                  fontSize: 48,
+                  fontSize: 46,
                   fontWeight: 1000,
                   lineHeight: 0.94,
+                  wordBreak: "break-word",
                 }}
               >
                 {display}
               </div>
-              <div style={{ fontSize: 18, opacity: 0.84 }}>
+              <div
+                style={{
+                  fontSize: 19,
+                  opacity: 0.86,
+                  lineHeight: 1.3,
+                }}
+              >
                 {resolvedSpecies} {resolvedClass}
               </div>
               <div
                 style={{
                   fontSize: 13,
-                  opacity: 0.76,
+                  opacity: 0.74,
                   lineHeight: 1.6,
                 }}
               >
@@ -1634,7 +1646,13 @@ export function OathPanel({
               />
             </div>
 
-            <div style={helperCardStyle}>
+            <div
+              style={{
+                ...helperCardStyle,
+                padding: "14px 16px",
+                gap: 10,
+              }}
+            >
               <div style={{ fontSize: 14, fontWeight: 900 }}>
                 What this build does well
               </div>
@@ -1647,7 +1665,13 @@ export function OathPanel({
               </div>
             </div>
 
-            <div style={helperCardStyle}>
+            <div
+              style={{
+                ...helperCardStyle,
+                padding: "14px 16px",
+                gap: 10,
+              }}
+            >
               <div style={{ fontSize: 14, fontWeight: 900 }}>Tradeoffs</div>
               <div style={{ fontSize: 13, opacity: 0.8, lineHeight: 1.65 }}>
                 • {resolvedSpeciesMeta.tradeoff}
@@ -1658,7 +1682,13 @@ export function OathPanel({
               </div>
             </div>
 
-            <div style={helperCardStyle}>
+            <div
+              style={{
+                ...helperCardStyle,
+                padding: "14px 16px",
+                gap: 10,
+              }}
+            >
               <div style={{ fontSize: 14, fontWeight: 900 }}>
                 Recommended playstyle
               </div>
@@ -1674,31 +1704,32 @@ export function OathPanel({
 
             <div
               style={{
-                display: "flex",
-                justifyContent: "space-between",
+                display: "grid",
+                gridTemplateColumns: "1fr",
                 gap: 12,
-                flexWrap: "wrap",
-                alignItems: "center",
-                paddingTop: 6,
+                paddingTop: 4,
               }}
             >
-              <button
-                type="button"
-                onClick={onBack}
-                style={{
-                  ...controlButtonBase,
-                  border: "1px solid rgba(255,255,255,0.12)",
-                  background: "rgba(255,255,255,0.05)",
-                  color: "inherit",
-                }}
-              >
-                Back
-              </button>
+              <div style={{ display: "flex", justifyContent: "flex-start" }}>
+                <button
+                  type="button"
+                  onClick={onBack}
+                  style={{
+                    ...controlButtonBase,
+                    border: "1px solid rgba(255,255,255,0.12)",
+                    background: "rgba(255,255,255,0.05)",
+                    color: "inherit",
+                  }}
+                >
+                  Back
+                </button>
+              </div>
 
               <div
                 style={{
                   display: "flex",
-                  gap: 10,
+                  justifyContent: "space-between",
+                  gap: 12,
                   flexWrap: "wrap",
                   alignItems: "center",
                 }}
@@ -1726,7 +1757,13 @@ export function OathPanel({
                   Enter the Chronicle
                 </button>
 
-                <span style={{ fontSize: 12, opacity: 0.72 }}>
+                <span
+                  style={{
+                    fontSize: 12,
+                    opacity: 0.72,
+                    textAlign: "right",
+                  }}
+                >
                   {canEnterChronicle
                     ? "Ritual complete"
                     : "Complete every choice to continue"}
@@ -1737,6 +1774,6 @@ export function OathPanel({
           </div>
         </div>
       </div>
-    </OathRitualStep>
+    </article>
   );
 }
