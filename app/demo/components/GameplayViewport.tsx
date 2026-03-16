@@ -1373,7 +1373,16 @@ export default function GameplayViewport({ demo }: Props) {
   }
 
   return (
-    <div style={{ display: "grid", gap: 18, position: "relative" }}>
+    <div
+  style={{
+    display: "grid",
+    gridTemplateRows: "auto 1fr",
+    height: "100vh",
+    overflow: "hidden",
+    gap: 14,
+    position: "relative",
+  }}
+>
       {showChronicleEntry ? (
         <div
           style={{
