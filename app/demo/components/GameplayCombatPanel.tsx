@@ -271,6 +271,11 @@ export default function GameplayCombatPanel({ demo }: Props) {
             events={demo.state.events as any[]}
             dmMode={demo.dmMode}
             onAppendCanon={demo.appendCanon}
+            openingCombatRound={demo.openingCombatRound}
+            canAttemptCombatRetreat={demo.canAttemptCombatRetreat}
+            openingBattleFinisherAvailable={demo.openingBattleFinisherAvailable}
+            openingBattleFinisherSkillLabel={demo.openingBattleFinisherSkillLabel}
+            isOpeningThresholdCombat={demo.isOpeningThresholdCombat}
             partyMembers={demo.partyMembers.map((m: any, idx: number) => ({
               id: String(m.id),
               name: displayName(m, idx + 1),
