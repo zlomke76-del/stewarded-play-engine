@@ -45,6 +45,7 @@ export interface OptionSet {
 
 export type CombatOptionContext = {
   combatActive?: boolean;
+  isEnemyTurn?: boolean;
   canAttemptRetreat?: boolean;
   openingCombatRound?: number | null;
   shouldPromptSignatureFinisher?: boolean;
@@ -293,6 +294,7 @@ function buildContext(
     parsed.skillId ? `Skill: ${parsed.skillId}` : null,
     parsed.ambiguity ? `Ambiguity: ${parsed.ambiguity}` : null,
     combatContext?.combatActive ? "Combat: active" : null,
+    combatContext?.isEnemyTurn ? "Turn: enemy" : "Turn: player",
     combatContext?.canAttemptRetreat ? "Retreat: available" : null,
     openingCombatRound !== null ? `Opening combat round: ${openingCombatRound}` : null,
     shouldPromptSignatureFinisher ? "Signature finisher: prompted" : null,
