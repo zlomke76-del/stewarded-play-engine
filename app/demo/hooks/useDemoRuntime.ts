@@ -190,6 +190,10 @@ function normalizeClassKey(value?: string) {
   return String(value ?? "").trim().toLowerCase();
 }
 
+function normalizeKey(value: string) {
+  return String(value ?? "").replace(/\s+/g, " ").trim().toLowerCase();
+}
+
 function attributeMod(score: number) {
   return Math.floor((Number(score || 10) - 10) / 2);
 }
@@ -462,6 +466,83 @@ function inferPrimaryAttackAttribute(className?: string): HeroAttributeKey {
   if (cls === "cleric" || cls === "druid") return "wisdom";
   if (cls === "sorcerer" || cls === "warlock" || cls === "paladin") return "charisma";
   return "strength";
+}
+
+function buildOpeningBattleFinisherSkillLabel(className?: string) {
+  const cls = normalizeClassKey(className);
+
+  if (cls === "warrior") return "Guard Break";
+  if (cls === "rogue") return "Backstab";
+  if (cls === "mage") return "Arc Bolt";
+  if (cls === "cleric") return "Bless";
+  if (cls === "ranger") return "Volley";
+  if (cls === "paladin") return "Smite";
+  if (cls === "bard") return "Inspire";
+  if (cls === "druid") return "Wild Shape";
+  if (cls === "monk") return "Flurry";
+  if (cls === "artificer") return "Infuse Weapon";
+  if (cls === "barbarian") return "Reckless Strike";
+  if (cls === "sorcerer") return "Chaos Bolt";
+  if (cls === "warlock") return "Eldritch Blast";
+
+  return "Signature Skill";
+}
+
+function findLatestCombatWindow(events: any[]) {
+  let latestStarted: { index: number; combatId: string } | null = null;
+  let latestEndedIndex = -1;
+
+  for (let i = 0; i < events.length; i += 1) {
+    const event = events[i];
+    const type = String(event?.type ?? "");
+    const payload = event?.payload ?? {};
+
+    if (type === "COMBAT_STARTED") {
+      const combatId = String(payload?.combatId ?? "").trim();
+      if (combatId) latestStarted = { index: i, combatId };
+    }
+
+    if (type === "COMBAT_ENDED") {
+      latestEndedIndex = i;
+    }
+  }
+
+  if (!latestStarted) return null;
+  if (latestEndedIndex > latestStarted.index) return null;
+
+  return latestStarted;
+}
+
+function inferIsOpeningThresholdCombat(args: {
+  events: any[];
+  floorId: string;
+  roomId: string;
+  combatId: string | null;
+}) {
+  const { events, floorId, roomId, combatId } = args;
+  if (!combatId) return false;
+
+  const combatWindow = findLatestCombatWindow(events);
+  if (!combatWindow) return false;
+  if (combatWindow.combatId !== combatId) return false;
+
+  const dungeonInitialized = events.some(
+    (event) => String(event?.type ?? "") === "DUNGEON_INITIALIZED"
+  );
+  if (!dungeonInitialized) return false;
+
+  const floorKey = normalizeKey(floorId);
+  const roomKey = normalizeKey(roomId);
+
+  return (
+    floorKey.includes("floor_0") ||
+    floorKey.includes("floor0") ||
+    roomKey.includes("start") ||
+    roomKey.includes("entrance") ||
+    roomKey.includes("threshold") ||
+    roomKey.includes("room_0") ||
+    roomKey.includes("room0")
+  );
 }
 
 function deriveHeroSheet(args: {
@@ -982,8 +1063,39 @@ export function useDemoRuntime() {
     if (!canPlayerSubmitIntent) return;
 
     const actorId = normalizeName(actingPlayerId || "player_1") || "player_1";
+    const finisherPrompt = buildOpeningBattleFinisherSkillLabel(
+      String(partyMembers[0]?.className ?? "Warrior")
+    );
+
     const parsedAction = parseAction(actorId, playerInput);
-    const optionSet = generateOptions(parsedAction);
+    const optionSet = generateOptions(parsedAction, {
+      combatActive,
+      isEnemyTurn,
+      openingCombatRound: derivedCombat?.round ?? null,
+      canAttemptRetreat:
+        !!derivedCombat &&
+        inferIsOpeningThresholdCombat({
+          events: state.events as any[],
+          floorId: location.floorId,
+          roomId: location.roomId,
+          combatId: derivedCombat.combatId,
+        }) &&
+        (derivedCombat?.round ?? 0) >= 2 &&
+        !isEnemyTurn,
+      shouldPromptSignatureFinisher:
+        !!derivedCombat &&
+        inferIsOpeningThresholdCombat({
+          events: state.events as any[],
+          floorId: location.floorId,
+          roomId: location.roomId,
+          combatId: derivedCombat.combatId,
+        }) &&
+        !state.events.some(
+          (event: any) => String(event?.type ?? "") === "HERO_STARTER_WEAPON_BROKEN"
+        ) &&
+        (derivedCombat?.round ?? 0) >= 2,
+      signatureFinisherLabel: finisherPrompt,
+    });
 
     setParsed(parsedAction);
     setOptions([...optionSet.options]);
@@ -1526,6 +1638,73 @@ export function useDemoRuntime() {
     [state.events, progressionState.hero.level, partyMembers]
   );
 
+  const openingCombatRound = useMemo(() => {
+    if (!derivedCombat?.round) return 0;
+    return Math.max(0, Number(derivedCombat.round) || 0);
+  }, [derivedCombat?.round]);
+
+  const starterWeaponAlreadyBroken = useMemo(
+    () =>
+      state.events.some(
+        (event: any) => String(event?.type ?? "") === "HERO_STARTER_WEAPON_BROKEN"
+      ),
+    [state.events]
+  );
+
+  const isOpeningThresholdCombat = useMemo(
+    () =>
+      inferIsOpeningThresholdCombat({
+        events: state.events as any[],
+        floorId: location.floorId,
+        roomId: location.roomId,
+        combatId: derivedCombat?.combatId ?? null,
+      }),
+    [state.events, location.floorId, location.roomId, derivedCombat?.combatId]
+  );
+
+  const canAttemptCombatRetreat = useMemo(() => {
+    return (
+      combatActive &&
+      !combatEnded &&
+      isOpeningThresholdCombat &&
+      openingCombatRound >= 2 &&
+      !isEnemyTurn &&
+      !isWrongPlayerForTurn
+    );
+  }, [
+    combatActive,
+    combatEnded,
+    isOpeningThresholdCombat,
+    openingCombatRound,
+    isEnemyTurn,
+    isWrongPlayerForTurn,
+  ]);
+
+  const openingBattleFinisherSkillLabel = useMemo(
+    () => buildOpeningBattleFinisherSkillLabel(String(partyMembers[0]?.className ?? "Warrior")),
+    [partyMembers]
+  );
+
+  const openingBattleFinisherAvailable = useMemo(() => {
+    return (
+      combatActive &&
+      !combatEnded &&
+      isOpeningThresholdCombat &&
+      !starterWeaponAlreadyBroken &&
+      openingCombatRound >= 2 &&
+      !isEnemyTurn &&
+      !isWrongPlayerForTurn
+    );
+  }, [
+    combatActive,
+    combatEnded,
+    isOpeningThresholdCombat,
+    starterWeaponAlreadyBroken,
+    openingCombatRound,
+    isEnemyTurn,
+    isWrongPlayerForTurn,
+  ]);
+
   return {
     role,
 
@@ -1691,6 +1870,12 @@ export function useDemoRuntime() {
     isEnemyTurn,
     isPlayerTurn,
     activeTurnLabel,
+
+    openingCombatRound,
+    isOpeningThresholdCombat,
+    canAttemptCombatRetreat,
+    openingBattleFinisherSkillLabel,
+    openingBattleFinisherAvailable,
 
     actingPlayerInjuryStacks,
     actingRollModifier,
