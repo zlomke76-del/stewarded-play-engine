@@ -36,6 +36,30 @@ type Props = {
   height?: number | string;
 };
 
+const ENEMY_3D_MODEL_BY_KEY: Record<string, string> = {
+  bandit_archer: "/assets/enemy3d/enemy_bandit_archer_01.glb",
+  bandit_captain: "/assets/enemy3d/enemy_bandit_captain_01.glb",
+  bandit_rogue: "/assets/enemy3d/enemy_bandit_rogue_01.glb",
+  bandit_warrior: "/assets/enemy3d/enemy_bandit_warrior_01.glb",
+  dire_wolf: "/assets/enemy3d/enemy_beast_dire_wolf_01.glb",
+  giant_spider: "/assets/enemy3d/enemy_beast_giant_spider_01.glb",
+  hell_hound: "/assets/enemy3d/enemy_beast_hell_hound_01.glb",
+  skeleton_archer: "/assets/enemy3d/enemy_skeleton_archer_01.glb",
+  skeleton_warrior: "/assets/enemy3d/enemy_skeleton_warrior_01.glb",
+};
+
+const ENEMY_FALLBACK_IMAGE_BY_KEY: Record<string, string> = {
+  bandit_archer: "/assets/V2/Enemy/Enemy_Bandit_Archer.png",
+  bandit_captain: "/assets/V2/Enemy/Enemy_Bandit_Captain.png",
+  bandit_rogue: "/assets/V2/Enemy/Enemy_Bandit_Rogue.png",
+  bandit_warrior: "/assets/V2/Enemy/Enemy_Bandit_Warrior.png",
+  dire_wolf: "/assets/V2/Enemy/Enemy_Dire_Wolf.png",
+  giant_spider: "/assets/V2/Enemy/Enemy_Giant_Spider.png",
+  hell_hound: "/assets/V2/Enemy/Enemy_Hell_Hound.png",
+  skeleton_archer: "/assets/V2/Enemy/Enemy_Skeleton_Archer.png",
+  skeleton_warrior: "/assets/V2/Enemy/Enemy_Skeleton_Warrior.png",
+};
+
 function clamp01(value: number) {
   return Math.max(0, Math.min(1, value));
 }
@@ -59,6 +83,68 @@ function titleCase(value: string) {
     .filter(Boolean)
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
     .join(" ");
+}
+
+function normalizeEnemyText(value?: string | null) {
+  return String(value ?? "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+function inferEnemyAssetKey(enemy: StageCombatant | null): string | null {
+  if (!enemy) return null;
+
+  const haystack = `${normalizeEnemyText(enemy.name)} ${normalizeEnemyText(enemy.className)} ${normalizeEnemyText(enemy.species)}`;
+
+  if (haystack.includes("bandit captain")) return "bandit_captain";
+  if (haystack.includes("bandit archer")) return "bandit_archer";
+  if (haystack.includes("bandit rogue")) return "bandit_rogue";
+  if (haystack.includes("bandit warrior")) return "bandit_warrior";
+
+  if (haystack.includes("skeleton archer")) return "skeleton_archer";
+  if (haystack.includes("skeleton warrior")) return "skeleton_warrior";
+
+  if (haystack.includes("dire wolf")) return "dire_wolf";
+  if (haystack.includes("giant spider")) return "giant_spider";
+  if (haystack.includes("hell hound") || haystack.includes("hellhound")) {
+    return "hell_hound";
+  }
+
+  if (haystack.includes("bandit") && haystack.includes("captain")) return "bandit_captain";
+  if (haystack.includes("bandit") && haystack.includes("archer")) return "bandit_archer";
+  if (haystack.includes("bandit") && haystack.includes("rogue")) return "bandit_rogue";
+  if (haystack.includes("bandit")) return "bandit_warrior";
+
+  if (haystack.includes("skeleton") && haystack.includes("archer")) return "skeleton_archer";
+  if (haystack.includes("skeleton")) return "skeleton_warrior";
+
+  if (haystack.includes("wolf")) return "dire_wolf";
+  if (haystack.includes("spider")) return "giant_spider";
+  if (haystack.includes("hound")) return "hell_hound";
+
+  return null;
+}
+
+function resolveEnemyModelSrc(enemy: StageCombatant | null) {
+  if (!enemy) return null;
+  if (enemy.modelSrc) return enemy.modelSrc;
+
+  const key = inferEnemyAssetKey(enemy);
+  if (!key) return null;
+
+  return ENEMY_3D_MODEL_BY_KEY[key] ?? null;
+}
+
+function resolveEnemyFallbackImage(enemy: StageCombatant) {
+  const key = inferEnemyAssetKey(enemy);
+
+  return (
+    enemy.imageSrc ||
+    enemy.fallbackImageSrc ||
+    (key ? ENEMY_FALLBACK_IMAGE_BY_KEY[key] : null) ||
+    "/assets/V2/Enemy/Enemy_Bandit_Warrior.png"
+  );
 }
 
 function getTelegraphText(telegraphHint?: TelegraphHint) {
@@ -250,7 +336,7 @@ function EnemyModelFallback(props: {
   height: number | string;
 }) {
   const { enemy, height } = props;
-  const portraitSrc = enemy.imageSrc || enemy.fallbackImageSrc || "/assets/V2/Enemy/Enemy_Bandit_Warrior.png";
+  const portraitSrc = resolveEnemyFallbackImage(enemy);
 
   return (
     <div
@@ -342,6 +428,8 @@ function EnemyModelViewer(props: {
   const [ready, setReady] = useState(false);
   const [failed, setFailed] = useState(false);
 
+  const resolvedModelSrc = useMemo(() => resolveEnemyModelSrc(enemy), [enemy]);
+
   useEffect(() => {
     if (typeof window === "undefined") return;
 
@@ -371,7 +459,11 @@ function EnemyModelViewer(props: {
     };
   }, []);
 
-  if (!enemy.modelSrc || !ready || failed) {
+  useEffect(() => {
+    setFailed(false);
+  }, [resolvedModelSrc]);
+
+  if (!resolvedModelSrc || !ready || failed) {
     return <EnemyModelFallback enemy={enemy} height={height} />;
   }
 
@@ -429,7 +521,7 @@ function EnemyModelViewer(props: {
         }}
       >
         {React.createElement("model-viewer" as any, {
-          src: enemy.modelSrc,
+          src: resolvedModelSrc,
           alt: enemy.name,
           "camera-controls": true,
           "touch-action": "pan-y",
@@ -490,6 +582,16 @@ export default function CombatStage({
 
   const enemyStageHeight =
     typeof height === "number" ? Math.max(300, Math.round(height * 0.74)) : "74%";
+
+  const enemySubtitle = useMemo(() => {
+    if (!enemy) return null;
+
+    const parts = [enemy.className, enemy.species]
+      .map((value) => titleCase(String(value ?? "").trim()))
+      .filter(Boolean);
+
+    return parts.length > 0 ? parts.join(" · ") : "Hostile";
+  }, [enemy]);
 
   return (
     <div
@@ -657,7 +759,7 @@ export default function CombatStage({
         >
           <StageLabel
             title={enemy?.name ?? "Enemy"}
-            subtitle={enemy ? `${enemy.className ?? "Hostile"}` : null}
+            subtitle={enemySubtitle}
             align="right"
             active={Boolean(enemy?.active) && isEnemyTurn && !combatEnded}
             defeated={Boolean(enemy?.defeated)}
