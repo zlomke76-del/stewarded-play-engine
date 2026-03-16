@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 
+import { getPortraitPath } from "@/lib/portraits/getPortraitPath";
 import HeroStatusBar from "./HeroStatusBar";
 import GameStateAdvisoryPanel from "./GameStateAdvisoryPanel";
 import RoomTopologyPanel from "./RoomTopologyPanel";
@@ -12,117 +13,39 @@ import PressureGaugeVisual from "./puzzles/PressureGaugeVisual";
 import HeroRitualPortrait from "./hero-ritual/HeroRitualPortrait";
 import { anchorId } from "../demoUtils";
 
-function pickFirstString(...values: unknown[]): string | undefined {
-  for (const value of values) {
-    if (typeof value === "string" && value.trim()) {
-      return value.trim();
-    }
-  }
-  return undefined;
-}
-
-function resolveHeroVisualData(demo: any, member: any) {
-  const portraitType = pickFirstString(
-    member?.portrait,
-    member?.portraitType,
-    member?.selectedPortrait,
-    demo?.selectedPortrait,
-    demo?.heroPortraitType,
-    demo?.activeHeroPortraitType,
-    demo?.currentPortraitType
-  );
-
-  const imageSrc = pickFirstString(
-    member?.imageSrc,
-    member?.portraitImage,
-    member?.portraitSrc,
-    member?.heroImage,
-    member?.tokenImage,
-    demo?.heroPortraitSrc,
-    demo?.activeHeroPortraitSrc,
-    demo?.portraitImageSrc,
-    demo?.heroImageSrc,
-    demo?.currentHeroImage
-  );
-
-  const fallbackImageSrc = pickFirstString(
-    member?.fallbackImageSrc,
-    member?.fallbackPortraitSrc,
-    demo?.heroPortraitFallbackSrc,
-    demo?.portraitFallbackSrc,
-    demo?.fallbackHeroImage
-  );
-
-  const objectPosition =
-    pickFirstString(
-      member?.portraitObjectPosition,
-      demo?.heroPortraitObjectPosition,
-      demo?.portraitObjectPosition
-    ) ?? "center top";
-
-  return {
-    portraitType,
-    imageSrc,
-    fallbackImageSrc,
-    objectPosition,
-  };
-}
-
 function HeaderHeroVisual(props: {
-  demo: any;
   hero: {
     name: string;
     species: string;
     className: string;
+    portrait: "Male" | "Female";
   };
 }) {
-  const { demo, hero } = props;
+  const { hero } = props;
 
-  const member = demo.partyMembers?.[0] ?? null;
-  const visual = resolveHeroVisualData(demo, member);
+  const imageSrc = getPortraitPath(hero.species, hero.className, hero.portrait);
+  const fallbackImageSrc = getPortraitPath("Human", "Warrior", hero.portrait);
 
-  if (visual.imageSrc && visual.portraitType) {
-    return (
-      <div
-        style={{
-          width: "100%",
-          height: "100%",
-          pointerEvents: "none",
-        }}
-      >
-        <HeroRitualPortrait
-          species={hero.species}
-          className={hero.className}
-          portrait={visual.portraitType as any}
-          imageSrc={visual.imageSrc}
-          fallbackImageSrc={visual.fallbackImageSrc}
-          alt={`${hero.name} portrait`}
-          height="100%"
-          objectPosition={visual.objectPosition}
-        />
-      </div>
-    );
-  }
-
-  const staticPortraitSrc = visual.imageSrc ?? visual.fallbackImageSrc;
-
-  if (staticPortraitSrc) {
-    return (
-      <img
-        src={staticPortraitSrc}
+  return (
+    <div
+      style={{
+        width: "100%",
+        height: "100%",
+        pointerEvents: "none",
+      }}
+    >
+      <HeroRitualPortrait
+        species={hero.species}
+        className={hero.className}
+        portrait={hero.portrait}
+        imageSrc={imageSrc}
+        fallbackImageSrc={fallbackImageSrc}
         alt={`${hero.name} portrait`}
-        style={{
-          width: "100%",
-          height: "100%",
-          objectFit: "cover",
-          objectPosition: visual.objectPosition,
-          display: "block",
-        }}
+        height="100%"
+        objectPosition="center top"
       />
-    );
-  }
-
-  return null;
+    </div>
+  );
 }
 
 function ProgressionBanner(props: { demo: any }) {
@@ -1157,6 +1080,7 @@ export default function GameplayViewport({ demo }: Props) {
       name: String(member?.name ?? fallbackName ?? "The Lone Hero"),
       species: String(member?.species ?? "Human"),
       className: String(member?.className ?? "Warrior"),
+      portrait: member?.portrait === "Female" ? "Female" : "Male",
       level: Number(demo.progression?.hero?.level ?? 1),
       hpCurrent: Number(member?.hpCurrent ?? member?.hpMax ?? 0),
       hpMax: Number(member?.hpMax ?? 0),
@@ -1166,8 +1090,8 @@ export default function GameplayViewport({ demo }: Props) {
   }, [demo.partyMembers, demo.effectivePlayerNames, demo.progression?.hero?.level]);
 
   const heroHeaderVisual = useMemo(() => {
-    return <HeaderHeroVisual demo={demo} hero={hero} />;
-  }, [demo, hero]);
+    return <HeaderHeroVisual hero={hero} />;
+  }, [hero]);
 
   function setPressureScene() {
     demo.setGameplayFocusStep("pressure");
