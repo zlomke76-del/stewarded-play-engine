@@ -8,11 +8,13 @@
 // - moves the textarea and resolve action higher
 // - collapses party-turn management + loadout detail
 // - preserves dictation, pass-turn, party buttons, and action chips
+// - reuses the same 3D hero portrait system as the header
 // ------------------------------------------------------------
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import CardSection from "@/components/layout/CardSection";
 import { getPortraitPath } from "@/lib/portraits/getPortraitPath";
+import HeroRitualPortrait from "./hero-ritual/HeroRitualPortrait";
 
 type PartyMemberLite = {
   id: string;
@@ -389,6 +391,60 @@ function TurnOrderRail(props: {
   );
 }
 
+function CompactHeroPortrait3D(props: {
+  species?: string;
+  className?: string;
+  portrait?: "Male" | "Female";
+  alt: string;
+  size: number;
+  borderRadius: number;
+  border: string;
+  background: string;
+  boxShadow?: string;
+  objectPosition?: string;
+}) {
+  const {
+    species = "Human",
+    className = "Warrior",
+    portrait = "Male",
+    alt,
+    size,
+    borderRadius,
+    border,
+    background,
+    boxShadow,
+    objectPosition = "center 18%",
+  } = props;
+
+  const fallbackImageSrc = getPortraitPath(species, className, portrait);
+
+  return (
+    <div
+      style={{
+        width: size,
+        height: size,
+        borderRadius,
+        overflow: "hidden",
+        border,
+        background,
+        boxShadow,
+        position: "relative",
+      }}
+    >
+      <HeroRitualPortrait
+        species={species}
+        className={className}
+        portrait={portrait}
+        imageSrc={fallbackImageSrc}
+        fallbackImageSrc={fallbackImageSrc}
+        alt={alt}
+        height={size}
+        objectPosition={objectPosition}
+      />
+    </div>
+  );
+}
+
 export default function ActionSection({
   partyMembers,
   actingPlayerId,
@@ -463,14 +519,6 @@ export default function ActionSection({
   const actingFlavorLine = useMemo(() => {
     return flavorLineForMember(actingLabel, actingSkillIds, actingTraitIds);
   }, [actingLabel, actingSkillIds, actingTraitIds]);
-
-  const actingPortraitPath = useMemo(() => {
-    return getPortraitPath(
-      actingMember?.species ?? "Human",
-      actingMember?.className ?? "Warrior",
-      actingMember?.portrait ?? "Male"
-    );
-  }, [actingMember]);
 
   const specialtyButtons = useMemo(() => {
     return actingSkillLabels.slice(0, 3);
@@ -821,33 +869,18 @@ export default function ActionSection({
                   alignItems: "start",
                 }}
               >
-                <div
-                  style={{
-                    width: 64,
-                    height: 64,
-                    borderRadius: 14,
-                    overflow: "hidden",
-                    border: "1px solid rgba(255,196,118,0.24)",
-                    background: "rgba(255,196,118,0.08)",
-                    boxShadow: canSubmit ? "0 0 0 4px rgba(255,196,118,0.05)" : "none",
-                  }}
-                >
-                  <img
-                    src={actingPortraitPath}
-                    alt={`${actingDisplayName} portrait`}
-                    style={{
-                      width: "100%",
-                      height: "100%",
-                      objectFit: "cover",
-                      display: "block",
-                    }}
-                    onError={(e) => {
-                      const img = e.currentTarget;
-                      img.onerror = null;
-                      img.src = getPortraitPath("Human", "Warrior", actingMember?.portrait ?? "Male");
-                    }}
-                  />
-                </div>
+                <CompactHeroPortrait3D
+                  species={actingMember?.species ?? "Human"}
+                  className={actingMember?.className ?? "Warrior"}
+                  portrait={actingMember?.portrait ?? "Male"}
+                  alt={`${actingDisplayName} portrait`}
+                  size={64}
+                  borderRadius={14}
+                  border="1px solid rgba(255,196,118,0.24)"
+                  background="rgba(255,196,118,0.08)"
+                  boxShadow={canSubmit ? "0 0 0 4px rgba(255,196,118,0.05)" : "none"}
+                  objectPosition="center 16%"
+                />
 
                 <div style={{ minWidth: 0, display: "grid", gap: 5 }}>
                   <div style={{ display: "flex", alignItems: "baseline", gap: 10, flexWrap: "wrap" }}>
@@ -906,11 +939,6 @@ export default function ActionSection({
                         const lockedByTurn = actingCardsLocked;
                         const displayName = extractDisplayName(member.label);
                         const meta = extractMetaLabel(member.label);
-                        const portraitPath = getPortraitPath(
-                          member.species ?? "Human",
-                          member.className ?? "Warrior",
-                          member.portrait ?? "Male"
-                        );
 
                         return (
                           <button
@@ -946,38 +974,21 @@ export default function ActionSection({
                               alignItems: "center",
                             }}
                           >
-                            <div
-                              style={{
-                                width: 40,
-                                height: 40,
-                                borderRadius: 10,
-                                overflow: "hidden",
-                                border: active
+                            <CompactHeroPortrait3D
+                              species={member.species ?? "Human"}
+                              className={member.className ?? "Warrior"}
+                              portrait={member.portrait ?? "Male"}
+                              alt={`${displayName} portrait`}
+                              size={40}
+                              borderRadius={10}
+                              border={
+                                active
                                   ? "1px solid rgba(255,196,118,0.28)"
-                                  : "1px solid rgba(255,255,255,0.10)",
-                                background: "rgba(255,255,255,0.04)",
-                              }}
-                            >
-                              <img
-                                src={portraitPath}
-                                alt={`${displayName} portrait`}
-                                style={{
-                                  width: "100%",
-                                  height: "100%",
-                                  objectFit: "cover",
-                                  display: "block",
-                                }}
-                                onError={(e) => {
-                                  const img = e.currentTarget;
-                                  img.onerror = null;
-                                  img.src = getPortraitPath(
-                                    "Human",
-                                    "Warrior",
-                                    member.portrait ?? "Male"
-                                  );
-                                }}
-                              />
-                            </div>
+                                  : "1px solid rgba(255,255,255,0.10)"
+                              }
+                              background="rgba(255,255,255,0.04)"
+                              objectPosition="center 14%"
+                            />
 
                             <div style={{ minWidth: 0, display: "grid", gap: 3 }}>
                               <div
