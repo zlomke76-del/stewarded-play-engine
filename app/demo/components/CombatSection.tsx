@@ -11,6 +11,7 @@
 //   2. Whose turn is it?
 //   3. What can I do right now?
 // - Add a visual battle stage that can host hero/enemy 3D assets
+// - Make battlefield action buttons route the player to the real command input
 // - Keep canon / derived combat intact
 // - Preserve existing enemy-turn resolver + setup systems
 // - Move workshop/debug-heavy surfaces behind collapsible panels
@@ -542,7 +543,7 @@ function getPlayerInstruction(args: {
 
   const activeName = String(args.activeCombatantSpec?.name ?? "").trim();
   if (activeName) {
-    return `It is ${activeName}'s turn. Choose an action below or use the action panel to improvise.`;
+    return `It is ${activeName}'s turn. Click a combat action below to jump to the real command input.`;
   }
 
   return "Choose your next move.";
@@ -911,8 +912,22 @@ export default function CombatSection({
     };
   }, [activeEnemyCard, combatEnded, isEnemyTurn]);
 
+  function requestCombatAction(
+    action: "attack" | "defend" | "skill" | "reposition" | "improvise"
+  ) {
+    if (typeof window === "undefined") return;
+
+    window.dispatchEvent(
+      new CustomEvent("eof:combat-action-request", {
+        detail: { action },
+      })
+    );
+  }
+
   function chooseTargetCombatantId(): string | null {
-    const hintedName = enemyTelegraphHint?.targetName ? nameKey(enemyTelegraphHint.targetName) : "";
+    const hintedName = enemyTelegraphHint?.targetName
+      ? nameKey(enemyTelegraphHint.targetName)
+      : "";
     const living = partyMembersForDisplay.filter((m) => (Number(m.hpCurrent) || 0) > 0);
 
     if (hintedName) {
@@ -1129,13 +1144,14 @@ export default function CombatSection({
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                 <button
                   type="button"
+                  onClick={() => requestCombatAction("attack")}
                   style={{
                     ...actionButtonStyle("primary"),
                     padding: "10px 12px",
                     borderRadius: 12,
                     fontSize: 13,
                     fontWeight: 800,
-                    cursor: "default",
+                    cursor: "pointer",
                   }}
                 >
                   Attack
@@ -1143,13 +1159,14 @@ export default function CombatSection({
 
                 <button
                   type="button"
+                  onClick={() => requestCombatAction("defend")}
                   style={{
                     ...actionButtonStyle("secondary"),
                     padding: "10px 12px",
                     borderRadius: 12,
                     fontSize: 13,
                     fontWeight: 800,
-                    cursor: "default",
+                    cursor: "pointer",
                   }}
                 >
                   Defend
@@ -1157,13 +1174,14 @@ export default function CombatSection({
 
                 <button
                   type="button"
+                  onClick={() => requestCombatAction("skill")}
                   style={{
                     ...actionButtonStyle("secondary"),
                     padding: "10px 12px",
                     borderRadius: 12,
                     fontSize: 13,
                     fontWeight: 800,
-                    cursor: "default",
+                    cursor: "pointer",
                   }}
                 >
                   Skill
@@ -1171,13 +1189,14 @@ export default function CombatSection({
 
                 <button
                   type="button"
+                  onClick={() => requestCombatAction("reposition")}
                   style={{
                     ...actionButtonStyle("secondary"),
                     padding: "10px 12px",
                     borderRadius: 12,
                     fontSize: 13,
                     fontWeight: 800,
-                    cursor: "default",
+                    cursor: "pointer",
                   }}
                 >
                   Reposition
@@ -1185,13 +1204,14 @@ export default function CombatSection({
 
                 <button
                   type="button"
+                  onClick={() => requestCombatAction("improvise")}
                   style={{
                     ...actionButtonStyle("secondary"),
                     padding: "10px 12px",
                     borderRadius: 12,
                     fontSize: 13,
                     fontWeight: 800,
-                    cursor: "default",
+                    cursor: "pointer",
                   }}
                 >
                   Improvise
@@ -1205,7 +1225,7 @@ export default function CombatSection({
                   color: "rgba(228,232,240,0.68)",
                 }}
               >
-                Use the action surface outside this panel to choose or improvise your move. This battlefield panel now tells you what is happening and what kind of choices make sense.
+                Clicking a combat action will jump you to the real command input so you can submit your move there.
               </div>
             </div>
 
