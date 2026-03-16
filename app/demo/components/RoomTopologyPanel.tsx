@@ -154,8 +154,20 @@ export default function RoomTopologyPanel(props: Props) {
     return buildImmediateRead(currentRoomTitle, roomNarrative);
   }, [currentRoomTitle, roomNarrative]);
 
+  const selectedRouteAction = selectedRoute
+    ? buildRouteAction(selectedRoute)
+    : null;
+
+  const selectedRouteMeta = selectedRoute
+    ? buildRouteMeta(selectedRoute)
+    : null;
+
+  const selectedRouteMood = selectedRoute
+    ? buildRouteMood(selectedRoute)
+    : null;
+
   return (
-    <div style={{ display: "grid", gap: 16 }}>
+    <div style={{ display: "grid", gap: 14 }}>
       <div
         key={currentRoomVisualKey}
         style={{
@@ -164,7 +176,7 @@ export default function RoomTopologyPanel(props: Props) {
           border: "1px solid rgba(255,255,255,0.10)",
           background: "rgba(255,255,255,0.04)",
           display: "grid",
-          gap: 14,
+          gap: 12,
           animation: "roomFadeIn 320ms ease",
         }}
       >
@@ -174,6 +186,8 @@ export default function RoomTopologyPanel(props: Props) {
               position: "relative",
               overflow: "hidden",
               borderRadius: 14,
+              border: "1px solid rgba(255,255,255,0.08)",
+              background: "rgba(0,0,0,0.16)",
             }}
           >
             <img
@@ -181,9 +195,9 @@ export default function RoomTopologyPanel(props: Props) {
               alt={currentRoomTitle}
               style={{
                 width: "100%",
-                maxHeight: 380,
+                height: 250,
                 objectFit: "cover",
-                borderRadius: 14,
+                objectPosition: "center center",
                 display: "block",
                 animation: "roomImageIn 420ms ease",
               }}
@@ -193,21 +207,26 @@ export default function RoomTopologyPanel(props: Props) {
                 position: "absolute",
                 inset: 0,
                 background:
-                  "linear-gradient(to bottom, rgba(0,0,0,0.03) 0%, rgba(0,0,0,0.22) 100%)",
+                  "linear-gradient(to bottom, rgba(0,0,0,0.04) 0%, rgba(0,0,0,0.18) 100%)",
                 pointerEvents: "none",
               }}
             />
           </div>
         ) : null}
 
-        <div style={{ display: "grid", gap: 8 }}>
+        <div
+          style={{
+            display: "grid",
+            gap: 8,
+            animation: "roomTextIn 360ms ease",
+          }}
+        >
           <div
             style={{
               fontSize: 11,
               letterSpacing: 0.9,
               textTransform: "uppercase",
               opacity: 0.58,
-              animation: "roomTextIn 320ms ease",
             }}
           >
             Current Chamber
@@ -215,11 +234,10 @@ export default function RoomTopologyPanel(props: Props) {
 
           <div
             style={{
-              fontSize: 24,
+              fontSize: 22,
               fontWeight: 900,
-              lineHeight: 1.12,
+              lineHeight: 1.1,
               color: "rgba(245,236,216,0.98)",
-              animation: "roomTextIn 360ms ease",
             }}
           >
             {currentRoomTitle}
@@ -227,10 +245,10 @@ export default function RoomTopologyPanel(props: Props) {
 
           <div
             style={{
-              lineHeight: 1.72,
-              animation: "roomTextIn 420ms ease",
-              color: "rgba(232,235,242,0.88)",
-              fontSize: 15,
+              lineHeight: 1.68,
+              color: "rgba(232,235,242,0.86)",
+              fontSize: 14,
+              maxWidth: 860,
             }}
           >
             {immediateRead}
@@ -249,12 +267,14 @@ export default function RoomTopologyPanel(props: Props) {
                 <span
                   key={`${feature.kind}-${idx}`}
                   style={{
-                    padding: "7px 10px",
+                    padding: "6px 10px",
                     borderRadius: 999,
                     border: "1px solid rgba(255,255,255,0.10)",
                     background: "rgba(255,255,255,0.04)",
-                    fontSize: 12,
-                    color: "rgba(239,241,245,0.88)",
+                    fontSize: 11,
+                    color: "rgba(239,241,245,0.86)",
+                    textTransform: "uppercase",
+                    letterSpacing: 0.45,
                   }}
                 >
                   {feature.kind.replaceAll("_", " ")}
@@ -333,6 +353,9 @@ export default function RoomTopologyPanel(props: Props) {
                           : "rgba(255,255,255,0.03)",
                       color: "inherit",
                       cursor: "pointer",
+                      boxShadow: selected
+                        ? "0 10px 24px rgba(0,0,0,0.14)"
+                        : "none",
                     }}
                   >
                     <div
@@ -359,13 +382,20 @@ export default function RoomTopologyPanel(props: Props) {
                           fontSize: 12,
                           fontWeight: 900,
                           opacity: 0.92,
+                          flexShrink: 0,
                         }}
                       >
                         {idx + 1}
                       </div>
 
                       <div style={{ display: "grid", gap: 4, minWidth: 0 }}>
-                        <div style={{ fontWeight: 900, lineHeight: 1.35 }}>
+                        <div
+                          style={{
+                            fontWeight: 900,
+                            lineHeight: 1.35,
+                            color: "rgba(245,236,216,0.97)",
+                          }}
+                        >
                           {actionLabel}
                         </div>
 
@@ -389,13 +419,13 @@ export default function RoomTopologyPanel(props: Props) {
             {selectedRoute ? (
               <div
                 style={{
-                  padding: "14px",
-                  borderRadius: 16,
+                  padding: "12px 13px",
+                  borderRadius: 14,
                   border: "1px solid rgba(255,255,255,0.08)",
                   background:
-                    "linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.02))",
+                    "linear-gradient(180deg, rgba(255,255,255,0.035), rgba(255,255,255,0.02))",
                   display: "grid",
-                  gap: 12,
+                  gap: 8,
                 }}
               >
                 <div
@@ -409,21 +439,12 @@ export default function RoomTopologyPanel(props: Props) {
                   Selected Route
                 </div>
 
-                {selectedRoute.previewImage ? (
-                  <img
-                    src={selectedRoute.previewImage}
-                    alt={selectedRoute.targetLabel}
-                    style={{
-                      width: "100%",
-                      maxHeight: 180,
-                      objectFit: "cover",
-                      borderRadius: 12,
-                      display: "block",
-                    }}
-                  />
-                ) : null}
-
-                <div style={{ display: "grid", gap: 6 }}>
+                <div
+                  style={{
+                    display: "grid",
+                    gap: 5,
+                  }}
+                >
                   <div
                     style={{
                       fontSize: 18,
@@ -432,18 +453,18 @@ export default function RoomTopologyPanel(props: Props) {
                       color: "rgba(245,236,216,0.97)",
                     }}
                   >
-                    {buildRouteAction(selectedRoute)}
+                    {selectedRouteAction}
                   </div>
 
                   <div
                     style={{
-                      fontSize: 12,
+                      fontSize: 11,
                       opacity: 0.68,
                       textTransform: "uppercase",
                       letterSpacing: 0.7,
                     }}
                   >
-                    {buildRouteMeta(selectedRoute)}
+                    {selectedRouteMeta}
                   </div>
 
                   <div
@@ -453,9 +474,47 @@ export default function RoomTopologyPanel(props: Props) {
                       color: "rgba(228,232,240,0.82)",
                     }}
                   >
-                    {buildRouteMood(selectedRoute)}
+                    {selectedRouteMood}
                   </div>
                 </div>
+
+                {selectedRoute.previewImage ? (
+                  <details
+                    style={{
+                      borderRadius: 12,
+                      border: "1px solid rgba(255,255,255,0.08)",
+                      background: "rgba(255,255,255,0.03)",
+                      overflow: "hidden",
+                    }}
+                  >
+                    <summary
+                      style={{
+                        cursor: "pointer",
+                        padding: "11px 12px",
+                        fontSize: 11,
+                        letterSpacing: 0.7,
+                        textTransform: "uppercase",
+                        opacity: 0.6,
+                      }}
+                    >
+                      Route Preview
+                    </summary>
+
+                    <div style={{ padding: "0 12px 12px" }}>
+                      <img
+                        src={selectedRoute.previewImage}
+                        alt={selectedRoute.targetLabel}
+                        style={{
+                          width: "100%",
+                          height: 132,
+                          objectFit: "cover",
+                          borderRadius: 10,
+                          display: "block",
+                        }}
+                      />
+                    </div>
+                  </details>
+                ) : null}
 
                 {roomExitNarrative.length > 0 ? (
                   <details
