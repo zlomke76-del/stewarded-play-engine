@@ -97,7 +97,7 @@ function normalizeKey(value: string) {
   return String(value ?? "").trim().toLowerCase();
 }
 
-function StatCard(props: {
+function StatPill(props: {
   label: string;
   value: string;
   tone: string;
@@ -108,8 +108,9 @@ function StatCard(props: {
   return (
     <div
       style={{
-        padding: "11px 13px",
-        borderRadius: 16,
+        minWidth: 0,
+        padding: "9px 11px",
+        borderRadius: 14,
         border: warning
           ? "1px solid rgba(255,132,132,0.18)"
           : "1px solid rgba(255,255,255,0.08)",
@@ -118,25 +119,27 @@ function StatCard(props: {
           : `linear-gradient(180deg, ${tone}, rgba(255,255,255,0.02))`,
         boxShadow: "inset 0 1px 0 rgba(255,255,255,0.04)",
         display: "grid",
-        gap: 4,
+        gap: 3,
       }}
     >
       <div
         style={{
-          fontSize: 11,
+          fontSize: 10,
           letterSpacing: 0.8,
           textTransform: "uppercase",
           opacity: 0.58,
+          lineHeight: 1,
         }}
       >
         {label}
       </div>
       <div
         style={{
-          fontSize: 20,
+          fontSize: 18,
           fontWeight: 900,
           lineHeight: 1,
           color: "rgba(245,236,216,0.97)",
+          whiteSpace: "nowrap",
         }}
       >
         {value}
@@ -182,16 +185,50 @@ function InfoChip(props: {
       style={{
         display: "inline-flex",
         alignItems: "center",
-        padding: "7px 10px",
+        padding: "6px 9px",
         borderRadius: 999,
-        fontSize: 12,
+        fontSize: 11,
         fontWeight: 700,
-        lineHeight: 1.2,
+        lineHeight: 1.1,
         ...style,
       }}
     >
       {label}
     </span>
+  );
+}
+
+function SectionCard(props: {
+  title: string;
+  children: ReactNode;
+}) {
+  const { title, children } = props;
+
+  return (
+    <div
+      style={{
+        padding: "12px 12px 10px",
+        borderRadius: 16,
+        border: "1px solid rgba(255,255,255,0.08)",
+        background:
+          "linear-gradient(180deg, rgba(255,255,255,0.035), rgba(255,255,255,0.015))",
+        display: "grid",
+        gap: 10,
+      }}
+    >
+      <div
+        style={{
+          fontSize: 10,
+          letterSpacing: 1,
+          textTransform: "uppercase",
+          opacity: 0.62,
+          lineHeight: 1,
+        }}
+      >
+        {title}
+      </div>
+      {children}
+    </div>
   );
 }
 
@@ -233,6 +270,7 @@ export default function HeroStatusBar(props: Props) {
   const [xpImpactVisible, setXpImpactVisible] = useState(false);
   const [xpGainLabel, setXpGainLabel] = useState<string | null>(null);
   const [levelUpLabel, setLevelUpLabel] = useState<string | null>(null);
+  const [detailsExpanded, setDetailsExpanded] = useState(false);
   const [skillsExpanded, setSkillsExpanded] = useState(false);
 
   const impactTimerRef = useRef<number | null>(null);
@@ -410,18 +448,23 @@ export default function HeroStatusBar(props: Props) {
     ? `Top skill: ${topSkill.label} ${topSkill.value >= 0 ? `+${topSkill.value}` : `${topSkill.value}`}`
     : "No trained skills recorded.";
 
+  const compactEquipmentSummary = [
+    weapon?.name ?? "Unarmed",
+    armor?.name ?? "Traveler's Clothes",
+  ].join(" · ");
+
   return (
     <div
       data-eof-hero-xp-target={HERO_STATUS_XP_TARGET_ID}
       style={{
         position: "relative",
         overflow: "hidden",
-        borderRadius: 22,
+        borderRadius: 20,
         border: "1px solid rgba(214, 188, 120, 0.18)",
         background:
-          "radial-gradient(circle at top left, rgba(214,188,120,0.12), transparent 32%), linear-gradient(180deg, rgba(16,18,28,0.96), rgba(10,12,20,0.92))",
+          "radial-gradient(circle at top left, rgba(214,188,120,0.10), transparent 28%), linear-gradient(180deg, rgba(16,18,28,0.96), rgba(10,12,20,0.92))",
         boxShadow:
-          "0 18px 48px rgba(0,0,0,0.28), inset 0 1px 0 rgba(255,255,255,0.04)",
+          "0 16px 42px rgba(0,0,0,0.26), inset 0 1px 0 rgba(255,255,255,0.04)",
       }}
     >
       <div
@@ -430,7 +473,7 @@ export default function HeroStatusBar(props: Props) {
           inset: 0,
           pointerEvents: "none",
           background:
-            "linear-gradient(90deg, rgba(214,188,120,0.06), transparent 24%, transparent 76%, rgba(214,188,120,0.03))",
+            "linear-gradient(90deg, rgba(214,188,120,0.05), transparent 24%, transparent 76%, rgba(214,188,120,0.025))",
         }}
       />
 
@@ -449,24 +492,24 @@ export default function HeroStatusBar(props: Props) {
       <div
         style={{
           position: "relative",
-          padding: "16px 16px 14px",
+          padding: "12px 12px 10px",
           display: "grid",
-          gap: 14,
+          gap: 10,
         }}
       >
         <div
           style={{
             display: "grid",
             gridTemplateColumns: "minmax(0, 1fr) auto",
-            gap: 16,
+            gap: 12,
             alignItems: "start",
           }}
         >
           <div
             style={{
               display: "grid",
-              gridTemplateColumns: "88px minmax(0, 1fr)",
-              gap: 14,
+              gridTemplateColumns: "60px minmax(0, 1fr)",
+              gap: 12,
               alignItems: "center",
               minWidth: 0,
             }}
@@ -474,9 +517,9 @@ export default function HeroStatusBar(props: Props) {
             <div
               aria-label={`${heroName} portrait`}
               style={{
-                width: 88,
-                height: 88,
-                borderRadius: 18,
+                width: 60,
+                height: 60,
+                borderRadius: 14,
                 overflow: "hidden",
                 border: recoveredWeapon
                   ? "1px solid rgba(255,220,138,0.28)"
@@ -485,8 +528,8 @@ export default function HeroStatusBar(props: Props) {
                   "radial-gradient(circle at 50% 30%, rgba(214,188,120,0.18), rgba(24,28,40,0.96) 70%)",
                 boxShadow:
                   recoveredWeapon
-                    ? "0 10px 28px rgba(0,0,0,0.24), 0 0 18px rgba(255,208,120,0.10), inset 0 1px 0 rgba(255,255,255,0.05)"
-                    : "0 10px 28px rgba(0,0,0,0.24), inset 0 1px 0 rgba(255,255,255,0.05)",
+                    ? "0 8px 20px rgba(0,0,0,0.22), 0 0 14px rgba(255,208,120,0.08), inset 0 1px 0 rgba(255,255,255,0.05)"
+                    : "0 8px 20px rgba(0,0,0,0.22), inset 0 1px 0 rgba(255,255,255,0.05)",
                 display: "grid",
                 placeItems: "center",
               }}
@@ -517,8 +560,8 @@ export default function HeroStatusBar(props: Props) {
               ) : (
                 <div
                   style={{
-                    width: 58,
-                    height: 58,
+                    width: 40,
+                    height: 40,
                     borderRadius: 999,
                     border: "1px solid rgba(214,188,120,0.20)",
                     background:
@@ -526,7 +569,7 @@ export default function HeroStatusBar(props: Props) {
                     display: "grid",
                     placeItems: "center",
                     color: "rgba(245,236,216,0.96)",
-                    fontSize: 20,
+                    fontSize: 15,
                     fontWeight: 900,
                     letterSpacing: 1,
                     textTransform: "uppercase",
@@ -537,13 +580,14 @@ export default function HeroStatusBar(props: Props) {
               )}
             </div>
 
-            <div style={{ display: "grid", gap: 8, minWidth: 0 }}>
+            <div style={{ display: "grid", gap: 6, minWidth: 0 }}>
               <div
                 style={{
-                  fontSize: 11,
+                  fontSize: 10,
                   letterSpacing: 1,
                   textTransform: "uppercase",
-                  opacity: 0.6,
+                  opacity: 0.58,
+                  lineHeight: 1,
                 }}
               >
                 Active Hero
@@ -551,24 +595,33 @@ export default function HeroStatusBar(props: Props) {
 
               <div
                 style={{
-                  fontSize: 26,
-                  fontWeight: 900,
-                  lineHeight: 1.02,
-                  color: "rgba(245,236,216,0.98)",
-                  wordBreak: "break-word",
+                  display: "flex",
+                  alignItems: "baseline",
+                  gap: 8,
+                  flexWrap: "wrap",
                 }}
               >
-                {heroName}
-              </div>
+                <div
+                  style={{
+                    fontSize: 24,
+                    fontWeight: 900,
+                    lineHeight: 1,
+                    color: "rgba(245,236,216,0.98)",
+                    wordBreak: "break-word",
+                  }}
+                >
+                  {heroName}
+                </div>
 
-              <div
-                style={{
-                  fontSize: 14,
-                  lineHeight: 1.5,
-                  color: "rgba(228,232,240,0.82)",
-                }}
-              >
-                {species} · {className} · Level {displayLevel}
+                <div
+                  style={{
+                    fontSize: 13,
+                    lineHeight: 1.3,
+                    color: "rgba(228,232,240,0.80)",
+                  }}
+                >
+                  {species} · {className} · L{displayLevel}
+                </div>
               </div>
 
               <div
@@ -585,192 +638,79 @@ export default function HeroStatusBar(props: Props) {
                 />
                 {weaponBroken ? <InfoChip label="Weapon Broken" tone="warn" /> : null}
                 {recoveredWeapon ? <InfoChip label="Recovered Armament" tone="blessing" /> : null}
-                {armor?.name ? <InfoChip label={armor.name} /> : null}
-              </div>
-
-              <div
-                style={{
-                  position: "relative",
-                  display: "grid",
-                  gap: 6,
-                  minWidth: 0,
-                }}
-              >
-                <div
-                  style={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    gap: 12,
-                    alignItems: "center",
-                    flexWrap: "wrap",
-                  }}
-                >
-                  <div
-                    style={{
-                      fontSize: 11,
-                      letterSpacing: 0.8,
-                      textTransform: "uppercase",
-                      color: "rgba(214,188,120,0.78)",
-                    }}
-                  >
-                    Progress to Level {Math.min(displayLevel + 1, 30)}
-                  </div>
-
-                  <div
-                    style={{
-                      fontSize: 11,
-                      color: "rgba(232,236,244,0.68)",
-                      whiteSpace: "nowrap",
-                    }}
-                  >
-                    {displayXp} / {resolvedXpToNextLevel} XP
-                  </div>
-                </div>
-
-                <div
-                  style={{
-                    position: "relative",
-                    height: 12,
-                    borderRadius: 999,
-                    overflow: "hidden",
-                    border: "1px solid rgba(214,188,120,0.16)",
-                    background:
-                      "linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.02))",
-                    boxShadow: "inset 0 1px 2px rgba(0,0,0,0.30)",
-                  }}
-                >
-                  <div
-                    style={{
-                      position: "absolute",
-                      inset: 0,
-                      width: `${xpProgress * 100}%`,
-                      transition:
-                        "width 900ms cubic-bezier(0.22, 1, 0.36, 1), filter 220ms ease",
-                      background:
-                        "linear-gradient(90deg, rgba(196,138,54,0.98), rgba(235,199,112,0.98) 55%, rgba(255,233,170,0.98))",
-                      boxShadow:
-                        xpImpactVisible
-                          ? "0 0 18px rgba(255,208,120,0.42)"
-                          : "0 0 10px rgba(255,208,120,0.24)",
-                      filter: xpImpactVisible ? "brightness(1.08)" : "none",
-                    }}
-                  />
-
-                  <div
-                    style={{
-                      position: "absolute",
-                      inset: 0,
-                      background:
-                        "linear-gradient(180deg, rgba(255,255,255,0.18), rgba(255,255,255,0.00) 55%)",
-                      pointerEvents: "none",
-                    }}
-                  />
-                </div>
-
-                <div
-                  style={{
-                    position: "absolute",
-                    right: 0,
-                    top: -2,
-                    display: "grid",
-                    gap: 6,
-                    justifyItems: "end",
-                    pointerEvents: "none",
-                  }}
-                >
-                  {xpGainLabel ? (
-                    <div
-                      style={{
-                        padding: "6px 10px",
-                        borderRadius: 999,
-                        border: "1px solid rgba(214,188,120,0.22)",
-                        background: "rgba(214,188,120,0.10)",
-                        color: "rgba(255,240,198,0.98)",
-                        fontSize: 11,
-                        fontWeight: 900,
-                        boxShadow: "0 8px 18px rgba(0,0,0,0.20)",
-                      }}
-                    >
-                      {xpGainLabel}
-                    </div>
-                  ) : null}
-
-                  {levelUpLabel ? (
-                    <div
-                      style={{
-                        padding: "7px 11px",
-                        borderRadius: 999,
-                        border: "1px solid rgba(255,220,138,0.28)",
-                        background:
-                          "linear-gradient(180deg, rgba(214,188,120,0.18), rgba(214,188,120,0.08))",
-                        color: "rgba(255,245,220,0.98)",
-                        fontSize: 11,
-                        fontWeight: 900,
-                        letterSpacing: 0.7,
-                        textTransform: "uppercase",
-                        boxShadow: "0 10px 24px rgba(0,0,0,0.24)",
-                      }}
-                    >
-                      {levelUpLabel}
-                    </div>
-                  ) : null}
-                </div>
-              </div>
-
-              <div
-                style={{
-                  fontSize: 12,
-                  lineHeight: 1.5,
-                  color: weaponBroken
-                    ? "rgba(255,188,188,0.86)"
-                    : recoveredWeapon
-                      ? "rgba(255,231,174,0.90)"
-                      : "rgba(214,188,120,0.78)",
-                }}
-              >
-                {journeyLine}
               </div>
             </div>
           </div>
 
           <div
             style={{
-              padding: "8px 10px",
-              borderRadius: 999,
-              border: recoveredWeapon
-                ? "1px solid rgba(255,220,138,0.24)"
-                : "1px solid rgba(214,188,120,0.20)",
-              background: recoveredWeapon
-                ? "linear-gradient(180deg, rgba(214,188,120,0.16), rgba(214,188,120,0.08))"
-                : "rgba(214,188,120,0.08)",
-              fontSize: 11,
-              letterSpacing: 0.9,
-              textTransform: "uppercase",
-              fontWeight: 800,
-              color: "rgba(245,236,216,0.96)",
-              whiteSpace: "nowrap",
-              alignSelf: "start",
+              display: "grid",
+              gap: 8,
+              justifyItems: "end",
             }}
           >
-            {recoveredWeapon ? "The Chronicle Arms You" : "The Chronicle Remembers"}
+            <div
+              style={{
+                padding: "7px 9px",
+                borderRadius: 999,
+                border: recoveredWeapon
+                  ? "1px solid rgba(255,220,138,0.24)"
+                  : "1px solid rgba(214,188,120,0.20)",
+                background: recoveredWeapon
+                  ? "linear-gradient(180deg, rgba(214,188,120,0.16), rgba(214,188,120,0.08))"
+                  : "rgba(214,188,120,0.08)",
+                fontSize: 10,
+                letterSpacing: 0.8,
+                textTransform: "uppercase",
+                fontWeight: 800,
+                color: "rgba(245,236,216,0.96)",
+                whiteSpace: "nowrap",
+              }}
+            >
+              {recoveredWeapon ? "Chronicle Armed" : "Chronicle Remembers"}
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setDetailsExpanded((prev) => !prev)}
+              aria-expanded={detailsExpanded}
+              style={{
+                appearance: "none",
+                border: "1px solid rgba(214,188,120,0.18)",
+                background: "rgba(214,188,120,0.08)",
+                color: "rgba(245,236,216,0.94)",
+                borderRadius: 999,
+                padding: "7px 10px",
+                fontSize: 10,
+                fontWeight: 800,
+                lineHeight: 1,
+                letterSpacing: 0.6,
+                textTransform: "uppercase",
+                cursor: "pointer",
+                boxShadow: "inset 0 1px 0 rgba(255,255,255,0.04)",
+                whiteSpace: "nowrap",
+              }}
+            >
+              {detailsExpanded ? "Hide Hero Sheet" : "Expand Hero Sheet"}
+            </button>
           </div>
         </div>
 
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))",
-            gap: 10,
+            gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
+            gap: 8,
           }}
         >
-          <StatCard label="HP" value={`${hpCurrent}/${hpMax}`} tone={hpTone} />
-          <StatCard label="AC" value={String(ac)} tone="rgba(126,150,196,0.12)" />
-          <StatCard
-            label="Initiative"
+          <StatPill label="HP" value={`${hpCurrent}/${hpMax}`} tone={hpTone} />
+          <StatPill label="AC" value={String(ac)} tone="rgba(126,150,196,0.12)" />
+          <StatPill
+            label="Init"
             value={initiativeMod >= 0 ? `+${initiativeMod}` : `${initiativeMod}`}
             tone="rgba(118,188,132,0.12)"
           />
-          <StatCard
+          <StatPill
             label="Attack"
             value={attackLabel}
             tone={recoveredWeapon ? "rgba(214,188,120,0.14)" : "rgba(214,188,120,0.10)"}
@@ -778,449 +718,496 @@ export default function HeroStatusBar(props: Props) {
           />
         </div>
 
-        {attributeRows.length > 0 ? (
-          <div
-            style={{
-              padding: "14px 14px 12px",
-              borderRadius: 18,
-              border: "1px solid rgba(255,255,255,0.08)",
-              background:
-                "linear-gradient(180deg, rgba(255,255,255,0.035), rgba(255,255,255,0.015))",
-              display: "grid",
-              gap: 10,
-            }}
-          >
-            <div
-              style={{
-                fontSize: 11,
-                letterSpacing: 1,
-                textTransform: "uppercase",
-                opacity: 0.62,
-              }}
-            >
-              Attributes
-            </div>
-
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "repeat(auto-fit, minmax(110px, 1fr))",
-                gap: 8,
-              }}
-            >
-              {attributeRows.map((item) => (
-                <div
-                  key={item.key}
-                  style={{
-                    padding: "10px 11px",
-                    borderRadius: 14,
-                    border: "1px solid rgba(255,255,255,0.06)",
-                    background: "rgba(255,255,255,0.03)",
-                    display: "grid",
-                    gap: 5,
-                  }}
-                >
-                  <div
-                    style={{
-                      fontSize: 11,
-                      letterSpacing: 0.8,
-                      textTransform: "uppercase",
-                      opacity: 0.6,
-                    }}
-                  >
-                    {item.label}
-                  </div>
-                  <div
-                    style={{
-                      display: "flex",
-                      justifyContent: "space-between",
-                      gap: 8,
-                      alignItems: "baseline",
-                    }}
-                  >
-                    <div
-                      style={{
-                        fontSize: 20,
-                        fontWeight: 900,
-                        lineHeight: 1,
-                        color: "rgba(245,236,216,0.97)",
-                      }}
-                    >
-                      {item.value}
-                    </div>
-                    <div
-                      style={{
-                        fontSize: 12,
-                        lineHeight: 1,
-                        color: "rgba(226,230,238,0.74)",
-                        whiteSpace: "nowrap",
-                      }}
-                    >
-                      {item.mod >= 0 ? `+${item.mod}` : `${item.mod}`}
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        ) : null}
-
         <div
           style={{
+            position: "relative",
             display: "grid",
-            gridTemplateColumns: "minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 1fr)",
-            gap: 10,
+            gap: 5,
+            minWidth: 0,
           }}
         >
           <div
             style={{
-              padding: "14px 14px 12px",
-              borderRadius: 18,
-              border: "1px solid rgba(255,255,255,0.08)",
-              background:
-                "linear-gradient(180deg, rgba(255,255,255,0.035), rgba(255,255,255,0.015))",
-              display: "grid",
-              gap: 10,
-              minWidth: 0,
-              alignContent: "start",
+              display: "flex",
+              justifyContent: "space-between",
+              gap: 12,
+              alignItems: "center",
+              flexWrap: "wrap",
             }}
           >
             <div
               style={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-                gap: 10,
-                flexWrap: "wrap",
+                fontSize: 10,
+                letterSpacing: 0.8,
+                textTransform: "uppercase",
+                color: "rgba(214,188,120,0.78)",
+                lineHeight: 1,
               }}
             >
-              <div
-                style={{
-                  fontSize: 11,
-                  letterSpacing: 1,
-                  textTransform: "uppercase",
-                  opacity: 0.62,
-                }}
-              >
-                Skills
-              </div>
-
-              {sortedSkills.length > 0 ? (
-                <button
-                  type="button"
-                  onClick={() => setSkillsExpanded((prev) => !prev)}
-                  aria-expanded={skillsExpanded}
-                  style={{
-                    appearance: "none",
-                    border: "1px solid rgba(214,188,120,0.18)",
-                    background: "rgba(214,188,120,0.08)",
-                    color: "rgba(245,236,216,0.94)",
-                    borderRadius: 999,
-                    padding: "7px 10px",
-                    fontSize: 11,
-                    fontWeight: 800,
-                    lineHeight: 1,
-                    letterSpacing: 0.6,
-                    textTransform: "uppercase",
-                    cursor: "pointer",
-                    boxShadow: "inset 0 1px 0 rgba(255,255,255,0.04)",
-                    whiteSpace: "nowrap",
-                  }}
-                >
-                  {skillsExpanded ? "Hide Skills" : "Show Skills"}
-                </button>
-              ) : null}
+              Progress to Level {Math.min(displayLevel + 1, 30)}
             </div>
 
-            {sortedSkills.length > 0 ? (
-              skillsExpanded ? (
-                <div style={{ display: "grid", gap: 7 }}>
-                  {sortedSkills.map((skill) => (
-                    <div
-                      key={skill.id}
-                      style={{
-                        display: "flex",
-                        justifyContent: "space-between",
-                        alignItems: "center",
-                        gap: 12,
-                        padding: "8px 10px",
-                        borderRadius: 12,
-                        background: "rgba(255,255,255,0.03)",
-                        border: "1px solid rgba(255,255,255,0.05)",
-                      }}
-                    >
-                      <div style={{ minWidth: 0 }}>
-                        <div
-                          style={{
-                            fontSize: 13,
-                            fontWeight: 700,
-                            color: "rgba(245,236,216,0.95)",
-                          }}
-                        >
-                          {skill.label}
-                        </div>
-                        <div
-                          style={{
-                            fontSize: 11,
-                            opacity: 0.56,
-                            textTransform: "uppercase",
-                            letterSpacing: 0.7,
-                          }}
-                        >
-                          {attributeAbbrev(skill.attribute)}
-                        </div>
-                      </div>
-                      <div
-                        style={{
-                          fontSize: 13,
-                          fontWeight: 900,
-                          whiteSpace: "nowrap",
-                          color: "rgba(232,236,244,0.88)",
-                        }}
-                      >
-                        {skill.value >= 0 ? `+${skill.value}` : `${skill.value}`}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div
-                  style={{
-                    padding: "10px 12px",
-                    borderRadius: 12,
-                    border: "1px solid rgba(255,255,255,0.05)",
-                    background: "rgba(255,255,255,0.03)",
-                    display: "grid",
-                    gap: 6,
-                  }}
-                >
-                  <div
-                    style={{
-                      display: "flex",
-                      justifyContent: "space-between",
-                      alignItems: "center",
-                      gap: 12,
-                      flexWrap: "wrap",
-                    }}
-                  >
-                    <div
-                      style={{
-                        fontSize: 13,
-                        fontWeight: 800,
-                        color: "rgba(245,236,216,0.95)",
-                      }}
-                    >
-                      {skillSummaryLabel}
-                    </div>
-                    <div
-                      style={{
-                        fontSize: 11,
-                        letterSpacing: 0.7,
-                        textTransform: "uppercase",
-                        color: "rgba(214,188,120,0.78)",
-                        whiteSpace: "nowrap",
-                      }}
-                    >
-                      Collapsed
-                    </div>
-                  </div>
-
-                  <div
-                    style={{
-                      fontSize: 12,
-                      lineHeight: 1.45,
-                      color: "rgba(232,236,244,0.76)",
-                    }}
-                  >
-                    {skillSummaryDetail}
-                  </div>
-                </div>
-              )
-            ) : (
-              <div style={{ fontSize: 12, opacity: 0.68 }}>
-                No trained skills recorded.
-              </div>
-            )}
+            <div
+              style={{
+                fontSize: 10,
+                color: "rgba(232,236,244,0.68)",
+                whiteSpace: "nowrap",
+                lineHeight: 1,
+              }}
+            >
+              {displayXp} / {resolvedXpToNextLevel} XP
+            </div>
           </div>
 
           <div
             style={{
-              padding: "14px 14px 12px",
-              borderRadius: 18,
-              border: "1px solid rgba(255,255,255,0.08)",
+              position: "relative",
+              height: 10,
+              borderRadius: 999,
+              overflow: "hidden",
+              border: "1px solid rgba(214,188,120,0.16)",
               background:
-                "linear-gradient(180deg, rgba(255,255,255,0.035), rgba(255,255,255,0.015))",
-              display: "grid",
-              gap: 10,
-              minWidth: 0,
+                "linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.02))",
+              boxShadow: "inset 0 1px 2px rgba(0,0,0,0.30)",
+            }}
+          >
+            <div
+              style={{
+                position: "absolute",
+                inset: 0,
+                width: `${xpProgress * 100}%`,
+                transition:
+                  "width 900ms cubic-bezier(0.22, 1, 0.36, 1), filter 220ms ease",
+                background:
+                  "linear-gradient(90deg, rgba(196,138,54,0.98), rgba(235,199,112,0.98) 55%, rgba(255,233,170,0.98))",
+                boxShadow: xpImpactVisible
+                  ? "0 0 18px rgba(255,208,120,0.42)"
+                  : "0 0 10px rgba(255,208,120,0.24)",
+                filter: xpImpactVisible ? "brightness(1.08)" : "none",
+              }}
+            />
+
+            <div
+              style={{
+                position: "absolute",
+                inset: 0,
+                background:
+                  "linear-gradient(180deg, rgba(255,255,255,0.18), rgba(255,255,255,0.00) 55%)",
+                pointerEvents: "none",
+              }}
+            />
+          </div>
+
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              gap: 8,
+              alignItems: "center",
+              flexWrap: "wrap",
             }}
           >
             <div
               style={{
                 fontSize: 11,
-                letterSpacing: 1,
-                textTransform: "uppercase",
-                opacity: 0.62,
+                lineHeight: 1.45,
+                color: weaponBroken
+                  ? "rgba(255,188,188,0.86)"
+                  : recoveredWeapon
+                    ? "rgba(255,231,174,0.90)"
+                    : "rgba(214,188,120,0.78)",
               }}
             >
-              Equipment
+              {journeyLine}
             </div>
 
             <div
               style={{
-                display: "grid",
-                gap: 8,
+                display: "flex",
+                gap: 6,
+                flexWrap: "wrap",
+                justifyContent: "flex-end",
               }}
             >
-              <div
-                style={{
-                  padding: "9px 10px",
-                  borderRadius: 12,
-                  ...weaponPanelTone,
-                  display: "grid",
-                  gap: 4,
-                }}
-              >
+              <InfoChip label={compactEquipmentSummary} />
+              {xpGainLabel ? <InfoChip label={xpGainLabel} tone="accent" /> : null}
+              {levelUpLabel ? <InfoChip label={levelUpLabel} tone="blessing" /> : null}
+            </div>
+          </div>
+        </div>
+
+        {detailsExpanded ? (
+          <>
+            {attributeRows.length > 0 ? (
+              <SectionCard title="Attributes">
                 <div
                   style={{
-                    fontSize: 11,
-                    opacity: 0.58,
-                    textTransform: "uppercase",
-                    letterSpacing: 0.7,
+                    display: "grid",
+                    gridTemplateColumns: "repeat(auto-fit, minmax(92px, 1fr))",
+                    gap: 8,
                   }}
                 >
-                  Weapon
+                  {attributeRows.map((item) => (
+                    <div
+                      key={item.key}
+                      style={{
+                        padding: "8px 9px",
+                        borderRadius: 12,
+                        border: "1px solid rgba(255,255,255,0.06)",
+                        background: "rgba(255,255,255,0.03)",
+                        display: "grid",
+                        gap: 4,
+                      }}
+                    >
+                      <div
+                        style={{
+                          fontSize: 10,
+                          letterSpacing: 0.8,
+                          textTransform: "uppercase",
+                          opacity: 0.6,
+                          lineHeight: 1,
+                        }}
+                      >
+                        {item.label}
+                      </div>
+                      <div
+                        style={{
+                          display: "flex",
+                          justifyContent: "space-between",
+                          gap: 8,
+                          alignItems: "baseline",
+                        }}
+                      >
+                        <div
+                          style={{
+                            fontSize: 18,
+                            fontWeight: 900,
+                            lineHeight: 1,
+                            color: "rgba(245,236,216,0.97)",
+                          }}
+                        >
+                          {item.value}
+                        </div>
+                        <div
+                          style={{
+                            fontSize: 11,
+                            lineHeight: 1,
+                            color: "rgba(226,230,238,0.74)",
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          {item.mod >= 0 ? `+${item.mod}` : `${item.mod}`}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
                 </div>
+              </SectionCard>
+            ) : null}
+
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "minmax(0, 1.15fr) minmax(0, 1fr) minmax(0, 1fr)",
+                gap: 10,
+              }}
+            >
+              <SectionCard title="Skills">
                 <div
                   style={{
                     display: "flex",
-                    gap: 8,
-                    alignItems: "center",
                     justifyContent: "space-between",
+                    alignItems: "center",
+                    gap: 10,
                     flexWrap: "wrap",
                   }}
                 >
                   <div
                     style={{
-                      fontSize: 13,
-                      fontWeight: 800,
-                      color: weaponBroken
-                        ? "rgba(255,220,220,0.98)"
-                        : recoveredWeapon
-                          ? "rgba(255,245,220,0.98)"
-                          : "rgba(245,236,216,0.95)",
+                      fontSize: 11,
+                      lineHeight: 1.4,
+                      color: "rgba(232,236,244,0.76)",
                     }}
                   >
-                    {weapon?.name ?? "Unarmed"}
+                    {skillSummaryLabel}
                   </div>
-                  {weaponBroken ? <InfoChip label="Broken" tone="warn" /> : null}
-                  {recoveredWeapon ? <InfoChip label="Recovered" tone="blessing" /> : null}
+
+                  {sortedSkills.length > 0 ? (
+                    <button
+                      type="button"
+                      onClick={() => setSkillsExpanded((prev) => !prev)}
+                      aria-expanded={skillsExpanded}
+                      style={{
+                        appearance: "none",
+                        border: "1px solid rgba(214,188,120,0.18)",
+                        background: "rgba(214,188,120,0.08)",
+                        color: "rgba(245,236,216,0.94)",
+                        borderRadius: 999,
+                        padding: "6px 9px",
+                        fontSize: 10,
+                        fontWeight: 800,
+                        lineHeight: 1,
+                        letterSpacing: 0.6,
+                        textTransform: "uppercase",
+                        cursor: "pointer",
+                        boxShadow: "inset 0 1px 0 rgba(255,255,255,0.04)",
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      {skillsExpanded ? "Hide Skills" : "Show Skills"}
+                    </button>
+                  ) : null}
                 </div>
-                <div style={{ fontSize: 12, opacity: 0.76, lineHeight: 1.5 }}>
-                  {weapon ? `${weapon.category} · ${weapon.damage}` : "No weapon equipped"}
-                </div>
-                {weapon?.trait ? (
+
+                {sortedSkills.length > 0 ? (
+                  skillsExpanded ? (
+                    <div style={{ display: "grid", gap: 7 }}>
+                      {sortedSkills.map((skill) => (
+                        <div
+                          key={skill.id}
+                          style={{
+                            display: "flex",
+                            justifyContent: "space-between",
+                            alignItems: "center",
+                            gap: 12,
+                            padding: "8px 9px",
+                            borderRadius: 12,
+                            background: "rgba(255,255,255,0.03)",
+                            border: "1px solid rgba(255,255,255,0.05)",
+                          }}
+                        >
+                          <div style={{ minWidth: 0 }}>
+                            <div
+                              style={{
+                                fontSize: 12,
+                                fontWeight: 700,
+                                color: "rgba(245,236,216,0.95)",
+                              }}
+                            >
+                              {skill.label}
+                            </div>
+                            <div
+                              style={{
+                                fontSize: 10,
+                                opacity: 0.56,
+                                textTransform: "uppercase",
+                                letterSpacing: 0.7,
+                              }}
+                            >
+                              {attributeAbbrev(skill.attribute)}
+                            </div>
+                          </div>
+                          <div
+                            style={{
+                              fontSize: 12,
+                              fontWeight: 900,
+                              whiteSpace: "nowrap",
+                              color: "rgba(232,236,244,0.88)",
+                            }}
+                          >
+                            {skill.value >= 0 ? `+${skill.value}` : `${skill.value}`}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div
+                      style={{
+                        padding: "9px 10px",
+                        borderRadius: 12,
+                        border: "1px solid rgba(255,255,255,0.05)",
+                        background: "rgba(255,255,255,0.03)",
+                        display: "grid",
+                        gap: 5,
+                      }}
+                    >
+                      <div
+                        style={{
+                          display: "flex",
+                          justifyContent: "space-between",
+                          alignItems: "center",
+                          gap: 12,
+                          flexWrap: "wrap",
+                        }}
+                      >
+                        <div
+                          style={{
+                            fontSize: 12,
+                            fontWeight: 800,
+                            color: "rgba(245,236,216,0.95)",
+                          }}
+                        >
+                          {skillSummaryLabel}
+                        </div>
+                        <div
+                          style={{
+                            fontSize: 10,
+                            letterSpacing: 0.7,
+                            textTransform: "uppercase",
+                            color: "rgba(214,188,120,0.78)",
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          Collapsed
+                        </div>
+                      </div>
+
+                      <div
+                        style={{
+                          fontSize: 11,
+                          lineHeight: 1.45,
+                          color: "rgba(232,236,244,0.76)",
+                        }}
+                      >
+                        {skillSummaryDetail}
+                      </div>
+                    </div>
+                  )
+                ) : (
+                  <div style={{ fontSize: 12, opacity: 0.68 }}>
+                    No trained skills recorded.
+                  </div>
+                )}
+              </SectionCard>
+
+              <SectionCard title="Equipment">
+                <div
+                  style={{
+                    display: "grid",
+                    gap: 8,
+                  }}
+                >
                   <div
                     style={{
-                      fontSize: 12,
-                      opacity: recoveredWeapon ? 0.82 : 0.66,
-                      lineHeight: 1.45,
-                      color: recoveredWeapon ? "rgba(255,231,174,0.90)" : undefined,
+                      padding: "8px 9px",
+                      borderRadius: 12,
+                      ...weaponPanelTone,
+                      display: "grid",
+                      gap: 4,
                     }}
                   >
-                    {weapon.trait}
+                    <div
+                      style={{
+                        fontSize: 10,
+                        opacity: 0.58,
+                        textTransform: "uppercase",
+                        letterSpacing: 0.7,
+                        lineHeight: 1,
+                      }}
+                    >
+                      Weapon
+                    </div>
+                    <div
+                      style={{
+                        display: "flex",
+                        gap: 8,
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                        flexWrap: "wrap",
+                      }}
+                    >
+                      <div
+                        style={{
+                          fontSize: 12,
+                          fontWeight: 800,
+                          color: weaponBroken
+                            ? "rgba(255,220,220,0.98)"
+                            : recoveredWeapon
+                              ? "rgba(255,245,220,0.98)"
+                              : "rgba(245,236,216,0.95)",
+                        }}
+                      >
+                        {weapon?.name ?? "Unarmed"}
+                      </div>
+                      {weaponBroken ? <InfoChip label="Broken" tone="warn" /> : null}
+                      {recoveredWeapon ? <InfoChip label="Recovered" tone="blessing" /> : null}
+                    </div>
+                    <div style={{ fontSize: 11, opacity: 0.76, lineHeight: 1.45 }}>
+                      {weapon ? `${weapon.category} · ${weapon.damage}` : "No weapon equipped"}
+                    </div>
+                    {weapon?.trait ? (
+                      <div
+                        style={{
+                          fontSize: 11,
+                          opacity: recoveredWeapon ? 0.82 : 0.66,
+                          lineHeight: 1.45,
+                          color: recoveredWeapon ? "rgba(255,231,174,0.90)" : undefined,
+                        }}
+                      >
+                        {weapon.trait}
+                      </div>
+                    ) : null}
                   </div>
-                ) : null}
-              </div>
 
-              <div
-                style={{
-                  padding: "9px 10px",
-                  borderRadius: 12,
-                  background: "rgba(255,255,255,0.03)",
-                  border: "1px solid rgba(255,255,255,0.05)",
-                  display: "grid",
-                  gap: 4,
-                }}
-              >
-                <div
-                  style={{
-                    fontSize: 11,
-                    opacity: 0.58,
-                    textTransform: "uppercase",
-                    letterSpacing: 0.7,
-                  }}
-                >
-                  Armor
-                </div>
-                <div
-                  style={{
-                    fontSize: 13,
-                    fontWeight: 800,
-                    color: "rgba(245,236,216,0.95)",
-                  }}
-                >
-                  {armor?.name ?? "Traveler's Clothes"}
-                </div>
-                <div style={{ fontSize: 12, opacity: 0.76, lineHeight: 1.5 }}>
-                  {armor ? `${armor.category} · AC ${armor.acBase}` : "Light civilian wear"}
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div
-            style={{
-              padding: "14px 14px 12px",
-              borderRadius: 18,
-              border: "1px solid rgba(255,255,255,0.08)",
-              background:
-                "linear-gradient(180deg, rgba(255,255,255,0.035), rgba(255,255,255,0.015))",
-              display: "grid",
-              gap: 10,
-              minWidth: 0,
-            }}
-          >
-            <div
-              style={{
-                fontSize: 11,
-                letterSpacing: 1,
-                textTransform: "uppercase",
-                opacity: 0.62,
-              }}
-            >
-              Class Features
-            </div>
-
-            {visibleFeatures.length > 0 ? (
-              <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                {visibleFeatures.map((feature) => (
-                  <span
-                    key={feature}
+                  <div
                     style={{
-                      display: "inline-flex",
-                      alignItems: "center",
-                      padding: "7px 10px",
-                      borderRadius: 999,
-                      border: "1px solid rgba(214,188,120,0.16)",
-                      background: "rgba(214,188,120,0.08)",
-                      fontSize: 12,
-                      fontWeight: 700,
-                      lineHeight: 1.2,
-                      color: "rgba(245,236,216,0.94)",
+                      padding: "8px 9px",
+                      borderRadius: 12,
+                      background: "rgba(255,255,255,0.03)",
+                      border: "1px solid rgba(255,255,255,0.05)",
+                      display: "grid",
+                      gap: 4,
                     }}
                   >
-                    {feature}
-                  </span>
-                ))}
-              </div>
-            ) : (
-              <div style={{ fontSize: 12, opacity: 0.68 }}>
-                No class features unlocked yet.
-              </div>
-            )}
-          </div>
-        </div>
+                    <div
+                      style={{
+                        fontSize: 10,
+                        opacity: 0.58,
+                        textTransform: "uppercase",
+                        letterSpacing: 0.7,
+                        lineHeight: 1,
+                      }}
+                    >
+                      Armor
+                    </div>
+                    <div
+                      style={{
+                        fontSize: 12,
+                        fontWeight: 800,
+                        color: "rgba(245,236,216,0.95)",
+                      }}
+                    >
+                      {armor?.name ?? "Traveler's Clothes"}
+                    </div>
+                    <div style={{ fontSize: 11, opacity: 0.76, lineHeight: 1.45 }}>
+                      {armor ? `${armor.category} · AC ${armor.acBase}` : "Light civilian wear"}
+                    </div>
+                  </div>
+                </div>
+              </SectionCard>
+
+              <SectionCard title="Class Features">
+                {visibleFeatures.length > 0 ? (
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                    {visibleFeatures.map((feature) => (
+                      <span
+                        key={feature}
+                        style={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          padding: "6px 9px",
+                          borderRadius: 999,
+                          border: "1px solid rgba(214,188,120,0.16)",
+                          background: "rgba(214,188,120,0.08)",
+                          fontSize: 11,
+                          fontWeight: 700,
+                          lineHeight: 1.1,
+                          color: "rgba(245,236,216,0.94)",
+                        }}
+                      >
+                        {feature}
+                      </span>
+                    ))}
+                  </div>
+                ) : (
+                  <div style={{ fontSize: 12, opacity: 0.68 }}>
+                    No class features unlocked yet.
+                  </div>
+                )}
+              </SectionCard>
+            </div>
+          </>
+        ) : null}
       </div>
     </div>
   );
