@@ -9,7 +9,121 @@ import GameplayActionColumn from "./GameplayActionColumn";
 import GameplayCombatPanel from "./GameplayCombatPanel";
 import CanonChronicleSection from "./CanonChronicleSection";
 import PressureGaugeVisual from "./puzzles/PressureGaugeVisual";
+import HeroRitualPortrait from "./hero-ritual/HeroRitualPortrait";
 import { anchorId } from "../demoUtils";
+
+function pickFirstString(...values: unknown[]): string | undefined {
+  for (const value of values) {
+    if (typeof value === "string" && value.trim()) {
+      return value.trim();
+    }
+  }
+  return undefined;
+}
+
+function resolveHeroVisualData(demo: any, member: any) {
+  const portraitType = pickFirstString(
+    member?.portrait,
+    member?.portraitType,
+    member?.selectedPortrait,
+    demo?.selectedPortrait,
+    demo?.heroPortraitType,
+    demo?.activeHeroPortraitType,
+    demo?.currentPortraitType
+  );
+
+  const imageSrc = pickFirstString(
+    member?.imageSrc,
+    member?.portraitImage,
+    member?.portraitSrc,
+    member?.heroImage,
+    member?.tokenImage,
+    demo?.heroPortraitSrc,
+    demo?.activeHeroPortraitSrc,
+    demo?.portraitImageSrc,
+    demo?.heroImageSrc,
+    demo?.currentHeroImage
+  );
+
+  const fallbackImageSrc = pickFirstString(
+    member?.fallbackImageSrc,
+    member?.fallbackPortraitSrc,
+    demo?.heroPortraitFallbackSrc,
+    demo?.portraitFallbackSrc,
+    demo?.fallbackHeroImage
+  );
+
+  const objectPosition =
+    pickFirstString(
+      member?.portraitObjectPosition,
+      demo?.heroPortraitObjectPosition,
+      demo?.portraitObjectPosition
+    ) ?? "center top";
+
+  return {
+    portraitType,
+    imageSrc,
+    fallbackImageSrc,
+    objectPosition,
+  };
+}
+
+function HeaderHeroVisual(props: {
+  demo: any;
+  hero: {
+    name: string;
+    species: string;
+    className: string;
+  };
+}) {
+  const { demo, hero } = props;
+
+  const member = demo.partyMembers?.[0] ?? null;
+  const visual = resolveHeroVisualData(demo, member);
+
+  if (visual.imageSrc && visual.portraitType) {
+    return (
+      <div
+        style={{
+          width: "100%",
+          height: "100%",
+          pointerEvents: "none",
+        }}
+      >
+        <HeroRitualPortrait
+          species={hero.species}
+          className={hero.className}
+          portrait={visual.portraitType as any}
+          imageSrc={visual.imageSrc}
+          fallbackImageSrc={visual.fallbackImageSrc}
+          alt={`${hero.name} portrait`}
+          height="100%"
+          objectPosition={visual.objectPosition}
+        />
+      </div>
+    );
+  }
+
+  const staticPortraitSrc = visual.imageSrc ?? visual.fallbackImageSrc;
+
+  if (staticPortraitSrc) {
+    return (
+      <img
+        src={staticPortraitSrc}
+        alt={`${hero.name} portrait`}
+        style={{
+          width: "100%",
+          height: "100%",
+          objectFit: "cover",
+          objectPosition: visual.objectPosition,
+          display: "block",
+        }}
+      />
+    );
+  }
+
+  return null;
+}
 
 function ProgressionBanner(props: { demo: any }) {
   const { demo } = props;
@@ -1051,6 +1165,10 @@ export default function GameplayViewport({ demo }: Props) {
     };
   }, [demo.partyMembers, demo.effectivePlayerNames, demo.progression?.hero?.level]);
 
+  const heroHeaderVisual = useMemo(() => {
+    return <HeaderHeroVisual demo={demo} hero={hero} />;
+  }, [demo, hero]);
+
   function setPressureScene() {
     demo.setGameplayFocusStep("pressure");
     demo.setActiveSection("pressure");
@@ -1141,6 +1259,7 @@ export default function GameplayViewport({ demo }: Props) {
         hpMax={hero.hpMax}
         ac={hero.ac}
         initiativeMod={hero.initiativeMod}
+        heroVisual={heroHeaderVisual}
       />
 
       <ProgressionBanner demo={demo} />
