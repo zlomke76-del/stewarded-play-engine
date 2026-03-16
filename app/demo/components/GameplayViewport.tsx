@@ -1397,21 +1397,44 @@ export default function GameplayViewport({ demo }: Props) {
         ) : null}
 
         {activeScene === "combat" ? (
-          <div id={anchorId("combat")} style={{ scrollMarginTop: 90, display: "grid", gap: 14 }}>
-            <GameplayCombatPanel demo={demo} />
-            <GameplayActionColumn
-              demo={{
-                ...demo,
-                CanonChronicleSection,
-                actionMode: "combat",
-                actionTitle: "Combat Command",
-                actionEyebrow: "Command",
-                actionDescription:
-                  "The battlefield is active. Keep action input and combat resolution in the same immediate frame.",
-              }}
-            />
-          </div>
-        ) : null}
+  <div
+    id={anchorId("combat")}
+    style={{
+      scrollMarginTop: 90,
+      display: "grid",
+      gap: 16,
+      gridTemplateRows: "auto auto",
+    }}
+  >
+    {/* Battlefield */}
+    <GameplayCombatPanel demo={demo} />
+
+    {/* Combat Command Console */}
+    <div
+      style={{
+        borderRadius: 22,
+        border: "1px solid rgba(214,188,120,0.16)",
+        background:
+          "linear-gradient(180deg, rgba(16,18,28,0.94), rgba(10,12,20,0.92))",
+        boxShadow:
+          "0 24px 60px rgba(0,0,0,0.28), inset 0 1px 0 rgba(255,255,255,0.04)",
+        padding: 14,
+      }}
+    >
+      <GameplayActionColumn
+        demo={{
+          ...demo,
+          CanonChronicleSection,
+          actionMode: "combat",
+          actionTitle: "Combat Command",
+          actionEyebrow: "Command",
+          actionDescription:
+            "The battlefield is active. Issue the hero’s command and resolve it immediately.",
+        }}
+      />
+    </div>
+  </div>
+) : null}
 
         <details
           style={{
