@@ -10,7 +10,7 @@
 // - typing remains the primary mechanic
 // - quick action buttons only assist composition
 // - fake "type here" battlefield messaging is removed
-// - options + advisory + record flow now render directly inside combat
+// - the REAL adjudication / Roll Fate panel now renders directly in combat
 //
 // Notes:
 // - preserves canon / derived combat behavior
@@ -22,6 +22,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import CardSection from "@/components/layout/CardSection";
 import CombatSetupPanel from "@/components/combat/CombatSetupPanel";
 import EnemyTurnResolverPanel from "@/components/combat/EnemyTurnResolverPanel";
+import ResolutionDraftAdvisoryPanel from "@/components/resolution/ResolutionDraftAdvisoryPanel";
 import CombatStage from "./CombatStage";
 import ActionSection from "./ActionSection";
 import { formatCombatantLabel } from "@/lib/combat/CombatState";
@@ -32,6 +33,7 @@ import {
   getEnemyDefinitionByName,
   type EnemyEncounterTheme,
 } from "@/lib/game/EnemyDatabase";
+import { inferOptionKind } from "../demoUtils";
 
 type PartyMemberLite = {
   id: string;
@@ -87,12 +89,6 @@ type ActionSurfacePartyMember = {
   initiativeMod?: number;
 };
 
-type ResolutionRecordPayload = {
-  description: string;
-  dice: { mode: any; roll: number; dc: number; source: any };
-  audit: string[];
-};
-
 type ActionSurfaceProps = {
   partyMembers: ActionSurfacePartyMember[];
   actingPlayerId: string;
@@ -102,7 +98,7 @@ type ActionSurfaceProps = {
   canSubmit: boolean;
   onSubmit: () => void;
   onPassTurn: () => void;
-  onRecord: (payload: ResolutionRecordPayload) => void;
+  onRecord: (payload: any) => void;
   options: any[] | null;
   selectedOption: any | null;
   onSetSelectedOption: (option: any | null) => void;
@@ -264,72 +260,192 @@ function titleCase(v: string) {
     .join(" ");
 }
 
-function parseMaybeNumber(value: unknown) {
-  const n = Number(value);
-  return Number.isFinite(n) ? n : null;
-}
+type HpState = {
+  hpMax: number;
+  hpCurrent: number;
+  downed: boolean;
+};
 
-function optionDescription(option: any) {
-  return (
-    String(
-      option?.description ??
-        option?.label ??
-        option?.title ??
-        option?.summary ??
-        option?.text ??
-        "Action option"
-    ).trim() || "Action option"
-  );
-}
+type EnemyRosterCard = {
+  combatantId: string;
+  enemyName: string;
+  label: string;
+  hpMax: number;
+  hpCurrent: number;
+  ac: number;
+  defeated: boolean;
+  initiativeMod: number;
+  portraitSrc: string;
+  portraitKey: string | null;
+  factionLabel: string;
+  roleLabel: string;
+  isActive: boolean;
+  isKeybearer: boolean;
+  isRelicBearer: boolean;
+  isCacheGuard: boolean;
+};
 
-function optionAuditLines(option: any) {
-  const raw =
-    option?.audit ??
-    option?.reasons ??
-    option?.notes ??
-    option?.advisory ??
-    option?.analysis ??
-    option?.rationale ??
-    [];
-  if (Array.isArray(raw)) {
-    return raw
-      .map((entry) => String(entry ?? "").trim())
-      .filter(Boolean)
-      .slice(0, 8);
+function derivePlayerHpFromCanon(args: {
+  events: readonly any[];
+  combatId: string | null;
+  partyMembers: PartyMemberLite[];
+}): Record<string, HpState> {
+  const { events, combatId, partyMembers } = args;
+
+  const base: Record<string, HpState> = {};
+  for (const m of partyMembers) {
+    const hpMax = Math.max(1, Number(m.hpMax) || 1);
+    const hpCur = clampInt(m.hpCurrent, 0, hpMax);
+    base[String(m.id)] = { hpMax, hpCurrent: hpCur, downed: hpCur <= 0 };
   }
-  if (typeof raw === "string" && raw.trim()) {
-    return [raw.trim()];
+
+  if (!combatId) return base;
+
+  for (const e of events) {
+    if (e?.type !== "COMBATANT_HP_INITIALIZED") continue;
+    const p = e?.payload ?? {};
+    if (String(p.combatId ?? "") !== String(combatId)) continue;
+
+    const id = String(p.combatantId ?? "");
+    if (!id) continue;
+
+    const hpMax = Math.max(1, Number(p.hpMax) || 1);
+    const hpCur = clampInt(p.hpCurrent, 0, hpMax);
+
+    base[id] = { hpMax, hpCurrent: hpCur, downed: hpCur <= 0 };
   }
-  return [];
+
+  for (const e of events) {
+    const t = e?.type;
+    const p = e?.payload ?? {};
+    if (!combatId || String(p.combatId ?? "") !== String(combatId)) continue;
+
+    if (t === "COMBATANT_DAMAGED") {
+      const targetId = String(p.targetCombatantId ?? "");
+      const amount = Math.max(0, Math.trunc(Number(p.amount ?? 0)));
+      if (!targetId || amount <= 0) continue;
+
+      const cur = base[targetId] ?? { hpMax: 12, hpCurrent: 12, downed: false };
+      const nextCur = Math.max(0, (Number(cur.hpCurrent) || 0) - amount);
+      base[targetId] = {
+        ...cur,
+        hpCurrent: nextCur,
+        downed: cur.downed || nextCur <= 0,
+      };
+    }
+
+    if (t === "COMBATANT_HEALED") {
+      const targetId = String(p.targetCombatantId ?? "");
+      const amount = Math.max(0, Math.trunc(Number(p.amount ?? 0)));
+      if (!targetId || amount <= 0) continue;
+
+      const cur = base[targetId] ?? { hpMax: 12, hpCurrent: 0, downed: true };
+      const max = Math.max(1, Number(cur.hpMax) || 1);
+      const nextCur = Math.min(max, (Number(cur.hpCurrent) || 0) + amount);
+      base[targetId] = { ...cur, hpCurrent: nextCur, downed: nextCur <= 0 };
+    }
+
+    if (t === "COMBATANT_DOWNED") {
+      const id = String(p.combatantId ?? "");
+      if (!id) continue;
+      const cur = base[id] ?? { hpMax: 12, hpCurrent: 0, downed: true };
+      base[id] = {
+        ...cur,
+        hpCurrent: Math.max(0, Number(cur.hpCurrent) || 0),
+        downed: true,
+      };
+    }
+  }
+
+  return base;
 }
 
-function optionSuggestedDc(option: any) {
-  return (
-    parseMaybeNumber(option?.dice?.dc) ??
-    parseMaybeNumber(option?.dc) ??
-    parseMaybeNumber(option?.difficultyClass) ??
-    parseMaybeNumber(option?.targetDc) ??
-    parseMaybeNumber(option?.resolution?.dice?.dc) ??
-    12
-  );
-}
+function deriveEnemyHpFromCanon(args: {
+  events: readonly any[];
+  combatId: string | null;
+  derivedCombat: DerivedCombatLite | null;
+}): Record<string, HpState> {
+  const { events, combatId, derivedCombat } = args;
+  const base: Record<string, HpState> = {};
 
-function optionSuggestedMode(option: any, fallback: string) {
-  return (
-    option?.dice?.mode ??
-    option?.mode ??
-    option?.resolution?.dice?.mode ??
-    fallback
-  );
-}
+  if (!combatId || !derivedCombat) return base;
 
-function optionSuggestedSource(option: any, fallback: string) {
-  return (
-    option?.dice?.source ??
-    option?.source ??
-    option?.resolution?.dice?.source ??
-    fallback
-  );
+  for (const participant of derivedCombat.participants ?? []) {
+    if (String(participant?.kind ?? "") !== "enemy_group") continue;
+
+    const combatantId = String(participant?.id ?? "").trim();
+    const enemyName = String(participant?.name ?? "").trim();
+    if (!combatantId) continue;
+
+    const def = getEnemyDefinitionByName(enemyName);
+    const hpMax = Math.max(1, Number(def?.defenses?.hp ?? 12) || 12);
+
+    base[combatantId] = {
+      hpMax,
+      hpCurrent: hpMax,
+      downed: false,
+    };
+  }
+
+  for (const e of events) {
+    if (e?.type !== "COMBATANT_HP_INITIALIZED") continue;
+    const p = e?.payload ?? {};
+    if (String(p.combatId ?? "") !== String(combatId)) continue;
+
+    const id = String(p.combatantId ?? "");
+    if (!id || !base[id]) continue;
+
+    const hpMax = Math.max(1, Number(p.hpMax) || base[id].hpMax);
+    const hpCur = clampInt(p.hpCurrent, 0, hpMax);
+
+    base[id] = { hpMax, hpCurrent: hpCur, downed: hpCur <= 0 };
+  }
+
+  for (const e of events) {
+    const t = e?.type;
+    const p = e?.payload ?? {};
+    if (String(p.combatId ?? "") !== String(combatId)) continue;
+
+    if (t === "COMBATANT_DAMAGED") {
+      const targetId = String(p.targetCombatantId ?? "");
+      const amount = Math.max(0, Math.trunc(Number(p.amount ?? 0)));
+      if (!targetId || amount <= 0 || !base[targetId]) continue;
+
+      const cur = base[targetId];
+      const nextCur = Math.max(0, cur.hpCurrent - amount);
+      base[targetId] = {
+        ...cur,
+        hpCurrent: nextCur,
+        downed: cur.downed || nextCur <= 0,
+      };
+    }
+
+    if (t === "COMBATANT_HEALED") {
+      const targetId = String(p.targetCombatantId ?? "");
+      const amount = Math.max(0, Math.trunc(Number(p.amount ?? 0)));
+      if (!targetId || amount <= 0 || !base[targetId]) continue;
+
+      const cur = base[targetId];
+      const nextCur = Math.min(cur.hpMax, cur.hpCurrent + amount);
+      base[targetId] = {
+        ...cur,
+        hpCurrent: nextCur,
+        downed: nextCur <= 0,
+      };
+    }
+
+    if (t === "COMBATANT_DOWNED") {
+      const id = String(p.combatantId ?? "");
+      if (!id || !base[id]) continue;
+      base[id] = {
+        ...base[id],
+        hpCurrent: Math.max(0, base[id].hpCurrent),
+        downed: true,
+      };
+    }
+  }
+
+  return base;
 }
 
 function inferDamageStyleFromPayload(
@@ -566,194 +682,6 @@ function renderTurnTone(args: {
   };
 }
 
-type HpState = {
-  hpMax: number;
-  hpCurrent: number;
-  downed: boolean;
-};
-
-type EnemyRosterCard = {
-  combatantId: string;
-  enemyName: string;
-  label: string;
-  hpMax: number;
-  hpCurrent: number;
-  ac: number;
-  defeated: boolean;
-  initiativeMod: number;
-  portraitSrc: string;
-  portraitKey: string | null;
-  factionLabel: string;
-  roleLabel: string;
-  isActive: boolean;
-  isKeybearer: boolean;
-  isRelicBearer: boolean;
-  isCacheGuard: boolean;
-};
-
-function derivePlayerHpFromCanon(args: {
-  events: readonly any[];
-  combatId: string | null;
-  partyMembers: PartyMemberLite[];
-}): Record<string, HpState> {
-  const { events, combatId, partyMembers } = args;
-
-  const base: Record<string, HpState> = {};
-  for (const m of partyMembers) {
-    const hpMax = Math.max(1, Number(m.hpMax) || 1);
-    const hpCur = clampInt(m.hpCurrent, 0, hpMax);
-    base[String(m.id)] = { hpMax, hpCurrent: hpCur, downed: hpCur <= 0 };
-  }
-
-  if (!combatId) return base;
-
-  for (const e of events) {
-    if (e?.type !== "COMBATANT_HP_INITIALIZED") continue;
-    const p = e?.payload ?? {};
-    if (String(p.combatId ?? "") !== String(combatId)) continue;
-
-    const id = String(p.combatantId ?? "");
-    if (!id) continue;
-
-    const hpMax = Math.max(1, Number(p.hpMax) || 1);
-    const hpCur = clampInt(p.hpCurrent, 0, hpMax);
-
-    base[id] = { hpMax, hpCurrent: hpCur, downed: hpCur <= 0 };
-  }
-
-  for (const e of events) {
-    const t = e?.type;
-    const p = e?.payload ?? {};
-    if (!combatId || String(p.combatId ?? "") !== String(combatId)) continue;
-
-    if (t === "COMBATANT_DAMAGED") {
-      const targetId = String(p.targetCombatantId ?? "");
-      const amount = Math.max(0, Math.trunc(Number(p.amount ?? 0)));
-      if (!targetId || amount <= 0) continue;
-
-      const cur = base[targetId] ?? { hpMax: 12, hpCurrent: 12, downed: false };
-      const nextCur = Math.max(0, (Number(cur.hpCurrent) || 0) - amount);
-      base[targetId] = {
-        ...cur,
-        hpCurrent: nextCur,
-        downed: cur.downed || nextCur <= 0,
-      };
-    }
-
-    if (t === "COMBATANT_HEALED") {
-      const targetId = String(p.targetCombatantId ?? "");
-      const amount = Math.max(0, Math.trunc(Number(p.amount ?? 0)));
-      if (!targetId || amount <= 0) continue;
-
-      const cur = base[targetId] ?? { hpMax: 12, hpCurrent: 0, downed: true };
-      const max = Math.max(1, Number(cur.hpMax) || 1);
-      const nextCur = Math.min(max, (Number(cur.hpCurrent) || 0) + amount);
-      base[targetId] = { ...cur, hpCurrent: nextCur, downed: nextCur <= 0 };
-    }
-
-    if (t === "COMBATANT_DOWNED") {
-      const id = String(p.combatantId ?? "");
-      if (!id) continue;
-      const cur = base[id] ?? { hpMax: 12, hpCurrent: 0, downed: true };
-      base[id] = {
-        ...cur,
-        hpCurrent: Math.max(0, Number(cur.hpCurrent) || 0),
-        downed: true,
-      };
-    }
-  }
-
-  return base;
-}
-
-function deriveEnemyHpFromCanon(args: {
-  events: readonly any[];
-  combatId: string | null;
-  derivedCombat: DerivedCombatLite | null;
-}): Record<string, HpState> {
-  const { events, combatId, derivedCombat } = args;
-  const base: Record<string, HpState> = {};
-
-  if (!combatId || !derivedCombat) return base;
-
-  for (const participant of derivedCombat.participants ?? []) {
-    if (String(participant?.kind ?? "") !== "enemy_group") continue;
-
-    const combatantId = String(participant?.id ?? "").trim();
-    const enemyName = String(participant?.name ?? "").trim();
-    if (!combatantId) continue;
-
-    const def = getEnemyDefinitionByName(enemyName);
-    const hpMax = Math.max(1, Number(def?.defenses?.hp ?? 12) || 12);
-
-    base[combatantId] = {
-      hpMax,
-      hpCurrent: hpMax,
-      downed: false,
-    };
-  }
-
-  for (const e of events) {
-    if (e?.type !== "COMBATANT_HP_INITIALIZED") continue;
-    const p = e?.payload ?? {};
-    if (String(p.combatId ?? "") !== String(combatId)) continue;
-
-    const id = String(p.combatantId ?? "");
-    if (!id || !base[id]) continue;
-
-    const hpMax = Math.max(1, Number(p.hpMax) || base[id].hpMax);
-    const hpCur = clampInt(p.hpCurrent, 0, hpMax);
-
-    base[id] = { hpMax, hpCurrent: hpCur, downed: hpCur <= 0 };
-  }
-
-  for (const e of events) {
-    const t = e?.type;
-    const p = e?.payload ?? {};
-    if (String(p.combatId ?? "") !== String(combatId)) continue;
-
-    if (t === "COMBATANT_DAMAGED") {
-      const targetId = String(p.targetCombatantId ?? "");
-      const amount = Math.max(0, Math.trunc(Number(p.amount ?? 0)));
-      if (!targetId || amount <= 0 || !base[targetId]) continue;
-
-      const cur = base[targetId];
-      const nextCur = Math.max(0, cur.hpCurrent - amount);
-      base[targetId] = {
-        ...cur,
-        hpCurrent: nextCur,
-        downed: cur.downed || nextCur <= 0,
-      };
-    }
-
-    if (t === "COMBATANT_HEALED") {
-      const targetId = String(p.targetCombatantId ?? "");
-      const amount = Math.max(0, Math.trunc(Number(p.amount ?? 0)));
-      if (!targetId || amount <= 0 || !base[targetId]) continue;
-
-      const cur = base[targetId];
-      const nextCur = Math.min(cur.hpMax, cur.hpCurrent + amount);
-      base[targetId] = {
-        ...cur,
-        hpCurrent: nextCur,
-        downed: nextCur <= 0,
-      };
-    }
-
-    if (t === "COMBATANT_DOWNED") {
-      const id = String(p.combatantId ?? "");
-      if (!id || !base[id]) continue;
-      base[id] = {
-        ...base[id],
-        hpCurrent: Math.max(0, base[id].hpCurrent),
-        downed: true,
-      };
-    }
-  }
-
-  return base;
-}
-
 function InfoPill(props: {
   label: string;
   tone?: "neutral" | "info" | "warn" | "accent";
@@ -776,6 +704,16 @@ function InfoPill(props: {
       {props.label}
     </span>
   );
+}
+
+function optionId(option: any, idx: number) {
+  const explicit = String(option?.id ?? "").trim();
+  if (explicit) return explicit;
+  return `option_${idx}_${String(option?.description ?? option?.label ?? "choice")}`;
+}
+
+function optionDescription(option: any) {
+  return String(option?.description ?? option?.label ?? "Unknown resolution path").trim();
 }
 
 export default function CombatSection({
@@ -807,9 +745,6 @@ export default function CombatSection({
   const combatId = derivedCombat?.combatId ?? null;
   const prevTelegraphKeyRef = useRef<string>("");
   const [showInspector, setShowInspector] = useState(false);
-  const [manualRoll, setManualRoll] = useState("");
-  const [manualDc, setManualDc] = useState("12");
-  const [recordError, setRecordError] = useState<string | null>(null);
 
   const playerHpById = useMemo(
     () => derivePlayerHpFromCanon({ events, combatId, partyMembers }),
@@ -862,13 +797,6 @@ export default function CombatSection({
 
     prevTelegraphKeyRef.current = key;
   }, [enemyTelegraphHint]);
-
-  useEffect(() => {
-    const nextDc = optionSuggestedDc(actionSurface.selectedOption);
-    setManualDc(String(nextDc));
-    setManualRoll("");
-    setRecordError(null);
-  }, [actionSurface.selectedOption]);
 
   const skillChipStyle: React.CSSProperties = {
     display: "inline-flex",
@@ -1046,16 +974,6 @@ export default function CombatSection({
     };
   }, [activeEnemyCard, combatEnded, isEnemyTurn]);
 
-  const selectedOptionDescription = useMemo(
-    () => optionDescription(actionSurface.selectedOption),
-    [actionSurface.selectedOption]
-  );
-
-  const selectedOptionAudit = useMemo(
-    () => optionAuditLines(actionSurface.selectedOption),
-    [actionSurface.selectedOption]
-  );
-
   function chooseTargetCombatantId(): string | null {
     const hintedName = enemyTelegraphHint?.targetName
       ? nameKey(enemyTelegraphHint.targetName)
@@ -1133,63 +1051,6 @@ export default function CombatSection({
       });
       playSfx(SFX.enemyDeath, 0.76);
     }
-  }
-
-  function handleRecordSelectedOption() {
-    if (!actionSurface.selectedOption) return;
-
-    const roll = clampInt(manualRoll, 0, 999);
-    const dc = clampInt(manualDc, 1, 999);
-
-    if (!manualRoll.trim()) {
-      setRecordError("Enter the visible d20 result before recording the outcome.");
-      return;
-    }
-
-    if (roll < 1 || roll > 20) {
-      setRecordError("Roll must be a value from 1 to 20.");
-      return;
-    }
-
-    const payload: ResolutionRecordPayload = {
-      description: selectedOptionDescription,
-      dice: {
-        mode: optionSuggestedMode(
-          actionSurface.selectedOption,
-          actionSurface.resolutionDmMode || "manual"
-        ),
-        roll,
-        dc,
-        source: optionSuggestedSource(
-          actionSurface.selectedOption,
-          actionSurface.role || "arbiter"
-        ),
-      },
-      audit: [
-        `Room: ${String(actionSurface.currentRoomTitle ?? "Unknown chamber")}`,
-        `Summary: ${String(actionSurface.roomSummary ?? "No room summary available.")}`,
-        `Injury stacks: ${Math.max(
-          0,
-          Math.trunc(Number(actionSurface.actingPlayerInjuryStacks ?? 0))
-        )}`,
-        `Roll modifier: ${Math.trunc(Number(actionSurface.actingRollModifier ?? 0))}`,
-        ...(actionSurface.resolutionCombat?.activeEnemyGroupName
-          ? [
-              `Enemy focus: ${String(actionSurface.resolutionCombat.activeEnemyGroupName)}`,
-            ]
-          : []),
-        ...(actionSurface.resolutionCombat?.attackStyleHint
-          ? [
-              `Combat hint: ${String(actionSurface.resolutionCombat.attackStyleHint)}`,
-            ]
-          : []),
-        ...selectedOptionAudit,
-      ].filter(Boolean),
-    };
-
-    setRecordError(null);
-    actionSurface.onRecord(payload);
-    setManualRoll("");
   }
 
   return (
@@ -1574,7 +1435,7 @@ export default function CombatSection({
                   opacity: 0.62,
                 }}
               >
-                Resolution Flow
+                Adjudication
               </div>
               <div
                 style={{
@@ -1583,7 +1444,7 @@ export default function CombatSection({
                   color: "rgba(228,232,240,0.78)",
                 }}
               >
-                Type your command above, click <strong>Resolve Action</strong>, choose the best interpretation below, then enter the visible d20 result and record the consequence here in combat.
+                Resolve the typed command here in combat. Choose the best interpretation, then use the real fate panel below.
               </div>
             </div>
 
@@ -1597,66 +1458,41 @@ export default function CombatSection({
                     opacity: 0.62,
                   }}
                 >
-                  Interpreted Options
+                  Resolution Paths
                 </div>
 
-                <div style={{ display: "grid", gap: 8 }}>
-                  {actionSurface.options.map((option, idx) => {
-                    const selected =
-                      actionSurface.selectedOption === option ||
-                      optionDescription(actionSurface.selectedOption) === optionDescription(option);
+                <div style={{ display: "grid", gap: 10 }}>
+                  {actionSurface.options.map((opt, idx) => {
+                    const active = actionSurface.selectedOption?.id
+                      ? actionSurface.selectedOption?.id === opt?.id
+                      : actionSurface.selectedOption === opt;
 
                     return (
                       <button
-                        key={`combat_option_${idx}_${optionDescription(option)}`}
+                        key={optionId(opt, idx)}
                         type="button"
                         onClick={() => {
                           playSfx(SFX.uiClick, 0.58);
-                          actionSurface.onSetSelectedOption(option);
+                          actionSurface.onSetSelectedOption(opt);
                         }}
                         style={{
+                          width: "100%",
                           textAlign: "left",
-                          padding: "12px 12px",
+                          padding: "13px 14px",
                           borderRadius: 14,
-                          border: selected
-                            ? "1px solid rgba(255,196,118,0.30)"
-                            : "1px solid rgba(255,255,255,0.10)",
-                          background: selected
-                            ? "linear-gradient(180deg, rgba(255,196,118,0.10), rgba(255,255,255,0.03))"
-                            : "rgba(255,255,255,0.04)",
+                          border: active
+                            ? "1px solid rgba(214,188,120,0.28)"
+                            : "1px solid rgba(255,255,255,0.08)",
+                          background: active
+                            ? "linear-gradient(180deg, rgba(214,188,120,0.10), rgba(255,255,255,0.03))"
+                            : "rgba(255,255,255,0.03)",
                           color: "inherit",
                           cursor: "pointer",
-                          display: "grid",
-                          gap: 6,
+                          lineHeight: 1.55,
+                          fontWeight: active ? 800 : 600,
                         }}
                       >
-                        <div
-                          style={{
-                            fontSize: 14,
-                            fontWeight: 800,
-                            lineHeight: 1.45,
-                            color: "rgba(245,236,216,0.96)",
-                          }}
-                        >
-                          {optionDescription(option)}
-                        </div>
-
-                        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                          <InfoPill label={`DC ${optionSuggestedDc(option)}`} tone="info" />
-                          {selected ? <InfoPill label="Selected" tone="accent" /> : null}
-                        </div>
-
-                        {optionAuditLines(option).length > 0 ? (
-                          <div
-                            style={{
-                              fontSize: 12,
-                              lineHeight: 1.55,
-                              color: "rgba(228,232,240,0.72)",
-                            }}
-                          >
-                            {optionAuditLines(option)[0]}
-                          </div>
-                        ) : null}
+                        {optionDescription(opt)}
                       </button>
                     );
                   })}
@@ -1675,244 +1511,69 @@ export default function CombatSection({
                 }}
               >
                 {actionSurface.playerInput.trim().length > 0
-                  ? "Once you click Resolve Action, the interpreted options will appear here."
-                  : "Write your command above first. The battlefield flow will continue here."}
+                  ? "Click Resolve Action above and the combat interpretations will appear here."
+                  : "Type your command above to begin the combat adjudication loop."}
               </div>
             )}
 
             {actionSurface.selectedOption ? (
-              <div
-                style={{
-                  display: "grid",
-                  gap: 12,
-                  padding: "14px",
-                  borderRadius: 16,
-                  border: "1px solid rgba(255,196,118,0.18)",
-                  background:
-                    "linear-gradient(180deg, rgba(255,196,118,0.06), rgba(0,0,0,0.22))",
-                }}
-              >
-                <div style={{ display: "grid", gap: 6 }}>
-                  <div
-                    style={{
-                      fontSize: 11,
-                      letterSpacing: 0.8,
-                      textTransform: "uppercase",
-                      opacity: 0.62,
-                    }}
-                  >
-                    Combat Resolution Advisory
-                  </div>
-
-                  <div
-                    style={{
-                      fontSize: 16,
-                      fontWeight: 900,
-                      lineHeight: 1.45,
-                      color: "rgba(245,236,216,0.96)",
-                    }}
-                  >
-                    {selectedOptionDescription}
-                  </div>
-
-                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                    <InfoPill label={`Suggested DC ${optionSuggestedDc(actionSurface.selectedOption)}`} tone="info" />
-                    <InfoPill
-                      label={`Roll Mod ${Math.trunc(
-                        Number(actionSurface.actingRollModifier ?? 0)
-                      ) >= 0
-                        ? `+${Math.trunc(Number(actionSurface.actingRollModifier ?? 0))}`
-                        : `${Math.trunc(Number(actionSurface.actingRollModifier ?? 0))}`}`}
-                      tone="accent"
-                    />
-                    <InfoPill
-                      label={`Injury ${Math.max(
-                        0,
-                        Math.trunc(Number(actionSurface.actingPlayerInjuryStacks ?? 0))
-                      )}`}
-                      tone="warn"
-                    />
-                  </div>
-                </div>
-
-                {selectedOptionAudit.length > 0 ? (
-                  <div
-                    style={{
-                      display: "grid",
-                      gap: 8,
-                      padding: "12px",
-                      borderRadius: 14,
-                      border: "1px solid rgba(255,255,255,0.08)",
-                      background: "rgba(255,255,255,0.03)",
-                    }}
-                  >
-                    <div
-                      style={{
-                        fontSize: 11,
-                        letterSpacing: 0.7,
-                        textTransform: "uppercase",
-                        opacity: 0.6,
-                      }}
-                    >
-                      Advisory Notes
-                    </div>
-
-                    <div style={{ display: "grid", gap: 6 }}>
-                      {selectedOptionAudit.map((line, idx) => (
-                        <div
-                          key={`advisory_${idx}`}
-                          style={{
-                            fontSize: 13,
-                            lineHeight: 1.55,
-                            color: "rgba(228,232,240,0.76)",
-                          }}
-                        >
-                          • {line}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                ) : null}
-
+              <div style={{ display: "grid", gap: 10 }}>
                 <div
                   style={{
-                    display: "grid",
-                    gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))",
-                    gap: 10,
+                    fontSize: 11,
+                    letterSpacing: 0.7,
+                    textTransform: "uppercase",
+                    opacity: 0.62,
                   }}
                 >
-                  <label style={{ display: "grid", gap: 6 }}>
-                    <span
-                      style={{
-                        fontSize: 11,
-                        letterSpacing: 0.6,
-                        textTransform: "uppercase",
-                        opacity: 0.62,
-                      }}
-                    >
-                      d20 Result
-                    </span>
-                    <input
-                      type="number"
-                      min={1}
-                      max={20}
-                      value={manualRoll}
-                      onChange={(e) => setManualRoll(e.target.value)}
-                      placeholder="Enter roll"
-                      style={{
-                        width: "100%",
-                        borderRadius: 12,
-                        border: "1px solid rgba(255,255,255,0.12)",
-                        background: "rgba(0,0,0,0.28)",
-                        color: "inherit",
-                        padding: "10px 12px",
-                        outline: "none",
-                      }}
-                    />
-                  </label>
-
-                  <label style={{ display: "grid", gap: 6 }}>
-                    <span
-                      style={{
-                        fontSize: 11,
-                        letterSpacing: 0.6,
-                        textTransform: "uppercase",
-                        opacity: 0.62,
-                      }}
-                    >
-                      DC
-                    </span>
-                    <input
-                      type="number"
-                      min={1}
-                      max={30}
-                      value={manualDc}
-                      onChange={(e) => setManualDc(e.target.value)}
-                      style={{
-                        width: "100%",
-                        borderRadius: 12,
-                        border: "1px solid rgba(255,255,255,0.12)",
-                        background: "rgba(0,0,0,0.28)",
-                        color: "inherit",
-                        padding: "10px 12px",
-                        outline: "none",
-                      }}
-                    />
-                  </label>
+                  Roll Fate
                 </div>
+
+                <ResolutionDraftAdvisoryPanel
+                  context={{
+                    optionDescription: actionSurface.selectedOption.description,
+                    optionKind: inferOptionKind(
+                      `${actionSurface.playerInput}\n${actionSurface.selectedOption.description}`.trim()
+                    ),
+                  }}
+                  role={actionSurface.role as any}
+                  dmMode={actionSurface.resolutionDmMode as any}
+                  setupText={`${actionSurface.playerInput}\n\nCurrent Room: ${actionSurface.currentRoomTitle}\n\n${actionSurface.roomSummary}`}
+                  movement={actionSurface.resolutionMovement}
+                  combat={actionSurface.resolutionCombat}
+                  rollModifier={actionSurface.actingRollModifier}
+                  rollModifierLabel={
+                    (actionSurface.actingPlayerInjuryStacks ?? 0) > 0
+                      ? `Injury stacks: ${actionSurface.actingPlayerInjuryStacks}`
+                      : null
+                  }
+                  onRecord={actionSurface.onRecord}
+                />
 
                 <div
                   style={{
                     display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "center",
-                    gap: 12,
+                    justifyContent: "flex-end",
+                    gap: 8,
                     flexWrap: "wrap",
                   }}
                 >
-                  <div
+                  <button
+                    type="button"
+                    onClick={() => {
+                      playSfx(SFX.uiClick, 0.56);
+                      actionSurface.onSetSelectedOption(null);
+                    }}
                     style={{
-                      fontSize: 12,
-                      lineHeight: 1.55,
-                      color: "rgba(228,232,240,0.72)",
+                      ...actionButtonStyle("secondary"),
+                      padding: "9px 12px",
+                      borderRadius: 12,
+                      fontWeight: 800,
                     }}
                   >
-                    {actionSurface.currentRoomTitle ? (
-                      <>
-                        <strong>{actionSurface.currentRoomTitle}</strong>
-                        {actionSurface.roomSummary ? ` · ${actionSurface.roomSummary}` : ""}
-                      </>
-                    ) : (
-                      "Record the visible outcome here and keep the player inside the battlefield loop."
-                    )}
-                  </div>
-
-                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        playSfx(SFX.uiClick, 0.56);
-                        actionSurface.onSetSelectedOption(null);
-                      }}
-                      style={{
-                        ...actionButtonStyle("secondary"),
-                        padding: "10px 12px",
-                        borderRadius: 12,
-                        fontWeight: 800,
-                      }}
-                    >
-                      Clear Selection
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => {
-                        playSfx(SFX.uiClick, 0.64);
-                        handleRecordSelectedOption();
-                      }}
-                      style={{
-                        ...actionButtonStyle("primary"),
-                        padding: "10px 14px",
-                        borderRadius: 12,
-                        fontWeight: 900,
-                      }}
-                    >
-                      Record Outcome
-                    </button>
-                  </div>
+                    Clear Selection
+                  </button>
                 </div>
-
-                {recordError ? (
-                  <div
-                    style={{
-                      fontSize: 12,
-                      lineHeight: 1.5,
-                      color: "rgba(255,214,214,0.94)",
-                    }}
-                  >
-                    {recordError}
-                  </div>
-                ) : null}
               </div>
             ) : null}
           </div>
