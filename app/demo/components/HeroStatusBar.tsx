@@ -24,6 +24,7 @@ type HeroWeaponSummary = {
   category: string;
   trait: string;
   damage: string;
+  broken?: boolean;
 };
 
 type HeroArmorSummary = {
@@ -96,16 +97,21 @@ function StatCard(props: {
   label: string;
   value: string;
   tone: string;
+  warning?: boolean;
 }) {
-  const { label, value, tone } = props;
+  const { label, value, tone, warning = false } = props;
 
   return (
     <div
       style={{
         padding: "11px 13px",
         borderRadius: 16,
-        border: "1px solid rgba(255,255,255,0.08)",
-        background: `linear-gradient(180deg, ${tone}, rgba(255,255,255,0.02))`,
+        border: warning
+          ? "1px solid rgba(255,132,132,0.18)"
+          : "1px solid rgba(255,255,255,0.08)",
+        background: warning
+          ? "linear-gradient(180deg, rgba(188,118,118,0.16), rgba(255,255,255,0.02))"
+          : `linear-gradient(180deg, ${tone}, rgba(255,255,255,0.02))`,
         boxShadow: "inset 0 1px 0 rgba(255,255,255,0.04)",
         display: "grid",
         gap: 4,
@@ -132,6 +138,49 @@ function StatCard(props: {
         {value}
       </div>
     </div>
+  );
+}
+
+function InfoChip(props: {
+  label: string;
+  tone?: "neutral" | "warn" | "accent";
+}) {
+  const { label, tone = "neutral" } = props;
+
+  const style =
+    tone === "warn"
+      ? {
+          border: "1px solid rgba(255,140,140,0.22)",
+          background: "rgba(255,140,140,0.10)",
+          color: "rgba(255,226,226,0.96)",
+        }
+      : tone === "accent"
+        ? {
+            border: "1px solid rgba(214,188,120,0.18)",
+            background: "rgba(214,188,120,0.08)",
+            color: "rgba(245,236,216,0.94)",
+          }
+        : {
+            border: "1px solid rgba(255,255,255,0.08)",
+            background: "rgba(255,255,255,0.04)",
+            color: "rgba(232,236,244,0.88)",
+          };
+
+  return (
+    <span
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        padding: "7px 10px",
+        borderRadius: 999,
+        fontSize: 12,
+        fontWeight: 700,
+        lineHeight: 1.2,
+        ...style,
+      }}
+    >
+      {label}
+    </span>
   );
 }
 
@@ -280,6 +329,22 @@ export default function HeroStatusBar(props: Props) {
       mod: abilityModifier(attributes[key]),
     }));
   }, [attributes]);
+
+  const weaponBroken = Boolean(weapon?.broken);
+  const attackLabel =
+    typeof attackBonus === "number"
+      ? attackBonus >= 0
+        ? `+${attackBonus}`
+        : `${attackBonus}`
+      : "—";
+
+  const hpRatio = hpMax > 0 ? hpCurrent / hpMax : 0;
+  const hpTone =
+    hpRatio <= 0.25
+      ? "rgba(188,118,118,0.18)"
+      : hpRatio <= 0.5
+        ? "rgba(214,188,120,0.14)"
+        : "rgba(118,188,132,0.12)";
 
   return (
     <div
@@ -440,6 +505,19 @@ export default function HeroStatusBar(props: Props) {
 
               <div
                 style={{
+                  display: "flex",
+                  gap: 6,
+                  flexWrap: "wrap",
+                  alignItems: "center",
+                }}
+              >
+                <InfoChip label={`Attack ${attackLabel}`} tone={weaponBroken ? "warn" : "accent"} />
+                {weaponBroken ? <InfoChip label="Weapon Broken" tone="warn" /> : null}
+                {armor?.name ? <InfoChip label={armor.name} /> : null}
+              </div>
+
+              <div
+                style={{
                   position: "relative",
                   display: "grid",
                   gap: 6,
@@ -571,10 +649,14 @@ export default function HeroStatusBar(props: Props) {
                 style={{
                   fontSize: 12,
                   lineHeight: 1.5,
-                  color: "rgba(214,188,120,0.78)",
+                  color: weaponBroken
+                    ? "rgba(255,188,188,0.86)"
+                    : "rgba(214,188,120,0.78)",
                 }}
               >
-                The Chronicle bears witness as you enter the dark.
+                {weaponBroken
+                  ? "The first victory cost steel. A better weapon must be found deeper in the dungeon."
+                  : "The Chronicle bears witness as you enter the dark."}
               </div>
             </div>
           </div>
@@ -608,7 +690,7 @@ export default function HeroStatusBar(props: Props) {
           <StatCard
             label="HP"
             value={`${hpCurrent}/${hpMax}`}
-            tone="rgba(188,118,118,0.12)"
+            tone={hpTone}
           />
           <StatCard
             label="AC"
@@ -622,14 +704,9 @@ export default function HeroStatusBar(props: Props) {
           />
           <StatCard
             label="Attack"
-            value={
-              typeof attackBonus === "number"
-                ? attackBonus >= 0
-                  ? `+${attackBonus}`
-                  : `${attackBonus}`
-                : "—"
-            }
+            value={attackLabel}
             tone="rgba(214,188,120,0.10)"
+            warning={weaponBroken}
           />
         </div>
 
@@ -801,7 +878,9 @@ export default function HeroStatusBar(props: Props) {
                 ))}
               </div>
             ) : (
-              <div style={{ fontSize: 12, opacity: 0.68 }}>No trained skills recorded.</div>
+              <div style={{ fontSize: 12, opacity: 0.68 }}>
+                No trained skills recorded.
+              </div>
             )}
           </div>
 
@@ -838,17 +917,47 @@ export default function HeroStatusBar(props: Props) {
                 style={{
                   padding: "9px 10px",
                   borderRadius: 12,
-                  background: "rgba(255,255,255,0.03)",
-                  border: "1px solid rgba(255,255,255,0.05)",
+                  background: weaponBroken
+                    ? "linear-gradient(180deg, rgba(188,118,118,0.12), rgba(255,255,255,0.03))"
+                    : "rgba(255,255,255,0.03)",
+                  border: weaponBroken
+                    ? "1px solid rgba(255,132,132,0.18)"
+                    : "1px solid rgba(255,255,255,0.05)",
                   display: "grid",
                   gap: 4,
                 }}
               >
-                <div style={{ fontSize: 11, opacity: 0.58, textTransform: "uppercase", letterSpacing: 0.7 }}>
+                <div
+                  style={{
+                    fontSize: 11,
+                    opacity: 0.58,
+                    textTransform: "uppercase",
+                    letterSpacing: 0.7,
+                  }}
+                >
                   Weapon
                 </div>
-                <div style={{ fontSize: 13, fontWeight: 800, color: "rgba(245,236,216,0.95)" }}>
-                  {weapon?.name ?? "Unarmed"}
+                <div
+                  style={{
+                    display: "flex",
+                    gap: 8,
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    flexWrap: "wrap",
+                  }}
+                >
+                  <div
+                    style={{
+                      fontSize: 13,
+                      fontWeight: 800,
+                      color: weaponBroken
+                        ? "rgba(255,220,220,0.98)"
+                        : "rgba(245,236,216,0.95)",
+                    }}
+                  >
+                    {weapon?.name ?? "Unarmed"}
+                  </div>
+                  {weaponBroken ? <InfoChip label="Broken" tone="warn" /> : null}
                 </div>
                 <div style={{ fontSize: 12, opacity: 0.76, lineHeight: 1.5 }}>
                   {weapon ? `${weapon.category} · ${weapon.damage}` : "No weapon equipped"}
@@ -870,10 +979,23 @@ export default function HeroStatusBar(props: Props) {
                   gap: 4,
                 }}
               >
-                <div style={{ fontSize: 11, opacity: 0.58, textTransform: "uppercase", letterSpacing: 0.7 }}>
+                <div
+                  style={{
+                    fontSize: 11,
+                    opacity: 0.58,
+                    textTransform: "uppercase",
+                    letterSpacing: 0.7,
+                  }}
+                >
                   Armor
                 </div>
-                <div style={{ fontSize: 13, fontWeight: 800, color: "rgba(245,236,216,0.95)" }}>
+                <div
+                  style={{
+                    fontSize: 13,
+                    fontWeight: 800,
+                    color: "rgba(245,236,216,0.95)",
+                  }}
+                >
                   {armor?.name ?? "Traveler's Clothes"}
                 </div>
                 <div style={{ fontSize: 12, opacity: 0.76, lineHeight: 1.5 }}>
