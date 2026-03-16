@@ -112,11 +112,11 @@ type ActionSurfaceProps = {
     to?: { x: number; y: number } | null;
     direction?: "north" | "south" | "east" | "west" | "none" | null;
   } | null;
-  resolutionCombat?: {
-    activeEnemyGroupName?: string | null;
-    isEnemyTurn?: boolean;
-    attackStyleHint?: string | null;
-  } | null;
+   resolutionCombat?: {
+     activeEnemyGroupName?: string | null;
+     isEnemyTurn?: boolean;
+     attackStyleHint?: "volley" | "beam" | "charge" | "unknown";
+   } | null;
   actingRollModifier?: number;
   actingPlayerInjuryStacks?: number;
   title?: string;
@@ -1540,7 +1540,15 @@ export default function CombatSection({
                   dmMode={actionSurface.resolutionDmMode as any}
                   setupText={`${actionSurface.playerInput}\n\nCurrent Room: ${actionSurface.currentRoomTitle}\n\n${actionSurface.roomSummary}`}
                   movement={actionSurface.resolutionMovement}
-                  combat={actionSurface.resolutionCombat}
+                  combat={
+                    actionSurface.resolutionCombat
+                      ? {
+                        ...actionSurface.resolutionCombat,
+                        attackStyleHint:
+                          actionSurface.resolutionCombat.attackStyleHint ?? undefined,
+                      }
+                    : null
+                }
                   rollModifier={actionSurface.actingRollModifier}
                   rollModifierLabel={
                     (actionSurface.actingPlayerInjuryStacks ?? 0) > 0
