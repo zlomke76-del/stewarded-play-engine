@@ -10,7 +10,6 @@ import GameplayActionColumn from "./GameplayActionColumn";
 import GameplayCombatPanel from "./GameplayCombatPanel";
 import CanonChronicleSection from "./CanonChronicleSection";
 import PressureGaugeVisual from "./puzzles/PressureGaugeVisual";
-import HeroRitualPortrait from "./hero-ritual/HeroRitualPortrait";
 import { anchorId } from "../demoUtils";
 
 function HeaderHeroVisual(props: {
@@ -24,25 +23,41 @@ function HeaderHeroVisual(props: {
   const { hero } = props;
 
   const imageSrc = getPortraitPath(hero.species, hero.className, hero.portrait);
-  const fallbackImageSrc = getPortraitPath("Human", "Warrior", hero.portrait);
 
   return (
     <div
       style={{
         width: "100%",
         height: "100%",
-        pointerEvents: "none",
+        overflow: "hidden",
+        borderRadius: 12,
+        position: "relative",
+        background:
+          "radial-gradient(circle at 50% 24%, rgba(255,196,118,0.16), rgba(255,255,255,0.02) 40%, rgba(0,0,0,0.12) 100%)",
       }}
     >
-      <HeroRitualPortrait
-        species={hero.species}
-        className={hero.className}
-        portrait={hero.portrait}
-        imageSrc={imageSrc}
-        fallbackImageSrc={fallbackImageSrc}
+      <img
+        src={imageSrc}
         alt={`${hero.name} portrait`}
-        height="100%"
-        objectPosition="center top"
+        style={{
+          width: "100%",
+          height: "100%",
+          objectFit: "cover",
+          objectPosition: "center top",
+          display: "block",
+          filter: "contrast(1.06) brightness(1.08) saturate(1.02)",
+          transform: "scale(1.03)",
+        }}
+      />
+      <div
+        aria-hidden
+        style={{
+          position: "absolute",
+          inset: 0,
+          background:
+            "linear-gradient(180deg, rgba(255,255,255,0.04), rgba(0,0,0,0.08) 40%, rgba(0,0,0,0.22) 100%)",
+          pointerEvents: "none",
+        }}
       />
     </div>
   );
