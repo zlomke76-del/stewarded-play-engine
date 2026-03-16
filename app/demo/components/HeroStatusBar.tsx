@@ -2,6 +2,36 @@
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
+type HeroAttributeKey =
+  | "strength"
+  | "dexterity"
+  | "constitution"
+  | "intelligence"
+  | "wisdom"
+  | "charisma";
+
+type HeroAttributes = Record<HeroAttributeKey, number>;
+
+type HeroSkill = {
+  id: string;
+  label: string;
+  value: number;
+  attribute: HeroAttributeKey;
+};
+
+type HeroWeaponSummary = {
+  name: string;
+  category: string;
+  trait: string;
+  damage: string;
+};
+
+type HeroArmorSummary = {
+  name: string;
+  category: string;
+  acBase: number;
+};
+
 type Props = {
   heroName: string;
   species: string;
@@ -15,6 +45,12 @@ type Props = {
   heroPortraitSrc?: string;
   xpCurrent?: number;
   xpToNextLevel?: number;
+  attributes?: HeroAttributes;
+  skills?: HeroSkill[];
+  classFeatures?: string[];
+  weapon?: HeroWeaponSummary | null;
+  armor?: HeroArmorSummary | null;
+  attackBonus?: number;
 };
 
 type HeroXpGainDetail = {
@@ -36,11 +72,67 @@ function getHeroInitials(heroName: string) {
 
 function getDefaultXpToNextLevel(level: number) {
   const safeLevel = Math.max(1, Number(level) || 1);
-  return 100 + (safeLevel - 1) * 25;
+  return 100 + (safeLevel - 1) * 50;
 }
 
 function clamp01(value: number) {
   return Math.max(0, Math.min(1, value));
+}
+
+function attributeAbbrev(key: HeroAttributeKey) {
+  if (key === "strength") return "STR";
+  if (key === "dexterity") return "DEX";
+  if (key === "constitution") return "CON";
+  if (key === "intelligence") return "INT";
+  if (key === "wisdom") return "WIS";
+  return "CHA";
+}
+
+function abilityModifier(score: number) {
+  return Math.floor((Number(score || 0) - 10) / 2);
+}
+
+function StatCard(props: {
+  label: string;
+  value: string;
+  tone: string;
+}) {
+  const { label, value, tone } = props;
+
+  return (
+    <div
+      style={{
+        padding: "11px 13px",
+        borderRadius: 16,
+        border: "1px solid rgba(255,255,255,0.08)",
+        background: `linear-gradient(180deg, ${tone}, rgba(255,255,255,0.02))`,
+        boxShadow: "inset 0 1px 0 rgba(255,255,255,0.04)",
+        display: "grid",
+        gap: 4,
+      }}
+    >
+      <div
+        style={{
+          fontSize: 11,
+          letterSpacing: 0.8,
+          textTransform: "uppercase",
+          opacity: 0.58,
+        }}
+      >
+        {label}
+      </div>
+      <div
+        style={{
+          fontSize: 20,
+          fontWeight: 900,
+          lineHeight: 1,
+          color: "rgba(245,236,216,0.97)",
+        }}
+      >
+        {value}
+      </div>
+    </div>
+  );
 }
 
 export default function HeroStatusBar(props: Props) {
@@ -57,6 +149,12 @@ export default function HeroStatusBar(props: Props) {
     heroPortraitSrc,
     xpCurrent,
     xpToNextLevel,
+    attributes,
+    skills = [],
+    classFeatures = [],
+    weapon,
+    armor,
+    attackBonus,
   } = props;
 
   const heroInitials = getHeroInitials(heroName);
@@ -157,6 +255,31 @@ export default function HeroStatusBar(props: Props) {
   }, [resolvedXpToNextLevel]);
 
   const xpProgress = clamp01(displayXp / resolvedXpToNextLevel);
+
+  const sortedSkills = useMemo(() => {
+    return [...skills].sort((a, b) => b.value - a.value).slice(0, 6);
+  }, [skills]);
+
+  const visibleFeatures = classFeatures.slice(0, 4);
+
+  const attributeRows = useMemo(() => {
+    if (!attributes) return [];
+    return (
+      [
+        "strength",
+        "dexterity",
+        "constitution",
+        "intelligence",
+        "wisdom",
+        "charisma",
+      ] as HeroAttributeKey[]
+    ).map((key) => ({
+      key,
+      label: attributeAbbrev(key),
+      value: attributes[key],
+      mod: abilityModifier(attributes[key]),
+    }));
+  }, [attributes]);
 
   return (
     <div
@@ -340,7 +463,7 @@ export default function HeroStatusBar(props: Props) {
                       color: "rgba(214,188,120,0.78)",
                     }}
                   >
-                    Progress to Level {displayLevel + 1}
+                    Progress to Level {Math.min(displayLevel + 1, 30)}
                   </div>
 
                   <div
@@ -482,62 +605,335 @@ export default function HeroStatusBar(props: Props) {
             gap: 10,
           }}
         >
-          {[
-            {
-              label: "HP",
-              value: `${hpCurrent}/${hpMax}`,
-              tone: "rgba(188,118,118,0.12)",
-            },
-            {
-              label: "AC",
-              value: String(ac),
-              tone: "rgba(126,150,196,0.12)",
-            },
-            {
-              label: "Initiative",
-              value: initiativeMod >= 0 ? `+${initiativeMod}` : `${initiativeMod}`,
-              tone: "rgba(118,188,132,0.12)",
-            },
-            {
-              label: "Role",
-              value: className,
-              tone: "rgba(214,188,120,0.10)",
-            },
-          ].map((item) => (
+          <StatCard
+            label="HP"
+            value={`${hpCurrent}/${hpMax}`}
+            tone="rgba(188,118,118,0.12)"
+          />
+          <StatCard
+            label="AC"
+            value={String(ac)}
+            tone="rgba(126,150,196,0.12)"
+          />
+          <StatCard
+            label="Initiative"
+            value={initiativeMod >= 0 ? `+${initiativeMod}` : `${initiativeMod}`}
+            tone="rgba(118,188,132,0.12)"
+          />
+          <StatCard
+            label="Attack"
+            value={
+              typeof attackBonus === "number"
+                ? attackBonus >= 0
+                  ? `+${attackBonus}`
+                  : `${attackBonus}`
+                : "—"
+            }
+            tone="rgba(214,188,120,0.10)"
+          />
+        </div>
+
+        {attributeRows.length > 0 ? (
+          <div
+            style={{
+              padding: "14px 14px 12px",
+              borderRadius: 18,
+              border: "1px solid rgba(255,255,255,0.08)",
+              background:
+                "linear-gradient(180deg, rgba(255,255,255,0.035), rgba(255,255,255,0.015))",
+              display: "grid",
+              gap: 10,
+            }}
+          >
             <div
-              key={item.label}
               style={{
-                padding: "11px 13px",
-                borderRadius: 16,
-                border: "1px solid rgba(255,255,255,0.08)",
-                background: `linear-gradient(180deg, ${item.tone}, rgba(255,255,255,0.02))`,
-                boxShadow: "inset 0 1px 0 rgba(255,255,255,0.04)",
+                fontSize: 11,
+                letterSpacing: 1,
+                textTransform: "uppercase",
+                opacity: 0.62,
+              }}
+            >
+              Attributes
+            </div>
+
+            <div
+              style={{
                 display: "grid",
-                gap: 4,
+                gridTemplateColumns: "repeat(auto-fit, minmax(110px, 1fr))",
+                gap: 8,
+              }}
+            >
+              {attributeRows.map((item) => (
+                <div
+                  key={item.key}
+                  style={{
+                    padding: "10px 11px",
+                    borderRadius: 14,
+                    border: "1px solid rgba(255,255,255,0.06)",
+                    background: "rgba(255,255,255,0.03)",
+                    display: "grid",
+                    gap: 5,
+                  }}
+                >
+                  <div
+                    style={{
+                      fontSize: 11,
+                      letterSpacing: 0.8,
+                      textTransform: "uppercase",
+                      opacity: 0.6,
+                    }}
+                  >
+                    {item.label}
+                  </div>
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      gap: 8,
+                      alignItems: "baseline",
+                    }}
+                  >
+                    <div
+                      style={{
+                        fontSize: 20,
+                        fontWeight: 900,
+                        lineHeight: 1,
+                        color: "rgba(245,236,216,0.97)",
+                      }}
+                    >
+                      {item.value}
+                    </div>
+                    <div
+                      style={{
+                        fontSize: 12,
+                        lineHeight: 1,
+                        color: "rgba(226,230,238,0.74)",
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      {item.mod >= 0 ? `+${item.mod}` : `${item.mod}`}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : null}
+
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 1fr)",
+            gap: 10,
+          }}
+        >
+          <div
+            style={{
+              padding: "14px 14px 12px",
+              borderRadius: 18,
+              border: "1px solid rgba(255,255,255,0.08)",
+              background:
+                "linear-gradient(180deg, rgba(255,255,255,0.035), rgba(255,255,255,0.015))",
+              display: "grid",
+              gap: 10,
+              minWidth: 0,
+            }}
+          >
+            <div
+              style={{
+                fontSize: 11,
+                letterSpacing: 1,
+                textTransform: "uppercase",
+                opacity: 0.62,
+              }}
+            >
+              Skills
+            </div>
+
+            {sortedSkills.length > 0 ? (
+              <div style={{ display: "grid", gap: 7 }}>
+                {sortedSkills.map((skill) => (
+                  <div
+                    key={skill.id}
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                      gap: 12,
+                      padding: "8px 10px",
+                      borderRadius: 12,
+                      background: "rgba(255,255,255,0.03)",
+                      border: "1px solid rgba(255,255,255,0.05)",
+                    }}
+                  >
+                    <div style={{ minWidth: 0 }}>
+                      <div
+                        style={{
+                          fontSize: 13,
+                          fontWeight: 700,
+                          color: "rgba(245,236,216,0.95)",
+                        }}
+                      >
+                        {skill.label}
+                      </div>
+                      <div
+                        style={{
+                          fontSize: 11,
+                          opacity: 0.56,
+                          textTransform: "uppercase",
+                          letterSpacing: 0.7,
+                        }}
+                      >
+                        {attributeAbbrev(skill.attribute)}
+                      </div>
+                    </div>
+                    <div
+                      style={{
+                        fontSize: 13,
+                        fontWeight: 900,
+                        whiteSpace: "nowrap",
+                        color: "rgba(232,236,244,0.88)",
+                      }}
+                    >
+                      {skill.value >= 0 ? `+${skill.value}` : `${skill.value}`}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div style={{ fontSize: 12, opacity: 0.68 }}>No trained skills recorded.</div>
+            )}
+          </div>
+
+          <div
+            style={{
+              padding: "14px 14px 12px",
+              borderRadius: 18,
+              border: "1px solid rgba(255,255,255,0.08)",
+              background:
+                "linear-gradient(180deg, rgba(255,255,255,0.035), rgba(255,255,255,0.015))",
+              display: "grid",
+              gap: 10,
+              minWidth: 0,
+            }}
+          >
+            <div
+              style={{
+                fontSize: 11,
+                letterSpacing: 1,
+                textTransform: "uppercase",
+                opacity: 0.62,
+              }}
+            >
+              Equipment
+            </div>
+
+            <div
+              style={{
+                display: "grid",
+                gap: 8,
               }}
             >
               <div
                 style={{
-                  fontSize: 11,
-                  letterSpacing: 0.8,
-                  textTransform: "uppercase",
-                  opacity: 0.58,
+                  padding: "9px 10px",
+                  borderRadius: 12,
+                  background: "rgba(255,255,255,0.03)",
+                  border: "1px solid rgba(255,255,255,0.05)",
+                  display: "grid",
+                  gap: 4,
                 }}
               >
-                {item.label}
+                <div style={{ fontSize: 11, opacity: 0.58, textTransform: "uppercase", letterSpacing: 0.7 }}>
+                  Weapon
+                </div>
+                <div style={{ fontSize: 13, fontWeight: 800, color: "rgba(245,236,216,0.95)" }}>
+                  {weapon?.name ?? "Unarmed"}
+                </div>
+                <div style={{ fontSize: 12, opacity: 0.76, lineHeight: 1.5 }}>
+                  {weapon ? `${weapon.category} · ${weapon.damage}` : "No weapon equipped"}
+                </div>
+                {weapon?.trait ? (
+                  <div style={{ fontSize: 12, opacity: 0.66, lineHeight: 1.45 }}>
+                    {weapon.trait}
+                  </div>
+                ) : null}
               </div>
+
               <div
                 style={{
-                  fontSize: 20,
-                  fontWeight: 900,
-                  lineHeight: 1,
-                  color: "rgba(245,236,216,0.97)",
+                  padding: "9px 10px",
+                  borderRadius: 12,
+                  background: "rgba(255,255,255,0.03)",
+                  border: "1px solid rgba(255,255,255,0.05)",
+                  display: "grid",
+                  gap: 4,
                 }}
               >
-                {item.value}
+                <div style={{ fontSize: 11, opacity: 0.58, textTransform: "uppercase", letterSpacing: 0.7 }}>
+                  Armor
+                </div>
+                <div style={{ fontSize: 13, fontWeight: 800, color: "rgba(245,236,216,0.95)" }}>
+                  {armor?.name ?? "Traveler's Clothes"}
+                </div>
+                <div style={{ fontSize: 12, opacity: 0.76, lineHeight: 1.5 }}>
+                  {armor ? `${armor.category} · AC ${armor.acBase}` : "Light civilian wear"}
+                </div>
               </div>
             </div>
-          ))}
+          </div>
+
+          <div
+            style={{
+              padding: "14px 14px 12px",
+              borderRadius: 18,
+              border: "1px solid rgba(255,255,255,0.08)",
+              background:
+                "linear-gradient(180deg, rgba(255,255,255,0.035), rgba(255,255,255,0.015))",
+              display: "grid",
+              gap: 10,
+              minWidth: 0,
+            }}
+          >
+            <div
+              style={{
+                fontSize: 11,
+                letterSpacing: 1,
+                textTransform: "uppercase",
+                opacity: 0.62,
+              }}
+            >
+              Class Features
+            </div>
+
+            {visibleFeatures.length > 0 ? (
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                {visibleFeatures.map((feature) => (
+                  <span
+                    key={feature}
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      padding: "7px 10px",
+                      borderRadius: 999,
+                      border: "1px solid rgba(214,188,120,0.16)",
+                      background: "rgba(214,188,120,0.08)",
+                      fontSize: 12,
+                      fontWeight: 700,
+                      lineHeight: 1.2,
+                      color: "rgba(245,236,216,0.94)",
+                    }}
+                  >
+                    {feature}
+                  </span>
+                ))}
+              </div>
+            ) : (
+              <div style={{ fontSize: 12, opacity: 0.68 }}>
+                No class features unlocked yet.
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </div>
