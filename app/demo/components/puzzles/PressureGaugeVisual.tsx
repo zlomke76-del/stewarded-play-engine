@@ -89,6 +89,8 @@ const SFX = {
   gateOpen: "/assets/audio/Puzzles/Pressure_Plates/sfx_stone_gate_rumble_open.mp3",
 } as const;
 
+const HERO_STATUS_XP_TARGET_ID = "eof-active-hero-xp-target";
+
 type AudioMap = Record<keyof typeof SFX, HTMLAudioElement>;
 
 function clampGauge(value: number) {
@@ -176,6 +178,68 @@ function plateStatusLabel(args: {
   return status === "failed" ? "Rejecting" : "Idle";
 }
 
+function animateXpTransfer(args: { fromRect: DOMRect; toRect: DOMRect; xp: number }) {
+  const { fromRect, toRect, xp } = args;
+
+  const orb = document.createElement("div");
+  orb.setAttribute("data-eof-xp-orb", "true");
+  orb.textContent = `+${xp}`;
+
+  const startLeft = fromRect.left + fromRect.width / 2;
+  const startTop = fromRect.top + fromRect.height / 2;
+  const endLeft = toRect.left + Math.min(toRect.width * 0.78, toRect.width - 28);
+  const endTop = toRect.top + Math.min(toRect.height * 0.28, toRect.height - 24);
+
+  Object.assign(orb.style, {
+    position: "fixed",
+    left: `${startLeft}px`,
+    top: `${startTop}px`,
+    transform: "translate(-50%, -50%) scale(0.94)",
+    padding: "8px 12px",
+    borderRadius: "999px",
+    border: "1px solid rgba(255,220,148,0.28)",
+    background:
+      "radial-gradient(circle at 30% 30%, rgba(255,244,220,0.98), rgba(255,210,120,0.98) 48%, rgba(194,122,36,0.98) 100%)",
+    color: "rgba(54,26,6,0.96)",
+    fontSize: "12px",
+    fontWeight: "900",
+    letterSpacing: "0.3px",
+    boxShadow:
+      "0 0 0 1px rgba(255,244,220,0.16), 0 0 18px rgba(255,210,120,0.38), 0 12px 30px rgba(0,0,0,0.28)",
+    zIndex: "9999",
+    pointerEvents: "none",
+    opacity: "0",
+    transition:
+      "left 900ms cubic-bezier(0.22, 1, 0.36, 1), top 900ms cubic-bezier(0.22, 1, 0.36, 1), transform 900ms cubic-bezier(0.22, 1, 0.36, 1), opacity 180ms ease",
+  } as CSSStyleDeclaration);
+
+  document.body.appendChild(orb);
+
+  window.requestAnimationFrame(() => {
+    orb.style.opacity = "1";
+    orb.style.left = `${endLeft}px`;
+    orb.style.top = `${endTop}px`;
+    orb.style.transform = "translate(-50%, -50%) scale(0.78)";
+  });
+
+  window.setTimeout(() => {
+    window.dispatchEvent(
+      new CustomEvent("eof:hero-xp-gain", {
+        detail: { xp },
+      })
+    );
+  }, 760);
+
+  window.setTimeout(() => {
+    orb.style.opacity = "0";
+    orb.style.transform = "translate(-50%, -50%) scale(0.64)";
+  }, 940);
+
+  window.setTimeout(() => {
+    orb.remove();
+  }, 1240);
+}
+
 export default function PressureGaugeVisual(props: Props) {
   const {
     currentRoomTitle,
@@ -204,6 +268,8 @@ export default function PressureGaugeVisual(props: Props) {
   const audioRef = useRef<AudioMap | null>(null);
   const audioUnlockedRef = useRef(false);
   const solvedCallbackFiredRef = useRef(false);
+  const xpBadgeRef = useRef<HTMLDivElement | null>(null);
+  const xpTransferFiredRef = useRef(false);
 
   const victoryOpen = Boolean(victoryState?.isOpen);
 
@@ -255,6 +321,33 @@ export default function PressureGaugeVisual(props: Props) {
       );
     }
   }, [puzzleResult]);
+
+  useEffect(() => {
+    if (!victoryOpen) {
+      xpTransferFiredRef.current = false;
+      return;
+    }
+
+    if (xpTransferFiredRef.current) return;
+
+    const xp = Math.max(0, Number(victoryState?.xpGranted ?? 25) || 25);
+    if (!xpBadgeRef.current) return;
+
+    const target = document.querySelector(
+      `[data-eof-hero-xp-target="${HERO_STATUS_XP_TARGET_ID}"]`
+    ) as HTMLElement | null;
+
+    if (!target) return;
+
+    xpTransferFiredRef.current = true;
+
+    const fromRect = xpBadgeRef.current.getBoundingClientRect();
+    const toRect = target.getBoundingClientRect();
+
+    window.setTimeout(() => {
+      animateXpTransfer({ fromRect, toRect, xp });
+    }, 420);
+  }, [victoryOpen, victoryState?.xpGranted]);
 
   async function fireSolvedCallback() {
     if (solvedCallbackFiredRef.current) return;
@@ -737,11 +830,11 @@ export default function PressureGaugeVisual(props: Props) {
                       : glowState === "active"
                         ? "drop-shadow(0 0 10px rgba(255,230,170,0.24))"
                         : "drop-shadow(0 8px 18px rgba(0,0,0,0.30))",
-                          transform:
-                      transientPressed || persistentActive
-                        ? "translateY(4px) scale(0.985) rotate(45deg)"
-                        : "translateY(0) scale(1) rotate(45deg)",
-                      transition:
+                  transform:
+                    transientPressed || persistentActive
+                      ? "translateY(4px) scale(0.985) rotate(45deg)"
+                      : "translateY(0) scale(1) rotate(45deg)",
+                  transition:
                     "transform 90ms ease, filter 90ms ease, opacity 90ms ease",
                 }}
               />
@@ -881,6 +974,7 @@ export default function PressureGaugeVisual(props: Props) {
             </div>
 
             <div
+              ref={xpBadgeRef}
               style={{
                 display: "inline-flex",
                 justifySelf: "start",
@@ -893,6 +987,7 @@ export default function PressureGaugeVisual(props: Props) {
                 color: "rgba(245,236,216,0.98)",
                 fontWeight: 900,
                 fontSize: 14,
+                boxShadow: "0 8px 20px rgba(0,0,0,0.20)",
               }}
             >
               <span>+{victoryState?.xpGranted ?? 25} XP</span>
