@@ -5,8 +5,11 @@
 // ------------------------------------------------------------
 // Player-facing combat surface for Echoes of Fate.
 //
-// This version removes duplicate battlefield wrappers so the
-// arena is immediately visible and remains the focal point.
+// Combat cockpit goals:
+// - battlefield always renders first and stays visible
+// - command sits immediately below the battlefield
+// - adjudication stays tightly coupled to command
+// - supporting systems remain collapsed by default
 // ------------------------------------------------------------
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
@@ -469,9 +472,9 @@ function computeDeterministicDamage(args: {
   dc: number;
   style: "volley" | "beam" | "charge" | "unknown";
 }) {
-  const roll = Math.trunc(Number(args.roll) || 0);
-  const dc = Math.trunc(Number(args.dc) || 0);
-  const margin = roll - dc;
+  const rollValue = Math.trunc(Number(args.roll) || 0);
+  const dcValue = Math.trunc(Number(args.dc) || 0);
+  const margin = rollValue - dcValue;
 
   const base =
     args.style === "beam"
@@ -668,8 +671,8 @@ function OpeningCombatPrompt(props: {
       style={{
         display: "grid",
         gap: 6,
-        padding: "12px 14px",
-        borderRadius: 16,
+        padding: "10px 12px",
+        borderRadius: 14,
         border: "1px solid rgba(255,255,255,0.10)",
         background: "linear-gradient(180deg, rgba(255,255,255,0.04), rgba(0,0,0,0.20))",
       }}
@@ -689,7 +692,7 @@ function OpeningCombatPrompt(props: {
         <div
           style={{
             fontSize: 13,
-            lineHeight: 1.6,
+            lineHeight: 1.55,
             color: "rgba(232,236,244,0.88)",
           }}
         >
@@ -702,7 +705,7 @@ function OpeningCombatPrompt(props: {
         <div
           style={{
             fontSize: 13,
-            lineHeight: 1.6,
+            lineHeight: 1.55,
             color: "rgba(255,215,168,0.96)",
             fontWeight: 700,
           }}
@@ -777,8 +780,8 @@ export default function CombatSection({
   }, [activeCombatantSpec]);
 
   const telegraphTargetKey = useMemo(() => {
-    const t = enemyTelegraphHint?.targetName ? nameKey(enemyTelegraphHint.targetName) : "";
-    return t || null;
+    const targetName = enemyTelegraphHint?.targetName ? nameKey(enemyTelegraphHint.targetName) : "";
+    return targetName || null;
   }, [enemyTelegraphHint?.targetName]);
 
   useEffect(() => {
@@ -914,14 +917,15 @@ export default function CombatSection({
 
     const hpState = playerHpById[String(preferred.id)];
     const downed = hpState ? hpState.downed : (Number(preferred.hpCurrent) || 0) <= 0;
+    const src = portraitSrcFor(preferred);
 
     return {
       name: preferred.name || "Hero",
       species: getResolvedSpecies(preferred),
       className: getResolvedClass(preferred),
       portrait: preferred.portrait,
-      imageSrc: portraitSrcFor(preferred),
-      fallbackImageSrc: portraitSrcFor(preferred),
+      imageSrc: src,
+      fallbackImageSrc: src,
       modelSrc: null,
       hpCurrent: hpState?.hpCurrent ?? preferred.hpCurrent,
       hpMax: hpState?.hpMax ?? preferred.hpMax,
@@ -973,9 +977,9 @@ export default function CombatSection({
 
     if (!combatId) return;
 
-    const roll = Math.trunc(Number(payload?.dice?.roll ?? 0));
-    const dc = Math.trunc(Number(payload?.dice?.dc ?? 0));
-    const hit = Number.isFinite(roll) && Number.isFinite(dc) ? roll >= dc : false;
+    const rollValue = Math.trunc(Number(payload?.dice?.roll ?? 0));
+    const dcValue = Math.trunc(Number(payload?.dice?.dc ?? 0));
+    const hit = Number.isFinite(rollValue) && Number.isFinite(dcValue) ? rollValue >= dcValue : false;
     if (!hit) return;
 
     const styleFromTelegraph =
@@ -994,7 +998,7 @@ export default function CombatSection({
     const targetCombatantId = chooseTargetCombatantId();
     if (!targetCombatantId) return;
 
-    const amount = computeDeterministicDamage({ roll, dc, style });
+    const amount = computeDeterministicDamage({ roll: rollValue, dc: dcValue, style });
 
     onAppendCanon("COMBATANT_DAMAGED", {
       combatId,
@@ -1032,26 +1036,37 @@ export default function CombatSection({
       <div
         style={{
           display: "grid",
-          gap: 12,
-          padding: "0",
+          gap: 10,
+          padding: 0,
+          minHeight: 0,
+          alignContent: "start",
         }}
       >
-        <CombatStage
-          hero={stageHero}
-          enemy={stageEnemy}
-          battlefieldImageSrc={null}
-          isEnemyTurn={isEnemyTurn}
-          combatEnded={combatEnded}
-          telegraphHint={
-            enemyTelegraphHint
-              ? {
-                  attackStyleHint: enemyTelegraphHint.attackStyleHint,
-                  targetName: enemyTelegraphHint.targetName,
-                }
-              : null
-          }
-          height={560}
-        />
+        <div
+          style={{
+            minHeight: 280,
+            height: "clamp(280px, 42vh, 390px)",
+            maxHeight: "42vh",
+            minWidth: 0,
+          }}
+        >
+          <CombatStage
+            hero={stageHero}
+            enemy={stageEnemy}
+            battlefieldImageSrc={null}
+            isEnemyTurn={isEnemyTurn}
+            combatEnded={combatEnded}
+            telegraphHint={
+              enemyTelegraphHint
+                ? {
+                    attackStyleHint: enemyTelegraphHint.attackStyleHint,
+                    targetName: enemyTelegraphHint.targetName,
+                  }
+                : null
+            }
+            height={360}
+          />
+        </div>
 
         <div
           style={{
