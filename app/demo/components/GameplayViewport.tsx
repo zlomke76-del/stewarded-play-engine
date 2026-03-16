@@ -10,6 +10,7 @@ import GameplayActionColumn from "./GameplayActionColumn";
 import GameplayCombatPanel from "./GameplayCombatPanel";
 import CanonChronicleSection from "./CanonChronicleSection";
 import PressureGaugeVisual from "./puzzles/PressureGaugeVisual";
+import HeroRitualPortrait from "./hero-ritual/HeroRitualPortrait";
 import { anchorId } from "../demoUtils";
 
 function HeaderHeroVisual(props: {
@@ -22,7 +23,7 @@ function HeaderHeroVisual(props: {
 }) {
   const { hero } = props;
 
-  const imageSrc = getPortraitPath(hero.species, hero.className, hero.portrait);
+  const fallbackImageSrc = getPortraitPath("Human", "Warrior", hero.portrait);
 
   return (
     <div
@@ -33,30 +34,30 @@ function HeaderHeroVisual(props: {
         borderRadius: 12,
         position: "relative",
         background:
-          "radial-gradient(circle at 50% 24%, rgba(255,196,118,0.16), rgba(255,255,255,0.02) 40%, rgba(0,0,0,0.12) 100%)",
+          "radial-gradient(circle at 50% 24%, rgba(255,196,118,0.14), rgba(255,255,255,0.02) 40%, rgba(0,0,0,0.14) 100%)",
+        boxShadow:
+          "inset 0 0 0 1px rgba(255,255,255,0.05), inset 0 -18px 22px rgba(0,0,0,0.18)",
       }}
     >
-      <img
-        src={imageSrc}
+      <HeroRitualPortrait
+        species={hero.species}
+        className={hero.className}
+        portrait={hero.portrait}
+        imageSrc={fallbackImageSrc}
+        fallbackImageSrc={fallbackImageSrc}
         alt={`${hero.name} portrait`}
-        style={{
-          width: "100%",
-          height: "100%",
-          objectFit: "cover",
-          objectPosition: "center top",
-          display: "block",
-          filter: "contrast(1.06) brightness(1.08) saturate(1.02)",
-          transform: "scale(1.03)",
-        }}
+        height="100%"
+        objectPosition="center top"
       />
+
       <div
         aria-hidden
         style={{
           position: "absolute",
           inset: 0,
-          background:
-            "linear-gradient(180deg, rgba(255,255,255,0.04), rgba(0,0,0,0.08) 40%, rgba(0,0,0,0.22) 100%)",
           pointerEvents: "none",
+          background:
+            "linear-gradient(180deg, rgba(255,255,255,0.04), rgba(0,0,0,0.06) 38%, rgba(0,0,0,0.20) 100%)",
         }}
       />
     </div>
