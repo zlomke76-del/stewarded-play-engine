@@ -152,6 +152,20 @@ type HeroSheetSkill = {
   attribute: HeroAttributeKey;
 };
 
+type HeroWeaponSummary = {
+  name: string;
+  category: string;
+  trait: string;
+  damage: string;
+  broken?: boolean;
+};
+
+type HeroArmorSummary = {
+  name: string;
+  category: string;
+  acBase: number;
+};
+
 type HeroSheet = {
   xpCurrent: number;
   xpToNextLevel: number;
@@ -159,18 +173,8 @@ type HeroSheet = {
   attributes: Record<HeroAttributeKey, number>;
   skills: HeroSheetSkill[];
   classFeatures: string[];
-  weapon: {
-    name: string;
-    category: string;
-    trait: string;
-    damage: string;
-    broken?: boolean;
-  } | null;
-  armor: {
-    name: string;
-    category: string;
-    acBase: number;
-  } | null;
+  weapon: HeroWeaponSummary | null;
+  armor: HeroArmorSummary | null;
 };
 
 function titleCase(value: string) {
@@ -408,7 +412,7 @@ function buildBaseFeaturesForClass(className?: string) {
   return ["Strike", "Guard", "Reposition"];
 }
 
-function buildBaseWeaponForClass(className?: string) {
+function buildBaseWeaponForClass(className?: string): HeroWeaponSummary {
   const cls = normalizeClassKey(className);
 
   if (cls === "warrior") return { name: "Iron Longsword", category: "Martial Weapon", trait: "Versatile", damage: "1d8 slashing" };
@@ -428,7 +432,7 @@ function buildBaseWeaponForClass(className?: string) {
   return { name: "Starter Weapon", category: "Simple Weapon", trait: "Basic", damage: "1d6" };
 }
 
-function buildBaseArmorForClass(className?: string) {
+function buildBaseArmorForClass(className?: string): HeroArmorSummary {
   const cls = normalizeClassKey(className);
 
   if (cls === "warrior" || cls === "paladin") {
@@ -472,9 +476,8 @@ function deriveHeroSheet(args: {
   const skills = buildBaseSkillsForClass(className, attributes);
   const classFeatures = buildBaseFeaturesForClass(className);
 
-  let weapon = buildBaseWeaponForClass(className);
-  let armor = buildBaseArmorForClass(className);
-
+  let weapon: HeroWeaponSummary = buildBaseWeaponForClass(className);
+  let armor: HeroArmorSummary = buildBaseArmorForClass(className);
   const brokenStarterWeapon = events.some(
     (event) => String(event?.type ?? "") === "HERO_STARTER_WEAPON_BROKEN"
   );
