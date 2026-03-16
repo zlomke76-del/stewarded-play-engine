@@ -44,6 +44,8 @@ type ReplacementWeaponSummary = {
   damage: string;
 };
 
+type RecoveryRoomKind = "guard_post" | "armory";
+
 export function deriveOutcomeSuccess(payload: {
   dice?: { roll?: number; dc?: number } | null;
 }) {
@@ -110,7 +112,8 @@ function hasReplacementWeaponAlreadyRecovered(events: any[]) {
     const roomReward = normalizeKey(String(payload?.rewardType ?? ""));
 
     return (
-      consequence === "armory_replacement_claimed" ||
+      consequence === "weapon_recovery_claimed" ||
+      source === "guard_post_replacement" ||
       source === "armory_replacement" ||
       roomReward === "class_weapon_recovery"
     );
@@ -190,166 +193,279 @@ function inferHeroClassName(prevState: any) {
   return "Warrior";
 }
 
-function isArmoryRewardRoom(args: { currentRoom: any; roomId: string }) {
+function inferRecoveryRoomKind(args: { currentRoom: any; roomId: string }): RecoveryRoomKind | null {
   const roomIdKey = normalizeKey(args.roomId);
-  const roomTypeKey = normalizeKey(String(args.currentRoom?.type ?? ""));
+  const roomTypeKey = normalizeKey(
+    String(args.currentRoom?.roomType ?? args.currentRoom?.type ?? "")
+  );
   const roomTitleKey = normalizeKey(
-    String(
-      args.currentRoom?.title ??
-        args.currentRoom?.name ??
-        args.currentRoom?.label ??
-        ""
-    )
+    String(args.currentRoom?.title ?? args.currentRoom?.name ?? args.currentRoom?.label ?? "")
   );
   const roomNarrativeKey = normalizeKey(
     String(args.currentRoom?.narrative ?? args.currentRoom?.description ?? "")
   );
 
-  const combined = [
-    roomIdKey,
-    roomTypeKey,
-    roomTitleKey,
-    roomNarrativeKey,
-  ].join(" ");
+  const combined = [roomIdKey, roomTypeKey, roomTitleKey, roomNarrativeKey].join(" ");
 
-  return includesAny(combined, [
-    "armory",
-    "guard_shack",
+  const isGuardPost = includesAny(combined, [
+    "guard_post",
+    "guard post",
     "guard shack",
+    "watch post",
+    "watchroom",
+    "watch room",
+    "barracks",
+    "checkpoint",
+  ]);
+
+  if (isGuardPost) return "guard_post";
+
+  const isArmory = includesAny(combined, [
+    "armory",
+    "armoury",
     "weapons rack",
     "weapon rack",
     "weapon cache",
-    "barracks",
     "supply room",
   ]);
+
+  if (isArmory) return "armory";
+
+  return null;
 }
 
-function buildReplacementWeaponForClass(className?: string): ReplacementWeaponSummary {
+function isRecoveryRewardRoom(args: { currentRoom: any; roomId: string }) {
+  return inferRecoveryRoomKind(args) !== null;
+}
+
+function buildReplacementWeaponForClass(
+  className: string | undefined,
+  roomKind: RecoveryRoomKind
+): ReplacementWeaponSummary {
   const classKey = normalizeKey(className ?? "");
+  const fromGuardPost = roomKind === "guard_post";
 
   if (classKey.includes("warrior") || classKey.includes("fighter")) {
-    return {
-      name: "Tempered Longsword",
-      category: "martial blade",
-      trait: "balanced",
-      damage: "1d8",
-    };
+    return fromGuardPost
+      ? {
+          name: "Guard Blade",
+          category: "martial blade",
+          trait: "serviceable",
+          damage: "1d8",
+        }
+      : {
+          name: "Tempered Longsword",
+          category: "martial blade",
+          trait: "balanced",
+          damage: "1d8",
+        };
   }
 
   if (classKey.includes("rogue")) {
-    return {
-      name: "Silent Edge",
-      category: "dagger",
-      trait: "precise",
-      damage: "1d6",
-    };
+    return fromGuardPost
+      ? {
+          name: "Watch Dagger",
+          category: "dagger",
+          trait: "nimble",
+          damage: "1d6",
+        }
+      : {
+          name: "Silent Edge",
+          category: "dagger",
+          trait: "precise",
+          damage: "1d6",
+        };
   }
 
   if (classKey.includes("mage") || classKey.includes("wizard")) {
-    return {
-      name: "Rune Staff",
-      category: "arcane focus",
-      trait: "channeling",
-      damage: "1d8",
-    };
+    return fromGuardPost
+      ? {
+          name: "Focus Rod",
+          category: "arcane focus",
+          trait: "channeling",
+          damage: "1d8",
+        }
+      : {
+          name: "Rune Staff",
+          category: "arcane focus",
+          trait: "inscribed",
+          damage: "1d8",
+        };
   }
 
   if (classKey.includes("cleric")) {
-    return {
-      name: "Sanctified Mace",
-      category: "blunt weapon",
-      trait: "steadfast",
-      damage: "1d8",
-    };
+    return fromGuardPost
+      ? {
+          name: "Ward Mace",
+          category: "blunt weapon",
+          trait: "steady",
+          damage: "1d8",
+        }
+      : {
+          name: "Sanctified Mace",
+          category: "blunt weapon",
+          trait: "steadfast",
+          damage: "1d8",
+        };
   }
 
   if (classKey.includes("ranger")) {
-    return {
-      name: "Recovered Longbow",
-      category: "bow",
-      trait: "trueflight",
-      damage: "1d8",
-    };
+    return fromGuardPost
+      ? {
+          name: "Patrol Bow",
+          category: "bow",
+          trait: "field-kept",
+          damage: "1d8",
+        }
+      : {
+          name: "Recovered Longbow",
+          category: "bow",
+          trait: "trueflight",
+          damage: "1d8",
+        };
   }
 
   if (classKey.includes("paladin")) {
-    return {
-      name: "Oathblade Fragment Restored",
-      category: "holy blade",
-      trait: "vowed",
-      damage: "1d8",
-    };
+    return fromGuardPost
+      ? {
+          name: "Watchblade",
+          category: "holy blade",
+          trait: "sworn",
+          damage: "1d8",
+        }
+      : {
+          name: "Oathblade Fragment Restored",
+          category: "holy blade",
+          trait: "vowed",
+          damage: "1d8",
+        };
   }
 
   if (classKey.includes("monk")) {
-    return {
-      name: "Ironwood Cestus",
-      category: "hand weapon",
-      trait: "disciplined",
-      damage: "1d6",
-    };
+    return fromGuardPost
+      ? {
+          name: "Iron Staff",
+          category: "hand weapon",
+          trait: "disciplined",
+          damage: "1d6",
+        }
+      : {
+          name: "Ironwood Cestus",
+          category: "hand weapon",
+          trait: "focused",
+          damage: "1d6",
+        };
   }
 
   if (classKey.includes("druid")) {
-    return {
-      name: "Rootbound Staff",
-      category: "nature focus",
-      trait: "living grain",
-      damage: "1d8",
-    };
+    return fromGuardPost
+      ? {
+          name: "Grove Staff",
+          category: "nature focus",
+          trait: "seasoned",
+          damage: "1d8",
+        }
+      : {
+          name: "Rootbound Staff",
+          category: "nature focus",
+          trait: "living grain",
+          damage: "1d8",
+        };
   }
 
   if (classKey.includes("bard")) {
-    return {
-      name: "Courtblade",
-      category: "finesse blade",
-      trait: "graceful",
-      damage: "1d6",
-    };
+    return fromGuardPost
+      ? {
+          name: "Officer Rapier",
+          category: "finesse blade",
+          trait: "clean",
+          damage: "1d6",
+        }
+      : {
+          name: "Courtblade",
+          category: "finesse blade",
+          trait: "graceful",
+          damage: "1d6",
+        };
   }
 
   if (classKey.includes("artificer")) {
-    return {
-      name: "Calibrated Shock-Rod",
-      category: "engineered focus",
-      trait: "tuned",
-      damage: "1d8",
-    };
+    return fromGuardPost
+      ? {
+          name: "Field Calibrator",
+          category: "engineered focus",
+          trait: "tuned",
+          damage: "1d8",
+        }
+      : {
+          name: "Calibrated Shock-Rod",
+          category: "engineered focus",
+          trait: "refined",
+          damage: "1d8",
+        };
   }
 
   if (classKey.includes("barbarian")) {
-    return {
-      name: "Guardbreaker Axe",
-      category: "heavy weapon",
-      trait: "cleaving",
-      damage: "1d10",
-    };
+    return fromGuardPost
+      ? {
+          name: "Guard Axe",
+          category: "heavy weapon",
+          trait: "brutal",
+          damage: "1d10",
+        }
+      : {
+          name: "Guardbreaker Axe",
+          category: "heavy weapon",
+          trait: "cleaving",
+          damage: "1d10",
+        };
   }
 
   if (classKey.includes("sorcerer")) {
-    return {
-      name: "Ember Focus Rod",
-      category: "arcane focus",
-      trait: "volatile",
-      damage: "1d8",
-    };
+    return fromGuardPost
+      ? {
+          name: "Channel Wand",
+          category: "arcane focus",
+          trait: "volatile",
+          damage: "1d8",
+        }
+      : {
+          name: "Ember Focus Rod",
+          category: "arcane focus",
+          trait: "surging",
+          damage: "1d8",
+        };
   }
 
   if (classKey.includes("warlock")) {
-    return {
-      name: "Veilthorn Pact Blade",
-      category: "eldritch blade",
-      trait: "hexbound",
-      damage: "1d8",
-    };
+    return fromGuardPost
+      ? {
+          name: "Pact Rod",
+          category: "eldritch focus",
+          trait: "bound",
+          damage: "1d8",
+        }
+      : {
+          name: "Veilthorn Pact Blade",
+          category: "eldritch blade",
+          trait: "hexbound",
+          damage: "1d8",
+        };
   }
 
-  return {
-    name: "Guard Blade",
-    category: "martial weapon",
-    trait: "serviceable",
-    damage: "1d8",
-  };
+  return fromGuardPost
+    ? {
+        name: "Service Blade",
+        category: "martial weapon",
+        trait: "serviceable",
+        damage: "1d8",
+      }
+    : {
+        name: "Guard Blade",
+        category: "martial weapon",
+        trait: "balanced",
+        damage: "1d8",
+      };
 }
 
 function shouldBreakStarterWeapon(args: {
@@ -385,7 +501,7 @@ function shouldGrantReplacementWeapon(args: {
   if (!hasStarterWeaponAlreadyBroken(events)) return false;
   if (hasReplacementWeaponAlreadyRecovered(events)) return false;
 
-  return isArmoryRewardRoom({
+  return isRecoveryRewardRoom({
     currentRoom,
     roomId: location.roomId,
   });
@@ -415,7 +531,7 @@ function appendOpeningWeaponBreakConsequences(args: {
     state: "broken",
     previousItemName: "Starter Weapon",
     nextItemName: "Broken Starter Weapon",
-    consequence: "armory_replacement_needed",
+    consequence: "weapon_recovery_needed",
   });
 
   next = appendEventToState(next, "CHRONICLE_NOTE_RECORDED", {
@@ -431,15 +547,37 @@ function appendOpeningWeaponBreakConsequences(args: {
 function appendReplacementWeaponConsequences(args: {
   nextState: any;
   prevState: any;
+  currentRoom: any;
   location: { floorId: string; roomId: string };
   playerInput: string;
   selectedOptionDescription: string;
 }) {
-  const { nextState, prevState, location, playerInput, selectedOptionDescription } =
-    args;
+  const {
+    nextState,
+    prevState,
+    currentRoom,
+    location,
+    playerInput,
+    selectedOptionDescription,
+  } = args;
+
+  const roomKind =
+    inferRecoveryRoomKind({
+      currentRoom,
+      roomId: location.roomId,
+    }) ?? "guard_post";
 
   const className = inferHeroClassName(prevState);
-  const weapon = buildReplacementWeaponForClass(className);
+  const weapon = buildReplacementWeaponForClass(className, roomKind);
+
+  const source = roomKind === "guard_post" ? "guard_post_replacement" : "armory_replacement";
+  const roomLabel = roomKind === "guard_post" ? "guard post" : "armory";
+  const previousItemName = "Broken Starter Weapon";
+
+  const chronicleText =
+    roomKind === "guard_post"
+      ? `At the ${roomLabel}, the hero reclaimed momentum with ${weapon.name}, a practical weapon fit to carry the descent onward.`
+      : `In the ${roomLabel}, the hero reclaimed momentum with ${weapon.name}, a preserved weapon worthy of the deeper descent.`;
 
   let next = nextState;
 
@@ -448,23 +586,24 @@ function appendReplacementWeaponConsequences(args: {
     roomId: location.roomId,
     slot: "weapon",
     state: "equipped",
-    source: "armory_replacement",
+    source,
     rewardType: "class_weapon_recovery",
-    previousItemName: "Broken Starter Weapon",
+    recoveryRoomKind: roomKind,
+    previousItemName,
     nextItemName: weapon.name,
     weaponCategory: weapon.category,
     weaponTrait: weapon.trait,
     weaponDamage: weapon.damage,
     className,
-    consequence: "armory_replacement_claimed",
+    consequence: "weapon_recovery_claimed",
     sourceText: `${playerInput}\n${selectedOptionDescription}`.trim(),
   });
 
   next = appendEventToState(next, "CHRONICLE_NOTE_RECORDED", {
     floorId: location.floorId,
     roomId: location.roomId,
-    category: "weapon_recovered",
-    text: `In the dim reserve of the dungeon, the hero reclaimed momentum: ${weapon.name}.`,
+    category: roomKind === "guard_post" ? "guard_post_weapon_recovered" : "armory_weapon_recovered",
+    text: chronicleText,
   });
 
   return next;
@@ -580,6 +719,7 @@ export function commitResolvedActionToState(args: HandleRecordArgs) {
     next = appendReplacementWeaponConsequences({
       nextState: next,
       prevState,
+      currentRoom,
       location,
       playerInput,
       selectedOptionDescription,
