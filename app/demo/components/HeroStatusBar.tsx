@@ -59,7 +59,6 @@ type HeroXpGainDetail = {
 };
 
 const HERO_STATUS_XP_TARGET_ID = "eof-active-hero-xp-target";
-const COLLAPSED_SKILL_COUNT = 3;
 
 function getHeroInitials(heroName: string) {
   const words = String(heroName || "")
@@ -402,11 +401,14 @@ export default function HeroStatusBar(props: Props) {
       ? "A recovered weapon now carries the descent forward. The hero enters the next chamber with renewed intent."
       : "The Chronicle bears witness as you enter the dark.";
 
-  const hasHiddenSkills = sortedSkills.length > COLLAPSED_SKILL_COUNT;
-  const displayedSkills = skillsExpanded
-    ? sortedSkills
-    : sortedSkills.slice(0, COLLAPSED_SKILL_COUNT);
-  const hiddenSkillCount = Math.max(0, sortedSkills.length - COLLAPSED_SKILL_COUNT);
+  const topSkill = sortedSkills[0] ?? null;
+  const skillSummaryLabel =
+    sortedSkills.length > 0
+      ? `${sortedSkills.length} trained skill${sortedSkills.length === 1 ? "" : "s"}`
+      : "No trained skills";
+  const skillSummaryDetail = topSkill
+    ? `Top skill: ${topSkill.label} ${topSkill.value >= 0 ? `+${topSkill.value}` : `${topSkill.value}`}`
+    : "No trained skills recorded.";
 
   return (
     <div
@@ -904,125 +906,136 @@ export default function HeroStatusBar(props: Props) {
               </div>
 
               {sortedSkills.length > 0 ? (
-                <div
+                <button
+                  type="button"
+                  onClick={() => setSkillsExpanded((prev) => !prev)}
+                  aria-expanded={skillsExpanded}
                   style={{
-                    display: "inline-flex",
-                    alignItems: "center",
-                    gap: 8,
-                    flexWrap: "wrap",
-                    justifyContent: "flex-end",
+                    appearance: "none",
+                    border: "1px solid rgba(214,188,120,0.18)",
+                    background: "rgba(214,188,120,0.08)",
+                    color: "rgba(245,236,216,0.94)",
+                    borderRadius: 999,
+                    padding: "7px 10px",
+                    fontSize: 11,
+                    fontWeight: 800,
+                    lineHeight: 1,
+                    letterSpacing: 0.6,
+                    textTransform: "uppercase",
+                    cursor: "pointer",
+                    boxShadow: "inset 0 1px 0 rgba(255,255,255,0.04)",
+                    whiteSpace: "nowrap",
                   }}
                 >
-                  {!skillsExpanded && hasHiddenSkills ? (
-                    <span
-                      style={{
-                        fontSize: 11,
-                        color: "rgba(214,188,120,0.78)",
-                        letterSpacing: 0.5,
-                        textTransform: "uppercase",
-                        whiteSpace: "nowrap",
-                      }}
-                    >
-                      +{hiddenSkillCount} more
-                    </span>
-                  ) : null}
-
-                  {hasHiddenSkills ? (
-                    <button
-                      type="button"
-                      onClick={() => setSkillsExpanded((prev) => !prev)}
-                      aria-expanded={skillsExpanded}
-                      style={{
-                        appearance: "none",
-                        border: "1px solid rgba(214,188,120,0.18)",
-                        background: "rgba(214,188,120,0.08)",
-                        color: "rgba(245,236,216,0.94)",
-                        borderRadius: 999,
-                        padding: "7px 10px",
-                        fontSize: 11,
-                        fontWeight: 800,
-                        lineHeight: 1,
-                        letterSpacing: 0.6,
-                        textTransform: "uppercase",
-                        cursor: "pointer",
-                        boxShadow: "inset 0 1px 0 rgba(255,255,255,0.04)",
-                        whiteSpace: "nowrap",
-                      }}
-                    >
-                      {skillsExpanded ? "Hide Skills" : "Show All Skills"}
-                    </button>
-                  ) : null}
-                </div>
+                  {skillsExpanded ? "Hide Skills" : "Show Skills"}
+                </button>
               ) : null}
             </div>
 
             {sortedSkills.length > 0 ? (
-              <div style={{ display: "grid", gap: 7 }}>
-                {displayedSkills.map((skill) => (
+              skillsExpanded ? (
+                <div style={{ display: "grid", gap: 7 }}>
+                  {sortedSkills.map((skill) => (
+                    <div
+                      key={skill.id}
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                        gap: 12,
+                        padding: "8px 10px",
+                        borderRadius: 12,
+                        background: "rgba(255,255,255,0.03)",
+                        border: "1px solid rgba(255,255,255,0.05)",
+                      }}
+                    >
+                      <div style={{ minWidth: 0 }}>
+                        <div
+                          style={{
+                            fontSize: 13,
+                            fontWeight: 700,
+                            color: "rgba(245,236,216,0.95)",
+                          }}
+                        >
+                          {skill.label}
+                        </div>
+                        <div
+                          style={{
+                            fontSize: 11,
+                            opacity: 0.56,
+                            textTransform: "uppercase",
+                            letterSpacing: 0.7,
+                          }}
+                        >
+                          {attributeAbbrev(skill.attribute)}
+                        </div>
+                      </div>
+                      <div
+                        style={{
+                          fontSize: 13,
+                          fontWeight: 900,
+                          whiteSpace: "nowrap",
+                          color: "rgba(232,236,244,0.88)",
+                        }}
+                      >
+                        {skill.value >= 0 ? `+${skill.value}` : `${skill.value}`}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div
+                  style={{
+                    padding: "10px 12px",
+                    borderRadius: 12,
+                    border: "1px solid rgba(255,255,255,0.05)",
+                    background: "rgba(255,255,255,0.03)",
+                    display: "grid",
+                    gap: 6,
+                  }}
+                >
                   <div
-                    key={skill.id}
                     style={{
                       display: "flex",
                       justifyContent: "space-between",
                       alignItems: "center",
                       gap: 12,
-                      padding: "8px 10px",
-                      borderRadius: 12,
-                      background: "rgba(255,255,255,0.03)",
-                      border: "1px solid rgba(255,255,255,0.05)",
+                      flexWrap: "wrap",
                     }}
                   >
-                    <div style={{ minWidth: 0 }}>
-                      <div
-                        style={{
-                          fontSize: 13,
-                          fontWeight: 700,
-                          color: "rgba(245,236,216,0.95)",
-                        }}
-                      >
-                        {skill.label}
-                      </div>
-                      <div
-                        style={{
-                          fontSize: 11,
-                          opacity: 0.56,
-                          textTransform: "uppercase",
-                          letterSpacing: 0.7,
-                        }}
-                      >
-                        {attributeAbbrev(skill.attribute)}
-                      </div>
-                    </div>
                     <div
                       style={{
                         fontSize: 13,
-                        fontWeight: 900,
-                        whiteSpace: "nowrap",
-                        color: "rgba(232,236,244,0.88)",
+                        fontWeight: 800,
+                        color: "rgba(245,236,216,0.95)",
                       }}
                     >
-                      {skill.value >= 0 ? `+${skill.value}` : `${skill.value}`}
+                      {skillSummaryLabel}
+                    </div>
+                    <div
+                      style={{
+                        fontSize: 11,
+                        letterSpacing: 0.7,
+                        textTransform: "uppercase",
+                        color: "rgba(214,188,120,0.78)",
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      Collapsed
                     </div>
                   </div>
-                ))}
 
-                {!skillsExpanded && hasHiddenSkills ? (
                   <div
                     style={{
-                      padding: "8px 10px",
-                      borderRadius: 12,
-                      border: "1px dashed rgba(214,188,120,0.16)",
-                      background: "rgba(214,188,120,0.04)",
                       fontSize: 12,
                       lineHeight: 1.45,
-                      color: "rgba(214,188,120,0.82)",
+                      color: "rgba(232,236,244,0.76)",
                     }}
                   >
-                    {hiddenSkillCount} additional skill{hiddenSkillCount === 1 ? "" : "s"} hidden.
-                    Expand to review the full list.
+                    {skillSummaryDetail}
                   </div>
-                ) : null}
-              </div>
+                </div>
+              )
             ) : (
               <div style={{ fontSize: 12, opacity: 0.68 }}>
                 No trained skills recorded.
