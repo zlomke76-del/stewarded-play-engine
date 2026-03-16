@@ -5,7 +5,11 @@ import { createSession, type SessionState } from "@/lib/session/SessionState";
 import { parseAction } from "@/lib/parser/ActionParser";
 import { generateOptions, type Option } from "@/lib/options/OptionGenerator";
 import { exportCanon } from "@/lib/export/exportCanon";
-import { deriveCombatState, findLatestCombatId, nextTurnPointer } from "@/lib/combat/CombatState";
+import {
+  deriveCombatState,
+  findLatestCombatId,
+  nextTurnPointer,
+} from "@/lib/combat/CombatState";
 import { generateDungeon } from "@/lib/dungeon/DungeonGenerator";
 import {
   deriveCurrentDungeonLocation,
@@ -20,7 +24,10 @@ import {
   resolveActiveRoomPuzzle,
   runRoomPuzzleAttempt as runRoomPuzzleAttemptRuntime,
 } from "@/lib/dungeon/puzzles/PuzzleRuntime";
-import type { PuzzleCanonRecord, PuzzleResolution } from "@/lib/dungeon/puzzles/PuzzleState";
+import type {
+  PuzzleCanonRecord,
+  PuzzleResolution,
+} from "@/lib/dungeon/puzzles/PuzzleState";
 import {
   deriveProgressionEvolution,
   type SessionEvent as ProgressionSessionEvent,
@@ -31,7 +38,13 @@ import {
   formatProgressionInspectorReport,
   inspectProgressionState,
 } from "@/lib/debug/ProgressionInspector";
-import type { DMMode, DemoSectionId, DiceMode, InitialTable, RollSource } from "../demoTypes";
+import type {
+  DMMode,
+  DemoSectionId,
+  DiceMode,
+  InitialTable,
+  RollSource,
+} from "../demoTypes";
 import {
   normalizeName,
   randomName,
@@ -75,7 +88,11 @@ import {
   derivePresentationPhase,
   deriveRoomInteractionMode,
 } from "./runtime/demoRuntimeFlow";
-import { appendEventToState, hasDungeonInitialized, safeInt } from "./runtime/demoRuntimeUtils";
+import {
+  appendEventToState,
+  hasDungeonInitialized,
+  safeInt,
+} from "./runtime/demoRuntimeUtils";
 import {
   buildCombatEncounterContext,
   buildRoomConnectionsView,
@@ -119,6 +136,407 @@ type PressurePuzzleVictoryState = {
   roomId: string;
   isFirstPuzzleCompletion: boolean;
 };
+
+type HeroAttributeKey =
+  | "strength"
+  | "dexterity"
+  | "constitution"
+  | "intelligence"
+  | "wisdom"
+  | "charisma";
+
+type HeroSheetSkill = {
+  id: string;
+  label: string;
+  value: number;
+  attribute: HeroAttributeKey;
+};
+
+type HeroSheet = {
+  xpCurrent: number;
+  xpToNextLevel: number;
+  attackBonus: number;
+  attributes: Record<HeroAttributeKey, number>;
+  skills: HeroSheetSkill[];
+  classFeatures: string[];
+  weapon: {
+    name: string;
+    category: string;
+    trait: string;
+    damage: string;
+    broken?: boolean;
+  } | null;
+  armor: {
+    name: string;
+    category: string;
+    acBase: number;
+  } | null;
+};
+
+function titleCase(value: string) {
+  return String(value ?? "")
+    .replace(/[_-]+/g, " ")
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
+function normalizeClassKey(value?: string) {
+  return String(value ?? "").trim().toLowerCase();
+}
+
+function attributeMod(score: number) {
+  return Math.floor((Number(score || 10) - 10) / 2);
+}
+
+function xpToNextLevelFromLevel(level: number) {
+  return 100;
+}
+
+function buildBaseAttributesForClass(className?: string): Record<HeroAttributeKey, number> {
+  const cls = normalizeClassKey(className);
+
+  if (cls === "warrior") {
+    return {
+      strength: 16,
+      dexterity: 12,
+      constitution: 14,
+      intelligence: 10,
+      wisdom: 10,
+      charisma: 10,
+    };
+  }
+
+  if (cls === "rogue") {
+    return {
+      strength: 10,
+      dexterity: 16,
+      constitution: 12,
+      intelligence: 12,
+      wisdom: 12,
+      charisma: 10,
+    };
+  }
+
+  if (cls === "mage") {
+    return {
+      strength: 8,
+      dexterity: 12,
+      constitution: 12,
+      intelligence: 16,
+      wisdom: 13,
+      charisma: 10,
+    };
+  }
+
+  if (cls === "cleric") {
+    return {
+      strength: 12,
+      dexterity: 10,
+      constitution: 13,
+      intelligence: 10,
+      wisdom: 16,
+      charisma: 12,
+    };
+  }
+
+  if (cls === "ranger") {
+    return {
+      strength: 12,
+      dexterity: 16,
+      constitution: 13,
+      intelligence: 10,
+      wisdom: 12,
+      charisma: 10,
+    };
+  }
+
+  if (cls === "paladin") {
+    return {
+      strength: 16,
+      dexterity: 10,
+      constitution: 14,
+      intelligence: 9,
+      wisdom: 11,
+      charisma: 14,
+    };
+  }
+
+  if (cls === "bard") {
+    return {
+      strength: 10,
+      dexterity: 14,
+      constitution: 12,
+      intelligence: 11,
+      wisdom: 10,
+      charisma: 16,
+    };
+  }
+
+  if (cls === "druid") {
+    return {
+      strength: 10,
+      dexterity: 12,
+      constitution: 12,
+      intelligence: 11,
+      wisdom: 16,
+      charisma: 10,
+    };
+  }
+
+  if (cls === "monk") {
+    return {
+      strength: 12,
+      dexterity: 16,
+      constitution: 13,
+      intelligence: 10,
+      wisdom: 14,
+      charisma: 9,
+    };
+  }
+
+  if (cls === "barbarian") {
+    return {
+      strength: 16,
+      dexterity: 12,
+      constitution: 16,
+      intelligence: 8,
+      wisdom: 10,
+      charisma: 9,
+    };
+  }
+
+  if (cls === "artificer") {
+    return {
+      strength: 10,
+      dexterity: 12,
+      constitution: 12,
+      intelligence: 16,
+      wisdom: 10,
+      charisma: 10,
+    };
+  }
+
+  if (cls === "sorcerer" || cls === "warlock") {
+    return {
+      strength: 8,
+      dexterity: 12,
+      constitution: 12,
+      intelligence: 12,
+      wisdom: 10,
+      charisma: 16,
+    };
+  }
+
+  return {
+    strength: 12,
+    dexterity: 12,
+    constitution: 12,
+    intelligence: 10,
+    wisdom: 10,
+    charisma: 10,
+  };
+}
+
+function buildBaseSkillsForClass(
+  className?: string,
+  attributes?: Record<HeroAttributeKey, number>
+): HeroSheetSkill[] {
+  const cls = normalizeClassKey(className);
+  const attr = attributes ?? buildBaseAttributesForClass(className);
+
+  const valueFor = (attribute: HeroAttributeKey, bonus = 0) =>
+    attributeMod(attr[attribute]) + bonus;
+
+  if (cls === "warrior") {
+    return [
+      { id: "athletics", label: "Athletics", attribute: "strength", value: valueFor("strength", 2) },
+      { id: "intimidation", label: "Intimidation", attribute: "charisma", value: valueFor("charisma", 1) },
+      { id: "perception", label: "Perception", attribute: "wisdom", value: valueFor("wisdom", 1) },
+    ];
+  }
+
+  if (cls === "rogue") {
+    return [
+      { id: "stealth", label: "Stealth", attribute: "dexterity", value: valueFor("dexterity", 2) },
+      { id: "sleight_of_hand", label: "Sleight of Hand", attribute: "dexterity", value: valueFor("dexterity", 2) },
+      { id: "investigation", label: "Investigation", attribute: "intelligence", value: valueFor("intelligence", 1) },
+    ];
+  }
+
+  if (cls === "mage") {
+    return [
+      { id: "arcana", label: "Arcana", attribute: "intelligence", value: valueFor("intelligence", 2) },
+      { id: "history", label: "History", attribute: "intelligence", value: valueFor("intelligence", 1) },
+      { id: "insight", label: "Insight", attribute: "wisdom", value: valueFor("wisdom", 1) },
+    ];
+  }
+
+  if (cls === "cleric") {
+    return [
+      { id: "religion", label: "Religion", attribute: "intelligence", value: valueFor("intelligence", 1) },
+      { id: "medicine", label: "Medicine", attribute: "wisdom", value: valueFor("wisdom", 2) },
+      { id: "insight", label: "Insight", attribute: "wisdom", value: valueFor("wisdom", 1) },
+    ];
+  }
+
+  return [
+    { id: "perception", label: "Perception", attribute: "wisdom", value: valueFor("wisdom", 1) },
+    { id: "survival", label: "Survival", attribute: "wisdom", value: valueFor("wisdom", 1) },
+    { id: "athletics", label: "Athletics", attribute: "strength", value: valueFor("strength", 1) },
+  ];
+}
+
+function buildBaseFeaturesForClass(className?: string) {
+  const cls = normalizeClassKey(className);
+
+  if (cls === "warrior") return ["Guard Break", "Shield Wall", "Second Wind"];
+  if (cls === "rogue") return ["Backstab", "Shadowstep", "Disarm Trap"];
+  if (cls === "mage") return ["Arc Bolt", "Frost Bind", "Detect Arcana"];
+  if (cls === "cleric") return ["Heal", "Bless", "Turn Undead"];
+  if (cls === "ranger") return ["Mark Target", "Volley", "Track"];
+  if (cls === "paladin") return ["Smite", "Protect", "Rally"];
+  if (cls === "bard") return ["Inspire", "Distract", "Soothing Verse"];
+  if (cls === "druid") return ["Vinesnare", "Wild Shape", "Nature Sense"];
+  if (cls === "monk") return ["Flurry", "Deflect", "Center Self"];
+  if (cls === "artificer") return ["Gadget Trap", "Infuse Weapon", "Deploy Device"];
+  if (cls === "barbarian") return ["Rage", "Reckless Strike", "Intimidating Roar"];
+  if (cls === "sorcerer") return ["Chaos Bolt", "Surge", "Quickened Cast"];
+  if (cls === "warlock") return ["Hex", "Eldritch Blast", "Pact Ward"];
+
+  return ["Strike", "Guard", "Reposition"];
+}
+
+function buildBaseWeaponForClass(className?: string) {
+  const cls = normalizeClassKey(className);
+
+  if (cls === "warrior") return { name: "Iron Longsword", category: "Martial Weapon", trait: "Versatile", damage: "1d8 slashing" };
+  if (cls === "rogue") return { name: "Quick Dagger", category: "Finesse Weapon", trait: "Light", damage: "1d4 piercing" };
+  if (cls === "mage") return { name: "Apprentice Staff", category: "Arcane Focus", trait: "Channeling", damage: "1d6 arcane" };
+  if (cls === "cleric") return { name: "Sanctified Mace", category: "Simple Weapon", trait: "Holy", damage: "1d6 bludgeoning" };
+  if (cls === "ranger") return { name: "Hunter Bow", category: "Ranged Weapon", trait: "Two-Handed", damage: "1d8 piercing" };
+  if (cls === "paladin") return { name: "Oathblade", category: "Martial Weapon", trait: "Holy", damage: "1d8 slashing" };
+  if (cls === "bard") return { name: "Rapier", category: "Finesse Weapon", trait: "Precise", damage: "1d8 piercing" };
+  if (cls === "druid") return { name: "Oak Staff", category: "Simple Weapon", trait: "Primal", damage: "1d6 bludgeoning" };
+  if (cls === "monk") return { name: "Bo Staff", category: "Monastic Weapon", trait: "Reach", damage: "1d6 bludgeoning" };
+  if (cls === "artificer") return { name: "Infused Sidearm", category: "Prototype Weapon", trait: "Utility", damage: "1d6 force" };
+  if (cls === "barbarian") return { name: "Rough Axe", category: "Martial Weapon", trait: "Heavy", damage: "1d10 slashing" };
+  if (cls === "sorcerer") return { name: "Focus Wand", category: "Arcane Focus", trait: "Volatile", damage: "1d6 arcane" };
+  if (cls === "warlock") return { name: "Pact Rod", category: "Pact Focus", trait: "Binding", damage: "1d6 force" };
+
+  return { name: "Starter Weapon", category: "Simple Weapon", trait: "Basic", damage: "1d6" };
+}
+
+function buildBaseArmorForClass(className?: string) {
+  const cls = normalizeClassKey(className);
+
+  if (cls === "warrior" || cls === "paladin") {
+    return { name: "Chain Vest", category: "Heavy Armor", acBase: 16 };
+  }
+
+  if (cls === "barbarian") {
+    return { name: "Hide Harness", category: "Medium Armor", acBase: 14 };
+  }
+
+  if (cls === "rogue" || cls === "ranger" || cls === "bard" || cls === "monk") {
+    return { name: "Leather Armor", category: "Light Armor", acBase: 13 };
+  }
+
+  if (cls === "cleric" || cls === "druid" || cls === "artificer") {
+    return { name: "Scale Vestments", category: "Medium Armor", acBase: 14 };
+  }
+
+  return { name: "Traveler Robes", category: "Cloth", acBase: 10 };
+}
+
+function inferPrimaryAttackAttribute(className?: string): HeroAttributeKey {
+  const cls = normalizeClassKey(className);
+
+  if (cls === "rogue" || cls === "ranger" || cls === "bard" || cls === "monk") return "dexterity";
+  if (cls === "mage" || cls === "artificer") return "intelligence";
+  if (cls === "cleric" || cls === "druid") return "wisdom";
+  if (cls === "sorcerer" || cls === "warlock" || cls === "paladin") return "charisma";
+  return "strength";
+}
+
+function deriveHeroSheet(args: {
+  events: any[];
+  heroLevel: number;
+  partyMember: any | null;
+}): HeroSheet {
+  const { events, heroLevel, partyMember } = args;
+
+  const className = String(partyMember?.className ?? "Warrior");
+  const attributes = buildBaseAttributesForClass(className);
+  const skills = buildBaseSkillsForClass(className, attributes);
+  const classFeatures = buildBaseFeaturesForClass(className);
+
+  let weapon = buildBaseWeaponForClass(className);
+  let armor = buildBaseArmorForClass(className);
+
+  const brokenStarterWeapon = events.some(
+    (event) => String(event?.type ?? "") === "HERO_STARTER_WEAPON_BROKEN"
+  );
+
+  if (brokenStarterWeapon) {
+    weapon = {
+      name: "Broken Starter Weapon",
+      category: weapon.category,
+      trait: "Damaged",
+      damage: "Improvised",
+      broken: true,
+    };
+  }
+
+  for (const event of events) {
+    const type = String(event?.type ?? "");
+    const payload = event?.payload ?? {};
+
+    if (type === "HERO_LOADOUT_CHANGED" && String(payload?.slot ?? "") === "weapon") {
+      const nextItemName = String(payload?.nextItemName ?? "").trim();
+      const state = String(payload?.state ?? "").trim().toLowerCase();
+
+      if (nextItemName) {
+        weapon = {
+          name: nextItemName,
+          category: state === "broken" ? weapon.category : weapon.category,
+          trait: state === "broken" ? "Damaged" : weapon.trait,
+          damage: state === "broken" ? "Improvised" : weapon.damage,
+          broken: state === "broken",
+        };
+      }
+    }
+
+    if (type === "HERO_LOADOUT_CHANGED" && String(payload?.slot ?? "") === "armor") {
+      const nextItemName = String(payload?.nextItemName ?? "").trim();
+      if (nextItemName) {
+        armor = {
+          ...armor,
+          name: nextItemName,
+        };
+      }
+    }
+  }
+
+  const xpCurrent = Number(heroLevel > 0 ? (events.filter((e) => String(e?.type ?? "") === "HERO_EXPERIENCE_GAINED")
+    .reduce((sum, event) => sum + Math.max(0, Number(event?.payload?.amount ?? 0)), 0) % xpToNextLevelFromLevel(heroLevel)) : 0);
+
+  const primaryAttackAttribute = inferPrimaryAttackAttribute(className);
+  const baseAttackBonus = attributeMod(attributes[primaryAttackAttribute]) + Math.max(1, Math.floor((heroLevel - 1) / 4) + 2);
+  const attackBonus = weapon?.broken ? Math.max(0, baseAttackBonus - 2) : baseAttackBonus;
+
+  return {
+    xpCurrent,
+    xpToNextLevel: xpToNextLevelFromLevel(heroLevel),
+    attackBonus,
+    attributes,
+    skills,
+    classFeatures,
+    weapon,
+    armor,
+  };
+}
 
 export function useDemoRuntime() {
   const role: "arbiter" = "arbiter";
@@ -974,10 +1392,14 @@ export function useDemoRuntime() {
   const showGameplay = presentationPhase === "gameplay";
 
   const activeEnemyOverlayName =
-    dmMode !== "human" && combatActive && isEnemyTurn ? String(activeCombatantSpec?.name ?? "") : null;
+    dmMode !== "human" && combatActive && isEnemyTurn
+      ? String(activeCombatantSpec?.name ?? "")
+      : null;
 
   const activeEnemyOverlayId =
-    dmMode !== "human" && combatActive && isEnemyTurn ? String(activeCombatantSpec?.id ?? "") : null;
+    dmMode !== "human" && combatActive && isEnemyTurn
+      ? String(activeCombatantSpec?.id ?? "")
+      : null;
 
   const solaceNeutralEnemyTurnEnabled =
     dmMode === "solace-neutral" &&
@@ -1063,7 +1485,24 @@ export function useDemoRuntime() {
         floorId: location.floorId,
         roomId: location.roomId,
       }),
-    [currentRoom, reachableConnections, playerInput, selectedOption?.description, location.floorId, location.roomId]
+    [
+      currentRoom,
+      reachableConnections,
+      playerInput,
+      selectedOption?.description,
+      location.floorId,
+      location.roomId,
+    ]
+  );
+
+  const heroSheet = useMemo(
+    () =>
+      deriveHeroSheet({
+        events: state.events as any[],
+        heroLevel: progressionState.hero.level,
+        partyMember: partyMembers[0] ?? null,
+      }),
+    [state.events, progressionState.hero.level, partyMembers]
   );
 
   return {
@@ -1132,6 +1571,8 @@ export function useDemoRuntime() {
     partySize,
     effectivePlayerNames,
 
+    heroSheet,
+
     progressionState,
     progressionInspectorSummary,
     progressionInspectorReport,
@@ -1159,8 +1600,10 @@ export function useDemoRuntime() {
       },
       campaign: {
         fullFellowshipAssembled: progressionState.campaign.fullFellowshipAssembled,
-        completionRequiresFullFellowship: progressionState.campaign.completionRequiresFullFellowship,
-        completionRequiresFullParty: progressionState.campaign.completionRequiresFullFellowship,
+        completionRequiresFullFellowship:
+          progressionState.campaign.completionRequiresFullFellowship,
+        completionRequiresFullParty:
+          progressionState.campaign.completionRequiresFullFellowship,
         completionBlocked: progressionState.campaign.completionBlocked,
         cryptFullyCleared: progressionState.campaign.cryptFullyCleared,
         finalDescentUnlocked: progressionState.campaign.finalDescentUnlocked,
@@ -1186,7 +1629,8 @@ export function useDemoRuntime() {
     activePartySize: progressionState.party.activeSlots,
     maxPartySlots: progressionState.party.maxSlots,
     fullFellowshipAssembled: progressionState.campaign.fullFellowshipAssembled,
-    completionRequiresFullFellowship: progressionState.campaign.completionRequiresFullFellowship,
+    completionRequiresFullFellowship:
+      progressionState.campaign.completionRequiresFullFellowship,
     campaignCompletionBlocked: progressionState.campaign.completionBlocked,
 
     dungeon,
