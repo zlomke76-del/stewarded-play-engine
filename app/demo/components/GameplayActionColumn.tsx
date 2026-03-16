@@ -12,6 +12,32 @@ type Props = {
   demo: any;
 };
 
+type CombatActionRequestDetail = {
+  action: "attack" | "defend" | "skill" | "reposition" | "improvise";
+};
+
+function buildSuggestedInput(action: CombatActionRequestDetail["action"], activeTurnLabel?: string | null) {
+  const actor = String(activeTurnLabel ?? "I").trim() || "I";
+
+  if (action === "attack") {
+    return `${actor} attack the enemy directly with a fast committed strike.`;
+  }
+
+  if (action === "defend") {
+    return `${actor} take a defensive stance, brace, and prepare for the next strike.`;
+  }
+
+  if (action === "skill") {
+    return `${actor} use a class skill to gain an advantage in this fight.`;
+  }
+
+  if (action === "reposition") {
+    return `${actor} reposition for advantage and avoid the enemy's strongest line of attack.`;
+  }
+
+  return "";
+}
+
 export default function GameplayActionColumn({ demo }: Props) {
   const [inlineResult, setInlineResult] = useState<any | null>(null);
   const [isRecording, setIsRecording] = useState(false);
@@ -103,6 +129,94 @@ export default function GameplayActionColumn({ demo }: Props) {
       node.scrollIntoView({ behavior: "smooth", block: "start" });
     });
   }, [renderOptions, renderResolution, inlineResult]);
+
+  useEffect(() => {
+    function handleCombatActionRequest(event: Event) {
+      const customEvent = event as CustomEvent<CombatActionRequestDetail>;
+      const action = customEvent.detail?.action;
+
+      if (!action) return;
+      if (!demo.gameplayAllowsAction) return;
+
+      if (typeof demo.setGameplayFocusStep === "function") {
+        demo.setGameplayFocusStep("action");
+      }
+
+      if (typeof demo.setActiveSection === "function") {
+        demo.setActiveSection("action");
+      }
+
+      if (typeof demo.setSelectedOption === "function") {
+        demo.setSelectedOption(null);
+      }
+
+      const suggested =
+        action === "improvise"
+          ? ""
+          : buildSuggestedInput(action, demo.activeTurnLabel);
+
+      if (typeof demo.setPlayerInput === "function") {
+        const existing = String(demo.playerInput ?? "").trim();
+        demo.setPlayerInput(existing.length > 0 ? existing : suggested);
+      }
+
+      window.requestAnimationFrame(() => {
+        const actionAnchor = document.getElementById(anchorId("action"));
+        if (actionAnchor) {
+          actionAnchor.scrollIntoView({ behavior: "smooth", block: "start" });
+        } else {
+          actionRootRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+        }
+
+        window.requestAnimationFrame(() => {
+          const root = actionRootRef.current;
+          if (!root) return;
+
+          const input =
+            root.querySelector("textarea") ??
+            root.querySelector('input[type="text"]') ??
+            root.querySelector("input") ??
+            null;
+
+          if (input instanceof HTMLTextAreaElement || input instanceof HTMLInputElement) {
+            input.focus();
+            const len = input.value.length;
+            try {
+              input.setSelectionRange(len, len);
+            } catch {
+              // ignore
+            }
+            return;
+          }
+
+          const button =
+            root.querySelector('button[type="submit"]') ??
+            root.querySelector("button");
+
+          if (button instanceof HTMLButtonElement) {
+            button.focus();
+          }
+        });
+      });
+    }
+
+    window.addEventListener(
+      "eof:combat-action-request",
+      handleCombatActionRequest as EventListener
+    );
+
+    return () => {
+      window.removeEventListener(
+        "eof:combat-action-request",
+        handleCombatActionRequest as EventListener
+      );
+    };
+  }, [
+    demo,
+    demo.activeTurnLabel,
+    demo.gameplayAllowsAction,
+    demo.playerInput,
+  ]);
 
   return (
     <div ref={actionRootRef} style={{ display: "grid", gap: 14 }}>
