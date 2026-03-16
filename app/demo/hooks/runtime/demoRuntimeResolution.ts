@@ -22,6 +22,14 @@ type HandleRecordArgs = {
   dungeon: any;
   openedDoorIds: string[];
   unlockedDoorIds: string[];
+  currentCombat?: {
+    combatId: string;
+    targetCombatantId?: string | null;
+    targetEnemyName?: string | null;
+    isOpeningThresholdCombat?: boolean;
+    openingBattleFinisherSkillId?: string | null;
+    openingBattleFinisherLabel?: string | null;
+  } | null;
 };
 
 type HandleOutcomeOnlyArgs = {
@@ -468,23 +476,66 @@ function buildReplacementWeaponForClass(
       };
 }
 
+function inputMentionsSkill(input: string, skillId?: string | null) {
+  if (!skillId) return false;
+  const normalizedInput = normalizeKey(input);
+  const skillName = normalizeKey(skillId.replaceAll("_", " "));
+  return normalizedInput.includes(skillName);
+}
+
+function isDecisiveFinisherAttempt(args: {
+  playerInput: string;
+  selectedOptionDescription: string;
+  finisherSkillId?: string | null;
+}) {
+  const selected = normalizeKey(args.selectedOptionDescription);
+  const typed = normalizeKey(args.playerInput);
+
+  const mentionsFinisherPath =
+    selected.includes("decisive class finishing skill") ||
+    selected.includes("decisive magical finishing skill");
+
+  const mentionsSkill = inputMentionsSkill(args.playerInput, args.finisherSkillId);
+
+  const aggressiveTypedIntent =
+    typed.includes("finish") ||
+    typed.includes("end the fight") ||
+    typed.includes("decisive") ||
+    typed.includes("final strike");
+
+  return mentionsFinisherPath || (mentionsSkill && aggressiveTypedIntent) || mentionsSkill;
+}
+
 function shouldBreakStarterWeapon(args: {
   prevState: any;
   success: boolean;
   kind: string;
   location: { floorId: string; roomId: string };
+  playerInput: string;
+  selectedOptionDescription: string;
+  currentCombat?: HandleRecordArgs["currentCombat"];
 }) {
-  const { prevState, success, kind, location } = args;
+  const { prevState, success, kind, location, playerInput, selectedOptionDescription, currentCombat } = args;
   if (!success) return false;
   if (kind !== "contested") return false;
 
   const events = Array.isArray(prevState?.events) ? prevState.events : [];
   if (hasStarterWeaponAlreadyBroken(events)) return false;
 
-  return inferIsOpeningThresholdCombat({
-    events,
-    floorId: location.floorId,
-    roomId: location.roomId,
+  const openingThreshold =
+    currentCombat?.isOpeningThresholdCombat ??
+    inferIsOpeningThresholdCombat({
+      events,
+      floorId: location.floorId,
+      roomId: location.roomId,
+    });
+
+  if (!openingThreshold) return false;
+
+  return isDecisiveFinisherAttempt({
+    playerInput,
+    selectedOptionDescription,
+    finisherSkillId: currentCombat?.openingBattleFinisherSkillId ?? null,
   });
 }
 
@@ -512,16 +563,18 @@ function appendOpeningWeaponBreakConsequences(args: {
   location: { floorId: string; roomId: string };
   playerInput: string;
   selectedOptionDescription: string;
+  finisherSkillLabel?: string | null;
 }) {
-  const { nextState, location, playerInput, selectedOptionDescription } = args;
+  const { nextState, location, playerInput, selectedOptionDescription, finisherSkillLabel } = args;
 
   let next = nextState;
 
   next = appendEventToState(next, "HERO_STARTER_WEAPON_BROKEN", {
     floorId: location.floorId,
     roomId: location.roomId,
-    reason: "opening_threshold_victory",
+    reason: "opening_threshold_finisher",
     sourceText: `${playerInput}\n${selectedOptionDescription}`.trim(),
+    finishingSkill: finisherSkillLabel ?? null,
   });
 
   next = appendEventToState(next, "HERO_LOADOUT_CHANGED", {
@@ -538,7 +591,9 @@ function appendOpeningWeaponBreakConsequences(args: {
     floorId: location.floorId,
     roomId: location.roomId,
     category: "first_victory",
-    text: "The hero survived the first guardian, but the weapon that carried them into the dark did not survive the strike.",
+    text: finisherSkillLabel
+      ? `The hero ended the first guardian with ${finisherSkillLabel}, forcing the strike through at full cost. The enemy fell, and the starter weapon failed in the same breath.`
+      : "The hero survived the first guardian, but the weapon that carried them into the dark did not survive the decisive strike.",
   });
 
   return next;
@@ -609,6 +664,27 @@ function appendReplacementWeaponConsequences(args: {
   return next;
 }
 
+function computePlayerCombatDamage(args: {
+  success: boolean;
+  kind: string;
+  selectedOptionDescription: string;
+  playerInput: string;
+  currentCombat?: HandleRecordArgs["currentCombat"];
+}) {
+  if (!args.success) return 0;
+
+  const finisher = isDecisiveFinisherAttempt({
+    playerInput: args.playerInput,
+    selectedOptionDescription: args.selectedOptionDescription,
+    finisherSkillId: args.currentCombat?.openingBattleFinisherSkillId ?? null,
+  });
+
+  if (finisher) return 12;
+  if (args.kind === "contested") return 4;
+  if (args.kind === "risky") return 3;
+  return 2;
+}
+
 export function commitResolvedActionToState(args: HandleRecordArgs) {
   const {
     prevState,
@@ -622,6 +698,7 @@ export function commitResolvedActionToState(args: HandleRecordArgs) {
     dungeon,
     openedDoorIds,
     unlockedDoorIds,
+    currentCombat = null,
   } = args;
 
   const combinedText = `${playerInput}\n${selectedOptionDescription}`.trim();
@@ -641,6 +718,9 @@ export function commitResolvedActionToState(args: HandleRecordArgs) {
       roomId: location.roomId,
       success,
       selectedConnectionId: selectedConnectionId ?? null,
+      combatId: currentCombat?.combatId ?? null,
+      targetCombatantId: currentCombat?.targetCombatantId ?? null,
+      openingThresholdCombat: !!currentCombat?.isOpeningThresholdCombat,
     },
   };
 
@@ -692,12 +772,53 @@ export function commitResolvedActionToState(args: HandleRecordArgs) {
     delta: awarenessDelta,
   });
 
+  const decisiveFinisher = isDecisiveFinisherAttempt({
+    playerInput,
+    selectedOptionDescription,
+    finisherSkillId: currentCombat?.openingBattleFinisherSkillId ?? null,
+  });
+
+  if (success && currentCombat?.combatId && currentCombat.targetCombatantId) {
+    const amount = computePlayerCombatDamage({
+      success,
+      kind,
+      selectedOptionDescription,
+      playerInput,
+      currentCombat,
+    });
+
+    if (amount > 0) {
+      next = appendEventToState(next, "COMBATANT_DAMAGED", {
+        combatId: currentCombat.combatId,
+        sourceCombatantId: "player_hero",
+        targetCombatantId: currentCombat.targetCombatantId,
+        amount,
+        kind: decisiveFinisher ? "finisher" : "attack",
+      });
+    }
+
+    if (decisiveFinisher) {
+      next = appendEventToState(next, "COMBATANT_DOWNED", {
+        combatId: currentCombat.combatId,
+        combatantId: currentCombat.targetCombatantId,
+        reason: "decisive_finisher",
+      });
+
+      next = appendEventToState(next, "COMBAT_ENDED", {
+        combatId: currentCombat.combatId,
+      });
+    }
+  }
+
   if (
     shouldBreakStarterWeapon({
       prevState,
       success,
       kind,
       location,
+      playerInput,
+      selectedOptionDescription,
+      currentCombat,
     })
   ) {
     next = appendOpeningWeaponBreakConsequences({
@@ -705,6 +826,7 @@ export function commitResolvedActionToState(args: HandleRecordArgs) {
       location,
       playerInput,
       selectedOptionDescription,
+      finisherSkillLabel: currentCombat?.openingBattleFinisherLabel ?? null,
     });
   }
 
