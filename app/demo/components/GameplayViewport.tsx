@@ -1075,8 +1075,6 @@ export default function GameplayViewport({ demo }: Props) {
     return "chamber";
   }, [demo.combatActive, demo.gameplayFocusStep, hasPuzzleRoom]);
 
-  const isCombatScene = activeScene === "combat";
-
   useEffect(() => {
     const timer = window.setTimeout(() => {
       setShowChronicleEntry(false);
@@ -1248,9 +1246,7 @@ export default function GameplayViewport({ demo }: Props) {
       style={{
         display: "flex",
         flexDirection: "column",
-        height: "100dvh",
         minHeight: "100dvh",
-        overflow: "hidden",
         gap: 14,
         position: "relative",
       }}
@@ -1352,8 +1348,8 @@ export default function GameplayViewport({ demo }: Props) {
           gap: 18,
           flex: 1,
           minHeight: 0,
-          overflow: isCombatScene ? "hidden" : "auto",
-          paddingRight: isCombatScene ? 0 : 2,
+          overflow: "auto",
+          paddingRight: 2,
         }}
       >
         {activeScene === "pressure" ? (
@@ -1444,8 +1440,6 @@ export default function GameplayViewport({ demo }: Props) {
             style={{
               scrollMarginTop: 90,
               minHeight: 0,
-              height: "100%",
-              overflow: "hidden",
             }}
           >
             <GameplayCombatPanel demo={demo} />
