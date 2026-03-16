@@ -1096,6 +1096,31 @@ export default function GameplayViewport({ demo }: Props) {
       hpMax: number;
       ac: number;
       initiativeMod: number;
+      xpCurrent: number;
+      xpToNextLevel: number;
+      attackBonus: number;
+      attributes: Record<
+        "strength" | "dexterity" | "constitution" | "intelligence" | "wisdom" | "charisma",
+        number
+      >;
+      skills: Array<{
+        id: string;
+        label: string;
+        value: number;
+        attribute: "strength" | "dexterity" | "constitution" | "intelligence" | "wisdom" | "charisma";
+      }>;
+      classFeatures: string[];
+      weapon: {
+        name: string;
+        category: string;
+        trait: string;
+        damage: string;
+      } | null;
+      armor: {
+        name: string;
+        category: string;
+        acBase: number;
+      } | null;
     } => {
       const member = demo.partyMembers?.[0] ?? null;
       const fallbackName =
@@ -1105,6 +1130,8 @@ export default function GameplayViewport({ demo }: Props) {
 
       const portrait: "Male" | "Female" =
         member?.portrait === "Female" ? "Female" : "Male";
+
+      const heroSheet = demo.heroSheet ?? null;
 
       return {
         name: String(member?.name ?? fallbackName ?? "The Lone Hero"),
@@ -1116,9 +1143,32 @@ export default function GameplayViewport({ demo }: Props) {
         hpMax: Number(member?.hpMax ?? 0),
         ac: Number(member?.ac ?? 0),
         initiativeMod: Number(member?.initiativeMod ?? 0),
+        xpCurrent: Number(heroSheet?.xpCurrent ?? 0),
+        xpToNextLevel: Number(heroSheet?.xpToNextLevel ?? 100),
+        attackBonus: Number(heroSheet?.attackBonus ?? 0),
+        attributes:
+          heroSheet?.attributes ?? {
+            strength: 10,
+            dexterity: 10,
+            constitution: 10,
+            intelligence: 10,
+            wisdom: 10,
+            charisma: 10,
+          },
+        skills: Array.isArray(heroSheet?.skills) ? heroSheet.skills : [],
+        classFeatures: Array.isArray(heroSheet?.classFeatures)
+          ? heroSheet.classFeatures
+          : [],
+        weapon: heroSheet?.weapon ?? null,
+        armor: heroSheet?.armor ?? null,
       };
     },
-    [demo.partyMembers, demo.effectivePlayerNames, demo.progression?.hero?.level]
+    [
+      demo.partyMembers,
+      demo.effectivePlayerNames,
+      demo.progression?.hero?.level,
+      demo.heroSheet,
+    ]
   );
 
   const heroHeaderVisual = useMemo(() => {
@@ -1251,6 +1301,14 @@ export default function GameplayViewport({ demo }: Props) {
         ac={hero.ac}
         initiativeMod={hero.initiativeMod}
         heroVisual={heroHeaderVisual}
+        xpCurrent={hero.xpCurrent}
+        xpToNextLevel={hero.xpToNextLevel}
+        attributes={hero.attributes}
+        skills={hero.skills}
+        classFeatures={hero.classFeatures}
+        weapon={hero.weapon}
+        armor={hero.armor}
+        attackBonus={hero.attackBonus}
       />
 
       {shouldShowProgressionBanner ? <ProgressionBanner demo={demo} /> : null}
