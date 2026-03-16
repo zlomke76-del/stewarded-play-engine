@@ -5,17 +5,12 @@
 // ------------------------------------------------------------
 // Player-facing combat surface for Echoes of Fate.
 //
-// This version fixes the core UX issue:
-// - the REAL command surface now lives inside combat
-// - typing remains the primary mechanic
-// - quick action buttons only assist composition
-// - fake "type here" battlefield messaging is removed
-// - the REAL adjudication / Roll Fate panel now renders directly in combat
-//
-// Notes:
-// - preserves canon / derived combat behavior
-// - preserves enemy-turn resolver + setup systems
-// - keeps workshop/debug-heavy surfaces behind inspector
+// Refactor goals in this version:
+// - arena remains the focal point
+// - combat chrome is compressed around the arena
+// - threat/focus blocks collapse into compact battlefield status rows
+// - real command surface remains inside combat
+// - inspector/dev-heavy surfaces stay tucked away
 // ------------------------------------------------------------
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
@@ -712,6 +707,82 @@ function InfoPill(props: {
   );
 }
 
+function StatusStrip(props: {
+  eyebrow: string;
+  title: string;
+  subtitle?: string | null;
+  chips?: React.ReactNode;
+}) {
+  const { eyebrow, title, subtitle = null, chips = null } = props;
+
+  return (
+    <div
+      style={{
+        padding: "12px 14px",
+        borderRadius: 14,
+        border: "1px solid rgba(255,255,255,0.08)",
+        background:
+          "linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.015))",
+        display: "grid",
+        gap: 8,
+      }}
+    >
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          gap: 10,
+          alignItems: "flex-start",
+          flexWrap: "wrap",
+        }}
+      >
+        <div style={{ display: "grid", gap: 4, minWidth: 0 }}>
+          <div
+            style={{
+              fontSize: 11,
+              letterSpacing: 0.8,
+              textTransform: "uppercase",
+              opacity: 0.58,
+            }}
+          >
+            {eyebrow}
+          </div>
+
+          <div
+            style={{
+              fontSize: 18,
+              fontWeight: 900,
+              lineHeight: 1.12,
+              color: "rgba(245,236,216,0.97)",
+              wordBreak: "break-word",
+            }}
+          >
+            {title}
+          </div>
+
+          {subtitle ? (
+            <div
+              style={{
+                fontSize: 12,
+                lineHeight: 1.5,
+                color: "rgba(228,232,240,0.74)",
+              }}
+            >
+              {subtitle}
+            </div>
+          ) : null}
+        </div>
+
+        {chips ? (
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "flex-end" }}>
+            {chips}
+          </div>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
 function optionId(option: any, idx: number) {
   const explicit = String(option?.id ?? "").trim();
   if (explicit) return explicit;
@@ -1131,332 +1202,145 @@ export default function CombatSection({
   return (
     <>
       <CardSection title="Battlefield">
-        <div style={{ display: "grid", gap: 14 }}>
-          <CombatStage
-            hero={stageHero}
-            enemy={stageEnemy}
-            battlefieldImageSrc={null}
-            isEnemyTurn={isEnemyTurn}
-            combatEnded={combatEnded}
-            telegraphHint={
-              enemyTelegraphHint
-                ? {
-                    attackStyleHint: enemyTelegraphHint.attackStyleHint,
-                    targetName: enemyTelegraphHint.targetName,
-                  }
-                : null
-            }
-            height={500}
-          />
-
+        <div style={{ display: "grid", gap: 12 }}>
           <div
             style={{
               display: "grid",
-              gridTemplateColumns: "minmax(0, 1.25fr) minmax(300px, 0.9fr)",
-              gap: 12,
+              gap: 10,
+              padding: "12px",
+              borderRadius: 18,
+              border: "1px solid rgba(255,255,255,0.08)",
+              background:
+                "linear-gradient(180deg, rgba(255,255,255,0.035), rgba(255,255,255,0.015))",
             }}
           >
             <div
               style={{
                 display: "grid",
-                gap: 10,
-                padding: "14px",
-                borderRadius: 16,
-                border: "1px solid rgba(255,255,255,0.08)",
-                background:
-                  "linear-gradient(180deg, rgba(255,255,255,0.035), rgba(255,255,255,0.015))",
+                gridTemplateColumns: "minmax(0, 1fr) auto auto",
+                gap: 8,
+                alignItems: "center",
               }}
             >
               <div
                 style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "flex-start",
-                  gap: 12,
-                  flexWrap: "wrap",
-                }}
-              >
-                <div style={{ display: "grid", gap: 5 }}>
-                  <div
-                    style={{
-                      fontSize: 11,
-                      letterSpacing: 0.9,
-                      textTransform: "uppercase",
-                      opacity: 0.58,
-                    }}
-                  >
-                    Immediate Threat
-                  </div>
-
-                  <div
-                    style={{
-                      fontSize: 24,
-                      fontWeight: 900,
-                      lineHeight: 1.08,
-                      color: "rgba(245,236,216,0.97)",
-                    }}
-                  >
-                    {encounterDisplayName}
-                  </div>
-
-                  <div
-                    style={{
-                      fontSize: 13,
-                      lineHeight: 1.6,
-                      color: "rgba(228,232,240,0.80)",
-                      maxWidth: 760,
-                    }}
-                  >
-                    {threatLine}
-                  </div>
-                </div>
-
-                <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-                  <span
-                    style={{
-                      display: "inline-flex",
-                      alignItems: "center",
-                      padding: "6px 10px",
-                      borderRadius: 999,
-                      border: `1px solid ${turnTone.border}`,
-                      background: turnTone.bg,
-                      color: turnTone.text,
-                      fontSize: 11,
-                      fontWeight: 800,
-                      letterSpacing: 0.8,
-                      textTransform: "uppercase",
-                      whiteSpace: "nowrap",
-                    }}
-                  >
-                    {turnTone.label}
-                  </span>
-
-                  <span
-                    style={{
-                      display: "inline-flex",
-                      alignItems: "center",
-                      padding: "6px 10px",
-                      borderRadius: 999,
-                      border: `1px solid ${pressureTone.border}`,
-                      background: pressureTone.bg,
-                      color: "rgba(235,238,244,0.92)",
-                      fontSize: 11,
-                      fontWeight: 800,
-                      letterSpacing: 0.8,
-                      textTransform: "uppercase",
-                      whiteSpace: "nowrap",
-                    }}
-                  >
-                    Pressure · {pressureTier}
-                  </span>
-                </div>
-              </div>
-
-              <div
-                style={{
-                  padding: "12px 12px",
-                  borderRadius: 14,
-                  border: "1px solid rgba(214,188,120,0.16)",
-                  background: "rgba(214,188,120,0.06)",
-                  fontSize: 14,
-                  lineHeight: 1.65,
-                  color: "rgba(245,236,216,0.94)",
-                }}
-              >
-                {playerInstruction}
-              </div>
-
-              <div
-                style={{
-                  fontSize: 12,
-                  lineHeight: 1.55,
-                  color: "rgba(228,232,240,0.68)",
-                }}
-              >
-                Combat remains intent-driven. Buttons assist composition, but the real move is the
-                command you type below.
-              </div>
-            </div>
-
-            <div
-              style={{
-                display: "grid",
-                gap: 10,
-                padding: "14px",
-                borderRadius: 16,
-                border: "1px solid rgba(255,255,255,0.08)",
-                background:
-                  "linear-gradient(180deg, rgba(255,255,255,0.035), rgba(255,255,255,0.015))",
-              }}
-            >
-              <div
-                style={{
+                  minWidth: 0,
                   fontSize: 11,
                   letterSpacing: 0.9,
                   textTransform: "uppercase",
                   opacity: 0.58,
                 }}
               >
-                Enemy Focus
+                Combat Surface
               </div>
 
-              {activeEnemyCard ? (
-                <div
-                  style={{
-                    display: "grid",
-                    gap: 10,
-                    padding: "10px",
-                    borderRadius: 14,
-                    border: activeEnemyCard.defeated
-                      ? "1px solid rgba(255,120,120,0.24)"
-                      : "1px solid rgba(255,255,255,0.08)",
-                    background: activeEnemyCard.defeated
-                      ? "rgba(255,120,120,0.05)"
-                      : "rgba(255,255,255,0.03)",
-                  }}
-                >
-                  <div style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
-                    <div
-                      style={{
-                        width: 72,
-                        height: 72,
-                        borderRadius: 14,
-                        overflow: "hidden",
-                        border: "1px solid rgba(255,255,255,0.14)",
-                        background: "rgba(0,0,0,0.24)",
-                        flexShrink: 0,
-                      }}
-                    >
-                      <img
-                        src={activeEnemyCard.portraitSrc}
-                        alt={activeEnemyCard.enemyName}
-                        width={72}
-                        height={72}
-                        style={{
-                          width: 72,
-                          height: 72,
-                          objectFit: "cover",
-                          display: "block",
-                        }}
-                        onError={(e) => {
-                          const el = e.currentTarget;
-                          el.onerror = null;
-                          el.src = "/assets/V2/Enemy/Enemy_Bandit_Warrior.png";
-                        }}
-                      />
-                    </div>
+              <span
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  padding: "6px 10px",
+                  borderRadius: 999,
+                  border: `1px solid ${turnTone.border}`,
+                  background: turnTone.bg,
+                  color: turnTone.text,
+                  fontSize: 11,
+                  fontWeight: 800,
+                  letterSpacing: 0.8,
+                  textTransform: "uppercase",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                {turnTone.label}
+              </span>
 
-                    <div style={{ minWidth: 0, flex: 1, display: "grid", gap: 5 }}>
-                      <div
-                        style={{
-                          fontSize: 17,
-                          fontWeight: 900,
-                          lineHeight: 1.15,
-                          color: "rgba(245,236,216,0.97)",
-                        }}
-                      >
-                        {activeEnemyCard.label}
-                      </div>
+              <span
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  padding: "6px 10px",
+                  borderRadius: 999,
+                  border: `1px solid ${pressureTone.border}`,
+                  background: pressureTone.bg,
+                  color: "rgba(235,238,244,0.92)",
+                  fontSize: 11,
+                  fontWeight: 800,
+                  letterSpacing: 0.8,
+                  textTransform: "uppercase",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                Pressure · {pressureTier}
+              </span>
+            </div>
 
-                      <div
-                        style={{
-                          fontSize: 12,
-                          lineHeight: 1.5,
-                          color: "rgba(228,232,240,0.74)",
-                        }}
-                      >
-                        {activeEnemyCard.roleLabel} · {activeEnemyCard.factionLabel}
-                      </div>
+            <CombatStage
+              hero={stageHero}
+              enemy={stageEnemy}
+              battlefieldImageSrc={null}
+              isEnemyTurn={isEnemyTurn}
+              combatEnded={combatEnded}
+              telegraphHint={
+                enemyTelegraphHint
+                  ? {
+                      attackStyleHint: enemyTelegraphHint.attackStyleHint,
+                      targetName: enemyTelegraphHint.targetName,
+                    }
+                  : null
+              }
+              height={560}
+            />
 
-                      <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                        <InfoPill label={`AC ${activeEnemyCard.ac}`} tone="info" />
-                        {activeEnemyCard.defeated ? (
-                          <InfoPill label="Defeated" tone="warn" />
-                        ) : (
-                          <InfoPill
-                            label={`HP ${fmtHp(activeEnemyCard.hpCurrent, activeEnemyCard.hpMax)}`}
-                            tone="accent"
-                          />
-                        )}
-                        {activeEnemyCard.isCacheGuard ? (
-                          <InfoPill label="Guards Cache" tone="accent" />
-                        ) : null}
-                        {activeEnemyCard.isKeybearer ? (
-                          <InfoPill label="Keybearer" tone="warn" />
-                        ) : null}
-                        {activeEnemyCard.isRelicBearer ? (
-                          <InfoPill label="Relic Bearer" tone="accent" />
-                        ) : null}
-                      </div>
-                    </div>
-                  </div>
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "minmax(0, 1.2fr) minmax(0, 0.95fr)",
+                gap: 10,
+              }}
+            >
+              <StatusStrip
+                eyebrow="Immediate Threat"
+                title={encounterDisplayName}
+                subtitle={threatLine}
+                chips={
+                  <>
+                    {combatEnded ? <InfoPill label="Resolved" tone="accent" /> : null}
+                    {!combatEnded && activeEnemyCard?.defeated ? (
+                      <InfoPill label="Primary Threat Down" tone="warn" />
+                    ) : null}
+                    {encounterContext?.objective ? (
+                      <InfoPill label={`Objective: ${encounterContext.objective}`} tone="neutral" />
+                    ) : null}
+                  </>
+                }
+              />
 
-                  <div
-                    style={{
-                      height: 8,
-                      borderRadius: 999,
-                      background: "rgba(0,0,0,0.36)",
-                      border: "1px solid rgba(255,255,255,0.10)",
-                      overflow: "hidden",
-                    }}
-                    aria-label={`Enemy HP ${fmtHp(activeEnemyCard.hpCurrent, activeEnemyCard.hpMax)}`}
-                  >
-                    <div
-                      style={{
-                        height: "100%",
-                        width: `${Math.round(
-                          hpPercent(activeEnemyCard.hpCurrent, activeEnemyCard.hpMax) * 100
-                        )}%`,
-                        background: activeEnemyCard.defeated
-                          ? "rgba(255,120,120,0.65)"
-                          : "rgba(255,196,118,0.58)",
-                        boxShadow: activeEnemyCard.defeated
-                          ? "none"
-                          : "0 0 12px rgba(255,196,118,0.18)",
-                      }}
-                    />
-                  </div>
-
-                  {enemyTelegraphHint && isEnemyTurn ? (
-                    <div
-                      style={{
-                        fontSize: 12,
-                        lineHeight: 1.5,
-                        color: "rgba(255,226,226,0.92)",
-                      }}
-                    >
-                      Telegraph: <strong>{enemyTelegraphHint.attackStyleHint}</strong> targeting{" "}
-                      <strong>{enemyTelegraphHint.targetName}</strong>.
-                    </div>
-                  ) : (
-                    <div
-                      style={{
-                        fontSize: 12,
-                        lineHeight: 1.5,
-                        color: "rgba(228,232,240,0.68)",
-                      }}
-                    >
-                      {combatEnded
-                        ? "The battlefield quiets. The immediate threat is spent."
-                        : "Track this enemy first. The roster below shows the rest of the battlefield."}
-                    </div>
-                  )}
-                </div>
-              ) : (
-                <div
-                  style={{
-                    padding: "12px",
-                    borderRadius: 14,
-                    border: "1px solid rgba(255,255,255,0.08)",
-                    background: "rgba(255,255,255,0.03)",
-                    fontSize: 13,
-                    lineHeight: 1.6,
-                    color: "rgba(228,232,240,0.72)",
-                  }}
-                >
-                  No enemy focus is available yet.
-                </div>
-              )}
+              <StatusStrip
+                eyebrow="Command Read"
+                title={playerInstruction}
+                subtitle={
+                  enemyTelegraphHint && isEnemyTurn
+                    ? `Telegraph: ${enemyTelegraphHint.attackStyleHint} targeting ${enemyTelegraphHint.targetName}.`
+                    : activeEnemyCard
+                      ? `Focus: ${activeEnemyCard.label} · HP ${fmtHp(
+                          activeEnemyCard.hpCurrent,
+                          activeEnemyCard.hpMax
+                        )} · AC ${activeEnemyCard.ac}`
+                      : "Read the arena first. Type the actual move below."
+                }
+                chips={
+                  <>
+                    {activeEnemyCard?.isCacheGuard ? (
+                      <InfoPill label="Guards Cache" tone="info" />
+                    ) : null}
+                    {activeEnemyCard?.isKeybearer ? (
+                      <InfoPill label="Keybearer" tone="warn" />
+                    ) : null}
+                    {activeEnemyCard?.isRelicBearer ? (
+                      <InfoPill label="Relic Bearer" tone="accent" />
+                    ) : null}
+                  </>
+                }
+              />
             </div>
           </div>
 
