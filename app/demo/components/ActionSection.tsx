@@ -9,6 +9,11 @@
 // - collapses party-turn management + loadout detail
 // - preserves dictation, pass-turn, party buttons, and action chips
 // - reuses the same 3D hero portrait system as the header
+//
+// Phase 3 combat UX upgrades:
+// - compact retreat / finisher prompts
+// - decisive skill surfacing without making the panel taller
+// - class skills tucked into a dropdown during combat
 // ------------------------------------------------------------
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
@@ -30,9 +35,15 @@ type PartyMemberLite = {
   initiativeMod?: number;
 };
 
-type DecisiveSkillPrompt = {
-  skillId: string;
-  label: string;
+type PromptBanner = {
+  visible?: boolean;
+  promptText?: string | null;
+  prefillText?: string | null;
+};
+
+type FinisherPrompt = PromptBanner & {
+  skillId?: string | null;
+  skillLabel?: string | null;
 };
 
 type Props = {
@@ -68,8 +79,8 @@ type Props = {
   showTurnCards?: boolean;
   showLoadoutDetails?: boolean;
 
-  canAttemptRetreat?: boolean;
-  decisiveSkillPrompt?: DecisiveSkillPrompt | null;
+  finisherPrompt?: FinisherPrompt | null;
+  retreatPrompt?: PromptBanner | null;
 };
 
 type SpeechRecognitionLike = {
@@ -274,16 +285,12 @@ function buildSkillIntent(skillId: string, label: string) {
   }
 }
 
-function buildRetreatIntent() {
-  return "I disengage, fall back, and look for a path to evade the fight without giving the enemy a clean opening.";
-}
-
 function ActionChipButton(props: {
   label: string;
   title?: string;
   disabled?: boolean;
   onClick: () => void;
-  accent?: "default" | "skill" | "dictate" | "clear" | "decisive";
+  accent?: "default" | "skill" | "dictate" | "clear" | "finisher";
 }) {
   const { label, title, disabled, onClick, accent = "default" } = props;
 
@@ -304,10 +311,11 @@ function ActionChipButton(props: {
       border: "1px solid rgba(255,255,255,0.10)",
       background: "rgba(255,255,255,0.04)",
     },
-    decisive: {
-      border: "1px solid rgba(255,196,118,0.34)",
+    finisher: {
+      border: "1px solid rgba(255,174,88,0.36)",
       background:
-        "linear-gradient(180deg, rgba(255,196,118,0.14), rgba(255,196,118,0.06))",
+        "linear-gradient(180deg, rgba(255,196,118,0.16), rgba(255,196,118,0.08))",
+      boxShadow: "0 0 0 1px rgba(255,196,118,0.06)",
     },
   };
 
@@ -487,8 +495,8 @@ export default function ActionSection({
   inputPlaceholder,
   showTurnCards = true,
   showLoadoutDetails = true,
-  canAttemptRetreat = false,
-  decisiveSkillPrompt = null,
+  finisherPrompt = null,
+  retreatPrompt = null,
 }: Props) {
   const hasParty = partyMembers.length > 0;
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
@@ -539,9 +547,32 @@ export default function ActionSection({
     return flavorLineForMember(actingLabel, actingSkillIds, actingTraitIds);
   }, [actingLabel, actingSkillIds, actingTraitIds]);
 
+  const finisherSkillLabel = String(finisherPrompt?.skillLabel ?? "").trim();
+  const finisherSkillId = String(finisherPrompt?.skillId ?? "").trim();
+
   const specialtyButtons = useMemo(() => {
-    return actingSkillLabels.slice(0, 3);
-  }, [actingSkillLabels]);
+    const base = actingSkillLabels.slice(0, 3);
+
+    if (!finisherPrompt?.visible || !finisherSkillLabel) {
+      return base;
+    }
+
+    const alreadyPresent = base.some(
+      (skill) =>
+        skill.id === finisherSkillId ||
+        skill.label.toLowerCase() === finisherSkillLabel.toLowerCase()
+    );
+
+    if (alreadyPresent) return base;
+
+    return [
+      {
+        id: finisherSkillId || finisherSkillLabel.toLowerCase().replace(/\s+/g, "_"),
+        label: finisherSkillLabel,
+      },
+      ...base,
+    ].slice(0, 3);
+  }, [actingSkillLabels, finisherPrompt?.visible, finisherSkillId, finisherSkillLabel]);
 
   const lockReason = useMemo(() => {
     if (!combatActive) return null;
@@ -747,10 +778,59 @@ export default function ActionSection({
     }
   }
 
+  function insertFinisherIntent() {
+    if (!canSubmit) return;
+    playSfx(SFX.buttonClick, 0.58);
+
+    const custom = String(finisherPrompt?.prefillText ?? "").trim();
+    if (custom) {
+      onSetPlayerInput(appendIntent(playerInput, custom));
+      return;
+    }
+
+    if (finisherSkillId && finisherSkillLabel) {
+      onSetPlayerInput(
+        appendIntent(
+          playerInput,
+          `I commit fully and use ${finisherSkillLabel} to end this fight, even if the weapon fails in the strike.`
+        )
+      );
+      return;
+    }
+
+    onSetPlayerInput(
+      appendIntent(
+        playerInput,
+        "I commit to a decisive finishing strike and try to end the fight here."
+      )
+    );
+  }
+
+  function insertRetreatIntent() {
+    if (!canSubmit) return;
+    playSfx(SFX.buttonClick, 0.58);
+
+    const custom = String(retreatPrompt?.prefillText ?? "").trim();
+    if (custom) {
+      onSetPlayerInput(appendIntent(playerInput, custom));
+      return;
+    }
+
+    onSetPlayerInput(
+      appendIntent(
+        playerInput,
+        "I disengage carefully, evade the immediate threat, and try to pull back toward a safer lane."
+      )
+    );
+  }
+
+  const showFinisherPrompt = !!finisherPrompt?.visible && !lockReason;
+  const showRetreatPrompt = !!retreatPrompt?.visible && !lockReason;
+
   return (
     <div id="player-action" style={{ scrollMarginTop: 90 }}>
       <CardSection title={title}>
-        <div style={{ display: "grid", gap: 14 }}>
+        <div style={{ display: "grid", gap: 12 }}>
           <div
             style={{
               ...bannerStyle,
@@ -872,10 +952,9 @@ export default function ActionSection({
                 padding: "14px",
                 borderRadius: 18,
                 border: "1px solid rgba(255,255,255,0.10)",
-                background:
-                  canSubmit
-                    ? "linear-gradient(180deg, rgba(255,196,118,0.05), rgba(0,0,0,0.28) 24%, rgba(0,0,0,0.24))"
-                    : "rgba(0,0,0,0.24)",
+                background: canSubmit
+                  ? "linear-gradient(180deg, rgba(255,196,118,0.05), rgba(0,0,0,0.28) 24%, rgba(0,0,0,0.24))"
+                  : "rgba(0,0,0,0.24)",
                 boxShadow: canSubmit ? "0 16px 36px rgba(0,0,0,0.22)" : "none",
                 backdropFilter: "blur(10px)",
               }}
@@ -1049,19 +1128,31 @@ export default function ActionSection({
                 ) : null}
               </div>
 
-              <div style={{ display: "grid", gap: 10 }}>
-                {(decisiveSkillPrompt || canAttemptRetreat) ? (
-                  <div
-                    style={{
-                      display: "grid",
-                      gap: 8,
-                      padding: "10px 12px",
-                      borderRadius: 14,
-                      border: "1px solid rgba(255,196,118,0.18)",
-                      background: "rgba(255,196,118,0.06)",
-                    }}
-                  >
-                    {decisiveSkillPrompt ? (
+              {(showFinisherPrompt || showRetreatPrompt) && (
+                <div style={{ display: "grid", gap: 8 }}>
+                  {showFinisherPrompt ? (
+                    <div
+                      style={{
+                        display: "grid",
+                        gap: 8,
+                        padding: "10px 12px",
+                        borderRadius: 14,
+                        border: "1px solid rgba(255,174,88,0.28)",
+                        background:
+                          "linear-gradient(180deg, rgba(255,196,118,0.12), rgba(255,196,118,0.05))",
+                      }}
+                    >
+                      <div
+                        style={{
+                          fontSize: 11,
+                          textTransform: "uppercase",
+                          letterSpacing: 0.7,
+                          color: "rgba(255,220,176,0.86)",
+                          fontWeight: 800,
+                        }}
+                      >
+                        Decisive Move
+                      </div>
                       <div
                         style={{
                           display: "flex",
@@ -1071,55 +1162,97 @@ export default function ActionSection({
                           alignItems: "center",
                         }}
                       >
-                        <div style={{ display: "grid", gap: 4 }}>
+                        <div style={{ display: "grid", gap: 3, minWidth: 0 }}>
                           <div
                             style={{
-                              fontSize: 11,
-                              textTransform: "uppercase",
-                              letterSpacing: 0.6,
-                              opacity: 0.66,
+                              fontSize: 13,
+                              lineHeight: 1.55,
+                              color: "rgba(245,236,216,0.96)",
+                              fontWeight: 700,
                             }}
                           >
-                            Decisive Move
+                            {finisherPrompt?.promptText ||
+                              "The enemy is exposed. A decisive class skill could end this fight."}
                           </div>
-                          <div style={{ fontSize: 13, lineHeight: 1.55, color: "rgba(245,236,216,0.94)" }}>
-                            The enemy is exposed. <strong>{decisiveSkillPrompt.label}</strong> could end the fight, but your weapon may not survive the strike.
-                          </div>
+                          {finisherSkillLabel ? (
+                            <div style={{ fontSize: 12, opacity: 0.76 }}>
+                              Skill: <strong>{finisherSkillLabel}</strong>
+                            </div>
+                          ) : null}
                         </div>
 
                         <ActionChipButton
-                          label={decisiveSkillPrompt.label}
+                          label={finisherSkillLabel ? `⚡ ${finisherSkillLabel}` : "⚡ Decisive Strike"}
                           disabled={!canSubmit}
-                          title={`Insert ${decisiveSkillPrompt.label} as the decisive move`}
-                          accent="decisive"
-                          onClick={() => {
-                            if (!canSubmit) return;
-                            playSfx(SFX.buttonClick, 0.58);
-                            onSetPlayerInput(
-                              appendIntent(
-                                playerInput,
-                                `${buildSkillIntent(
-                                  decisiveSkillPrompt.skillId,
-                                  decisiveSkillPrompt.label
-                                )} I commit to ending the fight with this strike even if my weapon breaks.`
-                              )
-                            );
-                          }}
+                          accent="finisher"
+                          title="Insert the decisive combat skill into your command"
+                          onClick={insertFinisherIntent}
                         />
                       </div>
-                    ) : null}
+                    </div>
+                  ) : null}
 
-                    {canAttemptRetreat ? (
-                      <div style={{ fontSize: 12, lineHeight: 1.5, color: "rgba(228,232,240,0.78)" }}>
-                        You can now attempt to <strong>evade</strong>, <strong>withdraw</strong>, or <strong>run</strong> if you want to break away from this fight.
+                  {showRetreatPrompt ? (
+                    <div
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        gap: 10,
+                        flexWrap: "wrap",
+                        alignItems: "center",
+                        padding: "10px 12px",
+                        borderRadius: 14,
+                        border: "1px solid rgba(160,190,255,0.22)",
+                        background: "rgba(160,190,255,0.06)",
+                      }}
+                    >
+                      <div
+                        style={{
+                          fontSize: 12,
+                          lineHeight: 1.55,
+                          color: "rgba(228,232,240,0.90)",
+                        }}
+                      >
+                        {retreatPrompt?.promptText ||
+                          "You can now evade, disengage, or try to withdraw from the fight."}
                       </div>
-                    ) : null}
-                  </div>
-                ) : null}
 
+                      <ActionChipButton
+                        label="↩ Evade / Withdraw"
+                        disabled={!canSubmit}
+                        accent="default"
+                        title="Insert an evade or withdrawal command"
+                        onClick={insertRetreatIntent}
+                      />
+                    </div>
+                  ) : null}
+                </div>
+              )}
+
+              <div style={{ display: "grid", gap: 10 }}>
                 <div style={{ display: "grid", gap: 6 }}>
-                  <div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: 0.5, opacity: 0.6 }}>
-                    Quick Actions
+                  <div
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "baseline",
+                      gap: 10,
+                      flexWrap: "wrap",
+                    }}
+                  >
+                    <div
+                      style={{
+                        fontSize: 11,
+                        textTransform: "uppercase",
+                        letterSpacing: 0.5,
+                        opacity: 0.6,
+                      }}
+                    >
+                      Quick Actions
+                    </div>
+                    <div style={{ fontSize: 12, opacity: 0.72 }}>
+                      Best commands usually include <strong>movement + target + intent</strong>.
+                    </div>
                   </div>
 
                   <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
@@ -1165,20 +1298,6 @@ export default function ActionSection({
                       }}
                     />
 
-                    {canAttemptRetreat ? (
-                      <ActionChipButton
-                        label="↩ Evade"
-                        disabled={!canSubmit}
-                        title="Insert an evade / disengage intent"
-                        accent="skill"
-                        onClick={() => {
-                          if (!canSubmit) return;
-                          playSfx(SFX.buttonClick, 0.58);
-                          onSetPlayerInput(appendIntent(playerInput, buildRetreatIntent()));
-                        }}
-                      />
-                    ) : null}
-
                     <ActionChipButton
                       label="🤝 Aid Ally"
                       disabled={!canSubmit}
@@ -1194,26 +1313,6 @@ export default function ActionSection({
                         );
                       }}
                     />
-
-                    {specialtyButtons.map((skill) => {
-                      const isDecisive = decisiveSkillPrompt?.skillId === skill.id;
-                      return (
-                        <ActionChipButton
-                          key={skill.id}
-                          label={skill.label}
-                          disabled={!canSubmit}
-                          title={`Insert ${skill.label} intent`}
-                          accent={isDecisive ? "decisive" : "skill"}
-                          onClick={() => {
-                            if (!canSubmit) return;
-                            playSfx(SFX.buttonClick, 0.58);
-                            onSetPlayerInput(
-                              appendIntent(playerInput, buildSkillIntent(skill.id, skill.label))
-                            );
-                          }}
-                        />
-                      );
-                    })}
 
                     {speechSupported ? (
                       <ActionChipButton
@@ -1239,29 +1338,79 @@ export default function ActionSection({
                   </div>
                 </div>
 
-                <div style={{ display: "grid", gap: 6 }}>
-                  <div
+                {specialtyButtons.length > 0 ? (
+                  <details
                     style={{
-                      display: "flex",
-                      justifyContent: "space-between",
-                      alignItems: "baseline",
-                      gap: 10,
-                      flexWrap: "wrap",
+                      borderRadius: 14,
+                      border: "1px solid rgba(255,255,255,0.10)",
+                      background: "rgba(0,0,0,0.18)",
+                      overflow: "hidden",
                     }}
                   >
-                    <div
+                    <summary
                       style={{
+                        cursor: "pointer",
+                        padding: "11px 12px",
                         fontSize: 11,
                         textTransform: "uppercase",
                         letterSpacing: 0.5,
-                        opacity: 0.6,
+                        opacity: 0.64,
                       }}
                     >
-                      Command
+                      Class Skills
+                    </summary>
+
+                    <div
+                      style={{
+                        padding: "0 12px 12px",
+                        display: "flex",
+                        gap: 8,
+                        flexWrap: "wrap",
+                      }}
+                    >
+                      {specialtyButtons.map((skill) => {
+                        const isFinisherSkill =
+                          !!finisherPrompt?.visible &&
+                          (skill.id === finisherSkillId ||
+                            skill.label.toLowerCase() === finisherSkillLabel.toLowerCase());
+
+                        return (
+                          <ActionChipButton
+                            key={skill.id}
+                            label={skill.label}
+                            disabled={!canSubmit}
+                            title={`Insert ${skill.label} intent`}
+                            accent={isFinisherSkill ? "finisher" : "skill"}
+                            onClick={() => {
+                              if (!canSubmit) return;
+                              playSfx(SFX.buttonClick, 0.58);
+
+                              if (isFinisherSkill) {
+                                insertFinisherIntent();
+                                return;
+                              }
+
+                              onSetPlayerInput(
+                                appendIntent(playerInput, buildSkillIntent(skill.id, skill.label))
+                              );
+                            }}
+                          />
+                        );
+                      })}
                     </div>
-                    <div style={{ fontSize: 12, opacity: 0.72 }}>
-                      Best commands usually include <strong>movement + target + intent</strong>.
-                    </div>
+                  </details>
+                ) : null}
+
+                <div style={{ display: "grid", gap: 6 }}>
+                  <div
+                    style={{
+                      fontSize: 11,
+                      textTransform: "uppercase",
+                      letterSpacing: 0.5,
+                      opacity: 0.6,
+                    }}
+                  >
+                    Command
                   </div>
 
                   <textarea
@@ -1277,7 +1426,7 @@ export default function ActionSection({
                     disabled={!canSubmit}
                     style={{
                       width: "100%",
-                      minHeight: "148px",
+                      minHeight: "136px",
                       resize: "vertical",
                       boxSizing: "border-box",
                       lineHeight: 1.55,
