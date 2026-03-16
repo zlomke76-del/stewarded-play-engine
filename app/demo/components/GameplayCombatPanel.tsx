@@ -305,6 +305,34 @@ export default function GameplayCombatPanel({ demo }: Props) {
             onAdvanceTurnBtn={() => demo.advanceTurn()}
             onPassTurnBtn={() => demo.passTurn()}
             onEndCombatBtn={() => demo.endCombat()}
+            actionSurface={{
+              partyMembers: demo.partyMembers.map((m: any, idx: number) => ({
+                id: String(m.id),
+                label: `${displayName(m, idx + 1)} (${m.id})`,
+                species: m.species ?? "Human",
+                className: m.className || "Warrior",
+                portrait: m.portrait ?? "Male",
+                skills: m.skills ?? [],
+                traits: m.traits ?? [],
+                ac: m.ac,
+                hpMax: m.hpMax,
+                hpCurrent: m.hpCurrent,
+                initiativeMod: m.initiativeMod,
+              })),
+              actingPlayerId: demo.actingPlayerId,
+              onSetActingPlayerId: (id: string) => demo.setActingPlayerId(id),
+              playerInput: demo.playerInput,
+              onSetPlayerInput: (v: string) => demo.setPlayerInput(v),
+              canSubmit: demo.canPlayerSubmitIntent,
+              onSubmit: demo.handlePlayerAction,
+              onPassTurn: demo.passTurn,
+              dmMode: demo.dmMode,
+              title: "Combat Command",
+              eyebrow: "Command",
+              description: "Describe what your character actually does in this fight.",
+              inputPlaceholder:
+                "Describe your move in full: where you move, who you target, what you attempt, and why.",
+            }}
           />
         </div>
       </div>
