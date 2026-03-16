@@ -478,6 +478,7 @@ function deriveHeroSheet(args: {
 
   let weapon: HeroWeaponSummary = buildBaseWeaponForClass(className);
   let armor: HeroArmorSummary = buildBaseArmorForClass(className);
+
   const brokenStarterWeapon = events.some(
     (event) => String(event?.type ?? "") === "HERO_STARTER_WEAPON_BROKEN"
   );
@@ -499,34 +500,51 @@ function deriveHeroSheet(args: {
     if (type === "HERO_LOADOUT_CHANGED" && String(payload?.slot ?? "") === "weapon") {
       const nextItemName = String(payload?.nextItemName ?? "").trim();
       const state = String(payload?.state ?? "").trim().toLowerCase();
+      const nextCategory = String(payload?.weaponCategory ?? "").trim();
+      const nextTrait = String(payload?.weaponTrait ?? "").trim();
+      const nextDamage = String(payload?.weaponDamage ?? "").trim();
 
       if (nextItemName) {
+        const isBroken = state === "broken";
+
         weapon = {
           name: nextItemName,
-          category: state === "broken" ? weapon.category : weapon.category,
-          trait: state === "broken" ? "Damaged" : weapon.trait,
-          damage: state === "broken" ? "Improvised" : weapon.damage,
-          broken: state === "broken",
+          category: nextCategory || weapon.category,
+          trait: isBroken ? "Damaged" : nextTrait || weapon.trait,
+          damage: isBroken ? "Improvised" : nextDamage || weapon.damage,
+          broken: isBroken,
         };
       }
     }
 
     if (type === "HERO_LOADOUT_CHANGED" && String(payload?.slot ?? "") === "armor") {
       const nextItemName = String(payload?.nextItemName ?? "").trim();
+      const nextCategory = String(payload?.armorCategory ?? "").trim();
+      const nextAcBase = Number(payload?.acBase);
+
       if (nextItemName) {
         armor = {
-          ...armor,
           name: nextItemName,
+          category: nextCategory || armor.category,
+          acBase: Number.isFinite(nextAcBase) ? nextAcBase : armor.acBase,
         };
       }
     }
   }
 
-  const xpCurrent = Number(heroLevel > 0 ? (events.filter((e) => String(e?.type ?? "") === "HERO_EXPERIENCE_GAINED")
-    .reduce((sum, event) => sum + Math.max(0, Number(event?.payload?.amount ?? 0)), 0) % xpToNextLevelFromLevel(heroLevel)) : 0);
+  const xpCurrent = Number(
+    heroLevel > 0
+      ? events
+          .filter((e) => String(e?.type ?? "") === "HERO_EXPERIENCE_GAINED")
+          .reduce((sum, event) => sum + Math.max(0, Number(event?.payload?.amount ?? 0)), 0) %
+          xpToNextLevelFromLevel(heroLevel)
+      : 0
+  );
 
   const primaryAttackAttribute = inferPrimaryAttackAttribute(className);
-  const baseAttackBonus = attributeMod(attributes[primaryAttackAttribute]) + Math.max(1, Math.floor((heroLevel - 1) / 4) + 2);
+  const baseAttackBonus =
+    attributeMod(attributes[primaryAttackAttribute]) +
+    Math.max(1, Math.floor((heroLevel - 1) / 4) + 2);
   const attackBonus = weapon?.broken ? Math.max(0, baseAttackBonus - 2) : baseAttackBonus;
 
   return {
