@@ -93,6 +93,10 @@ function abilityModifier(score: number) {
   return Math.floor((Number(score || 0) - 10) / 2);
 }
 
+function normalizeKey(value: string) {
+  return String(value ?? "").trim().toLowerCase();
+}
+
 function StatCard(props: {
   label: string;
   value: string;
@@ -143,7 +147,7 @@ function StatCard(props: {
 
 function InfoChip(props: {
   label: string;
-  tone?: "neutral" | "warn" | "accent";
+  tone?: "neutral" | "warn" | "accent" | "blessing";
 }) {
   const { label, tone = "neutral" } = props;
 
@@ -160,11 +164,18 @@ function InfoChip(props: {
             background: "rgba(214,188,120,0.08)",
             color: "rgba(245,236,216,0.94)",
           }
-        : {
-            border: "1px solid rgba(255,255,255,0.08)",
-            background: "rgba(255,255,255,0.04)",
-            color: "rgba(232,236,244,0.88)",
-          };
+        : tone === "blessing"
+          ? {
+              border: "1px solid rgba(255,220,138,0.28)",
+              background:
+                "linear-gradient(180deg, rgba(214,188,120,0.18), rgba(214,188,120,0.08))",
+              color: "rgba(255,245,220,0.98)",
+            }
+          : {
+              border: "1px solid rgba(255,255,255,0.08)",
+              background: "rgba(255,255,255,0.04)",
+              color: "rgba(232,236,244,0.88)",
+            };
 
   return (
     <span
@@ -331,6 +342,26 @@ export default function HeroStatusBar(props: Props) {
   }, [attributes]);
 
   const weaponBroken = Boolean(weapon?.broken);
+  const weaponNameKey = normalizeKey(weapon?.name ?? "");
+  const recoveredWeapon =
+    Boolean(weapon) &&
+    !weaponBroken &&
+    weaponNameKey.length > 0 &&
+    weaponNameKey !== "starter weapon" &&
+    weaponNameKey !== "iron longsword" &&
+    weaponNameKey !== "quick dagger" &&
+    weaponNameKey !== "apprentice staff" &&
+    weaponNameKey !== "sanctified mace" &&
+    weaponNameKey !== "hunter bow" &&
+    weaponNameKey !== "oathblade" &&
+    weaponNameKey !== "rapier" &&
+    weaponNameKey !== "oak staff" &&
+    weaponNameKey !== "bo staff" &&
+    weaponNameKey !== "infused sidearm" &&
+    weaponNameKey !== "rough axe" &&
+    weaponNameKey !== "focus wand" &&
+    weaponNameKey !== "pact rod";
+
   const attackLabel =
     typeof attackBonus === "number"
       ? attackBonus >= 0
@@ -345,6 +376,29 @@ export default function HeroStatusBar(props: Props) {
       : hpRatio <= 0.5
         ? "rgba(214,188,120,0.14)"
         : "rgba(118,188,132,0.12)";
+
+  const weaponPanelTone = weaponBroken
+    ? {
+        background:
+          "linear-gradient(180deg, rgba(188,118,118,0.12), rgba(255,255,255,0.03))",
+        border: "1px solid rgba(255,132,132,0.18)",
+      }
+    : recoveredWeapon
+      ? {
+          background:
+            "linear-gradient(180deg, rgba(214,188,120,0.14), rgba(255,255,255,0.03))",
+          border: "1px solid rgba(255,220,138,0.20)",
+        }
+      : {
+          background: "rgba(255,255,255,0.03)",
+          border: "1px solid rgba(255,255,255,0.05)",
+        };
+
+  const journeyLine = weaponBroken
+    ? "The first victory cost steel. A better weapon must be found deeper in the dungeon."
+    : recoveredWeapon
+      ? "A recovered weapon now carries the descent forward. The hero enters the next chamber with renewed intent."
+      : "The Chronicle bears witness as you enter the dark.";
 
   return (
     <div
@@ -414,11 +468,15 @@ export default function HeroStatusBar(props: Props) {
                 height: 88,
                 borderRadius: 18,
                 overflow: "hidden",
-                border: "1px solid rgba(214,188,120,0.24)",
+                border: recoveredWeapon
+                  ? "1px solid rgba(255,220,138,0.28)"
+                  : "1px solid rgba(214,188,120,0.24)",
                 background:
                   "radial-gradient(circle at 50% 30%, rgba(214,188,120,0.18), rgba(24,28,40,0.96) 70%)",
                 boxShadow:
-                  "0 10px 28px rgba(0,0,0,0.24), inset 0 1px 0 rgba(255,255,255,0.05)",
+                  recoveredWeapon
+                    ? "0 10px 28px rgba(0,0,0,0.24), 0 0 18px rgba(255,208,120,0.10), inset 0 1px 0 rgba(255,255,255,0.05)"
+                    : "0 10px 28px rgba(0,0,0,0.24), inset 0 1px 0 rgba(255,255,255,0.05)",
                 display: "grid",
                 placeItems: "center",
               }}
@@ -511,8 +569,12 @@ export default function HeroStatusBar(props: Props) {
                   alignItems: "center",
                 }}
               >
-                <InfoChip label={`Attack ${attackLabel}`} tone={weaponBroken ? "warn" : "accent"} />
+                <InfoChip
+                  label={`Attack ${attackLabel}`}
+                  tone={weaponBroken ? "warn" : recoveredWeapon ? "blessing" : "accent"}
+                />
                 {weaponBroken ? <InfoChip label="Weapon Broken" tone="warn" /> : null}
+                {recoveredWeapon ? <InfoChip label="Recovered Armament" tone="blessing" /> : null}
                 {armor?.name ? <InfoChip label={armor.name} /> : null}
               </div>
 
@@ -651,12 +713,12 @@ export default function HeroStatusBar(props: Props) {
                   lineHeight: 1.5,
                   color: weaponBroken
                     ? "rgba(255,188,188,0.86)"
-                    : "rgba(214,188,120,0.78)",
+                    : recoveredWeapon
+                      ? "rgba(255,231,174,0.90)"
+                      : "rgba(214,188,120,0.78)",
                 }}
               >
-                {weaponBroken
-                  ? "The first victory cost steel. A better weapon must be found deeper in the dungeon."
-                  : "The Chronicle bears witness as you enter the dark."}
+                {journeyLine}
               </div>
             </div>
           </div>
@@ -665,8 +727,12 @@ export default function HeroStatusBar(props: Props) {
             style={{
               padding: "8px 10px",
               borderRadius: 999,
-              border: "1px solid rgba(214,188,120,0.20)",
-              background: "rgba(214,188,120,0.08)",
+              border: recoveredWeapon
+                ? "1px solid rgba(255,220,138,0.24)"
+                : "1px solid rgba(214,188,120,0.20)",
+              background: recoveredWeapon
+                ? "linear-gradient(180deg, rgba(214,188,120,0.16), rgba(214,188,120,0.08))"
+                : "rgba(214,188,120,0.08)",
               fontSize: 11,
               letterSpacing: 0.9,
               textTransform: "uppercase",
@@ -676,7 +742,7 @@ export default function HeroStatusBar(props: Props) {
               alignSelf: "start",
             }}
           >
-            The Chronicle Remembers
+            {recoveredWeapon ? "The Chronicle Arms You" : "The Chronicle Remembers"}
           </div>
         </div>
 
@@ -687,16 +753,8 @@ export default function HeroStatusBar(props: Props) {
             gap: 10,
           }}
         >
-          <StatCard
-            label="HP"
-            value={`${hpCurrent}/${hpMax}`}
-            tone={hpTone}
-          />
-          <StatCard
-            label="AC"
-            value={String(ac)}
-            tone="rgba(126,150,196,0.12)"
-          />
+          <StatCard label="HP" value={`${hpCurrent}/${hpMax}`} tone={hpTone} />
+          <StatCard label="AC" value={String(ac)} tone="rgba(126,150,196,0.12)" />
           <StatCard
             label="Initiative"
             value={initiativeMod >= 0 ? `+${initiativeMod}` : `${initiativeMod}`}
@@ -705,7 +763,7 @@ export default function HeroStatusBar(props: Props) {
           <StatCard
             label="Attack"
             value={attackLabel}
-            tone="rgba(214,188,120,0.10)"
+            tone={recoveredWeapon ? "rgba(214,188,120,0.14)" : "rgba(214,188,120,0.10)"}
             warning={weaponBroken}
           />
         </div>
@@ -917,12 +975,7 @@ export default function HeroStatusBar(props: Props) {
                 style={{
                   padding: "9px 10px",
                   borderRadius: 12,
-                  background: weaponBroken
-                    ? "linear-gradient(180deg, rgba(188,118,118,0.12), rgba(255,255,255,0.03))"
-                    : "rgba(255,255,255,0.03)",
-                  border: weaponBroken
-                    ? "1px solid rgba(255,132,132,0.18)"
-                    : "1px solid rgba(255,255,255,0.05)",
+                  ...weaponPanelTone,
                   display: "grid",
                   gap: 4,
                 }}
@@ -952,18 +1005,28 @@ export default function HeroStatusBar(props: Props) {
                       fontWeight: 800,
                       color: weaponBroken
                         ? "rgba(255,220,220,0.98)"
-                        : "rgba(245,236,216,0.95)",
+                        : recoveredWeapon
+                          ? "rgba(255,245,220,0.98)"
+                          : "rgba(245,236,216,0.95)",
                     }}
                   >
                     {weapon?.name ?? "Unarmed"}
                   </div>
                   {weaponBroken ? <InfoChip label="Broken" tone="warn" /> : null}
+                  {recoveredWeapon ? <InfoChip label="Recovered" tone="blessing" /> : null}
                 </div>
                 <div style={{ fontSize: 12, opacity: 0.76, lineHeight: 1.5 }}>
                   {weapon ? `${weapon.category} · ${weapon.damage}` : "No weapon equipped"}
                 </div>
                 {weapon?.trait ? (
-                  <div style={{ fontSize: 12, opacity: 0.66, lineHeight: 1.45 }}>
+                  <div
+                    style={{
+                      fontSize: 12,
+                      opacity: recoveredWeapon ? 0.82 : 0.66,
+                      lineHeight: 1.45,
+                      color: recoveredWeapon ? "rgba(255,231,174,0.90)" : undefined,
+                    }}
+                  >
                     {weapon.trait}
                   </div>
                 ) : null}
