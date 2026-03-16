@@ -2329,3 +2329,4 @@ export default function CombatSection({
     </>
   );
 }
+
