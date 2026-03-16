@@ -1069,25 +1069,41 @@ export default function GameplayViewport({ demo }: Props) {
     };
   }, []);
 
-  const hero = useMemo(() => {
-    const member = demo.partyMembers?.[0] ?? null;
-    const fallbackName =
-      demo.effectivePlayerNames?.[0] ??
-      member?.name ??
-      "The Lone Hero";
+  const hero = useMemo(
+    (): {
+      name: string;
+      species: string;
+      className: string;
+      portrait: "Male" | "Female";
+      level: number;
+      hpCurrent: number;
+      hpMax: number;
+      ac: number;
+      initiativeMod: number;
+    } => {
+      const member = demo.partyMembers?.[0] ?? null;
+      const fallbackName =
+        demo.effectivePlayerNames?.[0] ??
+        member?.name ??
+        "The Lone Hero";
 
-    return {
-      name: String(member?.name ?? fallbackName ?? "The Lone Hero"),
-      species: String(member?.species ?? "Human"),
-      className: String(member?.className ?? "Warrior"),
-      portrait: member?.portrait === "Female" ? "Female" : "Male",
-      level: Number(demo.progression?.hero?.level ?? 1),
-      hpCurrent: Number(member?.hpCurrent ?? member?.hpMax ?? 0),
-      hpMax: Number(member?.hpMax ?? 0),
-      ac: Number(member?.ac ?? 0),
-      initiativeMod: Number(member?.initiativeMod ?? 0),
-    };
-  }, [demo.partyMembers, demo.effectivePlayerNames, demo.progression?.hero?.level]);
+      const portrait: "Male" | "Female" =
+        member?.portrait === "Female" ? "Female" : "Male";
+
+      return {
+        name: String(member?.name ?? fallbackName ?? "The Lone Hero"),
+        species: String(member?.species ?? "Human"),
+        className: String(member?.className ?? "Warrior"),
+        portrait,
+        level: Number(demo.progression?.hero?.level ?? 1),
+        hpCurrent: Number(member?.hpCurrent ?? member?.hpMax ?? 0),
+        hpMax: Number(member?.hpMax ?? 0),
+        ac: Number(member?.ac ?? 0),
+        initiativeMod: Number(member?.initiativeMod ?? 0),
+      };
+    },
+    [demo.partyMembers, demo.effectivePlayerNames, demo.progression?.hero?.level]
+  );
 
   const heroHeaderVisual = useMemo(() => {
     return <HeaderHeroVisual hero={hero} />;
