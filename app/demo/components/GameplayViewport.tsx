@@ -1054,155 +1054,6 @@ function PuzzleRoomPanel(props: {
   );
 }
 
-function CombatScene(props: {
-  demo: any;
-  hasPuzzleRoom: boolean;
-  onSelectPressure: () => void;
-  onSelectChamber: () => void;
-  onSelectPuzzle: () => void;
-  onSelectAction: () => void;
-}) {
-  const {
-    demo,
-    hasPuzzleRoom,
-    onSelectPressure,
-    onSelectChamber,
-    onSelectPuzzle,
-    onSelectAction,
-  } = props;
-
-  return (
-    <div
-      id={anchorId("combat")}
-      style={{
-        scrollMarginTop: 90,
-        display: "grid",
-        gridTemplateRows: "auto 1fr",
-        minHeight: 0,
-        height: "100%",
-        gap: 12,
-      }}
-    >
-      <div
-        style={{
-          borderRadius: 24,
-          border: "1px solid rgba(214,188,120,0.16)",
-          background:
-            "linear-gradient(180deg, rgba(16,18,28,0.94), rgba(10,12,20,0.92))",
-          boxShadow:
-            "0 24px 60px rgba(0,0,0,0.28), inset 0 1px 0 rgba(255,255,255,0.04)",
-          overflow: "hidden",
-          minHeight: 0,
-          height: "100%",
-          display: "grid",
-          gridTemplateRows: "auto 1fr",
-        }}
-      >
-        <div
-          style={{
-            padding: "14px 16px 12px",
-            borderBottom: "1px solid rgba(255,255,255,0.06)",
-            background:
-              "linear-gradient(180deg, rgba(255,255,255,0.035), rgba(255,255,255,0.015))",
-            display: "grid",
-            gap: 10,
-            flexShrink: 0,
-          }}
-        >
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "flex-start",
-              gap: 12,
-              flexWrap: "wrap",
-            }}
-          >
-            <div style={{ display: "grid", gap: 4, minWidth: 0 }}>
-              <div
-                style={{
-                  fontSize: 11,
-                  letterSpacing: 1.0,
-                  textTransform: "uppercase",
-                  opacity: 0.58,
-                }}
-              >
-                Combat Cockpit
-              </div>
-              <div
-                style={{
-                  fontSize: 14,
-                  lineHeight: 1.55,
-                  color: "rgba(228,232,240,0.80)",
-                  maxWidth: 860,
-                }}
-              >
-                The battlefield is active. Read the arena, issue the hero’s command,
-                and resolve the exchange inside one continuous combat surface.
-              </div>
-            </div>
-
-            <div
-              style={{
-                padding: "7px 10px",
-                borderRadius: 999,
-                border: "1px solid rgba(214,188,120,0.22)",
-                background: "rgba(214,188,120,0.08)",
-                fontSize: 11,
-                fontWeight: 800,
-                letterSpacing: 0.75,
-                textTransform: "uppercase",
-                color: "rgba(245,236,216,0.94)",
-                whiteSpace: "nowrap",
-              }}
-            >
-              Battlefield Active
-            </div>
-          </div>
-
-          <div
-            style={{
-              display: "flex",
-              gap: 8,
-              flexWrap: "wrap",
-              margin: "0 -16px -12px",
-            }}
-          >
-            <StageTabs
-              activeScene="combat"
-              hasPuzzleRoom={hasPuzzleRoom}
-              onSelectPressure={onSelectPressure}
-              onSelectChamber={onSelectChamber}
-              onSelectPuzzle={onSelectPuzzle}
-              onSelectAction={onSelectAction}
-            />
-          </div>
-        </div>
-
-        <div
-          style={{
-            padding: 10,
-            background:
-              "linear-gradient(180deg, rgba(255,255,255,0.012), rgba(255,255,255,0.00))",
-            minHeight: 0,
-            overflow: "hidden",
-          }}
-        >
-          <div
-            style={{
-              height: "100%",
-              minHeight: 0,
-              overflow: "auto",
-            }}
-          >
-            <GameplayCombatPanel demo={demo} />
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 type Props = {
   demo: any;
 };
@@ -1588,14 +1439,17 @@ export default function GameplayViewport({ demo }: Props) {
         ) : null}
 
         {activeScene === "combat" ? (
-          <CombatScene
-            demo={demo}
-            hasPuzzleRoom={hasPuzzleRoom}
-            onSelectPressure={setPressureScene}
-            onSelectChamber={setChamberScene}
-            onSelectPuzzle={setPuzzleScene}
-            onSelectAction={setActionScene}
-          />
+          <div
+            id={anchorId("combat")}
+            style={{
+              scrollMarginTop: 90,
+              minHeight: 0,
+              height: "100%",
+              overflow: "hidden",
+            }}
+          >
+            <GameplayCombatPanel demo={demo} />
+          </div>
         ) : null}
 
         <details
