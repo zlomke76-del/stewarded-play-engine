@@ -1,6 +1,6 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 type Props = {
   heroName: string;
@@ -13,7 +13,15 @@ type Props = {
   initiativeMod: number;
   heroVisual?: ReactNode;
   heroPortraitSrc?: string;
+  xpCurrent?: number;
+  xpToNextLevel?: number;
 };
+
+type HeroXpGainDetail = {
+  xp: number;
+};
+
+const HERO_STATUS_XP_TARGET_ID = "eof-active-hero-xp-target";
 
 function getHeroInitials(heroName: string) {
   const words = String(heroName || "")
@@ -24,6 +32,15 @@ function getHeroInitials(heroName: string) {
   if (words.length === 0) return "H";
   if (words.length === 1) return words[0].slice(0, 2).toUpperCase();
   return `${words[0][0] ?? ""}${words[1][0] ?? ""}`.toUpperCase();
+}
+
+function getDefaultXpToNextLevel(level: number) {
+  const safeLevel = Math.max(1, Number(level) || 1);
+  return 100 + (safeLevel - 1) * 25;
+}
+
+function clamp01(value: number) {
+  return Math.max(0, Math.min(1, value));
 }
 
 export default function HeroStatusBar(props: Props) {
@@ -38,12 +55,112 @@ export default function HeroStatusBar(props: Props) {
     initiativeMod,
     heroVisual,
     heroPortraitSrc,
+    xpCurrent,
+    xpToNextLevel,
   } = props;
 
   const heroInitials = getHeroInitials(heroName);
 
+  const resolvedXpToNextLevel = useMemo(() => {
+    return Math.max(1, xpToNextLevel ?? getDefaultXpToNextLevel(level));
+  }, [level, xpToNextLevel]);
+
+  const initialXpCurrent = useMemo(() => {
+    const value = xpCurrent ?? 0;
+    return Math.max(0, Math.min(value, resolvedXpToNextLevel));
+  }, [xpCurrent, resolvedXpToNextLevel]);
+
+  const [displayLevel, setDisplayLevel] = useState(level);
+  const [displayXp, setDisplayXp] = useState(initialXpCurrent);
+  const [xpImpactVisible, setXpImpactVisible] = useState(false);
+  const [xpGainLabel, setXpGainLabel] = useState<string | null>(null);
+  const [levelUpLabel, setLevelUpLabel] = useState<string | null>(null);
+
+  const impactTimerRef = useRef<number | null>(null);
+  const gainTimerRef = useRef<number | null>(null);
+  const levelUpTimerRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    setDisplayLevel(level);
+  }, [level]);
+
+  useEffect(() => {
+    setDisplayXp(initialXpCurrent);
+  }, [initialXpCurrent]);
+
+  useEffect(() => {
+    function handleXpGain(event: Event) {
+      const customEvent = event as CustomEvent<HeroXpGainDetail>;
+      const gainedXp = Math.max(0, Number(customEvent.detail?.xp) || 0);
+      if (!gainedXp) return;
+
+      if (impactTimerRef.current !== null) {
+        window.clearTimeout(impactTimerRef.current);
+      }
+      if (gainTimerRef.current !== null) {
+        window.clearTimeout(gainTimerRef.current);
+      }
+      if (levelUpTimerRef.current !== null) {
+        window.clearTimeout(levelUpTimerRef.current);
+      }
+
+      setXpImpactVisible(true);
+      setXpGainLabel(`+${gainedXp} XP`);
+
+      setDisplayXp((prevXp) => {
+        let workingXp = prevXp + gainedXp;
+        let leveledUp = false;
+
+        while (workingXp >= resolvedXpToNextLevel) {
+          workingXp -= resolvedXpToNextLevel;
+          leveledUp = true;
+        }
+
+        if (leveledUp) {
+          setDisplayLevel((prevLevel) => prevLevel + 1);
+          setLevelUpLabel("Level Up");
+          levelUpTimerRef.current = window.setTimeout(() => {
+            setLevelUpLabel(null);
+            levelUpTimerRef.current = null;
+          }, 2200);
+        }
+
+        return workingXp;
+      });
+
+      impactTimerRef.current = window.setTimeout(() => {
+        setXpImpactVisible(false);
+        impactTimerRef.current = null;
+      }, 1200);
+
+      gainTimerRef.current = window.setTimeout(() => {
+        setXpGainLabel(null);
+        gainTimerRef.current = null;
+      }, 1800);
+    }
+
+    window.addEventListener("eof:hero-xp-gain", handleXpGain as EventListener);
+
+    return () => {
+      window.removeEventListener("eof:hero-xp-gain", handleXpGain as EventListener);
+
+      if (impactTimerRef.current !== null) {
+        window.clearTimeout(impactTimerRef.current);
+      }
+      if (gainTimerRef.current !== null) {
+        window.clearTimeout(gainTimerRef.current);
+      }
+      if (levelUpTimerRef.current !== null) {
+        window.clearTimeout(levelUpTimerRef.current);
+      }
+    };
+  }, [resolvedXpToNextLevel]);
+
+  const xpProgress = clamp01(displayXp / resolvedXpToNextLevel);
+
   return (
     <div
+      data-eof-hero-xp-target={HERO_STATUS_XP_TARGET_ID}
       style={{
         position: "relative",
         overflow: "hidden",
@@ -62,6 +179,18 @@ export default function HeroStatusBar(props: Props) {
           pointerEvents: "none",
           background:
             "linear-gradient(90deg, rgba(214,188,120,0.06), transparent 24%, transparent 76%, rgba(214,188,120,0.03))",
+        }}
+      />
+
+      <div
+        style={{
+          position: "absolute",
+          inset: 0,
+          pointerEvents: "none",
+          opacity: xpImpactVisible ? 1 : 0,
+          transition: "opacity 240ms ease",
+          background:
+            "radial-gradient(circle at 24% 18%, rgba(255,210,120,0.16), transparent 22%), radial-gradient(circle at 48% 32%, rgba(255,210,120,0.10), transparent 28%), radial-gradient(circle at 80% 16%, rgba(255,210,120,0.08), transparent 22%)",
         }}
       />
 
@@ -152,7 +281,7 @@ export default function HeroStatusBar(props: Props) {
               )}
             </div>
 
-            <div style={{ display: "grid", gap: 6, minWidth: 0 }}>
+            <div style={{ display: "grid", gap: 8, minWidth: 0 }}>
               <div
                 style={{
                   fontSize: 11,
@@ -183,7 +312,136 @@ export default function HeroStatusBar(props: Props) {
                   color: "rgba(228,232,240,0.82)",
                 }}
               >
-                {species} · {className} · Level {level}
+                {species} · {className} · Level {displayLevel}
+              </div>
+
+              <div
+                style={{
+                  position: "relative",
+                  display: "grid",
+                  gap: 6,
+                  minWidth: 0,
+                }}
+              >
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    gap: 12,
+                    alignItems: "center",
+                    flexWrap: "wrap",
+                  }}
+                >
+                  <div
+                    style={{
+                      fontSize: 11,
+                      letterSpacing: 0.8,
+                      textTransform: "uppercase",
+                      color: "rgba(214,188,120,0.78)",
+                    }}
+                  >
+                    Progress to Level {displayLevel + 1}
+                  </div>
+
+                  <div
+                    style={{
+                      fontSize: 11,
+                      color: "rgba(232,236,244,0.68)",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    {displayXp} / {resolvedXpToNextLevel} XP
+                  </div>
+                </div>
+
+                <div
+                  style={{
+                    position: "relative",
+                    height: 12,
+                    borderRadius: 999,
+                    overflow: "hidden",
+                    border: "1px solid rgba(214,188,120,0.16)",
+                    background:
+                      "linear-gradient(180deg, rgba(255,255,255,0.05), rgba(255,255,255,0.02))",
+                    boxShadow: "inset 0 1px 2px rgba(0,0,0,0.30)",
+                  }}
+                >
+                  <div
+                    style={{
+                      position: "absolute",
+                      inset: 0,
+                      width: `${xpProgress * 100}%`,
+                      transition:
+                        "width 900ms cubic-bezier(0.22, 1, 0.36, 1), filter 220ms ease",
+                      background:
+                        "linear-gradient(90deg, rgba(196,138,54,0.98), rgba(235,199,112,0.98) 55%, rgba(255,233,170,0.98))",
+                      boxShadow:
+                        xpImpactVisible
+                          ? "0 0 18px rgba(255,208,120,0.42)"
+                          : "0 0 10px rgba(255,208,120,0.24)",
+                      filter: xpImpactVisible ? "brightness(1.08)" : "none",
+                    }}
+                  />
+
+                  <div
+                    style={{
+                      position: "absolute",
+                      inset: 0,
+                      background:
+                        "linear-gradient(180deg, rgba(255,255,255,0.18), rgba(255,255,255,0.00) 55%)",
+                      pointerEvents: "none",
+                    }}
+                  />
+                </div>
+
+                <div
+                  style={{
+                    position: "absolute",
+                    right: 0,
+                    top: -2,
+                    display: "grid",
+                    gap: 6,
+                    justifyItems: "end",
+                    pointerEvents: "none",
+                  }}
+                >
+                  {xpGainLabel ? (
+                    <div
+                      style={{
+                        padding: "6px 10px",
+                        borderRadius: 999,
+                        border: "1px solid rgba(214,188,120,0.22)",
+                        background: "rgba(214,188,120,0.10)",
+                        color: "rgba(255,240,198,0.98)",
+                        fontSize: 11,
+                        fontWeight: 900,
+                        boxShadow: "0 8px 18px rgba(0,0,0,0.20)",
+                      }}
+                    >
+                      {xpGainLabel}
+                    </div>
+                  ) : null}
+
+                  {levelUpLabel ? (
+                    <div
+                      style={{
+                        padding: "7px 11px",
+                        borderRadius: 999,
+                        border: "1px solid rgba(255,220,138,0.28)",
+                        background:
+                          "linear-gradient(180deg, rgba(214,188,120,0.18), rgba(214,188,120,0.08))",
+                        color: "rgba(255,245,220,0.98)",
+                        fontSize: 11,
+                        fontWeight: 900,
+                        letterSpacing: 0.7,
+                        textTransform: "uppercase",
+                        boxShadow: "0 10px 24px rgba(0,0,0,0.24)",
+                      }}
+                    >
+                      {levelUpLabel}
+                    </div>
+                  ) : null}
+                </div>
               </div>
 
               <div
