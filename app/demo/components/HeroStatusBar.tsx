@@ -1,5 +1,7 @@
 "use client";
 
+import type { ReactNode } from "react";
+
 type Props = {
   heroName: string;
   species: string;
@@ -9,7 +11,20 @@ type Props = {
   hpMax: number;
   ac: number;
   initiativeMod: number;
+  heroVisual?: ReactNode;
+  heroPortraitSrc?: string;
 };
+
+function getHeroInitials(heroName: string) {
+  const words = String(heroName || "")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+
+  if (words.length === 0) return "H";
+  if (words.length === 1) return words[0].slice(0, 2).toUpperCase();
+  return `${words[0][0] ?? ""}${words[1][0] ?? ""}`.toUpperCase();
+}
 
 export default function HeroStatusBar(props: Props) {
   const {
@@ -21,7 +36,11 @@ export default function HeroStatusBar(props: Props) {
     hpMax,
     ac,
     initiativeMod,
+    heroVisual,
+    heroPortraitSrc,
   } = props;
+
+  const heroInitials = getHeroInitials(heroName);
 
   return (
     <div
@@ -38,51 +57,144 @@ export default function HeroStatusBar(props: Props) {
     >
       <div
         style={{
+          position: "absolute",
+          inset: 0,
+          pointerEvents: "none",
+          background:
+            "linear-gradient(90deg, rgba(214,188,120,0.06), transparent 24%, transparent 76%, rgba(214,188,120,0.03))",
+        }}
+      />
+
+      <div
+        style={{
+          position: "relative",
           padding: "16px 16px 14px",
           display: "grid",
-          gap: 12,
+          gap: 14,
         }}
       >
         <div
           style={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "flex-start",
+            display: "grid",
+            gridTemplateColumns: "minmax(0, 1fr) auto",
             gap: 16,
-            flexWrap: "wrap",
+            alignItems: "start",
           }}
         >
-          <div style={{ display: "grid", gap: 6 }}>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "88px minmax(0, 1fr)",
+              gap: 14,
+              alignItems: "center",
+              minWidth: 0,
+            }}
+          >
             <div
+              aria-label={`${heroName} portrait`}
               style={{
-                fontSize: 11,
-                letterSpacing: 1,
-                textTransform: "uppercase",
-                opacity: 0.6,
+                width: 88,
+                height: 88,
+                borderRadius: 18,
+                overflow: "hidden",
+                border: "1px solid rgba(214,188,120,0.24)",
+                background:
+                  "radial-gradient(circle at 50% 30%, rgba(214,188,120,0.18), rgba(24,28,40,0.96) 70%)",
+                boxShadow:
+                  "0 10px 28px rgba(0,0,0,0.24), inset 0 1px 0 rgba(255,255,255,0.05)",
+                display: "grid",
+                placeItems: "center",
               }}
             >
-              Active Hero
+              {heroVisual ? (
+                <div
+                  style={{
+                    width: "100%",
+                    height: "100%",
+                    display: "grid",
+                    placeItems: "center",
+                    background: "rgba(0,0,0,0.14)",
+                  }}
+                >
+                  {heroVisual}
+                </div>
+              ) : heroPortraitSrc ? (
+                <img
+                  src={heroPortraitSrc}
+                  alt={`${heroName} portrait`}
+                  style={{
+                    width: "100%",
+                    height: "100%",
+                    objectFit: "cover",
+                    display: "block",
+                  }}
+                />
+              ) : (
+                <div
+                  style={{
+                    width: 58,
+                    height: 58,
+                    borderRadius: 999,
+                    border: "1px solid rgba(214,188,120,0.20)",
+                    background:
+                      "radial-gradient(circle at 50% 35%, rgba(214,188,120,0.22), rgba(214,188,120,0.06) 60%, rgba(255,255,255,0.02) 100%)",
+                    display: "grid",
+                    placeItems: "center",
+                    color: "rgba(245,236,216,0.96)",
+                    fontSize: 20,
+                    fontWeight: 900,
+                    letterSpacing: 1,
+                    textTransform: "uppercase",
+                  }}
+                >
+                  {heroInitials}
+                </div>
+              )}
             </div>
 
-            <div
-              style={{
-                fontSize: 24,
-                fontWeight: 900,
-                lineHeight: 1.02,
-                color: "rgba(245,236,216,0.98)",
-              }}
-            >
-              {heroName}
-            </div>
+            <div style={{ display: "grid", gap: 6, minWidth: 0 }}>
+              <div
+                style={{
+                  fontSize: 11,
+                  letterSpacing: 1,
+                  textTransform: "uppercase",
+                  opacity: 0.6,
+                }}
+              >
+                Active Hero
+              </div>
 
-            <div
-              style={{
-                fontSize: 14,
-                lineHeight: 1.5,
-                color: "rgba(228,232,240,0.82)",
-              }}
-            >
-              {species} · {className} · Level {level}
+              <div
+                style={{
+                  fontSize: 26,
+                  fontWeight: 900,
+                  lineHeight: 1.02,
+                  color: "rgba(245,236,216,0.98)",
+                  wordBreak: "break-word",
+                }}
+              >
+                {heroName}
+              </div>
+
+              <div
+                style={{
+                  fontSize: 14,
+                  lineHeight: 1.5,
+                  color: "rgba(228,232,240,0.82)",
+                }}
+              >
+                {species} · {className} · Level {level}
+              </div>
+
+              <div
+                style={{
+                  fontSize: 12,
+                  lineHeight: 1.5,
+                  color: "rgba(214,188,120,0.78)",
+                }}
+              >
+                The Chronicle bears witness as you enter the dark.
+              </div>
             </div>
           </div>
 
@@ -98,6 +210,7 @@ export default function HeroStatusBar(props: Props) {
               fontWeight: 800,
               color: "rgba(245,236,216,0.96)",
               whiteSpace: "nowrap",
+              alignSelf: "start",
             }}
           >
             The Chronicle Remembers
