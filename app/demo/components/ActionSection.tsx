@@ -30,6 +30,11 @@ type PartyMemberLite = {
   initiativeMod?: number;
 };
 
+type DecisiveSkillPrompt = {
+  skillId: string;
+  label: string;
+};
+
 type Props = {
   partyMembers: PartyMemberLite[];
   actingPlayerId: string;
@@ -62,6 +67,9 @@ type Props = {
   inputPlaceholder?: string;
   showTurnCards?: boolean;
   showLoadoutDetails?: boolean;
+
+  canAttemptRetreat?: boolean;
+  decisiveSkillPrompt?: DecisiveSkillPrompt | null;
 };
 
 type SpeechRecognitionLike = {
@@ -266,12 +274,16 @@ function buildSkillIntent(skillId: string, label: string) {
   }
 }
 
+function buildRetreatIntent() {
+  return "I disengage, fall back, and look for a path to evade the fight without giving the enemy a clean opening.";
+}
+
 function ActionChipButton(props: {
   label: string;
   title?: string;
   disabled?: boolean;
   onClick: () => void;
-  accent?: "default" | "skill" | "dictate" | "clear";
+  accent?: "default" | "skill" | "dictate" | "clear" | "decisive";
 }) {
   const { label, title, disabled, onClick, accent = "default" } = props;
 
@@ -291,6 +303,11 @@ function ActionChipButton(props: {
     clear: {
       border: "1px solid rgba(255,255,255,0.10)",
       background: "rgba(255,255,255,0.04)",
+    },
+    decisive: {
+      border: "1px solid rgba(255,196,118,0.34)",
+      background:
+        "linear-gradient(180deg, rgba(255,196,118,0.14), rgba(255,196,118,0.06))",
     },
   };
 
@@ -470,6 +487,8 @@ export default function ActionSection({
   inputPlaceholder,
   showTurnCards = true,
   showLoadoutDetails = true,
+  canAttemptRetreat = false,
+  decisiveSkillPrompt = null,
 }: Props) {
   const hasParty = partyMembers.length > 0;
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
@@ -1031,6 +1050,73 @@ export default function ActionSection({
               </div>
 
               <div style={{ display: "grid", gap: 10 }}>
+                {(decisiveSkillPrompt || canAttemptRetreat) ? (
+                  <div
+                    style={{
+                      display: "grid",
+                      gap: 8,
+                      padding: "10px 12px",
+                      borderRadius: 14,
+                      border: "1px solid rgba(255,196,118,0.18)",
+                      background: "rgba(255,196,118,0.06)",
+                    }}
+                  >
+                    {decisiveSkillPrompt ? (
+                      <div
+                        style={{
+                          display: "flex",
+                          justifyContent: "space-between",
+                          gap: 10,
+                          flexWrap: "wrap",
+                          alignItems: "center",
+                        }}
+                      >
+                        <div style={{ display: "grid", gap: 4 }}>
+                          <div
+                            style={{
+                              fontSize: 11,
+                              textTransform: "uppercase",
+                              letterSpacing: 0.6,
+                              opacity: 0.66,
+                            }}
+                          >
+                            Decisive Move
+                          </div>
+                          <div style={{ fontSize: 13, lineHeight: 1.55, color: "rgba(245,236,216,0.94)" }}>
+                            The enemy is exposed. <strong>{decisiveSkillPrompt.label}</strong> could end the fight, but your weapon may not survive the strike.
+                          </div>
+                        </div>
+
+                        <ActionChipButton
+                          label={decisiveSkillPrompt.label}
+                          disabled={!canSubmit}
+                          title={`Insert ${decisiveSkillPrompt.label} as the decisive move`}
+                          accent="decisive"
+                          onClick={() => {
+                            if (!canSubmit) return;
+                            playSfx(SFX.buttonClick, 0.58);
+                            onSetPlayerInput(
+                              appendIntent(
+                                playerInput,
+                                `${buildSkillIntent(
+                                  decisiveSkillPrompt.skillId,
+                                  decisiveSkillPrompt.label
+                                )} I commit to ending the fight with this strike even if my weapon breaks.`
+                              )
+                            );
+                          }}
+                        />
+                      </div>
+                    ) : null}
+
+                    {canAttemptRetreat ? (
+                      <div style={{ fontSize: 12, lineHeight: 1.5, color: "rgba(228,232,240,0.78)" }}>
+                        You can now attempt to <strong>evade</strong>, <strong>withdraw</strong>, or <strong>run</strong> if you want to break away from this fight.
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
+
                 <div style={{ display: "grid", gap: 6 }}>
                   <div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: 0.5, opacity: 0.6 }}>
                     Quick Actions
@@ -1079,6 +1165,20 @@ export default function ActionSection({
                       }}
                     />
 
+                    {canAttemptRetreat ? (
+                      <ActionChipButton
+                        label="↩ Evade"
+                        disabled={!canSubmit}
+                        title="Insert an evade / disengage intent"
+                        accent="skill"
+                        onClick={() => {
+                          if (!canSubmit) return;
+                          playSfx(SFX.buttonClick, 0.58);
+                          onSetPlayerInput(appendIntent(playerInput, buildRetreatIntent()));
+                        }}
+                      />
+                    ) : null}
+
                     <ActionChipButton
                       label="🤝 Aid Ally"
                       disabled={!canSubmit}
@@ -1095,22 +1195,25 @@ export default function ActionSection({
                       }}
                     />
 
-                    {specialtyButtons.map((skill) => (
-                      <ActionChipButton
-                        key={skill.id}
-                        label={skill.label}
-                        disabled={!canSubmit}
-                        title={`Insert ${skill.label} intent`}
-                        accent="skill"
-                        onClick={() => {
-                          if (!canSubmit) return;
-                          playSfx(SFX.buttonClick, 0.58);
-                          onSetPlayerInput(
-                            appendIntent(playerInput, buildSkillIntent(skill.id, skill.label))
-                          );
-                        }}
-                      />
-                    ))}
+                    {specialtyButtons.map((skill) => {
+                      const isDecisive = decisiveSkillPrompt?.skillId === skill.id;
+                      return (
+                        <ActionChipButton
+                          key={skill.id}
+                          label={skill.label}
+                          disabled={!canSubmit}
+                          title={`Insert ${skill.label} intent`}
+                          accent={isDecisive ? "decisive" : "skill"}
+                          onClick={() => {
+                            if (!canSubmit) return;
+                            playSfx(SFX.buttonClick, 0.58);
+                            onSetPlayerInput(
+                              appendIntent(playerInput, buildSkillIntent(skill.id, skill.label))
+                            );
+                          }}
+                        />
+                      );
+                    })}
 
                     {speechSupported ? (
                       <ActionChipButton
