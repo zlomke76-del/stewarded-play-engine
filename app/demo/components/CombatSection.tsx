@@ -3,26 +3,24 @@
 // ------------------------------------------------------------
 // CombatSection.tsx
 // ------------------------------------------------------------
-// Visual wrapper for combat setup, optional enemy-turn resolver,
-// encounter stakes, enemy roster state, and derived turn order.
+// Player-facing combat surface for Echoes of Fate.
 //
-// Upgrades in this pass:
-// - Derive BOTH player HP and enemy HP from canon events
-// - Surface enemy defeat state so victory is visible
-// - Show encounter stakes / reward signal context in combat
-// - Keep enemy damage application on Solace enemy turns
-// - Add event-sourced enemy roster cards with defeated markers
-// - Improve turn-order readability around defeated combatants
+// Goals of this pass:
+// - Answer immediately:
+//   1. What is happening?
+//   2. Whose turn is it?
+//   3. What can I do right now?
+// - Keep canon / derived combat intact
+// - Preserve existing enemy-turn resolver + setup systems
+// - Move workshop/debug-heavy surfaces behind collapsible panels
 //
 // Notes:
-// - This file does NOT author player-hit canon by itself.
-//   It makes enemy defeat / state visible once COMBATANT_DAMAGED
-//   and COMBATANT_DOWNED are being written.
-// - The next file to tighten after this is CombatState if you want
-//   defeated enemies removed from initiative order entirely.
+// - This file still relies on CombatSetupPanel and EnemyTurnResolverPanel
+// - It does not author player-hit canon directly
+// - It does preserve enemy damage / downed flow during Solace enemy turns
 // ------------------------------------------------------------
 
-import React, { useEffect, useMemo, useRef } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import CardSection from "@/components/layout/CardSection";
 import CombatSetupPanel from "@/components/combat/CombatSetupPanel";
 import EnemyTurnResolverPanel from "@/components/combat/EnemyTurnResolverPanel";
@@ -85,10 +83,8 @@ type Props = {
   pressureTier: "low" | "medium" | "high";
   allowDevControls: boolean;
 
-  // ecology-aware encounter context
   encounterContext?: CombatEncounterContext | null;
 
-  // Enemy turn resolver
   showEnemyResolver: boolean;
   activeEnemyGroupName: string | null;
   activeEnemyGroupId: string | null;
@@ -98,7 +94,6 @@ type Props = {
   onAdvanceTurn: () => void;
   enemyTelegraphHint: EnemyTelegraphHint | null;
 
-  // Derived order display
   derivedCombat: DerivedCombatLite | null;
   activeCombatantSpec: any | null;
   combatEnded: boolean;
@@ -122,11 +117,9 @@ function playSfx(src: string, volume = 0.72) {
   try {
     const audio = new Audio(src);
     audio.volume = volume;
-    void audio.play().catch(() => {
-      // fail silently; SFX should never interrupt combat flow
-    });
+    void audio.play().catch(() => {});
   } catch {
-    // fail silently
+    // fail silent
   }
 }
 
@@ -166,7 +159,13 @@ function normalizeClassKey(v: string) {
 
 function isHealerCapable(className: string) {
   const k = normalizeClassKey(className);
-  return k === "cleric" || k === "paladin" || k === "druid" || k === "bard" || k === "artificer";
+  return (
+    k === "cleric" ||
+    k === "paladin" ||
+    k === "druid" ||
+    k === "bard" ||
+    k === "artificer"
+  );
 }
 
 function clamp01(n: number) {
@@ -273,7 +272,11 @@ function derivePlayerHpFromCanon(args: {
 
       const cur = base[targetId] ?? { hpMax: 12, hpCurrent: 12, downed: false };
       const nextCur = Math.max(0, (Number(cur.hpCurrent) || 0) - amount);
-      base[targetId] = { ...cur, hpCurrent: nextCur, downed: cur.downed || nextCur <= 0 };
+      base[targetId] = {
+        ...cur,
+        hpCurrent: nextCur,
+        downed: cur.downed || nextCur <= 0,
+      };
     }
 
     if (t === "COMBATANT_HEALED") {
@@ -291,7 +294,11 @@ function derivePlayerHpFromCanon(args: {
       const id = String(p.combatantId ?? "");
       if (!id) continue;
       const cur = base[id] ?? { hpMax: 12, hpCurrent: 0, downed: true };
-      base[id] = { ...cur, hpCurrent: Math.max(0, Number(cur.hpCurrent) || 0), downed: true };
+      base[id] = {
+        ...cur,
+        hpCurrent: Math.max(0, Number(cur.hpCurrent) || 0),
+        downed: true,
+      };
     }
   }
 
@@ -386,11 +393,22 @@ function deriveEnemyHpFromCanon(args: {
   return base;
 }
 
-function inferDamageStyleFromPayload(payload: any): "volley" | "beam" | "charge" | "unknown" {
+function inferDamageStyleFromPayload(
+  payload: any
+): "volley" | "beam" | "charge" | "unknown" {
   const text = String(payload?.description ?? "").toLowerCase();
   if (text.includes("volley") || text.includes("arrows")) return "volley";
-  if (text.includes("spell") || text.includes("beam") || text.includes("force") || text.includes("burn")) return "beam";
-  if (text.includes("charge") || text.includes("smash") || text.includes("strike")) return "charge";
+  if (
+    text.includes("spell") ||
+    text.includes("beam") ||
+    text.includes("force") ||
+    text.includes("burn")
+  ) {
+    return "beam";
+  }
+  if (text.includes("charge") || text.includes("smash") || text.includes("strike")) {
+    return "charge";
+  }
   return "unknown";
 }
 
@@ -403,7 +421,14 @@ function computeDeterministicDamage(args: {
   const dc = Math.trunc(Number(args.dc) || 0);
   const margin = roll - dc;
 
-  const base = args.style === "beam" ? 6 : args.style === "charge" ? 5 : args.style === "volley" ? 4 : 4;
+  const base =
+    args.style === "beam"
+      ? 6
+      : args.style === "charge"
+        ? 5
+        : args.style === "volley"
+          ? 4
+          : 4;
   const bonus = Math.max(0, Math.floor(margin / 5));
   const raw = base + bonus;
 
@@ -421,7 +446,9 @@ function enemyMatchesName(enemyName: string, value?: string | null) {
   return normalizeName(enemyName).toLowerCase() === normalizeName(value).toLowerCase();
 }
 
-function chipStyle(tone: "neutral" | "info" | "warn" | "accent" = "neutral"): React.CSSProperties {
+function chipStyle(
+  tone: "neutral" | "info" | "warn" | "accent" = "neutral"
+): React.CSSProperties {
   if (tone === "info") {
     return {
       border: "1px solid rgba(138,180,255,0.22)",
@@ -447,6 +474,179 @@ function chipStyle(tone: "neutral" | "info" | "warn" | "accent" = "neutral"): Re
     border: "1px solid rgba(255,255,255,0.10)",
     background: "rgba(255,255,255,0.04)",
   };
+}
+
+function actionButtonStyle(
+  tone: "primary" | "secondary" | "warn" = "secondary"
+): React.CSSProperties {
+  if (tone === "primary") {
+    return {
+      border: "1px solid rgba(214,188,120,0.28)",
+      background: "linear-gradient(180deg, rgba(214,188,120,0.14), rgba(214,188,120,0.06))",
+      color: "rgba(245,236,216,0.98)",
+    };
+  }
+
+  if (tone === "warn") {
+    return {
+      border: "1px solid rgba(214,110,110,0.28)",
+      background: "linear-gradient(180deg, rgba(214,110,110,0.14), rgba(214,110,110,0.06))",
+      color: "rgba(255,224,224,0.96)",
+    };
+  }
+
+  return {
+    border: "1px solid rgba(255,255,255,0.12)",
+    background: "rgba(255,255,255,0.05)",
+    color: "rgba(236,239,244,0.94)",
+  };
+}
+
+function getEncounterDisplayName(args: {
+  activeEnemyGroupName: string | null;
+  encounterContext: CombatEncounterContext | null;
+  enemyRoster: EnemyRosterCard[];
+}) {
+  if (args.activeEnemyGroupName) return args.activeEnemyGroupName;
+  if (args.enemyRoster.length === 1) return args.enemyRoster[0].label;
+  if (args.enemyRoster.length > 1) return `${args.enemyRoster.length} Hostiles`;
+  if (args.encounterContext?.zoneTheme) return titleCase(String(args.encounterContext.zoneTheme));
+  return "Unknown Hostiles";
+}
+
+function getPlayerInstruction(args: {
+  combatEnded: boolean;
+  isEnemyTurn: boolean;
+  isWrongPlayerForTurn: boolean;
+  dmMode: "human" | "solace-neutral" | null;
+  activeCombatantSpec: any | null;
+}) {
+  if (args.combatEnded) {
+    return "This battle is over. Continue the descent when ready.";
+  }
+
+  if (args.isEnemyTurn) {
+    return args.dmMode === "solace-neutral"
+      ? "The enemy is acting now. Watch the battlefield and wait for your next turn."
+      : "It is the enemy's turn. Read the battlefield and prepare your response.";
+  }
+
+  if (args.isWrongPlayerForTurn) {
+    return "This turn belongs to another party member.";
+  }
+
+  const activeName = String(args.activeCombatantSpec?.name ?? "").trim();
+  if (activeName) {
+    return `It is ${activeName}'s turn. Choose an action below or use the action panel to improvise.`;
+  }
+
+  return "Choose your next move.";
+}
+
+function getThreatLine(args: {
+  enemyRoster: EnemyRosterCard[];
+  encounterContext: CombatEncounterContext | null;
+}) {
+  if (args.enemyRoster.length === 1) {
+    const e = args.enemyRoster[0];
+    return `${e.roleLabel} · AC ${e.ac} · ${e.defeated ? "Defeated" : "Still standing"}`;
+  }
+
+  if (args.enemyRoster.length > 1) {
+    const living = args.enemyRoster.filter((e) => !e.defeated).length;
+    return `${living} hostile${living === 1 ? "" : "s"} remain in the fight.`;
+  }
+
+  if (args.encounterContext?.objective) {
+    return args.encounterContext.objective;
+  }
+
+  return "Read the battlefield and keep pressure under control.";
+}
+
+function renderPressureTone(pressureTier: "low" | "medium" | "high") {
+  if (pressureTier === "high") {
+    return {
+      border: "rgba(214,110,110,0.24)",
+      bg: "rgba(214,110,110,0.08)",
+    };
+  }
+
+  if (pressureTier === "medium") {
+    return {
+      border: "rgba(214,188,120,0.24)",
+      bg: "rgba(214,188,120,0.08)",
+    };
+  }
+
+  return {
+    border: "rgba(120,160,214,0.22)",
+    bg: "rgba(120,160,214,0.08)",
+  };
+}
+
+function renderTurnTone(args: {
+  combatEnded: boolean;
+  isEnemyTurn: boolean;
+  isWrongPlayerForTurn: boolean;
+}) {
+  if (args.combatEnded) {
+    return {
+      label: "Combat Ended",
+      border: "rgba(118,188,132,0.24)",
+      bg: "rgba(118,188,132,0.08)",
+      text: "rgba(202,240,210,0.95)",
+    };
+  }
+
+  if (args.isEnemyTurn) {
+    return {
+      label: "Enemy Turn",
+      border: "rgba(214,110,110,0.28)",
+      bg: "rgba(214,110,110,0.10)",
+      text: "rgba(255,214,214,0.95)",
+    };
+  }
+
+  if (args.isWrongPlayerForTurn) {
+    return {
+      label: "Turn Locked",
+      border: "rgba(180,180,180,0.20)",
+      bg: "rgba(255,255,255,0.05)",
+      text: "rgba(235,235,235,0.90)",
+    };
+  }
+
+  return {
+    label: "Your Turn",
+    border: "rgba(214,188,120,0.28)",
+    bg: "rgba(214,188,120,0.10)",
+    text: "rgba(245,236,216,0.96)",
+  };
+}
+
+function InfoPill(props: {
+  label: string;
+  tone?: "neutral" | "info" | "warn" | "accent";
+}) {
+  return (
+    <span
+      style={{
+        ...chipStyle(props.tone ?? "neutral"),
+        display: "inline-flex",
+        alignItems: "center",
+        padding: "6px 10px",
+        borderRadius: 999,
+        fontSize: 11,
+        lineHeight: 1,
+        letterSpacing: 0.5,
+        textTransform: "uppercase",
+        whiteSpace: "nowrap",
+      }}
+    >
+      {props.label}
+    </span>
+  );
 }
 
 export default function CombatSection({
@@ -476,6 +676,7 @@ export default function CombatSection({
 }: Props) {
   const combatId = derivedCombat?.combatId ?? null;
   const prevTelegraphKeyRef = useRef<string>("");
+  const [showInspector, setShowInspector] = useState(false);
 
   const playerHpById = useMemo(
     () => derivePlayerHpFromCanon({ events, combatId, partyMembers }),
@@ -606,6 +807,63 @@ export default function CombatSection({
     return { total, defeated, living };
   }, [enemyRoster]);
 
+  const encounterDisplayName = useMemo(
+    () =>
+      getEncounterDisplayName({
+        activeEnemyGroupName,
+        encounterContext,
+        enemyRoster,
+      }),
+    [activeEnemyGroupName, encounterContext, enemyRoster]
+  );
+
+  const activeEnemyCard = useMemo(() => {
+    if (activeEnemyGroupId) {
+      const byId = enemyRoster.find((e) => e.combatantId === activeEnemyGroupId);
+      if (byId) return byId;
+    }
+
+    if (activeEnemyGroupName) {
+      const byName = enemyRoster.find((e) => nameKey(e.enemyName) === nameKey(activeEnemyGroupName));
+      if (byName) return byName;
+    }
+
+    return enemyRoster.find((e) => !e.defeated) ?? enemyRoster[0] ?? null;
+  }, [enemyRoster, activeEnemyGroupId, activeEnemyGroupName]);
+
+  const turnTone = useMemo(
+    () =>
+      renderTurnTone({
+        combatEnded,
+        isEnemyTurn,
+        isWrongPlayerForTurn,
+      }),
+    [combatEnded, isEnemyTurn, isWrongPlayerForTurn]
+  );
+
+  const pressureTone = useMemo(() => renderPressureTone(pressureTier), [pressureTier]);
+
+  const playerInstruction = useMemo(
+    () =>
+      getPlayerInstruction({
+        combatEnded,
+        isEnemyTurn,
+        isWrongPlayerForTurn,
+        dmMode,
+        activeCombatantSpec,
+      }),
+    [combatEnded, isEnemyTurn, isWrongPlayerForTurn, dmMode, activeCombatantSpec]
+  );
+
+  const threatLine = useMemo(
+    () =>
+      getThreatLine({
+        enemyRoster,
+        encounterContext,
+      }),
+    [enemyRoster, encounterContext]
+  );
+
   function chooseTargetCombatantId(): string | null {
     const hintedName = enemyTelegraphHint?.targetName ? nameKey(enemyTelegraphHint.targetName) : "";
     const living = partyMembersForDisplay.filter((m) => (Number(m.hpCurrent) || 0) > 0);
@@ -674,98 +932,425 @@ export default function CombatSection({
     const afterCur = Math.max(0, (Number(beforeCur) || 0) - amount);
 
     if (afterCur <= 0) {
-      onAppendCanon("COMBATANT_DOWNED", { combatId, combatantId: targetCombatantId, reason: "hp_zero" });
+      onAppendCanon("COMBATANT_DOWNED", {
+        combatId,
+        combatantId: targetCombatantId,
+        reason: "hp_zero",
+      });
       playSfx(SFX.enemyDeath, 0.76);
     }
   }
 
   return (
     <>
-      {(encounterContext?.objective ||
-        encounterContext?.rewardHint ||
-        encounterContext?.zoneTheme ||
-        encounterContext?.lockState) && (
-        <CardSection title="Encounter Stakes">
-          <div style={{ display: "grid", gap: 10 }}>
+      <CardSection title="Battlefield">
+        <div style={{ display: "grid", gap: 14 }}>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "minmax(0, 1.25fr) minmax(300px, 0.9fr)",
+              gap: 12,
+            }}
+          >
             <div
               style={{
-                display: "flex",
-                gap: 8,
-                flexWrap: "wrap",
+                display: "grid",
+                gap: 10,
+                padding: "14px",
+                borderRadius: 16,
+                border: "1px solid rgba(255,255,255,0.08)",
+                background:
+                  "linear-gradient(180deg, rgba(255,255,255,0.035), rgba(255,255,255,0.015))",
               }}
             >
-              {encounterContext?.zoneTheme ? (
-                <span
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "flex-start",
+                  gap: 12,
+                  flexWrap: "wrap",
+                }}
+              >
+                <div style={{ display: "grid", gap: 5 }}>
+                  <div
+                    style={{
+                      fontSize: 11,
+                      letterSpacing: 0.9,
+                      textTransform: "uppercase",
+                      opacity: 0.58,
+                    }}
+                  >
+                    Immediate Threat
+                  </div>
+
+                  <div
+                    style={{
+                      fontSize: 24,
+                      fontWeight: 900,
+                      lineHeight: 1.08,
+                      color: "rgba(245,236,216,0.97)",
+                    }}
+                  >
+                    {encounterDisplayName}
+                  </div>
+
+                  <div
+                    style={{
+                      fontSize: 13,
+                      lineHeight: 1.6,
+                      color: "rgba(228,232,240,0.80)",
+                      maxWidth: 760,
+                    }}
+                  >
+                    {threatLine}
+                  </div>
+                </div>
+
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                  <span
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      padding: "6px 10px",
+                      borderRadius: 999,
+                      border: `1px solid ${turnTone.border}`,
+                      background: turnTone.bg,
+                      color: turnTone.text,
+                      fontSize: 11,
+                      fontWeight: 800,
+                      letterSpacing: 0.8,
+                      textTransform: "uppercase",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    {turnTone.label}
+                  </span>
+
+                  <span
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      padding: "6px 10px",
+                      borderRadius: 999,
+                      border: `1px solid ${pressureTone.border}`,
+                      background: pressureTone.bg,
+                      color: "rgba(235,238,244,0.92)",
+                      fontSize: 11,
+                      fontWeight: 800,
+                      letterSpacing: 0.8,
+                      textTransform: "uppercase",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    Pressure · {pressureTier}
+                  </span>
+                </div>
+              </div>
+
+              <div
+                style={{
+                  padding: "12px 12px",
+                  borderRadius: 14,
+                  border: "1px solid rgba(214,188,120,0.16)",
+                  background: "rgba(214,188,120,0.06)",
+                  fontSize: 14,
+                  lineHeight: 1.65,
+                  color: "rgba(245,236,216,0.94)",
+                }}
+              >
+                {playerInstruction}
+              </div>
+
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <button
+                  type="button"
                   style={{
-                    ...chipStyle("info"),
-                    display: "inline-flex",
-                    alignItems: "center",
-                    padding: "6px 10px",
-                    borderRadius: 999,
-                    fontSize: 12,
-                    lineHeight: 1,
+                    ...actionButtonStyle("primary"),
+                    padding: "10px 12px",
+                    borderRadius: 12,
+                    fontSize: 13,
+                    fontWeight: 800,
+                    cursor: "default",
                   }}
                 >
-                  Theme: {titleCase(String(encounterContext.zoneTheme))}
-                </span>
+                  Attack
+                </button>
+
+                <button
+                  type="button"
+                  style={{
+                    ...actionButtonStyle("secondary"),
+                    padding: "10px 12px",
+                    borderRadius: 12,
+                    fontSize: 13,
+                    fontWeight: 800,
+                    cursor: "default",
+                  }}
+                >
+                  Defend
+                </button>
+
+                <button
+                  type="button"
+                  style={{
+                    ...actionButtonStyle("secondary"),
+                    padding: "10px 12px",
+                    borderRadius: 12,
+                    fontSize: 13,
+                    fontWeight: 800,
+                    cursor: "default",
+                  }}
+                >
+                  Skill
+                </button>
+
+                <button
+                  type="button"
+                  style={{
+                    ...actionButtonStyle("secondary"),
+                    padding: "10px 12px",
+                    borderRadius: 12,
+                    fontSize: 13,
+                    fontWeight: 800,
+                    cursor: "default",
+                  }}
+                >
+                  Reposition
+                </button>
+
+                <button
+                  type="button"
+                  style={{
+                    ...actionButtonStyle("secondary"),
+                    padding: "10px 12px",
+                    borderRadius: 12,
+                    fontSize: 13,
+                    fontWeight: 800,
+                    cursor: "default",
+                  }}
+                >
+                  Improvise
+                </button>
+              </div>
+
+              <div
+                style={{
+                  fontSize: 12,
+                  lineHeight: 1.55,
+                  color: "rgba(228,232,240,0.68)",
+                }}
+              >
+                Use the action surface outside this panel to choose or improvise your move. This battlefield panel now tells you what is happening and what kind of choices make sense.
+              </div>
+            </div>
+
+            <div
+              style={{
+                display: "grid",
+                gap: 10,
+                padding: "14px",
+                borderRadius: 16,
+                border: "1px solid rgba(255,255,255,0.08)",
+                background:
+                  "linear-gradient(180deg, rgba(255,255,255,0.035), rgba(255,255,255,0.015))",
+              }}
+            >
+              <div
+                style={{
+                  fontSize: 11,
+                  letterSpacing: 0.9,
+                  textTransform: "uppercase",
+                  opacity: 0.58,
+                }}
+              >
+                Enemy Focus
+              </div>
+
+              {activeEnemyCard ? (
+                <div
+                  style={{
+                    display: "grid",
+                    gap: 10,
+                    padding: "10px",
+                    borderRadius: 14,
+                    border: activeEnemyCard.defeated
+                      ? "1px solid rgba(255,120,120,0.24)"
+                      : "1px solid rgba(255,255,255,0.08)",
+                    background: activeEnemyCard.defeated
+                      ? "rgba(255,120,120,0.05)"
+                      : "rgba(255,255,255,0.03)",
+                  }}
+                >
+                  <div style={{ display: "flex", gap: 12, alignItems: "flex-start" }}>
+                    <div
+                      style={{
+                        width: 72,
+                        height: 72,
+                        borderRadius: 14,
+                        overflow: "hidden",
+                        border: "1px solid rgba(255,255,255,0.14)",
+                        background: "rgba(0,0,0,0.24)",
+                        flexShrink: 0,
+                      }}
+                    >
+                      <img
+                        src={activeEnemyCard.portraitSrc}
+                        alt={activeEnemyCard.enemyName}
+                        width={72}
+                        height={72}
+                        style={{
+                          width: 72,
+                          height: 72,
+                          objectFit: "cover",
+                          display: "block",
+                        }}
+                        onError={(e) => {
+                          const el = e.currentTarget;
+                          el.onerror = null;
+                          el.src = "/assets/V2/Enemy/Enemy_Bandit_Warrior.png";
+                        }}
+                      />
+                    </div>
+
+                    <div style={{ minWidth: 0, flex: 1, display: "grid", gap: 5 }}>
+                      <div
+                        style={{
+                          fontSize: 17,
+                          fontWeight: 900,
+                          lineHeight: 1.15,
+                          color: "rgba(245,236,216,0.97)",
+                        }}
+                      >
+                        {activeEnemyCard.label}
+                      </div>
+
+                      <div
+                        style={{
+                          fontSize: 12,
+                          lineHeight: 1.5,
+                          color: "rgba(228,232,240,0.74)",
+                        }}
+                      >
+                        {activeEnemyCard.roleLabel} · {activeEnemyCard.factionLabel}
+                      </div>
+
+                      <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                        <InfoPill label={`AC ${activeEnemyCard.ac}`} tone="info" />
+                        {activeEnemyCard.defeated ? (
+                          <InfoPill label="Defeated" tone="warn" />
+                        ) : (
+                          <InfoPill label={`HP ${fmtHp(activeEnemyCard.hpCurrent, activeEnemyCard.hpMax)}`} tone="accent" />
+                        )}
+                        {activeEnemyCard.isCacheGuard ? (
+                          <InfoPill label="Guards Cache" tone="accent" />
+                        ) : null}
+                        {activeEnemyCard.isKeybearer ? (
+                          <InfoPill label="Keybearer" tone="warn" />
+                        ) : null}
+                        {activeEnemyCard.isRelicBearer ? (
+                          <InfoPill label="Relic Bearer" tone="accent" />
+                        ) : null}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div
+                    style={{
+                      height: 8,
+                      borderRadius: 999,
+                      background: "rgba(0,0,0,0.36)",
+                      border: "1px solid rgba(255,255,255,0.10)",
+                      overflow: "hidden",
+                    }}
+                    aria-label={`Enemy HP ${fmtHp(activeEnemyCard.hpCurrent, activeEnemyCard.hpMax)}`}
+                  >
+                    <div
+                      style={{
+                        height: "100%",
+                        width: `${Math.round(
+                          hpPercent(activeEnemyCard.hpCurrent, activeEnemyCard.hpMax) * 100
+                        )}%`,
+                        background: activeEnemyCard.defeated
+                          ? "rgba(255,120,120,0.65)"
+                          : "rgba(255,196,118,0.58)",
+                        boxShadow: activeEnemyCard.defeated
+                          ? "none"
+                          : "0 0 12px rgba(255,196,118,0.18)",
+                      }}
+                    />
+                  </div>
+
+                  {enemyTelegraphHint && isEnemyTurn ? (
+                    <div
+                      style={{
+                        fontSize: 12,
+                        lineHeight: 1.5,
+                        color: "rgba(255,226,226,0.92)",
+                      }}
+                    >
+                      Telegraph: <strong>{enemyTelegraphHint.attackStyleHint}</strong> targeting{" "}
+                      <strong>{enemyTelegraphHint.targetName}</strong>.
+                    </div>
+                  ) : (
+                    <div
+                      style={{
+                        fontSize: 12,
+                        lineHeight: 1.5,
+                        color: "rgba(228,232,240,0.68)",
+                      }}
+                    >
+                      {combatEnded
+                        ? "The battlefield quiets. The immediate threat is spent."
+                        : "Track this enemy first. The roster below shows the rest of the battlefield."}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div
+                  style={{
+                    padding: "12px",
+                    borderRadius: 14,
+                    border: "1px solid rgba(255,255,255,0.08)",
+                    background: "rgba(255,255,255,0.03)",
+                    fontSize: 13,
+                    lineHeight: 1.6,
+                    color: "rgba(228,232,240,0.72)",
+                  }}
+                >
+                  No enemy focus is available yet.
+                </div>
+              )}
+            </div>
+          </div>
+
+          {(encounterContext?.objective ||
+            encounterContext?.rewardHint ||
+            encounterContext?.zoneTheme ||
+            encounterContext?.lockState) && (
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              {encounterContext?.zoneTheme ? (
+                <InfoPill label={`Theme: ${titleCase(String(encounterContext.zoneTheme))}`} tone="info" />
               ) : null}
 
               {encounterContext?.lockState ? (
-                <span
-                  style={{
-                    ...chipStyle("warn"),
-                    display: "inline-flex",
-                    alignItems: "center",
-                    padding: "6px 10px",
-                    borderRadius: 999,
-                    fontSize: 12,
-                    lineHeight: 1,
-                  }}
-                >
-                  Lock: {encounterContext.lockState}
-                </span>
+                <InfoPill label={`Lock: ${encounterContext.lockState}`} tone="warn" />
               ) : null}
 
               {encounterContext?.rewardHint ? (
-                <span
-                  style={{
-                    ...chipStyle("accent"),
-                    display: "inline-flex",
-                    alignItems: "center",
-                    padding: "6px 10px",
-                    borderRadius: 999,
-                    fontSize: 12,
-                    lineHeight: 1,
-                  }}
-                >
-                  Reward: {encounterContext.rewardHint}
-                </span>
+                <InfoPill label={`Reward: ${encounterContext.rewardHint}`} tone="accent" />
+              ) : null}
+
+              {encounterContext?.objective ? (
+                <InfoPill label={`Objective: ${encounterContext.objective}`} tone="neutral" />
               ) : null}
             </div>
-
-            {encounterContext?.objective ? (
-              <div style={{ fontSize: 13, lineHeight: 1.65, opacity: 0.9 }}>
-                <strong>Objective:</strong> {encounterContext.objective}
-              </div>
-            ) : null}
-
-            {enemyRoster.length > 0 && (
-              <div className="muted" style={{ fontSize: 12, lineHeight: 1.5 }}>
-                Enemies remaining: <strong>{enemyCounts.living}</strong> / {enemyCounts.total}
-                {enemyCounts.defeated > 0 ? (
-                  <>
-                    {" "}
-                    · Defeated: <strong>{enemyCounts.defeated}</strong>
-                  </>
-                ) : null}
-              </div>
-            )}
-          </div>
-        </CardSection>
-      )}
+          )}
+        </div>
+      </CardSection>
 
       {partyMembersForDisplay.length > 0 && (
-        <CardSection title="Players (session truth)">
+        <CardSection title="Your Side">
           <div
             style={{
               display: "grid",
@@ -782,14 +1367,17 @@ export default function CombatSection({
 
               const pct = hpPercent(m.hpCurrent, m.hpMax);
 
-              const isActiveTurnOwner = !!activePlayerId && String(activePlayerId) === String(m.id);
+              const isActiveTurnOwner =
+                !!activePlayerId && String(activePlayerId) === String(m.id);
               const isTelegraphTarget =
-                !!telegraphTargetKey && telegraphTargetKey.length > 0 && nameKey(m.name) === telegraphTargetKey;
+                !!telegraphTargetKey &&
+                telegraphTargetKey.length > 0 &&
+                nameKey(m.name) === telegraphTargetKey;
 
               const border = downed
                 ? "1px solid rgba(255,120,120,0.28)"
                 : isActiveTurnOwner
-                  ? "1px solid rgba(138,180,255,0.62)"
+                  ? "1px solid rgba(214,188,120,0.40)"
                   : isTelegraphTarget
                     ? "1px solid rgba(255,255,255,0.18)"
                     : "1px solid rgba(255,255,255,0.12)";
@@ -797,7 +1385,7 @@ export default function CombatSection({
               const background = downed
                 ? "rgba(255,120,120,0.06)"
                 : isActiveTurnOwner
-                  ? "rgba(138,180,255,0.10)"
+                  ? "rgba(214,188,120,0.08)"
                   : isTelegraphTarget
                     ? "rgba(255,255,255,0.06)"
                     : "rgba(255,255,255,0.04)";
@@ -841,8 +1429,8 @@ export default function CombatSection({
                         left: 10,
                         padding: "4px 8px",
                         borderRadius: 999,
-                        border: "1px solid rgba(138,180,255,0.60)",
-                        background: "rgba(138,180,255,0.12)",
+                        border: "1px solid rgba(214,188,120,0.45)",
+                        background: "rgba(214,188,120,0.12)",
                         fontSize: 11,
                         letterSpacing: 0.6,
                         textTransform: "uppercase",
@@ -926,7 +1514,7 @@ export default function CombatSection({
                       borderRadius: 14,
                       overflow: "hidden",
                       border: isActiveTurnOwner
-                        ? "1px solid rgba(138,180,255,0.45)"
+                        ? "1px solid rgba(214,188,120,0.45)"
                         : "1px solid rgba(255,255,255,0.16)",
                       background: "rgba(0,0,0,0.28)",
                       display: "flex",
@@ -946,16 +1534,29 @@ export default function CombatSection({
                       onError={(e) => {
                         const el = e.currentTarget;
                         el.onerror = null;
-                        el.src = getPortraitPath("Human", "Warrior", m.portrait === "Female" ? "Female" : "Male");
+                        el.src = getPortraitPath(
+                          "Human",
+                          "Warrior",
+                          m.portrait === "Female" ? "Female" : "Male"
+                        );
                       }}
                     />
                   </div>
 
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ display: "flex", alignItems: "baseline", gap: 10, flexWrap: "wrap" }}>
-                      <strong style={{ fontSize: 15, lineHeight: 1.2 }}>{m.name || "Unnamed"}</strong>
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "baseline",
+                        gap: 10,
+                        flexWrap: "wrap",
+                      }}
+                    >
+                      <strong style={{ fontSize: 15, lineHeight: 1.2 }}>
+                        {m.name || "Unnamed"}
+                      </strong>
                       <span className="muted" style={{ fontSize: 12 }}>
-                        id: {m.id} · AC {Number(m.ac) || 0} · init{" "}
+                        AC {Number(m.ac) || 0} · init{" "}
                         {m.initiativeMod >= 0 ? `+${m.initiativeMod}` : m.initiativeMod}
                       </span>
                     </div>
@@ -975,8 +1576,12 @@ export default function CombatSection({
                           style={{
                             height: "100%",
                             width: `${Math.round(pct * 100)}%`,
-                            background: downed ? "rgba(255,120,120,0.65)" : "rgba(160,220,255,0.55)",
-                            boxShadow: downed ? "none" : "0 0 12px rgba(160,220,255,0.22)",
+                            background: downed
+                              ? "rgba(255,120,120,0.65)"
+                              : "rgba(160,220,255,0.55)",
+                            boxShadow: downed
+                              ? "none"
+                              : "0 0 12px rgba(160,220,255,0.22)",
                           }}
                         />
                       </div>
@@ -1002,7 +1607,14 @@ export default function CombatSection({
                     </div>
 
                     {(skillLabels.length > 0 || traitLabels.length > 0) && (
-                      <div style={{ marginTop: 8, display: "flex", flexDirection: "column", gap: 6 }}>
+                      <div
+                        style={{
+                          marginTop: 8,
+                          display: "flex",
+                          flexDirection: "column",
+                          gap: 6,
+                        }}
+                      >
                         {skillLabels.length > 0 && (
                           <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                             {skillLabels.map((label, idx) => (
@@ -1024,22 +1636,6 @@ export default function CombatSection({
                         )}
                       </div>
                     )}
-
-                    <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>
-                      Portrait: <strong>{m.portrait}</strong>
-                      {healer ? (
-                        <>
-                          {" "}
-                          · Role: <strong>Healer</strong>
-                        </>
-                      ) : null}
-                    </div>
-
-                    {combatId && (
-                      <div className="muted" style={{ fontSize: 11, marginTop: 6, opacity: 0.85 }}>
-                        Combat HP is event-sourced (damage/downed).
-                      </div>
-                    )}
                   </div>
                 </div>
               );
@@ -1048,22 +1644,14 @@ export default function CombatSection({
         </CardSection>
       )}
 
-      <CombatSetupPanel
-        events={events as any[]}
-        onAppendCanon={onAppendCanon}
-        dmMode={dmMode as any}
-        partyMembers={partyMembers as any}
-        pressureTier={pressureTier as any}
-        allowDevControls={allowDevControls}
-        encounterContext={encounterContext}
-      />
-
       {enemyRoster.length > 0 && (
         <CardSection title="Enemy Roster">
           <div style={{ display: "grid", gap: 10 }}>
-            <div className="muted" style={{ fontSize: 12, lineHeight: 1.5 }}>
-              Enemies are now shown as event-sourced combatants. When one is reduced to 0 HP and downed, that victory is
-              preserved here instead of feeling like the roster silently refreshed.
+            <div
+              className="muted"
+              style={{ fontSize: 12, lineHeight: 1.5 }}
+            >
+              Track the enemy line here. Focus on who is still standing and whose turn is active.
             </div>
 
             <div
@@ -1078,12 +1666,12 @@ export default function CombatSection({
                 const border = enemy.defeated
                   ? "1px solid rgba(255,120,120,0.28)"
                   : enemy.isActive
-                    ? "1px solid rgba(138,180,255,0.55)"
+                    ? "1px solid rgba(214,188,120,0.45)"
                     : "1px solid rgba(255,255,255,0.10)";
                 const background = enemy.defeated
                   ? "rgba(255,120,120,0.06)"
                   : enemy.isActive
-                    ? "rgba(138,180,255,0.08)"
+                    ? "rgba(214,188,120,0.08)"
                     : "rgba(255,255,255,0.04)";
 
                 return (
@@ -1109,8 +1697,8 @@ export default function CombatSection({
                           left: 10,
                           padding: "4px 8px",
                           borderRadius: 999,
-                          border: "1px solid rgba(138,180,255,0.55)",
-                          background: "rgba(138,180,255,0.12)",
+                          border: "1px solid rgba(214,188,120,0.45)",
+                          background: "rgba(214,188,120,0.12)",
                           fontSize: 11,
                           letterSpacing: 0.5,
                           textTransform: "uppercase",
@@ -1156,7 +1744,12 @@ export default function CombatSection({
                         alt={enemy.enemyName}
                         width={64}
                         height={64}
-                        style={{ width: 64, height: 64, objectFit: "cover", display: "block" }}
+                        style={{
+                          width: 64,
+                          height: 64,
+                          objectFit: "cover",
+                          display: "block",
+                        }}
                         onError={(e) => {
                           const el = e.currentTarget;
                           el.onerror = null;
@@ -1166,10 +1759,20 @@ export default function CombatSection({
                     </div>
 
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "baseline" }}>
+                      <div
+                        style={{
+                          display: "flex",
+                          gap: 8,
+                          flexWrap: "wrap",
+                          alignItems: "baseline",
+                        }}
+                      >
                         <strong style={{ fontSize: 15 }}>{enemy.label}</strong>
                         <span className="muted" style={{ fontSize: 12 }}>
-                          AC {enemy.ac} · init {enemy.initiativeMod >= 0 ? `+${enemy.initiativeMod}` : enemy.initiativeMod}
+                          AC {enemy.ac} · init{" "}
+                          {enemy.initiativeMod >= 0
+                            ? `+${enemy.initiativeMod}`
+                            : enemy.initiativeMod}
                         </span>
                       </div>
 
@@ -1192,8 +1795,12 @@ export default function CombatSection({
                             style={{
                               height: "100%",
                               width: `${Math.round(pct * 100)}%`,
-                              background: enemy.defeated ? "rgba(255,120,120,0.65)" : "rgba(255,196,118,0.58)",
-                              boxShadow: enemy.defeated ? "none" : "0 0 12px rgba(255,196,118,0.18)",
+                              background: enemy.defeated
+                                ? "rgba(255,120,120,0.65)"
+                                : "rgba(255,196,118,0.58)",
+                              boxShadow: enemy.defeated
+                                ? "none"
+                                : "0 0 12px rgba(255,196,118,0.18)",
                             }}
                           />
                         </div>
@@ -1212,58 +1819,20 @@ export default function CombatSection({
                           <span>
                             HP <strong>{fmtHp(enemy.hpCurrent, enemy.hpMax)}</strong>
                           </span>
-                          <span>id: {enemy.combatantId}</span>
+                          <span>{enemy.combatantId}</span>
                         </div>
                       </div>
 
                       {(enemy.isKeybearer || enemy.isRelicBearer || enemy.isCacheGuard) && (
                         <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 8 }}>
                           {enemy.isKeybearer ? (
-                            <span
-                              style={{
-                                ...chipStyle("warn"),
-                                display: "inline-flex",
-                                alignItems: "center",
-                                padding: "5px 8px",
-                                borderRadius: 999,
-                                fontSize: 10,
-                                lineHeight: 1,
-                              }}
-                            >
-                              Keybearer
-                            </span>
+                            <InfoPill label="Keybearer" tone="warn" />
                           ) : null}
-
                           {enemy.isRelicBearer ? (
-                            <span
-                              style={{
-                                ...chipStyle("accent"),
-                                display: "inline-flex",
-                                alignItems: "center",
-                                padding: "5px 8px",
-                                borderRadius: 999,
-                                fontSize: 10,
-                                lineHeight: 1,
-                              }}
-                            >
-                              Relic Bearer
-                            </span>
+                            <InfoPill label="Relic Bearer" tone="accent" />
                           ) : null}
-
                           {enemy.isCacheGuard ? (
-                            <span
-                              style={{
-                                ...chipStyle("info"),
-                                display: "inline-flex",
-                                alignItems: "center",
-                                padding: "5px 8px",
-                                borderRadius: 999,
-                                fontSize: 10,
-                                lineHeight: 1,
-                              }}
-                            >
-                              Guards Cache
-                            </span>
+                            <InfoPill label="Guards Cache" tone="info" />
                           ) : null}
                         </div>
                       )}
@@ -1277,100 +1846,59 @@ export default function CombatSection({
       )}
 
       {showEnemyResolver && (
-        <CardSection title="Enemy Turn Resolution (Solace-neutral)">
-          <EnemyTurnResolverPanel
-            enabled={true}
-            activeEnemyGroupName={activeEnemyGroupName ?? ""}
-            activeEnemyGroupId={activeEnemyGroupId ?? ""}
-            playerNames={playerNames}
-            onTelegraph={(info) => {
-              playSfx(SFX.enemyTelegraph, 0.42);
-              onTelegraph(info);
-            }}
-            onCommitOutcome={handleEnemyCommitOutcomeAndDamage}
-            onAdvanceTurn={onAdvanceTurn}
-          />
-
-          {enemyTelegraphHint && (
-            <div className="muted" style={{ marginTop: 8, fontSize: 12 }}>
-              Telegraph hint: <strong>{enemyTelegraphHint.attackStyleHint}</strong> · Target{" "}
-              <strong>{enemyTelegraphHint.targetName}</strong>
+        <CardSection title="Enemy Turn">
+          <div style={{ display: "grid", gap: 10 }}>
+            <div
+              style={{
+                fontSize: 13,
+                lineHeight: 1.6,
+                color: "rgba(228,232,240,0.78)",
+              }}
+            >
+              Solace is resolving the enemy action. Watch the telegraph and damage outcome here.
             </div>
-          )}
 
-          <div className="muted" style={{ marginTop: 10, fontSize: 11, opacity: 0.85, lineHeight: 1.5 }}>
-            Damage V1: if roll ≥ DC, we commit <strong>COMBATANT_DAMAGED</strong> (deterministic, style-based). If HP hits
-            0, we also commit <strong>COMBATANT_DOWNED</strong>.
+            <EnemyTurnResolverPanel
+              enabled={true}
+              activeEnemyGroupName={activeEnemyGroupName ?? ""}
+              activeEnemyGroupId={activeEnemyGroupId ?? ""}
+              playerNames={playerNames}
+              onTelegraph={(info) => {
+                playSfx(SFX.enemyTelegraph, 0.42);
+                onTelegraph(info);
+              }}
+              onCommitOutcome={handleEnemyCommitOutcomeAndDamage}
+              onAdvanceTurn={onAdvanceTurn}
+            />
+
+            {enemyTelegraphHint ? (
+              <div className="muted" style={{ fontSize: 12 }}>
+                Telegraph hint: <strong>{enemyTelegraphHint.attackStyleHint}</strong> · Target{" "}
+                <strong>{enemyTelegraphHint.targetName}</strong>
+              </div>
+            ) : null}
           </div>
         </CardSection>
       )}
 
-      {derivedCombat && (
-        <CardSection title="Derived Turn Order">
-          <div className="muted">
-            Combat: <strong>{derivedCombat.combatId}</strong> · Round <strong>{derivedCombat.round}</strong>
-            {activeCombatantSpec && (
-              <>
-                {" "}
-                · Active: <strong>{formatCombatantLabel(activeCombatantSpec)}</strong>
-              </>
-            )}
+      <CardSection title="Turn Controls">
+        <div style={{ display: "grid", gap: 10 }}>
+          <div
+            style={{
+              fontSize: 13,
+              lineHeight: 1.6,
+              color: "rgba(228,232,240,0.78)",
+            }}
+          >
+            Use these only for the current turn flow. Everything else stays tucked away below.
           </div>
 
-          <div style={{ marginTop: 10, display: "grid", gridTemplateColumns: "1fr", gap: 6 }}>
-            {derivedCombat.order.map((id: string, idx: number) => {
-              const spec = derivedCombat.participants.find((p: any) => p.id === id) ?? null;
-              const roll = derivedCombat.initiative.find((r: any) => r.combatantId === id) ?? null;
-              const active = derivedCombat.activeCombatantId === id;
-              const isEnemy = String(spec?.kind ?? "") === "enemy_group";
-              const isPlayer = String(spec?.kind ?? "") === "player";
-
-              const enemyHp = isEnemy ? enemyHpById[String(id)] : null;
-              const playerHp = isPlayer ? playerHpById[String(id)] : null;
-              const defeated = Boolean(enemyHp?.downed || playerHp?.downed);
-
-              return (
-                <div
-                  key={id}
-                  style={{
-                    padding: "10px 12px",
-                    borderRadius: 8,
-                    border: defeated
-                      ? "1px solid rgba(255,120,120,0.28)"
-                      : active
-                        ? "1px solid rgba(138,180,255,0.55)"
-                        : "1px solid rgba(255,255,255,0.10)",
-                    background: defeated
-                      ? "rgba(255,120,120,0.06)"
-                      : active
-                        ? "rgba(138,180,255,0.10)"
-                        : "rgba(255,255,255,0.04)",
-                    display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "center",
-                    gap: 10,
-                    opacity: defeated ? 0.68 : 1,
-                  }}
-                >
-                  <div>
-                    <strong>
-                      {idx + 1}. {spec ? formatCombatantLabel(spec) : id}
-                    </strong>
-                    {active && !defeated && <span className="muted">{"  "}← active</span>}
-                    {defeated && <span className="muted">{"  "}· defeated</span>}
-                  </div>
-                  <div className="muted">
-                    {roll ? `Init ${roll.total} (d20 ${roll.natural} + ${roll.modifier})` : "Init —"}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-
-          <div style={{ marginTop: 12, display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             <button
               onClick={() => {
-                if (!derivedCombat || combatEnded || (dmMode === "solace-neutral" && isEnemyTurn)) return;
+                if (!derivedCombat || combatEnded || (dmMode === "solace-neutral" && isEnemyTurn)) {
+                  return;
+                }
                 playSfx(SFX.combatAdvance, 0.64);
                 onAdvanceTurnBtn();
               }}
@@ -1393,10 +1921,13 @@ export default function CombatSection({
                 onPassTurnBtn();
               }}
               disabled={
-                !derivedCombat || combatEnded || (dmMode === "solace-neutral" && isEnemyTurn) || isWrongPlayerForTurn
+                !derivedCombat ||
+                combatEnded ||
+                (dmMode === "solace-neutral" && isEnemyTurn) ||
+                isWrongPlayerForTurn
               }
             >
-              Pass / End Turn
+              End My Turn
             </button>
 
             <button
@@ -1410,8 +1941,127 @@ export default function CombatSection({
               End Combat
             </button>
           </div>
-        </CardSection>
-      )}
+        </div>
+      </CardSection>
+
+      <CardSection title="Combat Inspector">
+        <div style={{ display: "grid", gap: 10 }}>
+          <button
+            type="button"
+            onClick={() => setShowInspector((prev) => !prev)}
+            style={{
+              justifySelf: "start",
+              ...actionButtonStyle(showInspector ? "warn" : "secondary"),
+              padding: "8px 12px",
+              borderRadius: 10,
+              fontSize: 12,
+              fontWeight: 800,
+            }}
+          >
+            {showInspector ? "Hide Combat Inspector" : "Show Combat Inspector"}
+          </button>
+
+          {!showInspector ? (
+            <div
+              style={{
+                fontSize: 12,
+                lineHeight: 1.55,
+                color: "rgba(228,232,240,0.66)",
+              }}
+            >
+              Setup logic, derived order internals, and workshop surfaces are hidden by default so the battlefield reads like a game instead of a tool.
+            </div>
+          ) : (
+            <div style={{ display: "grid", gap: 14 }}>
+              <CombatSetupPanel
+                events={events as any[]}
+                onAppendCanon={onAppendCanon}
+                dmMode={dmMode as any}
+                partyMembers={partyMembers as any}
+                pressureTier={pressureTier as any}
+                allowDevControls={allowDevControls}
+                encounterContext={encounterContext}
+              />
+
+              {derivedCombat && (
+                <CardSection title="Derived Turn Order">
+                  <div className="muted">
+                    Combat: <strong>{derivedCombat.combatId}</strong> · Round{" "}
+                    <strong>{derivedCombat.round}</strong>
+                    {activeCombatantSpec && (
+                      <>
+                        {" "}
+                        · Active: <strong>{formatCombatantLabel(activeCombatantSpec)}</strong>
+                      </>
+                    )}
+                  </div>
+
+                  <div
+                    style={{
+                      marginTop: 10,
+                      display: "grid",
+                      gridTemplateColumns: "1fr",
+                      gap: 6,
+                    }}
+                  >
+                    {derivedCombat.order.map((id: string, idx: number) => {
+                      const spec =
+                        derivedCombat.participants.find((p: any) => p.id === id) ?? null;
+                      const roll =
+                        derivedCombat.initiative.find((r: any) => r.combatantId === id) ?? null;
+                      const active = derivedCombat.activeCombatantId === id;
+                      const isEnemy = String(spec?.kind ?? "") === "enemy_group";
+                      const isPlayer = String(spec?.kind ?? "") === "player";
+
+                      const enemyHp = isEnemy ? enemyHpById[String(id)] : null;
+                      const playerHp = isPlayer ? playerHpById[String(id)] : null;
+                      const defeated = Boolean(enemyHp?.downed || playerHp?.downed);
+
+                      return (
+                        <div
+                          key={id}
+                          style={{
+                            padding: "10px 12px",
+                            borderRadius: 8,
+                            border: defeated
+                              ? "1px solid rgba(255,120,120,0.28)"
+                              : active
+                                ? "1px solid rgba(138,180,255,0.55)"
+                                : "1px solid rgba(255,255,255,0.10)",
+                            background: defeated
+                              ? "rgba(255,120,120,0.06)"
+                              : active
+                                ? "rgba(138,180,255,0.10)"
+                                : "rgba(255,255,255,0.04)",
+                            display: "flex",
+                            justifyContent: "space-between",
+                            alignItems: "center",
+                            gap: 10,
+                            opacity: defeated ? 0.68 : 1,
+                          }}
+                        >
+                          <div>
+                            <strong>
+                              {idx + 1}. {spec ? formatCombatantLabel(spec) : id}
+                            </strong>
+                            {active && !defeated && <span className="muted">{"  "}← active</span>}
+                            {defeated && <span className="muted">{"  "}· defeated</span>}
+                          </div>
+                          <div className="muted">
+                            {roll
+                              ? `Init ${roll.total} (d20 ${roll.natural} + ${roll.modifier})`
+                              : "Init —"}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </CardSection>
+              )}
+            </div>
+          )}
+        </div>
+      </CardSection>
     </>
   );
 }
