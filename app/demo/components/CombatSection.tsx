@@ -131,6 +131,12 @@ type Props = {
 
   onAppendCanon: (type: string, payload: any) => void;
 
+  openingCombatRound?: number;
+  canAttemptCombatRetreat?: boolean;
+  openingBattleFinisherAvailable?: boolean;
+  openingBattleFinisherSkillLabel?: string | null;
+  isOpeningThresholdCombat?: boolean;
+
   partyMembers: PartyMemberLite[];
   pressureTier: "low" | "medium" | "high";
   allowDevControls: boolean;
@@ -716,10 +722,79 @@ function optionDescription(option: any) {
   return String(option?.description ?? option?.label ?? "Unknown resolution path").trim();
 }
 
+function OpeningCombatPrompt(props: {
+  round?: number;
+  canRetreat?: boolean;
+  finisherAvailable?: boolean;
+  finisherSkill?: string | null;
+  isOpeningThresholdCombat?: boolean;
+}) {
+  const { round, canRetreat, finisherAvailable, finisherSkill, isOpeningThresholdCombat } = props;
+
+  if (!isOpeningThresholdCombat) return null;
+  if (!canRetreat && !finisherAvailable) return null;
+
+  return (
+    <div
+      style={{
+        display: "grid",
+        gap: 6,
+        padding: "12px 14px",
+        borderRadius: 16,
+        border: "1px solid rgba(255,255,255,0.10)",
+        background: "linear-gradient(180deg, rgba(255,255,255,0.04), rgba(0,0,0,0.20))",
+      }}
+    >
+      <div
+        style={{
+          fontSize: 11,
+          letterSpacing: 0.8,
+          textTransform: "uppercase",
+          opacity: 0.62,
+        }}
+      >
+        Opening Battle{round ? ` · Round ${round}` : ""}
+      </div>
+
+      {canRetreat ? (
+        <div
+          style={{
+            fontSize: 13,
+            lineHeight: 1.6,
+            color: "rgba(232,236,244,0.88)",
+          }}
+        >
+          You can now attempt to <strong>evade</strong>, <strong>withdraw</strong>, or{" "}
+          <strong>break away</strong>.
+        </div>
+      ) : null}
+
+      {finisherAvailable ? (
+        <div
+          style={{
+            fontSize: 13,
+            lineHeight: 1.6,
+            color: "rgba(255,215,168,0.96)",
+            fontWeight: 700,
+          }}
+        >
+          The enemy is exposed. A decisive <strong>{finisherSkill ?? "class skill"}</strong>{" "}
+          could end the fight — but your weapon may not survive the strike.
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 export default function CombatSection({
   events,
   dmMode,
   onAppendCanon,
+  openingCombatRound,
+  canAttemptCombatRetreat,
+  openingBattleFinisherAvailable,
+  openingBattleFinisherSkillLabel,
+  isOpeningThresholdCombat,
   partyMembers,
   pressureTier,
   allowDevControls,
@@ -1198,7 +1273,8 @@ export default function CombatSection({
                   color: "rgba(228,232,240,0.68)",
                 }}
               >
-                Combat remains intent-driven. Buttons assist composition, but the real move is the command you type below.
+                Combat remains intent-driven. Buttons assist composition, but the real move is the
+                command you type below.
               </div>
             </div>
 
@@ -1384,6 +1460,14 @@ export default function CombatSection({
             </div>
           </div>
 
+          <OpeningCombatPrompt
+            round={openingCombatRound}
+            canRetreat={canAttemptCombatRetreat}
+            finisherAvailable={openingBattleFinisherAvailable}
+            finisherSkill={openingBattleFinisherSkillLabel}
+            isOpeningThresholdCombat={isOpeningThresholdCombat}
+          />
+
           <ActionSection
             partyMembers={actionSurface.partyMembers}
             actingPlayerId={actionSurface.actingPlayerId}
@@ -1398,7 +1482,9 @@ export default function CombatSection({
             dmMode={actionSurface.dmMode}
             isEnemyTurn={isEnemyTurn}
             isWrongPlayerForTurn={isWrongPlayerForTurn}
-            activeTurnLabel={String(activeCombatantSpec?.name ?? activeCombatantSpec?.id ?? "") || null}
+            activeTurnLabel={
+              String(activeCombatantSpec?.name ?? activeCombatantSpec?.id ?? "") || null
+            }
             showPartyButtons={false}
             commitDisabled
             title={actionSurface.title ?? "Combat Command"}
@@ -1444,7 +1530,8 @@ export default function CombatSection({
                   color: "rgba(228,232,240,0.78)",
                 }}
               >
-                Resolve the typed command here in combat. Choose the best interpretation, then use the real fate panel below.
+                Resolve the typed command here in combat. Choose the best interpretation, then use
+                the real fate panel below.
               </div>
             </div>
 
@@ -1844,9 +1931,7 @@ export default function CombatSection({
                             background: downed
                               ? "rgba(255,120,120,0.65)"
                               : "rgba(160,220,255,0.55)",
-                            boxShadow: downed
-                              ? "none"
-                              : "0 0 12px rgba(160,220,255,0.22)",
+                            boxShadow: downed ? "none" : "0 0 12px rgba(160,220,255,0.22)",
                           }}
                         />
                       </div>
@@ -2233,7 +2318,8 @@ export default function CombatSection({
                 color: "rgba(228,232,240,0.66)",
               }}
             >
-              Setup logic, derived order internals, and workshop surfaces are hidden by default so the battlefield reads like a game instead of a tool.
+              Setup logic, derived order internals, and workshop surfaces are hidden by default so
+              the battlefield reads like a game instead of a tool.
             </div>
           ) : (
             <div style={{ display: "grid", gap: 14 }}>
