@@ -1124,6 +1124,41 @@ export default function GameplayViewport({ demo }: Props) {
     return <HeaderHeroVisual hero={hero} />;
   }, [hero]);
 
+  const shouldShowProgressionBanner = useMemo(() => {
+    const summary = demo.progressionInspectorSummary ?? null;
+    const progression = demo.progression ?? null;
+
+    const activeSlots =
+      summary?.party?.activeSlots ?? progression?.party?.activeSlots ?? 1;
+
+    const inventoryUsed =
+      summary?.inventory?.usedSlots ?? progression?.inventory?.usedSlots ?? 0;
+
+    const bondedRelics = summary?.relics?.bondedCount ?? 0;
+
+    const fallen =
+      summary?.party?.fallenMembers ?? progression?.party?.fallenMembers ?? 0;
+
+    const cryptCleared = Boolean(
+      summary?.campaign?.cryptFullyCleared ??
+        progression?.campaign?.cryptFullyCleared
+    );
+
+    const finalReady = Boolean(
+      summary?.campaign?.finalDescentUnlocked ??
+        progression?.campaign?.finalDescentUnlocked
+    );
+
+    return (
+      activeSlots > 1 ||
+      inventoryUsed > 0 ||
+      bondedRelics > 0 ||
+      fallen > 0 ||
+      cryptCleared ||
+      finalReady
+    );
+  }, [demo.progressionInspectorSummary, demo.progression]);
+
   function setPressureScene() {
     demo.setGameplayFocusStep("pressure");
     demo.setActiveSection("pressure");
@@ -1217,15 +1252,15 @@ export default function GameplayViewport({ demo }: Props) {
         heroVisual={heroHeaderVisual}
       />
 
-      <ProgressionBanner demo={demo} />
+      {shouldShowProgressionBanner ? <ProgressionBanner demo={demo} /> : null}
 
       <div style={{ position: "relative", display: "grid", gap: 18 }}>
         {activeScene === "pressure" ? (
           <div id={anchorId("pressure")} style={{ scrollMarginTop: 90 }}>
             <SceneFrame
-              eyebrow="Threshold State"
-              title="The Air Tightens"
-              description="Read the danger state first. This establishes the chamber’s pressure before the chamber itself fully resolves."
+              eyebrow="Threshold"
+              title="The First Chamber"
+              description="The dungeon receives your first step. Read the chamber before choosing how to proceed."
               headerExtra={
                 <StageTabs
                   activeScene="pressure"
@@ -1239,7 +1274,7 @@ export default function GameplayViewport({ demo }: Props) {
               footer={
                 <SceneAdvanceBar
                   label="Continue to Chamber"
-                  hint="Danger first. Chamber second. Obstacle third. Command last."
+                  hint="Read the threshold first. Then step deeper."
                   onClick={setChamberScene}
                 />
               }
