@@ -46,6 +46,11 @@ export interface OptionSet {
 export type CombatOptionContext = {
   combatActive?: boolean;
   canAttemptRetreat?: boolean;
+  openingCombatRound?: number | null;
+  shouldPromptSignatureFinisher?: boolean;
+  signatureFinisherLabel?: string | null;
+
+  // Backward-compatible support for older runtime fields
   openingBattleFinisherAvailable?: boolean;
   openingBattleFinisherSkillId?: string | null;
   openingBattleFinisherSkillLabel?: string | null;
@@ -71,6 +76,27 @@ export function generateOptions(
   combatContext?: CombatOptionContext
 ): OptionSet {
   const options: Option[] = [];
+
+  const openingCombatRound =
+    typeof combatContext?.openingCombatRound === "number"
+      ? combatContext.openingCombatRound
+      : null;
+
+  const canAttemptRetreat = Boolean(combatContext?.canAttemptRetreat);
+
+  const shouldPromptSignatureFinisher = Boolean(
+    combatContext?.shouldPromptSignatureFinisher ??
+      combatContext?.openingBattleFinisherAvailable
+  );
+
+  const signatureFinisherLabel =
+    combatContext?.signatureFinisherLabel?.trim() ||
+    combatContext?.openingBattleFinisherSkillLabel?.trim() ||
+    (combatContext?.openingBattleFinisherSkillId
+      ? labelForSkill(combatContext.openingBattleFinisherSkillId)
+      : null);
+
+  const inOpeningCombat = openingCombatRound !== null && openingCombatRound >= 1;
 
   // ----------------------------------------------------------
   // STRUCTURAL LETHALITY SIGNAL (STRICT, NULL-SAFE)
@@ -103,7 +129,8 @@ export function generateOptions(
       }
 
       if (
-        combatContext?.canAttemptRetreat &&
+        canAttemptRetreat &&
+        (!inOpeningCombat || openingCombatRound >= 2) &&
         (parsed.intentTag === "retreat" || parsed.intentTag === "evade")
       ) {
         options.push(
@@ -111,14 +138,11 @@ export function generateOptions(
         );
       }
 
-      if (
-        combatContext?.openingBattleFinisherAvailable &&
-        combatContext.openingBattleFinisherSkillId
-      ) {
+      if (shouldPromptSignatureFinisher && signatureFinisherLabel) {
         options.push(
           option(
             "mechanical",
-            `Resolve as a decisive class finishing skill (${combatContext.openingBattleFinisherSkillLabel ?? labelForSkill(combatContext.openingBattleFinisherSkillId)})`
+            `Resolve as a signature finishing skill (${signatureFinisherLabel})`
           )
         );
       }
@@ -131,13 +155,21 @@ export function generateOptions(
         option("narrative", "Interpret as a ritual or symbolic act")
       );
 
-      if (
-        combatContext?.openingBattleFinisherAvailable &&
-        parsed.skillId &&
-        parsed.intentTag === "skill"
-      ) {
+      if (parsed.skillId) {
         options.push(
-          option("mechanical", "Resolve as a decisive magical finishing skill")
+          option(
+            "mechanical",
+            `Resolve as a class skill action (${labelForSkill(parsed.skillId)})`
+          )
+        );
+      }
+
+      if (shouldPromptSignatureFinisher && signatureFinisherLabel) {
+        options.push(
+          option(
+            "mechanical",
+            `Resolve as a signature finishing skill (${signatureFinisherLabel})`
+          )
         );
       }
       break;
@@ -167,7 +199,8 @@ export function generateOptions(
 
       if (
         combatContext?.combatActive &&
-        combatContext.canAttemptRetreat &&
+        canAttemptRetreat &&
+        (!inOpeningCombat || openingCombatRound >= 2) &&
         (parsed.intentTag === "retreat" || parsed.intentTag === "evade")
       ) {
         options.push(
@@ -234,6 +267,23 @@ function buildContext(
   parsed: ParsedAction,
   combatContext?: CombatOptionContext
 ): string {
+  const openingCombatRound =
+    typeof combatContext?.openingCombatRound === "number"
+      ? combatContext.openingCombatRound
+      : null;
+
+  const shouldPromptSignatureFinisher = Boolean(
+    combatContext?.shouldPromptSignatureFinisher ??
+      combatContext?.openingBattleFinisherAvailable
+  );
+
+  const signatureFinisherLabel =
+    combatContext?.signatureFinisherLabel?.trim() ||
+    combatContext?.openingBattleFinisherSkillLabel?.trim() ||
+    (combatContext?.openingBattleFinisherSkillId
+      ? labelForSkill(combatContext.openingBattleFinisherSkillId)
+      : null);
+
   return [
     `Actor: ${parsed.actor}`,
     `Category: ${parsed.category}`,
@@ -244,7 +294,9 @@ function buildContext(
     parsed.ambiguity ? `Ambiguity: ${parsed.ambiguity}` : null,
     combatContext?.combatActive ? "Combat: active" : null,
     combatContext?.canAttemptRetreat ? "Retreat: available" : null,
-    combatContext?.openingBattleFinisherAvailable ? "Finisher: available" : null,
+    openingCombatRound !== null ? `Opening combat round: ${openingCombatRound}` : null,
+    shouldPromptSignatureFinisher ? "Signature finisher: prompted" : null,
+    signatureFinisherLabel ? `Signature finisher label: ${signatureFinisherLabel}` : null,
   ]
     .filter(Boolean)
     .join(" · ");
