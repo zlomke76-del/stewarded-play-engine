@@ -43,6 +43,14 @@ export interface OptionSet {
   options: readonly Option[];
 }
 
+export type CombatOptionContext = {
+  combatActive?: boolean;
+  canAttemptRetreat?: boolean;
+  openingBattleFinisherAvailable?: boolean;
+  openingBattleFinisherSkillId?: string | null;
+  openingBattleFinisherSkillLabel?: string | null;
+};
+
 /* ------------------------------------------------------------
    Generator Entry Point
 ------------------------------------------------------------ */
@@ -59,7 +67,8 @@ export interface OptionSet {
  * - assign moral weight
  */
 export function generateOptions(
-  parsed: ParsedAction
+  parsed: ParsedAction,
+  combatContext?: CombatOptionContext
 ): OptionSet {
   const options: Option[] = [];
 
@@ -72,13 +81,9 @@ export function generateOptions(
   const impliesLethality =
     parsed.category === "combat" ||
     parsed.category === "environment" ||
-    [
-      "mammoth",
-      "animal",
-      "beast",
-      "enemy",
-      "tribe",
-    ].some((t) => target.includes(t));
+    ["mammoth", "animal", "beast", "enemy", "tribe"].some((t) =>
+      target.includes(t)
+    );
 
   switch (parsed.category) {
     case "combat":
@@ -87,6 +92,36 @@ export function generateOptions(
         option("environmental", "Account for terrain or surroundings"),
         option("narrative", "Interrupt or escalate the confrontation")
       );
+
+      if (parsed.skillId) {
+        options.push(
+          option(
+            "mechanical",
+            `Resolve as a class skill action (${labelForSkill(parsed.skillId)})`
+          )
+        );
+      }
+
+      if (
+        combatContext?.canAttemptRetreat &&
+        (parsed.intentTag === "retreat" || parsed.intentTag === "evade")
+      ) {
+        options.push(
+          option("mechanical", "Resolve as an evade or disengage attempt")
+        );
+      }
+
+      if (
+        combatContext?.openingBattleFinisherAvailable &&
+        combatContext.openingBattleFinisherSkillId
+      ) {
+        options.push(
+          option(
+            "mechanical",
+            `Resolve as a decisive class finishing skill (${combatContext.openingBattleFinisherSkillLabel ?? labelForSkill(combatContext.openingBattleFinisherSkillId)})`
+          )
+        );
+      }
       break;
 
     case "magic":
@@ -95,6 +130,16 @@ export function generateOptions(
         option("environmental", "Allow magic to affect the environment"),
         option("narrative", "Interpret as a ritual or symbolic act")
       );
+
+      if (
+        combatContext?.openingBattleFinisherAvailable &&
+        parsed.skillId &&
+        parsed.intentTag === "skill"
+      ) {
+        options.push(
+          option("mechanical", "Resolve as a decisive magical finishing skill")
+        );
+      }
       break;
 
     case "influence":
@@ -119,6 +164,16 @@ export function generateOptions(
         option("environmental", "Trigger environmental reactions"),
         option("narrative", "Advance the scene without mechanics")
       );
+
+      if (
+        combatContext?.combatActive &&
+        combatContext.canAttemptRetreat &&
+        (parsed.intentTag === "retreat" || parsed.intentTag === "evade")
+      ) {
+        options.push(
+          option("mechanical", "Resolve as a combat withdrawal or escape attempt")
+        );
+      }
       break;
 
     case "interaction":
@@ -153,12 +208,12 @@ export function generateOptions(
   // into zero-mechanics deferral.
   // ----------------------------------------------------------
 
-  const finalOptions = impliesLethality
-    ? options.filter((o) => o.category !== "other")
-    : options;
+  const finalOptions = dedupeOptions(
+    impliesLethality ? options.filter((o) => o.category !== "other") : options
+  );
 
   return {
-    context: buildContext(parsed),
+    context: buildContext(parsed, combatContext),
     options: finalOptions,
   };
 }
@@ -167,10 +222,7 @@ export function generateOptions(
    Helpers
 ------------------------------------------------------------ */
 
-function option(
-  category: OptionCategory,
-  description: string
-): Option {
+function option(category: OptionCategory, description: string): Option {
   return {
     id: crypto.randomUUID(),
     category,
@@ -178,16 +230,42 @@ function option(
   };
 }
 
-function buildContext(parsed: ParsedAction): string {
+function buildContext(
+  parsed: ParsedAction,
+  combatContext?: CombatOptionContext
+): string {
   return [
     `Actor: ${parsed.actor}`,
     `Category: ${parsed.category}`,
     parsed.target ? `Target: ${parsed.target}` : null,
     parsed.method ? `Method: ${parsed.method}` : null,
-    `Ambiguity: ${parsed.ambiguity}`,
+    parsed.intentTag ? `Intent: ${parsed.intentTag}` : null,
+    parsed.skillId ? `Skill: ${parsed.skillId}` : null,
+    parsed.ambiguity ? `Ambiguity: ${parsed.ambiguity}` : null,
+    combatContext?.combatActive ? "Combat: active" : null,
+    combatContext?.canAttemptRetreat ? "Retreat: available" : null,
+    combatContext?.openingBattleFinisherAvailable ? "Finisher: available" : null,
   ]
     .filter(Boolean)
     .join(" · ");
+}
+
+function labelForSkill(skillId: string) {
+  return String(skillId)
+    .split("_")
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
+function dedupeOptions(options: Option[]) {
+  const seen = new Set<string>();
+  return options.filter((opt) => {
+    const key = `${opt.category}::${opt.description.trim().toLowerCase()}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
 /* ------------------------------------------------------------
