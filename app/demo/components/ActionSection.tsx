@@ -3,17 +3,12 @@
 // ------------------------------------------------------------
 // ActionSection.tsx
 // ------------------------------------------------------------
-// Compressed action cockpit:
-// - keeps active hero identity strong
-// - moves the textarea and resolve action higher
+// Combat / action cockpit
+// - keeps the acting hero card as the single identity anchor
+// - removes duplicate meta/turn chrome inside combat
+// - keeps quick actions, dictation, pass-turn, and skill access
 // - collapses party-turn management + loadout detail
-// - preserves dictation, pass-turn, party buttons, and action chips
 // - reuses the same 3D hero portrait system as the header
-//
-// Phase 3 combat UX upgrades:
-// - compact retreat / finisher prompts
-// - decisive skill surfacing without making the panel taller
-// - class skills tucked into a dropdown during combat
 // ------------------------------------------------------------
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
@@ -403,7 +398,7 @@ function TurnOrderRail(props: {
                 whiteSpace: "nowrap",
               }}
             >
-              {idx === 0 ? "Now: " : idx === 1 ? "Next: " : "Then: "}
+              {idx === 0 ? "Current: " : idx === 1 ? "Next: " : "Then: "}
               {label}
             </div>
             {idx < ordered.length - 1 ? (
@@ -582,11 +577,7 @@ export default function ActionSection({
     return null;
   }, [combatActive, dmMode, isEnemyTurn, isWrongPlayerForTurn]);
 
-  const modeLabel = useMemo(() => {
-    if (dmMode === "human") return "Human DM";
-    if (dmMode === "solace-neutral") return "Solace-neutral";
-    return "Unselected";
-  }, [dmMode]);
+  const actingCardsLocked = combatActive && dmMode !== "human";
 
   useEffect(() => {
     if (!canSubmit) return;
@@ -680,39 +671,6 @@ export default function ActionSection({
       }
     }
   }, [canSubmit, isListening]);
-
-  const bannerTone = useMemo(() => {
-    if (!combatActive) return "free";
-    if (dmMode === "human") return "human";
-    if (isEnemyTurn) return "enemy";
-    if (isWrongPlayerForTurn) return "blocked";
-    return "yourturn";
-  }, [combatActive, dmMode, isEnemyTurn, isWrongPlayerForTurn]);
-
-  const bannerStyle: React.CSSProperties =
-    bannerTone === "yourturn"
-      ? {
-          border: "1px solid rgba(255,196,118,0.20)",
-          background: "linear-gradient(180deg, rgba(255,196,118,0.08), rgba(0,0,0,0.24))",
-          boxShadow: "0 0 0 1px rgba(255,196,118,0.04), 0 14px 34px rgba(0,0,0,0.20)",
-        }
-      : bannerTone === "enemy"
-        ? { border: "1px solid rgba(255,255,255,0.12)", background: "rgba(0,0,0,0.22)" }
-        : bannerTone === "blocked"
-          ? { border: "1px solid rgba(255,255,255,0.12)", background: "rgba(0,0,0,0.20)" }
-          : bannerTone === "human"
-            ? { border: "1px solid rgba(255,255,255,0.12)", background: "rgba(0,0,0,0.22)" }
-            : { border: "1px solid rgba(255,255,255,0.10)", background: "rgba(0,0,0,0.16)" };
-
-  const bannerTitle = useMemo(() => {
-    if (!combatActive) return "Action";
-    if (dmMode === "human") return "DM Control";
-    if (isEnemyTurn) return "Enemy Turn";
-    if (isWrongPlayerForTurn) return "Turn Locked";
-    return "Your Turn";
-  }, [combatActive, dmMode, isEnemyTurn, isWrongPlayerForTurn]);
-
-  const actingCardsLocked = combatActive && dmMode !== "human";
 
   const chipStyle: React.CSSProperties = {
     display: "inline-flex",
@@ -831,119 +789,6 @@ export default function ActionSection({
     <div id="player-action" style={{ scrollMarginTop: 90 }}>
       <CardSection title={title}>
         <div style={{ display: "grid", gap: 12 }}>
-          <div
-            style={{
-              ...bannerStyle,
-              borderRadius: 16,
-              padding: "12px 14px",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              gap: 14,
-              flexWrap: "wrap",
-            }}
-          >
-            <div style={{ display: "grid", gap: 4 }}>
-              <div
-                style={{
-                  fontSize: 11,
-                  letterSpacing: 0.8,
-                  textTransform: "uppercase",
-                  opacity: 0.68,
-                }}
-              >
-                {eyebrow} · {combatActive ? "Combat Turn" : "Scene"} · {modeLabel}
-              </div>
-
-              <div style={{ display: "flex", gap: 8, alignItems: "baseline", flexWrap: "wrap" }}>
-                <strong style={{ fontSize: 16 }}>{bannerTitle}</strong>
-
-                {combatActive && activeTurnLabel ? (
-                  <span style={{ fontSize: 12, opacity: 0.78 }}>
-                    · Active: <strong>{activeTurnLabel}</strong>
-                  </span>
-                ) : null}
-
-                <span style={{ fontSize: 12, opacity: 0.78 }}>
-                  · Acting: <strong>{actingDisplayName}</strong>
-                </span>
-              </div>
-
-              <div style={{ fontSize: 12, opacity: 0.76 }}>
-                {lockReason ?? description}
-              </div>
-            </div>
-
-            <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-              <button
-                onClick={() => {
-                  if (!combatActive || passDisabled) return;
-                  playSfx(SFX.buttonClick, 0.66);
-                  onPassTurn();
-                }}
-                disabled={!combatActive || passDisabled}
-                title="Advance to the next turn"
-                style={{
-                  padding: "9px 12px",
-                  borderRadius: 12,
-                  border: "1px solid rgba(255,255,255,0.12)",
-                  background: "rgba(255,255,255,0.06)",
-                  color: "inherit",
-                  opacity: !combatActive || passDisabled ? 0.5 : 1,
-                  cursor: !combatActive || passDisabled ? "not-allowed" : "pointer",
-                }}
-              >
-                Pass / End Turn
-              </button>
-
-              {showPartyButtons ? (
-                <>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (commitDisabled) return;
-                      playSfx(SFX.arbiterCanonRecord, 0.78);
-                      onCommitParty?.();
-                    }}
-                    disabled={!!commitDisabled}
-                    title="Commit PARTY_DECLARED (canon)"
-                    style={{
-                      padding: "9px 12px",
-                      borderRadius: 12,
-                      border: "1px solid rgba(255,196,118,0.24)",
-                      background: "rgba(255,196,118,0.08)",
-                      color: "inherit",
-                      opacity: commitDisabled ? 0.5 : 0.92,
-                      cursor: commitDisabled ? "not-allowed" : "pointer",
-                    }}
-                  >
-                    Commit Party
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      playSfx(SFX.buttonClick, 0.6);
-                      onRandomNames?.();
-                    }}
-                    title="Fill missing party names"
-                    style={{
-                      padding: "9px 12px",
-                      borderRadius: 12,
-                      border: "1px solid rgba(255,255,255,0.10)",
-                      background: "rgba(255,255,255,0.04)",
-                      color: "inherit",
-                      opacity: 0.7,
-                      cursor: "pointer",
-                    }}
-                  >
-                    Random Names
-                  </button>
-                </>
-              ) : null}
-            </div>
-          </div>
-
           {hasParty ? (
             <div
               style={{
@@ -962,7 +807,7 @@ export default function ActionSection({
               <div
                 style={{
                   display: "grid",
-                  gridTemplateColumns: "64px 1fr",
+                  gridTemplateColumns: "64px 1fr auto",
                   gap: 12,
                   alignItems: "start",
                 }}
@@ -986,147 +831,224 @@ export default function ActionSection({
                     {actingMetaLabel ? (
                       <div style={{ fontSize: 12, opacity: 0.66 }}>{actingMetaLabel}</div>
                     ) : null}
+                    {combatActive && activeTurnLabel ? (
+                      <div style={{ fontSize: 12, opacity: 0.7 }}>
+                        Active: <strong>{activeTurnLabel}</strong>
+                      </div>
+                    ) : null}
                   </div>
 
                   <div style={{ fontSize: 12, opacity: 0.68, fontWeight: 700 }}>{actingRoleLine}</div>
 
                   <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                    <StatMiniChip label="HP" value={`${actingMember?.hpCurrent ?? 0}/${actingMember?.hpMax ?? 0}`} />
+                    <StatMiniChip
+                      label="HP"
+                      value={`${actingMember?.hpCurrent ?? 0}/${actingMember?.hpMax ?? 0}`}
+                    />
                     <StatMiniChip label="AC" value={actingMember?.ac ?? "—"} />
                     <StatMiniChip label="Init" value={actingMember?.initiativeMod ?? "—"} />
                   </div>
 
-                  <div style={{ fontSize: 13, opacity: 0.82, lineHeight: 1.55 }}>{actingFlavorLine}</div>
+                  <div style={{ fontSize: 13, opacity: 0.82, lineHeight: 1.55 }}>
+                    {lockReason ?? description}
+                  </div>
+                </div>
+
+                <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end" }}>
+                  <button
+                    onClick={() => {
+                      if (!combatActive || passDisabled) return;
+                      playSfx(SFX.buttonClick, 0.66);
+                      onPassTurn();
+                    }}
+                    disabled={!combatActive || passDisabled}
+                    title="Advance to the next turn"
+                    style={{
+                      padding: "9px 12px",
+                      borderRadius: 12,
+                      border: "1px solid rgba(255,255,255,0.12)",
+                      background: "rgba(255,255,255,0.06)",
+                      color: "inherit",
+                      opacity: !combatActive || passDisabled ? 0.5 : 1,
+                      cursor: !combatActive || passDisabled ? "not-allowed" : "pointer",
+                    }}
+                  >
+                    Pass / End Turn
+                  </button>
+
+                  {showPartyButtons ? (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (commitDisabled) return;
+                          playSfx(SFX.arbiterCanonRecord, 0.78);
+                          onCommitParty?.();
+                        }}
+                        disabled={!!commitDisabled}
+                        title="Commit PARTY_DECLARED (canon)"
+                        style={{
+                          padding: "9px 12px",
+                          borderRadius: 12,
+                          border: "1px solid rgba(255,196,118,0.24)",
+                          background: "rgba(255,196,118,0.08)",
+                          color: "inherit",
+                          opacity: commitDisabled ? 0.5 : 0.92,
+                          cursor: commitDisabled ? "not-allowed" : "pointer",
+                        }}
+                      >
+                        Commit Party
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          playSfx(SFX.buttonClick, 0.6);
+                          onRandomNames?.();
+                        }}
+                        title="Fill missing party names"
+                        style={{
+                          padding: "9px 12px",
+                          borderRadius: 12,
+                          border: "1px solid rgba(255,255,255,0.10)",
+                          background: "rgba(255,255,255,0.04)",
+                          color: "inherit",
+                          opacity: 0.7,
+                          cursor: "pointer",
+                        }}
+                      >
+                        Random Names
+                      </button>
+                    </>
+                  ) : null}
                 </div>
               </div>
 
-              <div style={{ display: "grid", gap: 8 }}>
-                <TurnOrderRail members={partyMembers} actingPlayerId={actingPlayerId} />
-
-                {showTurnCards ? (
-                  <details
+              {showTurnCards ? (
+                <details
+                  style={{
+                    borderRadius: 14,
+                    border: "1px solid rgba(255,255,255,0.08)",
+                    background: "rgba(0,0,0,0.18)",
+                    overflow: "hidden",
+                  }}
+                >
+                  <summary
                     style={{
-                      borderRadius: 14,
-                      border: "1px solid rgba(255,255,255,0.08)",
-                      background: "rgba(0,0,0,0.18)",
-                      overflow: "hidden",
+                      cursor: "pointer",
+                      padding: "11px 12px",
+                      fontSize: 11,
+                      textTransform: "uppercase",
+                      letterSpacing: 0.6,
+                      opacity: 0.64,
                     }}
                   >
-                    <summary
-                      style={{
-                        cursor: "pointer",
-                        padding: "11px 12px",
-                        fontSize: 11,
-                        textTransform: "uppercase",
-                        letterSpacing: 0.6,
-                        opacity: 0.64,
-                      }}
-                    >
-                      Party Turn Cards
-                    </summary>
+                    Party Turn Cards
+                  </summary>
 
-                    <div
-                      style={{
-                        padding: "0 12px 12px",
-                        display: "grid",
-                        gap: 8,
-                      }}
-                    >
-                      {partyMembers.map((member) => {
-                        const active = member.id === actingPlayerId;
-                        const lockedByTurn = actingCardsLocked;
-                        const displayName = extractDisplayName(member.label);
-                        const meta = extractMetaLabel(member.label);
+                  <div
+                    style={{
+                      padding: "0 12px 12px",
+                      display: "grid",
+                      gap: 8,
+                    }}
+                  >
+                    <TurnOrderRail members={partyMembers} actingPlayerId={actingPlayerId} />
 
-                        return (
-                          <button
-                            key={member.id}
-                            type="button"
-                            disabled={lockedByTurn}
-                            onClick={() => {
-                              if (lockedByTurn) return;
-                              playSfx(SFX.buttonClick, 0.56);
-                              onSetActingPlayerId(member.id);
-                            }}
-                            title={
-                              lockedByTurn
-                                ? "Locked during combat (Solace-neutral) to preserve turn integrity."
-                                : `Act as ${displayName}`
+                    {partyMembers.map((member) => {
+                      const active = member.id === actingPlayerId;
+                      const lockedByTurn = actingCardsLocked;
+                      const displayName = extractDisplayName(member.label);
+                      const meta = extractMetaLabel(member.label);
+
+                      return (
+                        <button
+                          key={member.id}
+                          type="button"
+                          disabled={lockedByTurn}
+                          onClick={() => {
+                            if (lockedByTurn) return;
+                            playSfx(SFX.buttonClick, 0.56);
+                            onSetActingPlayerId(member.id);
+                          }}
+                          title={
+                            lockedByTurn
+                              ? "Locked during combat (Solace-neutral) to preserve turn integrity."
+                              : `Act as ${displayName}`
+                          }
+                          style={{
+                            textAlign: "left",
+                            padding: "10px",
+                            borderRadius: 14,
+                            border: active
+                              ? "1px solid rgba(255,196,118,0.34)"
+                              : "1px solid rgba(255,255,255,0.10)",
+                            background: active
+                              ? "linear-gradient(180deg, rgba(255,196,118,0.10), rgba(255,255,255,0.03))"
+                              : "rgba(255,255,255,0.04)",
+                            color: "inherit",
+                            opacity: lockedByTurn ? 0.7 : 1,
+                            cursor: lockedByTurn ? "not-allowed" : "pointer",
+                            display: "grid",
+                            gridTemplateColumns: "40px 1fr",
+                            gap: 10,
+                            alignItems: "center",
+                          }}
+                        >
+                          <CompactHeroPortrait3D
+                            species={member.species ?? "Human"}
+                            className={member.className ?? "Warrior"}
+                            portrait={member.portrait ?? "Male"}
+                            alt={`${displayName} portrait`}
+                            size={40}
+                            borderRadius={10}
+                            border={
+                              active
+                                ? "1px solid rgba(255,196,118,0.28)"
+                                : "1px solid rgba(255,255,255,0.10)"
                             }
-                            style={{
-                              textAlign: "left",
-                              padding: "10px",
-                              borderRadius: 14,
-                              border: active
-                                ? "1px solid rgba(255,196,118,0.34)"
-                                : "1px solid rgba(255,255,255,0.10)",
-                              background: active
-                                ? "linear-gradient(180deg, rgba(255,196,118,0.10), rgba(255,255,255,0.03))"
-                                : "rgba(255,255,255,0.04)",
-                              color: "inherit",
-                              opacity: lockedByTurn ? 0.7 : 1,
-                              cursor: lockedByTurn ? "not-allowed" : "pointer",
-                              display: "grid",
-                              gridTemplateColumns: "40px 1fr",
-                              gap: 10,
-                              alignItems: "center",
-                            }}
-                          >
-                            <CompactHeroPortrait3D
-                              species={member.species ?? "Human"}
-                              className={member.className ?? "Warrior"}
-                              portrait={member.portrait ?? "Male"}
-                              alt={`${displayName} portrait`}
-                              size={40}
-                              borderRadius={10}
-                              border={
-                                active
-                                  ? "1px solid rgba(255,196,118,0.28)"
-                                  : "1px solid rgba(255,255,255,0.10)"
-                              }
-                              background="rgba(255,255,255,0.04)"
-                              objectPosition="center 14%"
-                            />
+                            background="rgba(255,255,255,0.04)"
+                            objectPosition="center 14%"
+                          />
 
-                            <div style={{ minWidth: 0, display: "grid", gap: 3 }}>
-                              <div
-                                style={{
-                                  fontSize: 13,
-                                  fontWeight: 800,
-                                  lineHeight: 1.2,
-                                  overflow: "hidden",
-                                  textOverflow: "ellipsis",
-                                  whiteSpace: "nowrap",
-                                }}
-                              >
-                                {displayName}
-                              </div>
-
-                              <div
-                                style={{
-                                  fontSize: 11,
-                                  opacity: 0.66,
-                                  overflow: "hidden",
-                                  textOverflow: "ellipsis",
-                                  whiteSpace: "nowrap",
-                                }}
-                              >
-                                {meta || member.id}
-                              </div>
-
-                              <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
-                                <StatMiniChip label="HP" value={`${member.hpCurrent ?? 0}/${member.hpMax ?? 0}`} />
-                                <StatMiniChip label="AC" value={member.ac ?? "—"} />
-                                <StatMiniChip label="Init" value={member.initiativeMod ?? "—"} />
-                              </div>
+                          <div style={{ minWidth: 0, display: "grid", gap: 3 }}>
+                            <div
+                              style={{
+                                fontSize: 13,
+                                fontWeight: 800,
+                                lineHeight: 1.2,
+                                overflow: "hidden",
+                                textOverflow: "ellipsis",
+                                whiteSpace: "nowrap",
+                              }}
+                            >
+                              {displayName}
                             </div>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </details>
-                ) : null}
-              </div>
+
+                            <div
+                              style={{
+                                fontSize: 11,
+                                opacity: 0.66,
+                                overflow: "hidden",
+                                textOverflow: "ellipsis",
+                                whiteSpace: "nowrap",
+                              }}
+                            >
+                              {meta || member.id}
+                            </div>
+
+                            <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
+                              <StatMiniChip label="HP" value={`${member.hpCurrent ?? 0}/${member.hpMax ?? 0}`} />
+                              <StatMiniChip label="AC" value={member.ac ?? "—"} />
+                              <StatMiniChip label="Init" value={member.initiativeMod ?? "—"} />
+                            </div>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </details>
+              ) : null}
 
               {(showFinisherPrompt || showRetreatPrompt) && (
                 <div style={{ display: "grid", gap: 8 }}>
