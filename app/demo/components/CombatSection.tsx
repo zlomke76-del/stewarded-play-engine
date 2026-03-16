@@ -5,21 +5,16 @@
 // ------------------------------------------------------------
 // Player-facing combat surface for Echoes of Fate.
 //
-// Goals of this pass:
-// - Answer immediately:
-//   1. What is happening?
-//   2. Whose turn is it?
-//   3. What can I do right now?
-// - Add a visual battle stage that can host hero/enemy 3D assets
-// - Make battlefield action buttons route the player to the real command input
-// - Keep canon / derived combat intact
-// - Preserve existing enemy-turn resolver + setup systems
-// - Move workshop/debug-heavy surfaces behind collapsible panels
+// This version fixes the core UX issue:
+// - the REAL command surface now lives inside combat
+// - typing remains the primary mechanic
+// - quick action buttons only assist composition
+// - fake "type here" battlefield messaging is removed
 //
 // Notes:
-// - This file still relies on CombatSetupPanel and EnemyTurnResolverPanel
-// - It does not author player-hit canon directly
-// - It does preserve enemy damage / downed flow during Solace enemy turns
+// - preserves canon / derived combat behavior
+// - preserves enemy-turn resolver + setup systems
+// - keeps workshop/debug-heavy surfaces behind inspector
 // ------------------------------------------------------------
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
@@ -27,6 +22,7 @@ import CardSection from "@/components/layout/CardSection";
 import CombatSetupPanel from "@/components/combat/CombatSetupPanel";
 import EnemyTurnResolverPanel from "@/components/combat/EnemyTurnResolverPanel";
 import CombatStage from "./CombatStage";
+import ActionSection from "./ActionSection";
 import { formatCombatantLabel } from "@/lib/combat/CombatState";
 import { getPortraitPath } from "@/lib/portraits/getPortraitPath";
 import { getSkillDefinition } from "@/lib/skills/skillDefinitions";
@@ -76,6 +72,36 @@ type CombatEncounterContext = {
   cacheGuardEnemyName?: string | null;
 };
 
+type ActionSurfacePartyMember = {
+  id: string;
+  label: string;
+  species?: string;
+  className?: string;
+  portrait?: "Male" | "Female";
+  skills?: string[];
+  traits?: string[];
+  ac?: number;
+  hpMax?: number;
+  hpCurrent?: number;
+  initiativeMod?: number;
+};
+
+type ActionSurfaceProps = {
+  partyMembers: ActionSurfacePartyMember[];
+  actingPlayerId: string;
+  onSetActingPlayerId: (id: string) => void;
+  playerInput: string;
+  onSetPlayerInput: (v: string) => void;
+  canSubmit: boolean;
+  onSubmit: () => void;
+  onPassTurn: () => void;
+  dmMode: "human" | "solace-neutral" | null;
+  title?: string;
+  eyebrow?: string;
+  description?: string;
+  inputPlaceholder?: string;
+};
+
 type Props = {
   events: any[];
   dmMode: "human" | "solace-neutral" | null;
@@ -106,6 +132,8 @@ type Props = {
   onAdvanceTurnBtn: () => void;
   onPassTurnBtn: () => void;
   onEndCombatBtn: () => void;
+
+  actionSurface: ActionSurfaceProps;
 };
 
 const SFX = {
@@ -543,7 +571,7 @@ function getPlayerInstruction(args: {
 
   const activeName = String(args.activeCombatantSpec?.name ?? "").trim();
   if (activeName) {
-    return `It is ${activeName}'s turn. Click a combat action below to jump to the real command input.`;
+    return `It is ${activeName}'s turn. Type your actual command below and describe what your character does.`;
   }
 
   return "Choose your next move.";
@@ -679,6 +707,7 @@ export default function CombatSection({
   onAdvanceTurnBtn,
   onPassTurnBtn,
   onEndCombatBtn,
+  actionSurface,
 }: Props) {
   const combatId = derivedCombat?.combatId ?? null;
   const prevTelegraphKeyRef = useRef<string>("");
@@ -912,18 +941,6 @@ export default function CombatSection({
     };
   }, [activeEnemyCard, combatEnded, isEnemyTurn]);
 
-  function requestCombatAction(
-    action: "attack" | "defend" | "skill" | "reposition" | "improvise"
-  ) {
-    if (typeof window === "undefined") return;
-
-    window.dispatchEvent(
-      new CustomEvent("eof:combat-action-request", {
-        detail: { action },
-      })
-    );
-  }
-
   function chooseTargetCombatantId(): string | null {
     const hintedName = enemyTelegraphHint?.targetName
       ? nameKey(enemyTelegraphHint.targetName)
@@ -1141,83 +1158,6 @@ export default function CombatSection({
                 {playerInstruction}
               </div>
 
-              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                <button
-                  type="button"
-                  onClick={() => requestCombatAction("attack")}
-                  style={{
-                    ...actionButtonStyle("primary"),
-                    padding: "10px 12px",
-                    borderRadius: 12,
-                    fontSize: 13,
-                    fontWeight: 800,
-                    cursor: "pointer",
-                  }}
-                >
-                  Attack
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => requestCombatAction("defend")}
-                  style={{
-                    ...actionButtonStyle("secondary"),
-                    padding: "10px 12px",
-                    borderRadius: 12,
-                    fontSize: 13,
-                    fontWeight: 800,
-                    cursor: "pointer",
-                  }}
-                >
-                  Defend
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => requestCombatAction("skill")}
-                  style={{
-                    ...actionButtonStyle("secondary"),
-                    padding: "10px 12px",
-                    borderRadius: 12,
-                    fontSize: 13,
-                    fontWeight: 800,
-                    cursor: "pointer",
-                  }}
-                >
-                  Skill
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => requestCombatAction("reposition")}
-                  style={{
-                    ...actionButtonStyle("secondary"),
-                    padding: "10px 12px",
-                    borderRadius: 12,
-                    fontSize: 13,
-                    fontWeight: 800,
-                    cursor: "pointer",
-                  }}
-                >
-                  Reposition
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => requestCombatAction("improvise")}
-                  style={{
-                    ...actionButtonStyle("secondary"),
-                    padding: "10px 12px",
-                    borderRadius: 12,
-                    fontSize: 13,
-                    fontWeight: 800,
-                    cursor: "pointer",
-                  }}
-                >
-                  Improvise
-                </button>
-              </div>
-
               <div
                 style={{
                   fontSize: 12,
@@ -1225,7 +1165,7 @@ export default function CombatSection({
                   color: "rgba(228,232,240,0.68)",
                 }}
               >
-                Clicking a combat action will jump you to the real command input so you can submit your move there.
+                Combat remains intent-driven. Buttons assist composition, but the real move is the command you type below.
               </div>
             </div>
 
@@ -1410,6 +1350,37 @@ export default function CombatSection({
               )}
             </div>
           </div>
+
+          <ActionSection
+            partyMembers={actionSurface.partyMembers}
+            actingPlayerId={actionSurface.actingPlayerId}
+            onSetActingPlayerId={actionSurface.onSetActingPlayerId}
+            playerInput={actionSurface.playerInput}
+            onSetPlayerInput={actionSurface.onSetPlayerInput}
+            canSubmit={actionSurface.canSubmit}
+            onSubmit={actionSurface.onSubmit}
+            combatActive={true}
+            passDisabled={(dmMode === "solace-neutral" && isEnemyTurn) || isWrongPlayerForTurn}
+            onPassTurn={actionSurface.onPassTurn}
+            dmMode={actionSurface.dmMode}
+            isEnemyTurn={isEnemyTurn}
+            isWrongPlayerForTurn={isWrongPlayerForTurn}
+            activeTurnLabel={String(activeCombatantSpec?.name ?? activeCombatantSpec?.id ?? "") || null}
+            showPartyButtons={false}
+            commitDisabled
+            title={actionSurface.title ?? "Combat Command"}
+            eyebrow={actionSurface.eyebrow ?? "Command"}
+            description={
+              actionSurface.description ??
+              "Describe what your character actually does. This command is the move."
+            }
+            inputPlaceholder={
+              actionSurface.inputPlaceholder ??
+              "Describe your move in full: target, movement, tactic, and intent..."
+            }
+            showTurnCards
+            showLoadoutDetails
+          />
 
           {(encounterContext?.objective ||
             encounterContext?.rewardHint ||
