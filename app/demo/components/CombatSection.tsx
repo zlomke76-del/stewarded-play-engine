@@ -10,6 +10,7 @@
 //   1. What is happening?
 //   2. Whose turn is it?
 //   3. What can I do right now?
+// - Add a visual battle stage that can host hero/enemy 3D assets
 // - Keep canon / derived combat intact
 // - Preserve existing enemy-turn resolver + setup systems
 // - Move workshop/debug-heavy surfaces behind collapsible panels
@@ -24,6 +25,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import CardSection from "@/components/layout/CardSection";
 import CombatSetupPanel from "@/components/combat/CombatSetupPanel";
 import EnemyTurnResolverPanel from "@/components/combat/EnemyTurnResolverPanel";
+import CombatStage from "./CombatStage";
 import { formatCombatantLabel } from "@/lib/combat/CombatState";
 import { getPortraitPath } from "@/lib/portraits/getPortraitPath";
 import { getSkillDefinition } from "@/lib/skills/skillDefinitions";
@@ -222,6 +224,7 @@ type EnemyRosterCard = {
   defeated: boolean;
   initiativeMod: number;
   portraitSrc: string;
+  portraitKey: string | null;
   factionLabel: string;
   roleLabel: string;
   isActive: boolean;
@@ -482,7 +485,8 @@ function actionButtonStyle(
   if (tone === "primary") {
     return {
       border: "1px solid rgba(214,188,120,0.28)",
-      background: "linear-gradient(180deg, rgba(214,188,120,0.14), rgba(214,188,120,0.06))",
+      background:
+        "linear-gradient(180deg, rgba(214,188,120,0.14), rgba(214,188,120,0.06))",
       color: "rgba(245,236,216,0.98)",
     };
   }
@@ -490,7 +494,8 @@ function actionButtonStyle(
   if (tone === "warn") {
     return {
       border: "1px solid rgba(214,110,110,0.28)",
-      background: "linear-gradient(180deg, rgba(214,110,110,0.14), rgba(214,110,110,0.06))",
+      background:
+        "linear-gradient(180deg, rgba(214,110,110,0.14), rgba(214,110,110,0.06))",
       color: "rgba(255,224,224,0.96)",
     };
   }
@@ -788,6 +793,7 @@ export default function CombatSection({
         defeated: hp?.downed ?? false,
         initiativeMod: initMod,
         portraitSrc: enemyPortraitSrc(enemyName),
+        portraitKey: def?.portraitKey ?? null,
         factionLabel: titleCase(String(def?.faction ?? "unknown")),
         roleLabel: titleCase(String(def?.role ?? "enemy")),
         isActive: String(derivedCombat.activeCombatantId ?? "") === combatantId,
@@ -799,13 +805,6 @@ export default function CombatSection({
 
     return cards;
   }, [derivedCombat, enemyHpById, encounterContext]);
-
-  const enemyCounts = useMemo(() => {
-    const total = enemyRoster.length;
-    const defeated = enemyRoster.filter((e) => e.defeated).length;
-    const living = Math.max(0, total - defeated);
-    return { total, defeated, living };
-  }, [enemyRoster]);
 
   const encounterDisplayName = useMemo(
     () =>
@@ -824,7 +823,9 @@ export default function CombatSection({
     }
 
     if (activeEnemyGroupName) {
-      const byName = enemyRoster.find((e) => nameKey(e.enemyName) === nameKey(activeEnemyGroupName));
+      const byName = enemyRoster.find(
+        (e) => nameKey(e.enemyName) === nameKey(activeEnemyGroupName)
+      );
       if (byName) return byName;
     }
 
@@ -863,6 +864,52 @@ export default function CombatSection({
       }),
     [enemyRoster, encounterContext]
   );
+
+  const stageHero = useMemo(() => {
+    const preferred =
+      (activePlayerId
+        ? partyMembersForDisplay.find((m) => String(m.id) === String(activePlayerId))
+        : null) ??
+      partyMembersForDisplay[0] ??
+      null;
+
+    if (!preferred) return null;
+
+    const hpState = playerHpById[String(preferred.id)];
+    const downed = hpState ? hpState.downed : (Number(preferred.hpCurrent) || 0) <= 0;
+
+    return {
+      name: preferred.name || "Hero",
+      species: getResolvedSpecies(preferred),
+      className: getResolvedClass(preferred),
+      portrait: preferred.portrait,
+      imageSrc: portraitSrcFor(preferred),
+      fallbackImageSrc: portraitSrcFor(preferred),
+      modelSrc: null,
+      hpCurrent: hpState?.hpCurrent ?? preferred.hpCurrent,
+      hpMax: hpState?.hpMax ?? preferred.hpMax,
+      ac: preferred.ac,
+      defeated: downed,
+      active: !combatEnded && !isEnemyTurn,
+    };
+  }, [partyMembersForDisplay, activePlayerId, playerHpById, combatEnded, isEnemyTurn]);
+
+  const stageEnemy = useMemo(() => {
+    if (!activeEnemyCard) return null;
+
+    return {
+      name: activeEnemyCard.label,
+      className: activeEnemyCard.roleLabel,
+      imageSrc: activeEnemyCard.portraitSrc,
+      fallbackImageSrc: activeEnemyCard.portraitSrc,
+      modelSrc: null,
+      hpCurrent: activeEnemyCard.hpCurrent,
+      hpMax: activeEnemyCard.hpMax,
+      ac: activeEnemyCard.ac,
+      defeated: activeEnemyCard.defeated,
+      active: !combatEnded && isEnemyTurn && activeEnemyCard.isActive,
+    };
+  }, [activeEnemyCard, combatEnded, isEnemyTurn]);
 
   function chooseTargetCombatantId(): string | null {
     const hintedName = enemyTelegraphHint?.targetName ? nameKey(enemyTelegraphHint.targetName) : "";
@@ -945,6 +992,23 @@ export default function CombatSection({
     <>
       <CardSection title="Battlefield">
         <div style={{ display: "grid", gap: 14 }}>
+          <CombatStage
+            hero={stageHero}
+            enemy={stageEnemy}
+            battlefieldImageSrc={null}
+            isEnemyTurn={isEnemyTurn}
+            combatEnded={combatEnded}
+            telegraphHint={
+              enemyTelegraphHint
+                ? {
+                    attackStyleHint: enemyTelegraphHint.attackStyleHint,
+                    targetName: enemyTelegraphHint.targetName,
+                  }
+                : null
+            }
+            height={500}
+          />
+
           <div
             style={{
               display: "grid",
@@ -1240,7 +1304,10 @@ export default function CombatSection({
                         {activeEnemyCard.defeated ? (
                           <InfoPill label="Defeated" tone="warn" />
                         ) : (
-                          <InfoPill label={`HP ${fmtHp(activeEnemyCard.hpCurrent, activeEnemyCard.hpMax)}`} tone="accent" />
+                          <InfoPill
+                            label={`HP ${fmtHp(activeEnemyCard.hpCurrent, activeEnemyCard.hpMax)}`}
+                            tone="accent"
+                          />
                         )}
                         {activeEnemyCard.isCacheGuard ? (
                           <InfoPill label="Guards Cache" tone="accent" />
@@ -1330,7 +1397,10 @@ export default function CombatSection({
             encounterContext?.lockState) && (
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
               {encounterContext?.zoneTheme ? (
-                <InfoPill label={`Theme: ${titleCase(String(encounterContext.zoneTheme))}`} tone="info" />
+                <InfoPill
+                  label={`Theme: ${titleCase(String(encounterContext.zoneTheme))}`}
+                  tone="info"
+                />
               ) : null}
 
               {encounterContext?.lockState ? (
@@ -1647,10 +1717,7 @@ export default function CombatSection({
       {enemyRoster.length > 0 && (
         <CardSection title="Enemy Roster">
           <div style={{ display: "grid", gap: 10 }}>
-            <div
-              className="muted"
-              style={{ fontSize: 12, lineHeight: 1.5 }}
-            >
+            <div className="muted" style={{ fontSize: 12, lineHeight: 1.5 }}>
               Track the enemy line here. Focus on who is still standing and whose turn is active.
             </div>
 
@@ -1902,7 +1969,9 @@ export default function CombatSection({
                 playSfx(SFX.combatAdvance, 0.64);
                 onAdvanceTurnBtn();
               }}
-              disabled={!derivedCombat || combatEnded || (dmMode === "solace-neutral" && isEnemyTurn)}
+              disabled={
+                !derivedCombat || combatEnded || (dmMode === "solace-neutral" && isEnemyTurn)
+              }
             >
               Advance Turn
             </button>
