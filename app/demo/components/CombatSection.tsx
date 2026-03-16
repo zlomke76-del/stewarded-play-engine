@@ -5,11 +5,8 @@
 // ------------------------------------------------------------
 // Player-facing combat surface for Echoes of Fate.
 //
-// Refactor goals in this version:
-// - arena remains the focal point
-// - command loop stays immediately below the arena
-// - turn controls stay nearby but compact
-// - support surfaces move behind a single collapsed drawer
+// This version removes duplicate battlefield wrappers so the
+// arena is immediately visible and remains the focal point.
 // ------------------------------------------------------------
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
@@ -559,68 +556,6 @@ function actionButtonStyle(
   };
 }
 
-function getEncounterDisplayName(args: {
-  activeEnemyGroupName: string | null;
-  encounterContext: CombatEncounterContext | null;
-  enemyRoster: EnemyRosterCard[];
-}) {
-  if (args.activeEnemyGroupName) return args.activeEnemyGroupName;
-  if (args.enemyRoster.length === 1) return args.enemyRoster[0].label;
-  if (args.enemyRoster.length > 1) return `${args.enemyRoster.length} Hostiles`;
-  if (args.encounterContext?.zoneTheme) return titleCase(String(args.encounterContext.zoneTheme));
-  return "Unknown Hostiles";
-}
-
-function getPlayerInstruction(args: {
-  combatEnded: boolean;
-  isEnemyTurn: boolean;
-  isWrongPlayerForTurn: boolean;
-  dmMode: "human" | "solace-neutral" | null;
-  activeCombatantSpec: any | null;
-}) {
-  if (args.combatEnded) {
-    return "This battle is over. Continue the descent when ready.";
-  }
-
-  if (args.isEnemyTurn) {
-    return args.dmMode === "solace-neutral"
-      ? "The enemy is acting now. Watch the battlefield and wait for your next turn."
-      : "It is the enemy's turn. Read the battlefield and prepare your response.";
-  }
-
-  if (args.isWrongPlayerForTurn) {
-    return "This turn belongs to another party member.";
-  }
-
-  const activeName = String(args.activeCombatantSpec?.name ?? "").trim();
-  if (activeName) {
-    return `It is ${activeName}'s turn. Type your actual command below and describe what your character does.`;
-  }
-
-  return "Choose your next move.";
-}
-
-function getThreatLine(args: {
-  enemyRoster: EnemyRosterCard[];
-  encounterContext: CombatEncounterContext | null;
-}) {
-  if (args.enemyRoster.length === 1) {
-    const e = args.enemyRoster[0];
-    return `${e.roleLabel} · AC ${e.ac} · ${e.defeated ? "Defeated" : "Still standing"}`;
-  }
-
-  if (args.enemyRoster.length > 1) {
-    const living = args.enemyRoster.filter((e) => !e.defeated).length;
-    return `${living} hostile${living === 1 ? "" : "s"} remain in the fight.`;
-  }
-
-  if (args.encounterContext?.objective) {
-    return args.encounterContext.objective;
-  }
-
-  return "Read the battlefield and keep pressure under control.";
-}
-
 function renderPressureTone(pressureTier: "low" | "medium" | "high") {
   if (pressureTier === "high") {
     return {
@@ -703,82 +638,6 @@ function InfoPill(props: {
     >
       {props.label}
     </span>
-  );
-}
-
-function StatusStrip(props: {
-  eyebrow: string;
-  title: string;
-  subtitle?: string | null;
-  chips?: React.ReactNode;
-}) {
-  const { eyebrow, title, subtitle = null, chips = null } = props;
-
-  return (
-    <div
-      style={{
-        padding: "12px 14px",
-        borderRadius: 14,
-        border: "1px solid rgba(255,255,255,0.08)",
-        background:
-          "linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.015))",
-        display: "grid",
-        gap: 8,
-      }}
-    >
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          gap: 10,
-          alignItems: "flex-start",
-          flexWrap: "wrap",
-        }}
-      >
-        <div style={{ display: "grid", gap: 4, minWidth: 0 }}>
-          <div
-            style={{
-              fontSize: 11,
-              letterSpacing: 0.8,
-              textTransform: "uppercase",
-              opacity: 0.58,
-            }}
-          >
-            {eyebrow}
-          </div>
-
-          <div
-            style={{
-              fontSize: 18,
-              fontWeight: 900,
-              lineHeight: 1.12,
-              color: "rgba(245,236,216,0.97)",
-              wordBreak: "break-word",
-            }}
-          >
-            {title}
-          </div>
-
-          {subtitle ? (
-            <div
-              style={{
-                fontSize: 12,
-                lineHeight: 1.5,
-                color: "rgba(228,232,240,0.74)",
-              }}
-            >
-              {subtitle}
-            </div>
-          ) : null}
-        </div>
-
-        {chips ? (
-          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "flex-end" }}>
-            {chips}
-          </div>
-        ) : null}
-      </div>
-    </div>
   );
 }
 
@@ -1015,16 +874,6 @@ export default function CombatSection({
     return cards;
   }, [derivedCombat, enemyHpById, encounterContext]);
 
-  const encounterDisplayName = useMemo(
-    () =>
-      getEncounterDisplayName({
-        activeEnemyGroupName,
-        encounterContext,
-        enemyRoster,
-      }),
-    [activeEnemyGroupName, encounterContext, enemyRoster]
-  );
-
   const activeEnemyCard = useMemo(() => {
     if (activeEnemyGroupId) {
       const byId = enemyRoster.find((e) => e.combatantId === activeEnemyGroupId);
@@ -1052,27 +901,6 @@ export default function CombatSection({
   );
 
   const pressureTone = useMemo(() => renderPressureTone(pressureTier), [pressureTier]);
-
-  const playerInstruction = useMemo(
-    () =>
-      getPlayerInstruction({
-        combatEnded,
-        isEnemyTurn,
-        isWrongPlayerForTurn,
-        dmMode,
-        activeCombatantSpec,
-      }),
-    [combatEnded, isEnemyTurn, isWrongPlayerForTurn, dmMode, activeCombatantSpec]
-  );
-
-  const threatLine = useMemo(
-    () =>
-      getThreatLine({
-        enemyRoster,
-        encounterContext,
-      }),
-    [enemyRoster, encounterContext]
-  );
 
   const stageHero = useMemo(() => {
     const preferred =
@@ -1201,485 +1029,426 @@ export default function CombatSection({
 
   return (
     <>
-      <CardSection title="Battlefield">
-        <div style={{ display: "grid", gap: 12 }}>
-          <div
+      <div
+        style={{
+          display: "grid",
+          gap: 12,
+          padding: "0",
+        }}
+      >
+        <CombatStage
+          hero={stageHero}
+          enemy={stageEnemy}
+          battlefieldImageSrc={null}
+          isEnemyTurn={isEnemyTurn}
+          combatEnded={combatEnded}
+          telegraphHint={
+            enemyTelegraphHint
+              ? {
+                  attackStyleHint: enemyTelegraphHint.attackStyleHint,
+                  targetName: enemyTelegraphHint.targetName,
+                }
+              : null
+          }
+          height={560}
+        />
+
+        <div
+          style={{
+            display: "flex",
+            gap: 8,
+            flexWrap: "wrap",
+            alignItems: "center",
+          }}
+        >
+          <span
             style={{
-              display: "grid",
-              gap: 10,
-              padding: "12px",
-              borderRadius: 18,
-              border: "1px solid rgba(255,255,255,0.08)",
-              background:
-                "linear-gradient(180deg, rgba(255,255,255,0.035), rgba(255,255,255,0.015))",
+              display: "inline-flex",
+              alignItems: "center",
+              padding: "6px 10px",
+              borderRadius: 999,
+              border: `1px solid ${turnTone.border}`,
+              background: turnTone.bg,
+              color: turnTone.text,
+              fontSize: 11,
+              fontWeight: 800,
+              letterSpacing: 0.8,
+              textTransform: "uppercase",
+              whiteSpace: "nowrap",
             }}
           >
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "minmax(0, 1fr) auto auto",
-                gap: 8,
-                alignItems: "center",
-              }}
-            >
-              <div
-                style={{
-                  minWidth: 0,
-                  fontSize: 11,
-                  letterSpacing: 0.9,
-                  textTransform: "uppercase",
-                  opacity: 0.58,
-                }}
-              >
-                Combat Surface
-              </div>
+            {turnTone.label}
+          </span>
 
-              <span
-                style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  padding: "6px 10px",
-                  borderRadius: 999,
-                  border: `1px solid ${turnTone.border}`,
-                  background: turnTone.bg,
-                  color: turnTone.text,
-                  fontSize: 11,
-                  fontWeight: 800,
-                  letterSpacing: 0.8,
-                  textTransform: "uppercase",
-                  whiteSpace: "nowrap",
-                }}
-              >
-                {turnTone.label}
-              </span>
+          <span
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              padding: "6px 10px",
+              borderRadius: 999,
+              border: `1px solid ${pressureTone.border}`,
+              background: pressureTone.bg,
+              color: "rgba(235,238,244,0.92)",
+              fontSize: 11,
+              fontWeight: 800,
+              letterSpacing: 0.8,
+              textTransform: "uppercase",
+              whiteSpace: "nowrap",
+            }}
+          >
+            Pressure · {pressureTier}
+          </span>
 
-              <span
-                style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  padding: "6px 10px",
-                  borderRadius: 999,
-                  border: `1px solid ${pressureTone.border}`,
-                  background: pressureTone.bg,
-                  color: "rgba(235,238,244,0.92)",
-                  fontSize: 11,
-                  fontWeight: 800,
-                  letterSpacing: 0.8,
-                  textTransform: "uppercase",
-                  whiteSpace: "nowrap",
-                }}
-              >
-                Pressure · {pressureTier}
-              </span>
-            </div>
-
-            <CombatStage
-              hero={stageHero}
-              enemy={stageEnemy}
-              battlefieldImageSrc={null}
-              isEnemyTurn={isEnemyTurn}
-              combatEnded={combatEnded}
-              telegraphHint={
-                enemyTelegraphHint
-                  ? {
-                      attackStyleHint: enemyTelegraphHint.attackStyleHint,
-                      targetName: enemyTelegraphHint.targetName,
-                    }
-                  : null
-              }
-              height={560}
+          {stageHero ? (
+            <InfoPill
+              label={`${stageHero.name} HP ${fmtHp(stageHero.hpCurrent ?? 0, stageHero.hpMax ?? 1)}`}
+              tone="info"
             />
+          ) : null}
 
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "minmax(0, 1.2fr) minmax(0, 0.95fr)",
-                gap: 10,
-              }}
-            >
-              <StatusStrip
-                eyebrow="Immediate Threat"
-                title={encounterDisplayName}
-                subtitle={threatLine}
-                chips={
-                  <>
-                    {combatEnded ? <InfoPill label="Resolved" tone="accent" /> : null}
-                    {!combatEnded && activeEnemyCard?.defeated ? (
-                      <InfoPill label="Primary Threat Down" tone="warn" />
-                    ) : null}
-                    {encounterContext?.objective ? (
-                      <InfoPill label={`Objective: ${encounterContext.objective}`} tone="neutral" />
-                    ) : null}
-                  </>
-                }
-              />
+          {stageEnemy ? (
+            <InfoPill
+              label={`${stageEnemy.name} HP ${fmtHp(stageEnemy.hpCurrent ?? 0, stageEnemy.hpMax ?? 1)}`}
+              tone="accent"
+            />
+          ) : null}
+        </div>
 
-              <StatusStrip
-                eyebrow="Command Read"
-                title={playerInstruction}
-                subtitle={
-                  enemyTelegraphHint && isEnemyTurn
-                    ? `Telegraph: ${enemyTelegraphHint.attackStyleHint} targeting ${enemyTelegraphHint.targetName}.`
-                    : activeEnemyCard
-                      ? `Focus: ${activeEnemyCard.label} · HP ${fmtHp(
-                          activeEnemyCard.hpCurrent,
-                          activeEnemyCard.hpMax
-                        )} · AC ${activeEnemyCard.ac}`
-                      : "Read the arena first. Type the actual move below."
-                }
-                chips={
-                  <>
-                    {activeEnemyCard?.isCacheGuard ? (
-                      <InfoPill label="Guards Cache" tone="info" />
-                    ) : null}
-                    {activeEnemyCard?.isKeybearer ? (
-                      <InfoPill label="Keybearer" tone="warn" />
-                    ) : null}
-                    {activeEnemyCard?.isRelicBearer ? (
-                      <InfoPill label="Relic Bearer" tone="accent" />
-                    ) : null}
-                  </>
-                }
-              />
-            </div>
+        <OpeningCombatPrompt
+          round={openingCombatRound}
+          canRetreat={canAttemptCombatRetreat}
+          finisherAvailable={openingBattleFinisherAvailable}
+          finisherSkill={openingBattleFinisherSkillLabel}
+          isOpeningThresholdCombat={isOpeningThresholdCombat}
+        />
+
+        <ActionSection
+          partyMembers={actionSurface.partyMembers}
+          actingPlayerId={actionSurface.actingPlayerId}
+          onSetActingPlayerId={actionSurface.onSetActingPlayerId}
+          playerInput={actionSurface.playerInput}
+          onSetPlayerInput={actionSurface.onSetPlayerInput}
+          canSubmit={actionSurface.canSubmit}
+          onSubmit={actionSurface.onSubmit}
+          combatActive={true}
+          passDisabled={(dmMode === "solace-neutral" && isEnemyTurn) || isWrongPlayerForTurn}
+          onPassTurn={actionSurface.onPassTurn}
+          dmMode={actionSurface.dmMode}
+          isEnemyTurn={isEnemyTurn}
+          isWrongPlayerForTurn={isWrongPlayerForTurn}
+          activeTurnLabel={
+            String(activeCombatantSpec?.name ?? activeCombatantSpec?.id ?? "") || null
+          }
+          showPartyButtons={false}
+          commitDisabled
+          title={actionSurface.title ?? "Combat Command"}
+          eyebrow={actionSurface.eyebrow ?? "Command"}
+          description={
+            actionSurface.description ??
+            "Describe what your character actually does. This command is the move."
+          }
+          inputPlaceholder={
+            actionSurface.inputPlaceholder ??
+            "Describe your move in full: target, movement, tactic, and intent..."
+          }
+          showTurnCards
+          showLoadoutDetails
+        />
+
+        <div
+          style={{
+            display: "flex",
+            gap: 8,
+            flexWrap: "wrap",
+            alignItems: "center",
+            justifyContent: "space-between",
+            padding: "10px 12px",
+            borderRadius: 14,
+            border: "1px solid rgba(255,255,255,0.08)",
+            background: "rgba(255,255,255,0.03)",
+          }}
+        >
+          <div
+            style={{
+              fontSize: 12,
+              lineHeight: 1.5,
+              color: "rgba(228,232,240,0.74)",
+            }}
+          >
+            Turn flow controls stay here. Everything else is tucked below.
           </div>
 
-          <OpeningCombatPrompt
-            round={openingCombatRound}
-            canRetreat={canAttemptCombatRetreat}
-            finisherAvailable={openingBattleFinisherAvailable}
-            finisherSkill={openingBattleFinisherSkillLabel}
-            isOpeningThresholdCombat={isOpeningThresholdCombat}
-          />
-
-          <ActionSection
-            partyMembers={actionSurface.partyMembers}
-            actingPlayerId={actionSurface.actingPlayerId}
-            onSetActingPlayerId={actionSurface.onSetActingPlayerId}
-            playerInput={actionSurface.playerInput}
-            onSetPlayerInput={actionSurface.onSetPlayerInput}
-            canSubmit={actionSurface.canSubmit}
-            onSubmit={actionSurface.onSubmit}
-            combatActive={true}
-            passDisabled={(dmMode === "solace-neutral" && isEnemyTurn) || isWrongPlayerForTurn}
-            onPassTurn={actionSurface.onPassTurn}
-            dmMode={actionSurface.dmMode}
-            isEnemyTurn={isEnemyTurn}
-            isWrongPlayerForTurn={isWrongPlayerForTurn}
-            activeTurnLabel={
-              String(activeCombatantSpec?.name ?? activeCombatantSpec?.id ?? "") || null
-            }
-            showPartyButtons={false}
-            commitDisabled
-            title={actionSurface.title ?? "Combat Command"}
-            eyebrow={actionSurface.eyebrow ?? "Command"}
-            description={
-              actionSurface.description ??
-              "Describe what your character actually does. This command is the move."
-            }
-            inputPlaceholder={
-              actionSurface.inputPlaceholder ??
-              "Describe your move in full: target, movement, tactic, and intent..."
-            }
-            showTurnCards
-            showLoadoutDetails
-          />
-
-          <div
-            style={{
-              display: "flex",
-              gap: 8,
-              flexWrap: "wrap",
-              alignItems: "center",
-              justifyContent: "space-between",
-              padding: "10px 12px",
-              borderRadius: 14,
-              border: "1px solid rgba(255,255,255,0.08)",
-              background: "rgba(255,255,255,0.03)",
-            }}
-          >
-            <div
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <button
+              onClick={() => {
+                if (!derivedCombat || combatEnded || (dmMode === "solace-neutral" && isEnemyTurn)) {
+                  return;
+                }
+                playSfx(SFX.combatAdvance, 0.64);
+                onAdvanceTurnBtn();
+              }}
+              disabled={
+                !derivedCombat || combatEnded || (dmMode === "solace-neutral" && isEnemyTurn)
+              }
               style={{
+                ...actionButtonStyle("secondary"),
+                padding: "8px 12px",
+                borderRadius: 10,
                 fontSize: 12,
-                lineHeight: 1.5,
-                color: "rgba(228,232,240,0.74)",
+                fontWeight: 800,
               }}
             >
-              Turn flow controls stay here. Everything else is tucked below.
-            </div>
+              Advance Turn
+            </button>
 
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-              <button
-                onClick={() => {
-                  if (!derivedCombat || combatEnded || (dmMode === "solace-neutral" && isEnemyTurn)) {
-                    return;
-                  }
-                  playSfx(SFX.combatAdvance, 0.64);
-                  onAdvanceTurnBtn();
-                }}
-                disabled={
-                  !derivedCombat || combatEnded || (dmMode === "solace-neutral" && isEnemyTurn)
-                }
-                style={{
-                  ...actionButtonStyle("secondary"),
-                  padding: "8px 12px",
-                  borderRadius: 10,
-                  fontSize: 12,
-                  fontWeight: 800,
-                }}
-              >
-                Advance Turn
-              </button>
-
-              <button
-                onClick={() => {
-                  if (
-                    !derivedCombat ||
-                    combatEnded ||
-                    (dmMode === "solace-neutral" && isEnemyTurn) ||
-                    isWrongPlayerForTurn
-                  ) {
-                    return;
-                  }
-                  playSfx(SFX.uiClick, 0.64);
-                  onPassTurnBtn();
-                }}
-                disabled={
+            <button
+              onClick={() => {
+                if (
                   !derivedCombat ||
                   combatEnded ||
                   (dmMode === "solace-neutral" && isEnemyTurn) ||
                   isWrongPlayerForTurn
+                ) {
+                  return;
                 }
-                style={{
-                  ...actionButtonStyle("secondary"),
-                  padding: "8px 12px",
-                  borderRadius: 10,
-                  fontSize: 12,
-                  fontWeight: 800,
-                }}
-              >
-                End My Turn
-              </button>
+                playSfx(SFX.uiClick, 0.64);
+                onPassTurnBtn();
+              }}
+              disabled={
+                !derivedCombat ||
+                combatEnded ||
+                (dmMode === "solace-neutral" && isEnemyTurn) ||
+                isWrongPlayerForTurn
+              }
+              style={{
+                ...actionButtonStyle("secondary"),
+                padding: "8px 12px",
+                borderRadius: 10,
+                fontSize: 12,
+                fontWeight: 800,
+              }}
+            >
+              End My Turn
+            </button>
 
-              <button
-                onClick={() => {
-                  if (!derivedCombat || combatEnded) return;
-                  playSfx(SFX.uiClick, 0.66);
-                  onEndCombatBtn();
-                }}
-                disabled={!derivedCombat || combatEnded}
-                style={{
-                  ...actionButtonStyle("warn"),
-                  padding: "8px 12px",
-                  borderRadius: 10,
-                  fontSize: 12,
-                  fontWeight: 800,
-                }}
-              >
-                End Combat
-              </button>
+            <button
+              onClick={() => {
+                if (!derivedCombat || combatEnded) return;
+                playSfx(SFX.uiClick, 0.66);
+                onEndCombatBtn();
+              }}
+              disabled={!derivedCombat || combatEnded}
+              style={{
+                ...actionButtonStyle("warn"),
+                padding: "8px 12px",
+                borderRadius: 10,
+                fontSize: 12,
+                fontWeight: 800,
+              }}
+            >
+              End Combat
+            </button>
+          </div>
+        </div>
+
+        <div
+          style={{
+            display: "grid",
+            gap: 12,
+            padding: "14px",
+            borderRadius: 18,
+            border: "1px solid rgba(255,255,255,0.08)",
+            background:
+              "linear-gradient(180deg, rgba(255,255,255,0.035), rgba(255,255,255,0.015))",
+          }}
+        >
+          <div style={{ display: "grid", gap: 5 }}>
+            <div
+              style={{
+                fontSize: 11,
+                letterSpacing: 0.8,
+                textTransform: "uppercase",
+                opacity: 0.62,
+              }}
+            >
+              Adjudication
+            </div>
+            <div
+              style={{
+                fontSize: 14,
+                lineHeight: 1.6,
+                color: "rgba(228,232,240,0.78)",
+              }}
+            >
+              Resolve the typed command here in combat. Choose the best interpretation, then use
+              the real fate panel below.
             </div>
           </div>
 
-          <div
-            style={{
-              display: "grid",
-              gap: 12,
-              padding: "14px",
-              borderRadius: 18,
-              border: "1px solid rgba(255,255,255,0.08)",
-              background:
-                "linear-gradient(180deg, rgba(255,255,255,0.035), rgba(255,255,255,0.015))",
-            }}
-          >
-            <div style={{ display: "grid", gap: 5 }}>
+          {actionSurface.options && actionSurface.options.length > 0 ? (
+            <div style={{ display: "grid", gap: 10 }}>
               <div
                 style={{
                   fontSize: 11,
-                  letterSpacing: 0.8,
+                  letterSpacing: 0.7,
                   textTransform: "uppercase",
                   opacity: 0.62,
                 }}
               >
-                Adjudication
+                Resolution Paths
               </div>
-              <div
-                style={{
-                  fontSize: 14,
-                  lineHeight: 1.6,
-                  color: "rgba(228,232,240,0.78)",
-                }}
-              >
-                Resolve the typed command here in combat. Choose the best interpretation, then use
-                the real fate panel below.
+
+              <div style={{ display: "grid", gap: 10 }}>
+                {actionSurface.options.map((opt, idx) => {
+                  const active = actionSurface.selectedOption?.id
+                    ? actionSurface.selectedOption?.id === opt?.id
+                    : actionSurface.selectedOption === opt;
+
+                  return (
+                    <button
+                      key={optionId(opt, idx)}
+                      type="button"
+                      onClick={() => {
+                        playSfx(SFX.uiClick, 0.58);
+                        actionSurface.onSetSelectedOption(opt);
+                      }}
+                      style={{
+                        width: "100%",
+                        textAlign: "left",
+                        padding: "13px 14px",
+                        borderRadius: 14,
+                        border: active
+                          ? "1px solid rgba(214,188,120,0.28)"
+                          : "1px solid rgba(255,255,255,0.08)",
+                        background: active
+                          ? "linear-gradient(180deg, rgba(214,188,120,0.10), rgba(255,255,255,0.03))"
+                          : "rgba(255,255,255,0.03)",
+                        color: "inherit",
+                        cursor: "pointer",
+                        lineHeight: 1.55,
+                        fontWeight: active ? 800 : 600,
+                      }}
+                    >
+                      {optionDescription(opt)}
+                    </button>
+                  );
+                })}
               </div>
             </div>
-
-            {actionSurface.options && actionSurface.options.length > 0 ? (
-              <div style={{ display: "grid", gap: 10 }}>
-                <div
-                  style={{
-                    fontSize: 11,
-                    letterSpacing: 0.7,
-                    textTransform: "uppercase",
-                    opacity: 0.62,
-                  }}
-                >
-                  Resolution Paths
-                </div>
-
-                <div style={{ display: "grid", gap: 10 }}>
-                  {actionSurface.options.map((opt, idx) => {
-                    const active = actionSurface.selectedOption?.id
-                      ? actionSurface.selectedOption?.id === opt?.id
-                      : actionSurface.selectedOption === opt;
-
-                    return (
-                      <button
-                        key={optionId(opt, idx)}
-                        type="button"
-                        onClick={() => {
-                          playSfx(SFX.uiClick, 0.58);
-                          actionSurface.onSetSelectedOption(opt);
-                        }}
-                        style={{
-                          width: "100%",
-                          textAlign: "left",
-                          padding: "13px 14px",
-                          borderRadius: 14,
-                          border: active
-                            ? "1px solid rgba(214,188,120,0.28)"
-                            : "1px solid rgba(255,255,255,0.08)",
-                          background: active
-                            ? "linear-gradient(180deg, rgba(214,188,120,0.10), rgba(255,255,255,0.03))"
-                            : "rgba(255,255,255,0.03)",
-                          color: "inherit",
-                          cursor: "pointer",
-                          lineHeight: 1.55,
-                          fontWeight: active ? 800 : 600,
-                        }}
-                      >
-                        {optionDescription(opt)}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            ) : (
-              <div
-                style={{
-                  padding: "12px",
-                  borderRadius: 14,
-                  border: "1px solid rgba(255,255,255,0.08)",
-                  background: "rgba(255,255,255,0.03)",
-                  fontSize: 13,
-                  lineHeight: 1.6,
-                  color: "rgba(228,232,240,0.72)",
-                }}
-              >
-                {actionSurface.playerInput.trim().length > 0
-                  ? "Click Resolve Action above and the combat interpretations will appear here."
-                  : "Type your command above to begin the combat adjudication loop."}
-              </div>
-            )}
-
-            {actionSurface.selectedOption ? (
-              <div style={{ display: "grid", gap: 10 }}>
-                <div
-                  style={{
-                    fontSize: 11,
-                    letterSpacing: 0.7,
-                    textTransform: "uppercase",
-                    opacity: 0.62,
-                  }}
-                >
-                  Roll Fate
-                </div>
-
-                <ResolutionDraftAdvisoryPanel
-                  context={{
-                    optionDescription: actionSurface.selectedOption.description,
-                    optionKind: inferOptionKind(
-                      `${actionSurface.playerInput}\n${actionSurface.selectedOption.description}`.trim()
-                    ),
-                  }}
-                  role={actionSurface.role as any}
-                  dmMode={actionSurface.resolutionDmMode as any}
-                  setupText={`${actionSurface.playerInput}\n\nCurrent Room: ${actionSurface.currentRoomTitle}\n\n${actionSurface.roomSummary}`}
-                  movement={actionSurface.resolutionMovement}
-                  combat={
-                    actionSurface.resolutionCombat
-                      ? {
-                          ...actionSurface.resolutionCombat,
-                          attackStyleHint:
-                            actionSurface.resolutionCombat.attackStyleHint ?? undefined,
-                        }
-                      : null
-                  }
-                  rollModifier={actionSurface.actingRollModifier}
-                  rollModifierLabel={
-                    (actionSurface.actingPlayerInjuryStacks ?? 0) > 0
-                      ? `Injury stacks: ${actionSurface.actingPlayerInjuryStacks}`
-                      : null
-                  }
-                  onRecord={actionSurface.onRecord}
-                />
-
-                <div
-                  style={{
-                    display: "flex",
-                    justifyContent: "flex-end",
-                    gap: 8,
-                    flexWrap: "wrap",
-                  }}
-                >
-                  <button
-                    type="button"
-                    onClick={() => {
-                      playSfx(SFX.uiClick, 0.56);
-                      actionSurface.onSetSelectedOption(null);
-                    }}
-                    style={{
-                      ...actionButtonStyle("secondary"),
-                      padding: "9px 12px",
-                      borderRadius: 12,
-                      fontWeight: 800,
-                    }}
-                  >
-                    Clear Selection
-                  </button>
-                </div>
-              </div>
-            ) : null}
-          </div>
-
-          {(encounterContext?.objective ||
-            encounterContext?.rewardHint ||
-            encounterContext?.zoneTheme ||
-            encounterContext?.lockState) && (
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-              {encounterContext?.zoneTheme ? (
-                <InfoPill
-                  label={`Theme: ${titleCase(String(encounterContext.zoneTheme))}`}
-                  tone="info"
-                />
-              ) : null}
-
-              {encounterContext?.lockState ? (
-                <InfoPill label={`Lock: ${encounterContext.lockState}`} tone="warn" />
-              ) : null}
-
-              {encounterContext?.rewardHint ? (
-                <InfoPill label={`Reward: ${encounterContext.rewardHint}`} tone="accent" />
-              ) : null}
-
-              {encounterContext?.objective ? (
-                <InfoPill label={`Objective: ${encounterContext.objective}`} tone="neutral" />
-              ) : null}
+          ) : (
+            <div
+              style={{
+                padding: "12px",
+                borderRadius: 14,
+                border: "1px solid rgba(255,255,255,0.08)",
+                background: "rgba(255,255,255,0.03)",
+                fontSize: 13,
+                lineHeight: 1.6,
+                color: "rgba(228,232,240,0.72)",
+              }}
+            >
+              {actionSurface.playerInput.trim().length > 0
+                ? "Click Resolve Action above and the combat interpretations will appear here."
+                : "Type your command above to begin the combat adjudication loop."}
             </div>
           )}
+
+          {actionSurface.selectedOption ? (
+            <div style={{ display: "grid", gap: 10 }}>
+              <div
+                style={{
+                  fontSize: 11,
+                  letterSpacing: 0.7,
+                  textTransform: "uppercase",
+                  opacity: 0.62,
+                }}
+              >
+                Roll Fate
+              </div>
+
+              <ResolutionDraftAdvisoryPanel
+                context={{
+                  optionDescription: actionSurface.selectedOption.description,
+                  optionKind: inferOptionKind(
+                    `${actionSurface.playerInput}\n${actionSurface.selectedOption.description}`.trim()
+                  ),
+                }}
+                role={actionSurface.role as any}
+                dmMode={actionSurface.resolutionDmMode as any}
+                setupText={`${actionSurface.playerInput}\n\nCurrent Room: ${actionSurface.currentRoomTitle}\n\n${actionSurface.roomSummary}`}
+                movement={actionSurface.resolutionMovement}
+                combat={
+                  actionSurface.resolutionCombat
+                    ? {
+                        ...actionSurface.resolutionCombat,
+                        attackStyleHint:
+                          actionSurface.resolutionCombat.attackStyleHint ?? undefined,
+                      }
+                    : null
+                }
+                rollModifier={actionSurface.actingRollModifier}
+                rollModifierLabel={
+                  (actionSurface.actingPlayerInjuryStacks ?? 0) > 0
+                    ? `Injury stacks: ${actionSurface.actingPlayerInjuryStacks}`
+                    : null
+                }
+                onRecord={actionSurface.onRecord}
+              />
+
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "flex-end",
+                  gap: 8,
+                  flexWrap: "wrap",
+                }}
+              >
+                <button
+                  type="button"
+                  onClick={() => {
+                    playSfx(SFX.uiClick, 0.56);
+                    actionSurface.onSetSelectedOption(null);
+                  }}
+                  style={{
+                    ...actionButtonStyle("secondary"),
+                    padding: "9px 12px",
+                    borderRadius: 12,
+                    fontWeight: 800,
+                  }}
+                >
+                  Clear Selection
+                </button>
+              </div>
+            </div>
+          ) : null}
         </div>
-      </CardSection>
+
+        {(encounterContext?.objective ||
+          encounterContext?.rewardHint ||
+          encounterContext?.zoneTheme ||
+          encounterContext?.lockState) && (
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            {encounterContext?.zoneTheme ? (
+              <InfoPill
+                label={`Theme: ${titleCase(String(encounterContext.zoneTheme))}`}
+                tone="info"
+              />
+            ) : null}
+
+            {encounterContext?.lockState ? (
+              <InfoPill label={`Lock: ${encounterContext.lockState}`} tone="warn" />
+            ) : null}
+
+            {encounterContext?.rewardHint ? (
+              <InfoPill label={`Reward: ${encounterContext.rewardHint}`} tone="accent" />
+            ) : null}
+
+            {encounterContext?.objective ? (
+              <InfoPill label={`Objective: ${encounterContext.objective}`} tone="neutral" />
+            ) : null}
+          </div>
+        )}
+      </div>
 
       <CardSection title="Supporting Systems">
         <div style={{ display: "grid", gap: 10 }}>
