@@ -146,7 +146,6 @@ function ProgressionBanner(props: { demo: any }) {
       style={{
         position: "relative",
         overflow: "hidden",
-        marginBottom: 18,
         borderRadius: 22,
         border: `1px solid ${statusTone.edge}`,
         background:
@@ -1078,6 +1077,9 @@ function CombatScene(props: {
       style={{
         scrollMarginTop: 90,
         display: "grid",
+        gridTemplateRows: "auto 1fr",
+        minHeight: 0,
+        height: "100%",
         gap: 12,
       }}
     >
@@ -1090,6 +1092,10 @@ function CombatScene(props: {
           boxShadow:
             "0 24px 60px rgba(0,0,0,0.28), inset 0 1px 0 rgba(255,255,255,0.04)",
           overflow: "hidden",
+          minHeight: 0,
+          height: "100%",
+          display: "grid",
+          gridTemplateRows: "auto 1fr",
         }}
       >
         <div
@@ -1100,6 +1106,7 @@ function CombatScene(props: {
               "linear-gradient(180deg, rgba(255,255,255,0.035), rgba(255,255,255,0.015))",
             display: "grid",
             gap: 10,
+            flexShrink: 0,
           }}
         >
           <div
@@ -1158,6 +1165,7 @@ function CombatScene(props: {
               display: "flex",
               gap: 8,
               flexWrap: "wrap",
+              margin: "0 -16px -12px",
             }}
           >
             <StageTabs
@@ -1176,9 +1184,19 @@ function CombatScene(props: {
             padding: 10,
             background:
               "linear-gradient(180deg, rgba(255,255,255,0.012), rgba(255,255,255,0.00))",
+            minHeight: 0,
+            overflow: "hidden",
           }}
         >
-          <GameplayCombatPanel demo={demo} />
+          <div
+            style={{
+              height: "100%",
+              minHeight: 0,
+              overflow: "auto",
+            }}
+          >
+            <GameplayCombatPanel demo={demo} />
+          </div>
         </div>
       </div>
     </div>
@@ -1205,6 +1223,8 @@ export default function GameplayViewport({ demo }: Props) {
     if (demo.gameplayFocusStep === "pressure") return "pressure";
     return "chamber";
   }, [demo.combatActive, demo.gameplayFocusStep, hasPuzzleRoom]);
+
+  const isCombatScene = activeScene === "combat";
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -1374,15 +1394,16 @@ export default function GameplayViewport({ demo }: Props) {
 
   return (
     <div
-  style={{
-    display: "grid",
-    gridTemplateRows: "auto 1fr",
-    height: "100vh",
-    overflow: "hidden",
-    gap: 14,
-    position: "relative",
-  }}
->
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        height: "100dvh",
+        minHeight: "100dvh",
+        overflow: "hidden",
+        gap: 14,
+        position: "relative",
+      }}
+    >
       {showChronicleEntry ? (
         <div
           style={{
@@ -1392,6 +1413,7 @@ export default function GameplayViewport({ demo }: Props) {
             pointerEvents: "none",
             display: "flex",
             justifyContent: "center",
+            flexShrink: 0,
           }}
         >
           <div
@@ -1442,29 +1464,47 @@ export default function GameplayViewport({ demo }: Props) {
         </div>
       ) : null}
 
-      <HeroStatusBar
-        heroName={hero.name}
-        species={hero.species}
-        className={hero.className}
-        level={hero.level}
-        hpCurrent={hero.hpCurrent}
-        hpMax={hero.hpMax}
-        ac={hero.ac}
-        initiativeMod={hero.initiativeMod}
-        heroVisual={heroHeaderVisual}
-        xpCurrent={hero.xpCurrent}
-        xpToNextLevel={hero.xpToNextLevel}
-        attributes={hero.attributes}
-        skills={hero.skills}
-        classFeatures={hero.classFeatures}
-        weapon={hero.weapon}
-        armor={hero.armor}
-        attackBonus={hero.attackBonus}
-      />
+      <div
+        style={{
+          display: "grid",
+          gap: 14,
+          flexShrink: 0,
+        }}
+      >
+        <HeroStatusBar
+          heroName={hero.name}
+          species={hero.species}
+          className={hero.className}
+          level={hero.level}
+          hpCurrent={hero.hpCurrent}
+          hpMax={hero.hpMax}
+          ac={hero.ac}
+          initiativeMod={hero.initiativeMod}
+          heroVisual={heroHeaderVisual}
+          xpCurrent={hero.xpCurrent}
+          xpToNextLevel={hero.xpToNextLevel}
+          attributes={hero.attributes}
+          skills={hero.skills}
+          classFeatures={hero.classFeatures}
+          weapon={hero.weapon}
+          armor={hero.armor}
+          attackBonus={hero.attackBonus}
+        />
 
-      {shouldShowProgressionBanner ? <ProgressionBanner demo={demo} /> : null}
+        {shouldShowProgressionBanner ? <ProgressionBanner demo={demo} /> : null}
+      </div>
 
-      <div style={{ position: "relative", display: "grid", gap: 18 }}>
+      <div
+        style={{
+          position: "relative",
+          display: "grid",
+          gap: 18,
+          flex: 1,
+          minHeight: 0,
+          overflow: isCombatScene ? "hidden" : "auto",
+          paddingRight: isCombatScene ? 0 : 2,
+        }}
+      >
         {activeScene === "pressure" ? (
           <div id={anchorId("pressure")} style={{ scrollMarginTop: 90 }}>
             <SceneFrame
@@ -1565,6 +1605,7 @@ export default function GameplayViewport({ demo }: Props) {
             background:
               "linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.02))",
             overflow: "hidden",
+            flexShrink: 0,
           }}
         >
           <summary
