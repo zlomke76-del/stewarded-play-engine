@@ -167,26 +167,26 @@ function getStageFacingMode(combatEnded: boolean) {
 
 function getEnemyCameraOrbit(facingMode: "player" | "duel") {
   if (facingMode === "duel") {
-    return "-18deg 78deg 2.10m";
+    return "-18deg 78deg 2.16m";
   }
 
-  return "0deg 78deg 2.16m";
+  return "0deg 78deg 2.2m";
 }
 
 function getHeroStageTransform(facingMode: "player" | "duel") {
   if (facingMode === "duel") {
-    return "translateX(3%) scale(1.08)";
+    return "translateX(2.5%) scale(1.04)";
   }
 
-  return "translateX(0) scale(1.03)";
+  return "translateX(0) scale(1.01)";
 }
 
 function getEnemyStageTransform(facingMode: "player" | "duel") {
   if (facingMode === "duel") {
-    return "translateX(-3%) scale(1.14)";
+    return "translateX(-2.5%) scale(1.08)";
   }
 
-  return "translateX(0) scale(1.08)";
+  return "translateX(0) scale(1.03)";
 }
 
 function StageLabel(props: {
@@ -400,7 +400,7 @@ function EnemyModelFallback(props: {
           left: "50%",
           bottom: "-2%",
           transform: "translateX(-50%)",
-          width: "64%",
+          width: "62%",
           height: "20%",
           borderRadius: "50%",
           background:
@@ -414,13 +414,13 @@ function EnemyModelFallback(props: {
         style={{
           position: "absolute",
           inset: 0,
-          padding: "4% 6% 2%",
+          padding: "5% 7% 3%",
           display: "grid",
           placeItems: "center",
           transform:
             facingMode === "duel"
-              ? "translateX(-3%) scale(1.08)"
-              : "translateX(0) scale(1.04)",
+              ? "translateX(-2.5%) scale(1.03)"
+              : "translateX(0) scale(1.01)",
           transformOrigin: "center bottom",
           transition: "transform 220ms ease",
         }}
@@ -539,7 +539,7 @@ function EnemyModelViewer(props: {
           left: "50%",
           bottom: "-2%",
           transform: "translateX(-50%)",
-          width: "64%",
+          width: "62%",
           height: "20%",
           borderRadius: "50%",
           background:
@@ -553,7 +553,7 @@ function EnemyModelViewer(props: {
         style={{
           position: "absolute",
           inset: 0,
-          paddingTop: "0%",
+          paddingTop: "1%",
           transform: getEnemyStageTransform(facingMode),
           transformOrigin: "center bottom",
           filter: enemy.defeated ? "grayscale(0.8) brightness(0.72)" : "none",
@@ -616,10 +616,10 @@ export default function CombatStage({
   const facingMode = useMemo(() => getStageFacingMode(combatEnded), [combatEnded]);
 
   const heroStageHeight =
-    typeof height === "number" ? Math.max(360, Math.round(height * 0.92)) : "92%";
+    typeof height === "number" ? Math.max(350, Math.round(height * 0.9)) : "90%";
 
   const enemyStageHeight =
-    typeof height === "number" ? Math.max(340, Math.round(height * 0.86)) : "86%";
+    typeof height === "number" ? Math.max(330, Math.round(height * 0.84)) : "84%";
 
   const enemySubtitle = useMemo(() => {
     if (!enemy) return null;
@@ -794,7 +794,7 @@ export default function CombatStage({
                 }
                 alt={hero.name}
                 height={heroStageHeight}
-                objectPosition="center 18%"
+                objectPosition="center 8%"
                 combatMode
               />
             ) : (
