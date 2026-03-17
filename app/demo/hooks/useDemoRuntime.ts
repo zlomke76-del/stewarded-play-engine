@@ -1058,6 +1058,14 @@ export function useDemoRuntime() {
       (!combatActive && !isEnemyTurn) ||
       (combatActive && !isEnemyTurn && !isWrongPlayerForTurn));
 
+  const canCombatPlayerSubmitIntent =
+    combatActive &&
+    !combatEnded &&
+    !!derivedCombat?.combatId &&
+    !isEnemyTurn &&
+    !isWrongPlayerForTurn &&
+    dmMode !== null;
+
   function handlePlayerAction() {
     if (!playerInput.trim()) return;
     if (!canPlayerSubmitIntent) return;
@@ -1101,6 +1109,12 @@ export function useDemoRuntime() {
     setOptions([...optionSet.options]);
     setSelectedOption(null);
     setActiveSection("resolution");
+  }
+
+  function handleCombatPlayerAction() {
+    if (!playerInput.trim()) return;
+    if (!canCombatPlayerSubmitIntent) return;
+    handlePlayerAction();
   }
 
   useEffect(() => {
@@ -1892,6 +1906,7 @@ export function useDemoRuntime() {
 
     isWrongPlayerForTurn,
     canPlayerSubmitIntent,
+    canCombatPlayerSubmitIntent,
 
     chapterState,
     presentationPhase,
@@ -1921,6 +1936,7 @@ export function useDemoRuntime() {
     commitParty,
 
     handlePlayerAction,
+    handleCombatPlayerAction,
     handleRecord,
     handleRecordOutcomeOnly,
 
