@@ -14,15 +14,56 @@ type Props = {
   alt: string;
   height: number | string;
   objectPosition: string;
+  combatMode?: boolean;
 };
 
-function getViewerTuning(height: number | string) {
+function getViewerTuning(height: number | string, combatMode: boolean) {
   const numericHeight =
     typeof height === "number"
       ? height
       : typeof height === "string" && height.endsWith("px")
         ? Number.parseInt(height, 10)
         : null;
+
+  if (combatMode) {
+    if (numericHeight !== null && numericHeight >= 420) {
+      return {
+        cameraOrbit: "18deg 78deg 2.28m",
+        fieldOfView: "23deg",
+        minCameraOrbit: "18deg 74deg 2.28m",
+        maxCameraOrbit: "18deg 82deg 2.28m",
+        minFieldOfView: "23deg",
+        maxFieldOfView: "23deg",
+        posterScale: "scale(1.1)",
+        stagePaddingTop: "0%",
+        pedestalHeight: "22%",
+        pedestalWidth: "64%",
+        modelScale: "scale(1.08)",
+        allowCameraControls: false,
+        allowZoom: false,
+        autoRotate: false,
+        rotationPerSecond: "0deg",
+      };
+    }
+
+    return {
+      cameraOrbit: "18deg 78deg 2.14m",
+      fieldOfView: "24deg",
+      minCameraOrbit: "18deg 74deg 2.14m",
+      maxCameraOrbit: "18deg 82deg 2.14m",
+      minFieldOfView: "24deg",
+      maxFieldOfView: "24deg",
+      posterScale: "scale(1.08)",
+      stagePaddingTop: "0%",
+      pedestalHeight: "20%",
+      pedestalWidth: "62%",
+      modelScale: "scale(1.04)",
+      allowCameraControls: false,
+      allowZoom: false,
+      autoRotate: false,
+      rotationPerSecond: "0deg",
+    };
+  }
 
   if (numericHeight !== null && numericHeight >= 380) {
     return {
@@ -37,6 +78,10 @@ function getViewerTuning(height: number | string) {
       pedestalHeight: "20%",
       pedestalWidth: "60%",
       modelScale: "scale(0.89)",
+      allowCameraControls: true,
+      allowZoom: false,
+      autoRotate: true,
+      rotationPerSecond: "8deg",
     };
   }
 
@@ -52,6 +97,10 @@ function getViewerTuning(height: number | string) {
     pedestalHeight: "18%",
     pedestalWidth: "58%",
     modelScale: "scale(0.93)",
+    allowCameraControls: true,
+    allowZoom: false,
+    autoRotate: true,
+    rotationPerSecond: "8deg",
   };
 }
 
@@ -64,6 +113,7 @@ export default function HeroRitualPortrait({
   alt,
   height,
   objectPosition,
+  combatMode = false,
 }: Props) {
   const [imageFailed, setImageFailed] = useState(false);
   const [modelViewerReady, setModelViewerReady] = useState(false);
@@ -73,7 +123,7 @@ export default function HeroRitualPortrait({
     [species, className, portrait]
   );
 
-  const tuning = useMemo(() => getViewerTuning(height), [height]);
+  const tuning = useMemo(() => getViewerTuning(height, combatMode), [height, combatMode]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -114,8 +164,9 @@ export default function HeroRitualPortrait({
           height,
           position: "relative",
           overflow: "hidden",
-          background:
-            "radial-gradient(circle at 50% 26%, rgba(255,223,170,0.10), rgba(255,223,170,0.02) 22%, rgba(0,0,0,0) 42%), radial-gradient(circle at 50% 70%, rgba(120,86,48,0.18), rgba(0,0,0,0) 45%), linear-gradient(180deg, rgba(22,18,16,0.96) 0%, rgba(14,11,10,0.98) 58%, rgba(10,8,8,1) 100%)",
+          background: combatMode
+            ? "radial-gradient(circle at 50% 24%, rgba(255,223,170,0.12), rgba(255,223,170,0.03) 22%, rgba(0,0,0,0) 42%), radial-gradient(circle at 50% 74%, rgba(120,86,48,0.20), rgba(0,0,0,0) 45%), linear-gradient(180deg, rgba(18,16,18,0.98) 0%, rgba(12,10,12,0.98) 58%, rgba(8,8,10,1) 100%)"
+            : "radial-gradient(circle at 50% 26%, rgba(255,223,170,0.10), rgba(255,223,170,0.02) 22%, rgba(0,0,0,0) 42%), radial-gradient(circle at 50% 70%, rgba(120,86,48,0.18), rgba(0,0,0,0) 45%), linear-gradient(180deg, rgba(22,18,16,0.96) 0%, rgba(14,11,10,0.98) 58%, rgba(10,8,8,1) 100%)",
         }}
       >
         <ModelViewerBootstrap />
@@ -126,8 +177,9 @@ export default function HeroRitualPortrait({
             position: "absolute",
             inset: 0,
             pointerEvents: "none",
-            background:
-              "radial-gradient(circle at 50% 84%, rgba(255,183,92,0.12), rgba(255,183,92,0.04) 18%, rgba(0,0,0,0) 40%), radial-gradient(circle at 50% 18%, rgba(255,235,205,0.08), rgba(255,235,205,0) 28%)",
+            background: combatMode
+              ? "radial-gradient(circle at 50% 84%, rgba(255,183,92,0.14), rgba(255,183,92,0.05) 18%, rgba(0,0,0,0) 40%), radial-gradient(circle at 50% 18%, rgba(255,235,205,0.08), rgba(255,235,205,0) 28%)"
+              : "radial-gradient(circle at 50% 84%, rgba(255,183,92,0.12), rgba(255,183,92,0.04) 18%, rgba(0,0,0,0) 40%), radial-gradient(circle at 50% 18%, rgba(255,235,205,0.08), rgba(255,235,205,0) 28%)",
           }}
         />
 
@@ -141,8 +193,9 @@ export default function HeroRitualPortrait({
             width: tuning.pedestalWidth,
             height: tuning.pedestalHeight,
             borderRadius: "50%",
-            background:
-              "radial-gradient(circle, rgba(255,195,110,0.18) 0%, rgba(160,104,48,0.16) 32%, rgba(28,18,12,0.10) 58%, rgba(0,0,0,0) 76%)",
+            background: combatMode
+              ? "radial-gradient(circle, rgba(255,195,110,0.22) 0%, rgba(160,104,48,0.18) 32%, rgba(28,18,12,0.12) 58%, rgba(0,0,0,0) 76%)"
+              : "radial-gradient(circle, rgba(255,195,110,0.18) 0%, rgba(160,104,48,0.16) 32%, rgba(28,18,12,0.10) 58%, rgba(0,0,0,0) 76%)",
             filter: "blur(10px)",
             pointerEvents: "none",
           }}
@@ -153,8 +206,9 @@ export default function HeroRitualPortrait({
           style={{
             position: "absolute",
             inset: 0,
-            boxShadow:
-              "inset 0 0 0 1px rgba(255,255,255,0.05), inset 0 -90px 100px rgba(0,0,0,0.34), inset 0 40px 70px rgba(255,240,220,0.03)",
+            boxShadow: combatMode
+              ? "inset 0 0 0 1px rgba(255,255,255,0.04), inset 0 -80px 90px rgba(0,0,0,0.26), inset 0 36px 60px rgba(255,240,220,0.03)"
+              : "inset 0 0 0 1px rgba(255,255,255,0.05), inset 0 -90px 100px rgba(0,0,0,0.34), inset 0 40px 70px rgba(255,240,220,0.03)",
             pointerEvents: "none",
           }}
         />
@@ -165,17 +219,17 @@ export default function HeroRitualPortrait({
             inset: 0,
             paddingTop: tuning.stagePaddingTop,
             transform: tuning.modelScale,
-            transformOrigin: "center center",
+            transformOrigin: combatMode ? "center bottom" : "center center",
           }}
         >
           {React.createElement("model-viewer" as any, {
             src: glbPath,
             alt,
-            "camera-controls": true,
+            "camera-controls": tuning.allowCameraControls,
             "touch-action": "pan-y",
             "interaction-prompt": "none",
             "shadow-intensity": "1.15",
-            exposure: "1.08",
+            exposure: combatMode ? "1.12" : "1.08",
             "environment-image": "neutral",
             "camera-orbit": tuning.cameraOrbit,
             "field-of-view": tuning.fieldOfView,
@@ -184,15 +238,16 @@ export default function HeroRitualPortrait({
             "min-field-of-view": tuning.minFieldOfView,
             "max-field-of-view": tuning.maxFieldOfView,
             "disable-pan": true,
-            "disable-zoom": false,
-            "auto-rotate": true,
+            "disable-zoom": !tuning.allowZoom,
+            "auto-rotate": tuning.autoRotate,
             "auto-rotate-delay": 0,
-            "rotation-per-second": "8deg",
+            "rotation-per-second": tuning.rotationPerSecond,
             style: {
               width: "100%",
               height: "100%",
               display: "block",
               background: "transparent",
+              pointerEvents: combatMode ? "none" : "auto",
             },
             onError: () => {
               setImageFailed(true);
@@ -221,8 +276,10 @@ export default function HeroRitualPortrait({
           width: "100%",
           height: "100%",
           objectFit: "cover",
-          objectPosition,
+          objectPosition: combatMode ? "center 16%" : objectPosition,
           display: "block",
+          transform: combatMode ? "scale(1.08)" : "scale(1)",
+          transformOrigin: "center center",
         }}
         onError={(e) => {
           const img = e.currentTarget;
@@ -232,7 +289,7 @@ export default function HeroRitualPortrait({
           setImageFailed(true);
           img.onerror = null;
           img.src = fallbackImageSrc;
-          img.style.objectPosition = objectPosition;
+          img.style.objectPosition = combatMode ? "center 16%" : objectPosition;
         }}
       />
 
@@ -242,8 +299,9 @@ export default function HeroRitualPortrait({
           position: "absolute",
           inset: 0,
           pointerEvents: "none",
-          background:
-            "linear-gradient(180deg, rgba(0,0,0,0.06) 0%, rgba(0,0,0,0.12) 48%, rgba(0,0,0,0.24) 100%)",
+          background: combatMode
+            ? "linear-gradient(180deg, rgba(0,0,0,0.04) 0%, rgba(0,0,0,0.10) 44%, rgba(0,0,0,0.18) 100%)"
+            : "linear-gradient(180deg, rgba(0,0,0,0.06) 0%, rgba(0,0,0,0.12) 48%, rgba(0,0,0,0.24) 100%)",
         }}
       />
     </div>
