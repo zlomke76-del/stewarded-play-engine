@@ -1475,36 +1475,60 @@ export function useDemoRuntime() {
   }
 
   function handleRecord(payload: {
-    description: string;
-    dice: { mode: DiceMode; roll: number; dc: number; source: RollSource };
-    audit: string[];
-  }) {
-    const selectedText = selectedOption?.description ?? "";
+  description: string;
+  dice: { mode: DiceMode; roll: number; dc: number; source: RollSource };
+  audit: string[];
+}) {
+  const selectedText = selectedOption?.description ?? "";
 
-    setState((prev) =>
-      commitResolvedActionToState({
-        prevState: prev,
-        payload,
-        playerInput,
-        selectedOptionDescription: selectedText,
-        selectedConnectionId: selectedTraversalRoute?.id ?? selectedTraversalTargetId ?? null,
-        location,
-        currentRoom,
-        reachableConnections,
-        dungeon,
-        openedDoorIds,
-        unlockedDoorIds,
-      })
-    );
+  const activeEnemyTarget =
+    derivedCombat?.participants?.find(
+      (p: any) =>
+        p?.kind === "enemy_group" &&
+        !p?.defeated &&
+        String(p?.id ?? "") === String(activeEnemyOverlayId ?? "")
+    ) ??
+    derivedCombat?.participants?.find(
+      (p: any) => p?.kind === "enemy_group" && !p?.defeated
+    ) ??
+    null;
 
-    setPlayerInput("");
-    setParsed(null);
-    setOptions(null);
-    setSelectedOption(null);
-    setGameplayFocusStep("action");
-    setActiveSection("action");
-  }
+  setState((prev) =>
+    commitResolvedActionToState({
+      prevState: prev,
+      payload,
+      playerInput,
+      selectedOptionDescription: selectedText,
+      selectedConnectionId: selectedTraversalRoute?.id ?? selectedTraversalTargetId ?? null,
+      location,
+      currentRoom,
+      reachableConnections,
+      dungeon,
+      openedDoorIds,
+      unlockedDoorIds,
+      currentCombat: derivedCombat?.combatId
+        ? {
+            combatId: derivedCombat.combatId,
+            targetCombatantId: activeEnemyTarget?.id ?? null,
+            targetEnemyName: activeEnemyTarget?.name ?? activeEnemyOverlayName ?? null,
+            isOpeningThresholdCombat,
+            openingBattleFinisherSkillId:
+              openingBattleFinisherAvailable && openingBattleFinisherSkillLabel
+                ? openingBattleFinisherSkillLabel.trim().toLowerCase().replace(/\s+/g, "_")
+                : null,
+            openingBattleFinisherLabel: openingBattleFinisherSkillLabel ?? null,
+          }
+        : null,
+    })
+  );
 
+  setPlayerInput("");
+  setParsed(null);
+  setOptions(null);
+  setSelectedOption(null);
+  setGameplayFocusStep("action");
+  setActiveSection("action");
+}
   function handleRecordOutcomeOnly(payload: {
     description: string;
     dice: { mode: DiceMode; roll: number; dc: number; source: RollSource };
