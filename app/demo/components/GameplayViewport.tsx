@@ -525,7 +525,7 @@ function SceneFrame(props: {
           "linear-gradient(180deg, rgba(16,18,28,0.94), rgba(10,12,20,0.92))",
         boxShadow:
           "0 24px 60px rgba(0,0,0,0.28), inset 0 1px 0 rgba(255,255,255,0.04)",
-        overflow: "hidden",
+        overflow: "visible",
       }}
     >
       <div
@@ -574,7 +574,14 @@ function SceneFrame(props: {
 
       {headerExtra ? headerExtra : null}
 
-      <div style={{ padding: 16 }}>{children}</div>
+      <div
+        style={{
+          padding: 16,
+          overflow: "visible",
+        }}
+      >
+        {children}
+      </div>
       {footer ? footer : null}
     </div>
   );
@@ -1076,10 +1083,12 @@ function CombatScenePanel(props: {
       id={anchorId("combat")}
       style={{
         scrollMarginTop: 90,
-        minHeight: 0,
         width: "100%",
         maxWidth: "100%",
         minWidth: 0,
+        minHeight: "fit-content",
+        overflow: "visible",
+        alignSelf: "start",
       }}
     >
       <SceneFrame
@@ -1107,7 +1116,8 @@ function CombatScenePanel(props: {
               "linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.015))",
             boxShadow:
               "0 18px 44px rgba(0,0,0,0.22), inset 0 1px 0 rgba(255,255,255,0.04)",
-            overflow: "hidden",
+            overflow: "visible",
+            minHeight: "fit-content",
           }}
         >
           <GameplayCombatPanel demo={demo} />
@@ -1421,8 +1431,11 @@ export default function GameplayViewport({ demo }: Props) {
           gap: 18,
           flex: 1,
           minHeight: 0,
-          overflow: "auto",
+          overflowX: "hidden",
+          overflowY: "auto",
           paddingRight: 2,
+          paddingBottom: 24,
+          alignContent: "start",
         }}
       >
         {activeScene === "pressure" ? (
