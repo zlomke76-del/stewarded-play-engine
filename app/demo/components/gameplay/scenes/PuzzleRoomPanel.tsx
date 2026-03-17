@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import PressureGaugeVisual from "../../puzzles/PressureGaugeVisual";
 import SceneFrame, { SceneAdvanceBar } from "../ViewportSceneFrame";
-import { anchorId } from "../../demoUtils";
+import { anchorId } from "../../../demoUtils";
 
 function PuzzleCommandPanel(props: {
   demo: any;
