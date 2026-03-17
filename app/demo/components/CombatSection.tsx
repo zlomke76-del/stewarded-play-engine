@@ -13,460 +13,315 @@ import {
 } from "./combat/combatSectionUtils";
 import type { CombatSectionProps } from "./combat/combatSectionTypes";
 
-function chipStyle(
-  tone: "neutral" | "info" | "warn" | "accent" = "neutral"
-): React.CSSProperties {
-  if (tone === "info") {
-    return {
-      border: "1px solid rgba(138,180,255,0.22)",
-      background: "rgba(138,180,255,0.08)",
-    };
-  }
+const SFX = {
+  uiClick: "/assets/audio/sfx_button_click_01.mp3",
+  combatHit: "/assets/audio/sfx_sword_hit_01.mp3",
+  enemyDeath: "/assets/audio/sfx_monster_dying_01.mp3",
+  enemyTelegraph: "/assets/audio/sfx_goblin_attack_01.mp3",
+  combatAdvance: "/assets/audio/sfx_button_click_01.mp3",
+} as const;
 
-  if (tone === "warn") {
-    return {
-      border: "1px solid rgba(255,200,140,0.22)",
-      background: "rgba(255,200,140,0.08)",
-    };
-  }
-
-  if (tone === "accent") {
-    return {
-      border: "1px solid rgba(180,220,160,0.22)",
-      background: "rgba(180,220,160,0.08)",
-    };
-  }
-
-  return {
-    border: "1px solid rgba(255,255,255,0.10)",
-    background: "rgba(255,255,255,0.04)",
-  };
-}
-
-function actionButtonStyle(
-  tone: "primary" | "secondary" | "warn" = "secondary"
-): React.CSSProperties {
-  if (tone === "primary") {
-    return {
-      border: "1px solid rgba(214,188,120,0.28)",
-      background:
-        "linear-gradient(180deg, rgba(214,188,120,0.14), rgba(214,188,120,0.06))",
-      color: "rgba(245,236,216,0.98)",
-    };
-  }
-
-  if (tone === "warn") {
-    return {
-      border: "1px solid rgba(214,110,110,0.28)",
-      background:
-        "linear-gradient(180deg, rgba(214,110,110,0.14), rgba(214,110,110,0.06))",
-      color: "rgba(255,224,224,0.96)",
-    };
-  }
-
-  return {
-    border: "1px solid rgba(255,255,255,0.12)",
-    background: "rgba(255,255,255,0.05)",
-    color: "rgba(236,239,244,0.94)",
-  };
-}
-
-function InfoPill(props: {
-  label: string;
-  tone?: "neutral" | "info" | "warn" | "accent";
-}) {
-  return (
-    <span
-      style={{
-        ...chipStyle(props.tone ?? "neutral"),
-        display: "inline-flex",
-        alignItems: "center",
-        padding: "6px 10px",
-        borderRadius: 999,
-        fontSize: 11,
-        lineHeight: 1,
-        letterSpacing: 0.5,
-        textTransform: "uppercase",
-        whiteSpace: "nowrap",
-      }}
-    >
-      {props.label}
-    </span>
-  );
-}
-
-function OpeningCombatPrompt(props: {
-  round?: number;
-  canRetreat?: boolean;
-  finisherAvailable?: boolean;
-  finisherSkill?: string | null;
-  isOpeningThresholdCombat?: boolean;
-}) {
-  const { round, canRetreat, finisherAvailable, finisherSkill, isOpeningThresholdCombat } = props;
-
-  if (!isOpeningThresholdCombat) return null;
-  if (!canRetreat && !finisherAvailable) return null;
-
-  return (
-    <div
-      style={{
-        display: "grid",
-        gap: 6,
-        padding: "10px 12px",
-        borderRadius: 14,
-        border: "1px solid rgba(255,255,255,0.10)",
-        background: "linear-gradient(180deg, rgba(255,255,255,0.04), rgba(0,0,0,0.20))",
-        width: "100%",
-        minWidth: 0,
-      }}
-    >
-      <div
-        style={{
-          fontSize: 11,
-          letterSpacing: 0.8,
-          textTransform: "uppercase",
-          opacity: 0.62,
-        }}
-      >
-        Opening Battle{round ? ` · Round ${round}` : ""}
-      </div>
-
-      {canRetreat ? (
-        <div
-          style={{
-            fontSize: 13,
-            lineHeight: 1.55,
-            color: "rgba(232,236,244,0.88)",
-          }}
-        >
-          You can now attempt to <strong>evade</strong>, <strong>withdraw</strong>, or{" "}
-          <strong>break away</strong>.
-        </div>
-      ) : null}
-
-      {finisherAvailable ? (
-        <div
-          style={{
-            fontSize: 13,
-            lineHeight: 1.55,
-            color: "rgba(255,215,168,0.96)",
-            fontWeight: 700,
-          }}
-        >
-          The enemy is exposed. A decisive <strong>{finisherSkill ?? "class skill"}</strong>{" "}
-          could end the fight — but your weapon may not survive the strike.
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
-type Props = {
-  stageHero: StageCombatantView | null;
-  stageEnemy: StageCombatantView | null;
-  isEnemyTurn: boolean;
-  combatEnded: boolean;
-  enemyTelegraphHint: {
-    attackStyleHint: "volley" | "beam" | "charge" | "unknown";
-    targetName: string;
-  } | null;
-  turnTone: TurnTone;
-  pressureTone: PressureTone;
-  pressureTier: "low" | "medium" | "high";
-  openingCombatRound?: number;
-  canAttemptCombatRetreat?: boolean;
-  openingBattleFinisherAvailable?: boolean;
-  openingBattleFinisherSkillLabel?: string | null;
-  isOpeningThresholdCombat?: boolean;
-  actionSurface: ActionSurfaceProps;
-  dmMode: "human" | "solace-neutral" | null;
-  activeCombatantSpec: any | null;
-  isWrongPlayerForTurn: boolean;
-  derivedCombat: any | null;
-  heroCommandPose?: "idle" | "engage";
-  onResolveActionFocus?: () => void;
-  onAdvanceTurnBtn: () => void;
-  onPassTurnBtn: () => void;
-  onEndCombatBtn: () => void;
-  onPlayAdvanceSfx: () => void;
-  onPlayUiSfx: () => void;
-};
-
-export default function CombatMainShell(props: Props) {
+export default function CombatSection(props: CombatSectionProps) {
   const {
-    stageHero,
-    stageEnemy,
-    isEnemyTurn,
-    combatEnded,
-    enemyTelegraphHint,
-    turnTone,
-    pressureTone,
-    pressureTier,
+    events,
+    dmMode,
+    onAppendCanon,
     openingCombatRound,
     canAttemptCombatRetreat,
     openingBattleFinisherAvailable,
     openingBattleFinisherSkillLabel,
     isOpeningThresholdCombat,
-    actionSurface,
-    dmMode,
-    activeCombatantSpec,
-    isWrongPlayerForTurn,
+    partyMembers,
+    pressureTier,
+    allowDevControls,
+    encounterContext = null,
+    showEnemyResolver,
+    activeEnemyGroupName,
+    activeEnemyGroupId,
+    playerNames,
+    onTelegraph,
+    onCommitOutcomeOnly,
+    onAdvanceTurn,
+    enemyTelegraphHint,
     derivedCombat,
-    heroCommandPose = "idle",
-    onResolveActionFocus,
+    activeCombatantSpec,
+    combatEnded,
+    isEnemyTurn,
+    isWrongPlayerForTurn,
     onAdvanceTurnBtn,
     onPassTurnBtn,
     onEndCombatBtn,
-    onPlayAdvanceSfx,
-    onPlayUiSfx,
+    actionSurface,
   } = props;
 
-  const shellStyle: React.CSSProperties = {
-    display: "grid",
-    gap: 12,
-    padding: 14,
-    borderRadius: 22,
-    border: "1px solid rgba(214,188,120,0.14)",
-    background:
-      "linear-gradient(180deg, rgba(16,18,28,0.94), rgba(10,12,20,0.92))",
-    boxShadow:
-      "0 24px 60px rgba(0,0,0,0.28), inset 0 1px 0 rgba(255,255,255,0.04)",
-    width: "100%",
-    minWidth: 0,
-    alignContent: "start",
-  };
+  const model = useCombatSectionModel({
+    events,
+    partyMembers,
+    derivedCombat,
+    activeCombatantSpec,
+    combatEnded,
+    isEnemyTurn,
+    isWrongPlayerForTurn,
+    pressureTier,
+    enemyTelegraphHint,
+    activeEnemyGroupId,
+    activeEnemyGroupName,
+    encounterContext,
+  });
+
+  const prevTelegraphKeyRef = useRef<string>("");
+  const adjudicationRef = useRef<HTMLDivElement | null>(null);
+
+  const [showInspector, setShowInspector] = useState(false);
+  const [showSupportingSystems, setShowSupportingSystems] = useState(false);
+  const [showAdjudication, setShowAdjudication] = useState(false);
+  const [heroCommandPose, setHeroCommandPose] = useState<"idle" | "engage">("idle");
+
+  useEffect(() => {
+    const key = enemyTelegraphHint
+      ? `${enemyTelegraphHint.enemyName}|${enemyTelegraphHint.targetName}|${enemyTelegraphHint.attackStyleHint}`
+      : "";
+
+    if (!key) {
+      prevTelegraphKeyRef.current = "";
+      return;
+    }
+
+    if (prevTelegraphKeyRef.current && prevTelegraphKeyRef.current !== key) {
+      playSfx(SFX.enemyTelegraph, 0.42);
+    }
+
+    if (!prevTelegraphKeyRef.current) {
+      prevTelegraphKeyRef.current = key;
+      return;
+    }
+
+    prevTelegraphKeyRef.current = key;
+  }, [enemyTelegraphHint]);
+
+  useEffect(() => {
+    if (!actionSurface.playerInput.trim()) {
+      setHeroCommandPose("idle");
+      return;
+    }
+
+    if (actionSurface.canSubmit && !isEnemyTurn && !combatEnded) {
+      setHeroCommandPose("engage");
+      return;
+    }
+
+    setHeroCommandPose("idle");
+  }, [
+    actionSurface.playerInput,
+    actionSurface.canSubmit,
+    isEnemyTurn,
+    combatEnded,
+  ]);
+
+  function chooseTargetCombatantId(): string | null {
+    const hintedName = enemyTelegraphHint?.targetName
+      ? nameKey(enemyTelegraphHint.targetName)
+      : "";
+    const living = model.partyMembersForDisplay.filter((m) => (Number(m.hpCurrent) || 0) > 0);
+
+    if (hintedName) {
+      const byName = living.find((m) => nameKey(m.name) === hintedName);
+      if (byName) return String(byName.id);
+
+      const byContains = living.find(
+        (m) => nameKey(m.name).includes(hintedName) || hintedName.includes(nameKey(m.name))
+      );
+      if (byContains) return String(byContains.id);
+    }
+
+    if (living.length > 0) return String(living[0].id);
+    return model.partyMembersForDisplay.length > 0
+      ? String(model.partyMembersForDisplay[0].id)
+      : null;
+  }
+
+  function handleEnemyCommitOutcomeAndDamage(payload: any) {
+    onCommitOutcomeOnly(payload);
+
+    if (!model.combatId) return;
+
+    const rollValue = Math.trunc(Number(payload?.dice?.roll ?? 0));
+    const dcValue = Math.trunc(Number(payload?.dice?.dc ?? 0));
+    const hit =
+      Number.isFinite(rollValue) && Number.isFinite(dcValue) ? rollValue >= dcValue : false;
+    if (!hit) return;
+
+    const styleFromTelegraph =
+      enemyTelegraphHint?.enemyName && activeEnemyGroupName
+        ? nameKey(enemyTelegraphHint.enemyName) === nameKey(activeEnemyGroupName)
+          ? enemyTelegraphHint.attackStyleHint
+          : null
+        : null;
+
+    const style = (styleFromTelegraph ?? inferDamageStyleFromPayload(payload)) as
+      | "volley"
+      | "beam"
+      | "charge"
+      | "unknown";
+
+    const targetCombatantId = chooseTargetCombatantId();
+    if (!targetCombatantId) return;
+
+    const amount = computeDeterministicDamage({ roll: rollValue, dc: dcValue, style });
+
+    onAppendCanon("COMBATANT_DAMAGED", {
+      combatId: model.combatId,
+      sourceCombatantId: String(activeEnemyGroupId ?? activeEnemyGroupName ?? "enemy"),
+      targetCombatantId,
+      amount,
+      kind: style,
+    });
+
+    playSfx(SFX.combatHit, 0.74);
+
+    const before = model.playerHpById[targetCombatantId];
+    const beforeCur =
+      before?.hpCurrent ??
+      Math.max(
+        0,
+        Number(
+          model.partyMembersForDisplay.find((m) => String(m.id) === targetCombatantId)?.hpCurrent
+        ) || 0
+      );
+
+    const afterCur = Math.max(0, (Number(beforeCur) || 0) - amount);
+
+    if (afterCur <= 0) {
+      onAppendCanon("COMBATANT_DOWNED", {
+        combatId: model.combatId,
+        combatantId: targetCombatantId,
+        reason: "hp_zero",
+      });
+      playSfx(SFX.enemyDeath, 0.76);
+    }
+  }
+
+  function handleResolveActionFocus() {
+    setShowAdjudication(true);
+
+    if (typeof window !== "undefined") {
+      window.setTimeout(() => {
+        adjudicationRef.current?.scrollIntoView({
+          behavior: "smooth",
+          block: "start",
+        });
+      }, 140);
+    }
+  }
 
   return (
-    <div style={shellStyle}>
-      <div
-        style={{
-          width: "100%",
-          minWidth: 0,
-          minHeight: 320,
-          height: "clamp(320px, 48vh, 460px)",
-          maxHeight: "48vh",
-        }}
-      >
-        <CombatStage
-          hero={stageHero}
-          enemy={stageEnemy}
-          battlefieldImageSrc={null}
-          isEnemyTurn={isEnemyTurn}
-          combatEnded={combatEnded}
-          telegraphHint={enemyTelegraphHint}
-          heroCommandPose={heroCommandPose}
-          height={400}
-        />
-      </div>
-
-      <div
-        style={{
-          display: "flex",
-          gap: 8,
-          flexWrap: "wrap",
-          alignItems: "center",
-          width: "100%",
-          minWidth: 0,
-          padding: "10px 12px",
-          borderRadius: 14,
-          border: "1px solid rgba(255,255,255,0.08)",
-          background:
-            "linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.02))",
-        }}
-      >
-        <span
-          style={{
-            display: "inline-flex",
-            alignItems: "center",
-            padding: "6px 10px",
-            borderRadius: 999,
-            border: `1px solid ${turnTone.border}`,
-            background: turnTone.bg,
-            color: turnTone.text,
-            fontSize: 11,
-            fontWeight: 800,
-            letterSpacing: 0.8,
-            textTransform: "uppercase",
-            whiteSpace: "nowrap",
-          }}
-        >
-          {turnTone.label}
-        </span>
-
-        <span
-          style={{
-            display: "inline-flex",
-            alignItems: "center",
-            padding: "6px 10px",
-            borderRadius: 999,
-            border: `1px solid ${pressureTone.border}`,
-            background: pressureTone.bg,
-            color: "rgba(235,238,244,0.92)",
-            fontSize: 11,
-            fontWeight: 800,
-            letterSpacing: 0.8,
-            textTransform: "uppercase",
-            whiteSpace: "nowrap",
-          }}
-        >
-          Pressure · {pressureTier}
-        </span>
-
-        {stageHero ? (
-          <InfoPill
-            label={`${stageHero.name} HP ${fmtHp(stageHero.hpCurrent ?? 0, stageHero.hpMax ?? 1)}`}
-            tone="info"
-          />
-        ) : null}
-
-        {stageEnemy ? (
-          <InfoPill
-            label={`${stageEnemy.name} HP ${fmtHp(stageEnemy.hpCurrent ?? 0, stageEnemy.hpMax ?? 1)}`}
-            tone="accent"
-          />
-        ) : null}
-      </div>
-
-      <OpeningCombatPrompt
-        round={openingCombatRound}
-        canRetreat={canAttemptCombatRetreat}
-        finisherAvailable={openingBattleFinisherAvailable}
-        finisherSkill={openingBattleFinisherSkillLabel}
+    <div
+      style={{
+        display: "grid",
+        gap: 14,
+        width: "100%",
+        minWidth: 0,
+        alignContent: "start",
+        justifyItems: "stretch",
+      }}
+    >
+      <CombatMainShell
+        stageHero={model.stageHero}
+        stageEnemy={model.stageEnemy}
+        isEnemyTurn={isEnemyTurn}
+        combatEnded={combatEnded}
+        enemyTelegraphHint={
+          enemyTelegraphHint
+            ? {
+                attackStyleHint: enemyTelegraphHint.attackStyleHint,
+                targetName: enemyTelegraphHint.targetName,
+              }
+            : null
+        }
+        turnTone={model.turnTone}
+        pressureTone={model.pressureTone}
+        pressureTier={pressureTier}
+        openingCombatRound={openingCombatRound}
+        canAttemptCombatRetreat={canAttemptCombatRetreat}
+        openingBattleFinisherAvailable={openingBattleFinisherAvailable}
+        openingBattleFinisherSkillLabel={openingBattleFinisherSkillLabel}
         isOpeningThresholdCombat={isOpeningThresholdCombat}
+        actionSurface={actionSurface}
+        dmMode={dmMode}
+        activeCombatantSpec={activeCombatantSpec}
+        isWrongPlayerForTurn={isWrongPlayerForTurn}
+        derivedCombat={derivedCombat}
+        heroCommandPose={heroCommandPose}
+        onResolveActionFocus={handleResolveActionFocus}
+        onAdvanceTurnBtn={onAdvanceTurnBtn}
+        onPassTurnBtn={onPassTurnBtn}
+        onEndCombatBtn={onEndCombatBtn}
+        onPlayAdvanceSfx={() => playSfx(SFX.combatAdvance, 0.64)}
+        onPlayUiSfx={() => playSfx(SFX.uiClick, 0.64)}
       />
 
-      <div style={{ width: "100%", minWidth: 0 }}>
-        <ActionSection
-          partyMembers={actionSurface.partyMembers}
-          actingPlayerId={actionSurface.actingPlayerId}
-          onSetActingPlayerId={actionSurface.onSetActingPlayerId}
-          playerInput={actionSurface.playerInput}
-          onSetPlayerInput={actionSurface.onSetPlayerInput}
-          canSubmit={actionSurface.canSubmit}
-          onSubmit={actionSurface.onSubmit}
-          onResolveActionFocus={onResolveActionFocus}
-          combatActive={true}
-          passDisabled={(dmMode === "solace-neutral" && isEnemyTurn) || isWrongPlayerForTurn}
-          onPassTurn={actionSurface.onPassTurn}
-          dmMode={actionSurface.dmMode}
-          isEnemyTurn={isEnemyTurn}
-          isWrongPlayerForTurn={isWrongPlayerForTurn}
-          activeTurnLabel={
-            String(activeCombatantSpec?.name ?? activeCombatantSpec?.id ?? "") || null
-          }
-          showPartyButtons={false}
-          commitDisabled
-          title={actionSurface.title ?? "Combat Command"}
-          eyebrow={actionSurface.eyebrow ?? "Command"}
-          description={
-            actionSurface.description ??
-            "Describe what your character actually does. This command is the move."
-          }
-          inputPlaceholder={
-            actionSurface.inputPlaceholder ??
-            "Describe your move in full: target, movement, tactic, and intent..."
-          }
-          showTurnCards
-          showLoadoutDetails
-        />
-      </div>
-
-      <div
-        style={{
-          display: "flex",
-          gap: 8,
-          flexWrap: "wrap",
-          alignItems: "center",
-          justifyContent: "space-between",
-          padding: "10px 12px",
-          borderRadius: 14,
-          border: "1px solid rgba(255,255,255,0.08)",
-          background: "rgba(255,255,255,0.03)",
-          width: "100%",
-          minWidth: 0,
-        }}
-      >
+      {showAdjudication ? (
         <div
+          ref={adjudicationRef}
+          style={{ scrollMarginTop: 96 }}
+        >
+          <CombatAdjudicationPanel
+            actionSurface={actionSurface}
+            uiClickSfxSrc={SFX.uiClick}
+          />
+        </div>
+      ) : null}
+
+      <CombatSupportingSystems
+        showSupportingSystems={showSupportingSystems}
+        showInspector={showInspector}
+        onToggleSupportingSystems={() => setShowSupportingSystems((prev) => !prev)}
+        onToggleInspector={() => setShowInspector((prev) => !prev)}
+        allowDevControls={allowDevControls}
+        events={events}
+        onAppendCanon={onAppendCanon}
+        dmMode={dmMode}
+        partyMembers={partyMembers}
+        pressureTier={pressureTier}
+        encounterContext={encounterContext}
+        partyMembersForDisplay={model.partyMembersForDisplay}
+        playerHpById={model.playerHpById}
+        enemyHpById={model.enemyHpById}
+        activePlayerId={model.activePlayerId}
+        telegraphTargetKey={model.telegraphTargetKey}
+        enemyRoster={model.enemyRoster}
+        showEnemyResolver={showEnemyResolver}
+        activeEnemyGroupName={activeEnemyGroupName}
+        activeEnemyGroupId={activeEnemyGroupId}
+        playerNames={playerNames}
+        onTelegraph={onTelegraph}
+        onCommitOutcome={handleEnemyCommitOutcomeAndDamage}
+        onAdvanceTurn={onAdvanceTurn}
+        enemyTelegraphHint={enemyTelegraphHint}
+        derivedCombat={derivedCombat}
+        activeCombatantSpec={activeCombatantSpec}
+        isEnemyTurn={isEnemyTurn}
+        enemyTelegraphSfxSrc={SFX.enemyTelegraph}
+      />
+
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        <button
+          type="button"
+          onClick={() => setShowAdjudication((prev) => !prev)}
           style={{
+            border: "1px solid rgba(255,255,255,0.12)",
+            background: showAdjudication
+              ? "linear-gradient(180deg, rgba(214,188,120,0.14), rgba(214,188,120,0.06))"
+              : "rgba(255,255,255,0.05)",
+            color: "rgba(236,239,244,0.94)",
+            padding: "8px 12px",
+            borderRadius: 10,
             fontSize: 12,
-            lineHeight: 1.5,
-            color: "rgba(228,232,240,0.74)",
+            fontWeight: 800,
           }}
         >
-          Turn flow controls stay here. Adjudication and support systems stay below.
-        </div>
-
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          <button
-            onClick={() => {
-              if (!derivedCombat || combatEnded || (dmMode === "solace-neutral" && isEnemyTurn)) {
-                return;
-              }
-              onPlayAdvanceSfx();
-              onAdvanceTurnBtn();
-            }}
-            disabled={
-              !derivedCombat || combatEnded || (dmMode === "solace-neutral" && isEnemyTurn)
-            }
-            style={{
-              ...actionButtonStyle("secondary"),
-              padding: "8px 12px",
-              borderRadius: 10,
-              fontSize: 12,
-              fontWeight: 800,
-            }}
-          >
-            Advance Turn
-          </button>
-
-          <button
-            onClick={() => {
-              if (
-                !derivedCombat ||
-                combatEnded ||
-                (dmMode === "solace-neutral" && isEnemyTurn) ||
-                isWrongPlayerForTurn
-              ) {
-                return;
-              }
-              onPlayUiSfx();
-              onPassTurnBtn();
-            }}
-            disabled={
-              !derivedCombat ||
-              combatEnded ||
-              (dmMode === "solace-neutral" && isEnemyTurn) ||
-              isWrongPlayerForTurn
-            }
-            style={{
-              ...actionButtonStyle("secondary"),
-              padding: "8px 12px",
-              borderRadius: 10,
-              fontSize: 12,
-              fontWeight: 800,
-            }}
-          >
-            End My Turn
-          </button>
-
-          <button
-            onClick={() => {
-              if (!derivedCombat || combatEnded) return;
-              onPlayUiSfx();
-              onEndCombatBtn();
-            }}
-            disabled={!derivedCombat || combatEnded}
-            style={{
-              ...actionButtonStyle("warn"),
-              padding: "8px 12px",
-              borderRadius: 10,
-              fontSize: 12,
-              fontWeight: 800,
-            }}
-          >
-            End Combat
-          </button>
-        </div>
+          {showAdjudication ? "Hide Adjudication" : "Show Adjudication"}
+        </button>
       </div>
     </div>
   );
