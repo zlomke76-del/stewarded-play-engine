@@ -1,15 +1,17 @@
 "use client";
 
-import React from "react";
-import CombatStage from "../CombatStage";
-import ActionSection from "../ActionSection";
-import { fmtHp } from "./combatSectionUtils";
-import type {
-  ActionSurfaceProps,
-  StageCombatantView,
-  TurnTone,
-  PressureTone,
-} from "./combatSectionTypes";
+import React, { useEffect, useRef, useState } from "react";
+import CombatMainShell from "./combat/CombatMainShell";
+import CombatAdjudicationPanel from "./combat/CombatAdjudicationPanel";
+import CombatSupportingSystems from "./combat/CombatSupportingSystems";
+import { useCombatSectionModel } from "./combat/useCombatSectionModel";
+import {
+  computeDeterministicDamage,
+  inferDamageStyleFromPayload,
+  nameKey,
+  playSfx,
+} from "./combat/combatSectionUtils";
+import type { CombatSectionProps } from "./combat/combatSectionTypes";
 
 function chipStyle(
   tone: "neutral" | "info" | "warn" | "accent" = "neutral"
