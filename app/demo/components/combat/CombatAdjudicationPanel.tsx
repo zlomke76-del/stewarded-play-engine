@@ -3,7 +3,7 @@
 import React from "react";
 import CardSection from "@/components/layout/CardSection";
 import ResolutionDraftAdvisoryPanel from "@/components/resolution/ResolutionDraftAdvisoryPanel";
-import { inferOptionKind } from "../demoUtils";
+import { inferOptionKind } from "../../demoUtils";
 import type { ActionSurfaceProps } from "./combatSectionTypes";
 import { actionButtonStyle, playSfx } from "./combatSectionUtils";
 
