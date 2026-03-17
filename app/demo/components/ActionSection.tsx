@@ -51,6 +51,7 @@ type Props = {
 
   canSubmit: boolean;
   onSubmit: () => void;
+  onResolveActionFocus?: () => void;
 
   combatActive: boolean;
   passDisabled: boolean;
@@ -473,6 +474,7 @@ export default function ActionSection({
   onSetPlayerInput,
   canSubmit,
   onSubmit,
+  onResolveActionFocus,
   combatActive,
   passDisabled,
   onPassTurn,
@@ -705,6 +707,7 @@ export default function ActionSection({
     }
 
     onSubmit();
+    onResolveActionFocus?.();
   }
 
   function toggleListening() {
