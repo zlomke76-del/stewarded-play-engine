@@ -1247,6 +1247,10 @@ export default function GameplayViewport({ demo }: Props) {
         display: "flex",
         flexDirection: "column",
         minHeight: "100dvh",
+        width: "100%",
+        maxWidth: "100%",
+        minWidth: 0,
+        alignSelf: "stretch",
         gap: 14,
         position: "relative",
       }}
@@ -1316,6 +1320,9 @@ export default function GameplayViewport({ demo }: Props) {
           display: "grid",
           gap: 14,
           flexShrink: 0,
+          width: "100%",
+          maxWidth: "100%",
+          minWidth: 0,
         }}
       >
         <HeroStatusBar
@@ -1345,6 +1352,9 @@ export default function GameplayViewport({ demo }: Props) {
         style={{
           position: "relative",
           display: "grid",
+          width: "100%",
+          maxWidth: "100%",
+          minWidth: 0,
           gap: 18,
           flex: 1,
           minHeight: 0,
@@ -1440,6 +1450,9 @@ export default function GameplayViewport({ demo }: Props) {
             style={{
               scrollMarginTop: 90,
               minHeight: 0,
+              width: "100%",
+              maxWidth: "100%",
+              minWidth: 0,
             }}
           >
             <GameplayCombatPanel demo={demo} />
