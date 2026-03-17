@@ -1,7 +1,7 @@
 "use client";
 
 import GameplayCombatPanel from "../../GameplayCombatPanel";
-import { anchorId } from "../../demoUtils";
+import { anchorId } from "../../../demoUtils";
 import SceneFrame, { StageTabs } from "../ViewportSceneFrame";
 
 type Props = {
