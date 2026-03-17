@@ -167,26 +167,26 @@ function getStageFacingMode(combatEnded: boolean) {
 
 function getEnemyCameraOrbit(facingMode: "player" | "duel") {
   if (facingMode === "duel") {
-    return "-16deg 78deg 2.22m";
+    return "-18deg 78deg 2.10m";
   }
 
-  return "0deg 78deg 2.22m";
+  return "0deg 78deg 2.16m";
 }
 
 function getHeroStageTransform(facingMode: "player" | "duel") {
   if (facingMode === "duel") {
-    return "translateX(2%)";
+    return "translateX(3%) scale(1.08)";
   }
 
-  return "translateX(0)";
+  return "translateX(0) scale(1.03)";
 }
 
 function getEnemyStageTransform(facingMode: "player" | "duel") {
   if (facingMode === "duel") {
-    return "translateX(-2%)";
+    return "translateX(-3%) scale(1.14)";
   }
 
-  return "translateX(0)";
+  return "translateX(0) scale(1.08)";
 }
 
 function StageLabel(props: {
@@ -379,7 +379,7 @@ function EnemyModelFallback(props: {
         borderRadius: 18,
         background:
           "radial-gradient(circle at 50% 24%, rgba(214,110,110,0.14), rgba(214,110,110,0.03) 24%, rgba(0,0,0,0) 46%), radial-gradient(circle at 50% 76%, rgba(120,70,48,0.20), rgba(0,0,0,0) 42%), linear-gradient(180deg, rgba(22,18,16,0.96) 0%, rgba(14,11,10,0.98) 58%, rgba(10,8,8,1) 100%)",
-        border: "1px solid rgba(255,255,255,0.08)",
+        border: "1px solid rgba(255,255,255,0.06)",
       }}
     >
       <div
@@ -400,11 +400,11 @@ function EnemyModelFallback(props: {
           left: "50%",
           bottom: "-2%",
           transform: "translateX(-50%)",
-          width: "58%",
-          height: "18%",
+          width: "64%",
+          height: "20%",
           borderRadius: "50%",
           background:
-            "radial-gradient(circle, rgba(255,110,110,0.20) 0%, rgba(160,64,48,0.16) 32%, rgba(28,18,12,0.10) 58%, rgba(0,0,0,0) 76%)",
+            "radial-gradient(circle, rgba(255,110,110,0.22) 0%, rgba(160,64,48,0.18) 32%, rgba(28,18,12,0.10) 58%, rgba(0,0,0,0) 76%)",
           filter: "blur(10px)",
           pointerEvents: "none",
         }}
@@ -414,10 +414,14 @@ function EnemyModelFallback(props: {
         style={{
           position: "absolute",
           inset: 0,
-          padding: "10% 12% 8%",
+          padding: "4% 6% 2%",
           display: "grid",
           placeItems: "center",
-          transform: facingMode === "duel" ? "translateX(-2%)" : "translateX(0)",
+          transform:
+            facingMode === "duel"
+              ? "translateX(-3%) scale(1.08)"
+              : "translateX(0) scale(1.04)",
+          transformOrigin: "center bottom",
           transition: "transform 220ms ease",
         }}
       >
@@ -445,7 +449,7 @@ function EnemyModelFallback(props: {
           position: "absolute",
           inset: 0,
           boxShadow:
-            "inset 0 0 0 1px rgba(255,255,255,0.05), inset 0 -90px 100px rgba(0,0,0,0.34), inset 0 40px 70px rgba(255,240,220,0.03)",
+            "inset 0 0 0 1px rgba(255,255,255,0.04), inset 0 -72px 90px rgba(0,0,0,0.26), inset 0 36px 60px rgba(255,240,220,0.02)",
           pointerEvents: "none",
         }}
       />
@@ -512,7 +516,7 @@ function EnemyModelViewer(props: {
         borderRadius: 18,
         background:
           "radial-gradient(circle at 50% 24%, rgba(214,110,110,0.14), rgba(214,110,110,0.03) 24%, rgba(0,0,0,0) 46%), radial-gradient(circle at 50% 76%, rgba(120,70,48,0.20), rgba(0,0,0,0) 42%), linear-gradient(180deg, rgba(22,18,16,0.96) 0%, rgba(14,11,10,0.98) 58%, rgba(10,8,8,1) 100%)",
-        border: "1px solid rgba(255,255,255,0.08)",
+        border: "1px solid rgba(255,255,255,0.06)",
       }}
     >
       <ModelViewerBootstrap />
@@ -535,8 +539,8 @@ function EnemyModelViewer(props: {
           left: "50%",
           bottom: "-2%",
           transform: "translateX(-50%)",
-          width: "58%",
-          height: "18%",
+          width: "64%",
+          height: "20%",
           borderRadius: "50%",
           background:
             "radial-gradient(circle, rgba(255,110,110,0.20) 0%, rgba(160,64,48,0.16) 32%, rgba(28,18,12,0.10) 58%, rgba(0,0,0,0) 76%)",
@@ -549,9 +553,9 @@ function EnemyModelViewer(props: {
         style={{
           position: "absolute",
           inset: 0,
-          paddingTop: "2%",
-          transform: `scale(0.93) ${getEnemyStageTransform(facingMode)}`,
-          transformOrigin: "center center",
+          paddingTop: "0%",
+          transform: getEnemyStageTransform(facingMode),
+          transformOrigin: "center bottom",
           filter: enemy.defeated ? "grayscale(0.8) brightness(0.72)" : "none",
           transition: "transform 220ms ease",
         }}
@@ -561,14 +565,14 @@ function EnemyModelViewer(props: {
           alt: enemy.name,
           "interaction-prompt": "none",
           "shadow-intensity": "1.15",
-          exposure: "1.05",
+          exposure: "1.08",
           "environment-image": "neutral",
           "camera-orbit": cameraOrbit,
-          "field-of-view": "25deg",
-          "min-camera-orbit": "auto 62deg 1.98m",
-          "max-camera-orbit": "auto 92deg 2.58m",
-          "min-field-of-view": "25deg",
-          "max-field-of-view": "25deg",
+          "field-of-view": "24deg",
+          "min-camera-orbit": cameraOrbit,
+          "max-camera-orbit": cameraOrbit,
+          "min-field-of-view": "24deg",
+          "max-field-of-view": "24deg",
           "disable-pan": true,
           "disable-zoom": true,
           "auto-rotate": false,
@@ -591,7 +595,7 @@ function EnemyModelViewer(props: {
           position: "absolute",
           inset: 0,
           boxShadow:
-            "inset 0 0 0 1px rgba(255,255,255,0.05), inset 0 -90px 100px rgba(0,0,0,0.34), inset 0 40px 70px rgba(255,240,220,0.03)",
+            "inset 0 0 0 1px rgba(255,255,255,0.04), inset 0 -72px 90px rgba(0,0,0,0.26), inset 0 36px 60px rgba(255,240,220,0.02)",
           pointerEvents: "none",
         }}
       />
@@ -612,10 +616,10 @@ export default function CombatStage({
   const facingMode = useMemo(() => getStageFacingMode(combatEnded), [combatEnded]);
 
   const heroStageHeight =
-    typeof height === "number" ? Math.max(320, Math.round(height * 0.82)) : "82%";
+    typeof height === "number" ? Math.max(360, Math.round(height * 0.92)) : "92%";
 
   const enemyStageHeight =
-    typeof height === "number" ? Math.max(300, Math.round(height * 0.74)) : "74%";
+    typeof height === "number" ? Math.max(340, Math.round(height * 0.86)) : "86%";
 
   const enemySubtitle = useMemo(() => {
     if (!enemy) return null;
@@ -638,7 +642,7 @@ export default function CombatStage({
         border: "1px solid rgba(255,255,255,0.08)",
         background: battlefieldImageSrc
           ? `linear-gradient(180deg, rgba(6,8,14,0.42), rgba(6,8,14,0.68)), url(${battlefieldImageSrc}) center / cover no-repeat`
-          : "radial-gradient(circle at 50% 20%, rgba(214,188,120,0.10), rgba(214,188,120,0.02) 18%, rgba(0,0,0,0) 40%), linear-gradient(180deg, rgba(16,18,28,0.98), rgba(10,12,20,0.96))",
+          : "radial-gradient(circle at 50% 22%, rgba(214,188,120,0.12), rgba(214,188,120,0.03) 18%, rgba(0,0,0,0) 42%), linear-gradient(180deg, rgba(16,18,28,0.98), rgba(10,12,20,0.96))",
         boxShadow:
           "0 22px 56px rgba(0,0,0,0.26), inset 0 1px 0 rgba(255,255,255,0.04)",
       }}
@@ -650,7 +654,7 @@ export default function CombatStage({
           inset: 0,
           pointerEvents: "none",
           background:
-            "radial-gradient(circle at 50% 80%, rgba(255,194,104,0.08), rgba(255,194,104,0.00) 18%), linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.00) 24%, rgba(0,0,0,0.14) 100%)",
+            "radial-gradient(circle at 50% 78%, rgba(255,194,104,0.10), rgba(255,194,104,0.00) 18%), linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.00) 24%, rgba(0,0,0,0.14) 100%)",
         }}
       />
 
@@ -659,13 +663,13 @@ export default function CombatStage({
         style={{
           position: "absolute",
           left: "50%",
-          bottom: "6%",
+          bottom: "5%",
           transform: "translateX(-50%)",
-          width: "54%",
-          height: "18%",
+          width: "58%",
+          height: "20%",
           borderRadius: "50%",
           background:
-            "radial-gradient(circle, rgba(214,188,120,0.16) 0%, rgba(120,86,48,0.14) 34%, rgba(28,18,12,0.10) 58%, rgba(0,0,0,0) 78%)",
+            "radial-gradient(circle, rgba(214,188,120,0.18) 0%, rgba(120,86,48,0.14) 34%, rgba(28,18,12,0.10) 58%, rgba(0,0,0,0) 78%)",
           filter: "blur(12px)",
           pointerEvents: "none",
         }}
@@ -676,13 +680,29 @@ export default function CombatStage({
         style={{
           position: "absolute",
           left: "50%",
-          top: "18%",
-          bottom: "14%",
+          top: "16%",
+          bottom: "12%",
           width: 2,
           transform: "translateX(-50%)",
           background:
-            "linear-gradient(180deg, rgba(255,255,255,0.00), rgba(255,220,160,0.16) 24%, rgba(255,220,160,0.16) 76%, rgba(255,255,255,0.00))",
-          opacity: combatEnded ? 0.28 : 0.52,
+            "linear-gradient(180deg, rgba(255,255,255,0.00), rgba(255,220,160,0.20) 24%, rgba(255,220,160,0.20) 76%, rgba(255,255,255,0.00))",
+          opacity: combatEnded ? 0.28 : 0.6,
+          pointerEvents: "none",
+        }}
+      />
+
+      <div
+        aria-hidden="true"
+        style={{
+          position: "absolute",
+          left: "50%",
+          top: "24%",
+          transform: "translateX(-50%)",
+          width: "26%",
+          height: "34%",
+          background:
+            "radial-gradient(circle, rgba(255,190,90,0.08) 0%, rgba(255,190,90,0.03) 34%, rgba(0,0,0,0) 76%)",
+          filter: "blur(18px)",
           pointerEvents: "none",
         }}
       />
@@ -718,17 +738,17 @@ export default function CombatStage({
         style={{
           position: "absolute",
           inset: 0,
-          padding: "22px 22px 18px",
+          padding: "18px 18px 14px",
           display: "grid",
-          gridTemplateColumns: "minmax(0, 1fr) minmax(120px, 0.18fr) minmax(0, 1fr)",
+          gridTemplateColumns: "minmax(0, 1fr) minmax(88px, 0.16fr) minmax(0, 1fr)",
           alignItems: "end",
-          gap: 16,
+          gap: 12,
         }}
       >
         <div
           style={{
             display: "grid",
-            gap: 12,
+            gap: 10,
             alignSelf: "stretch",
             alignContent: "space-between",
           }}
@@ -756,9 +776,10 @@ export default function CombatStage({
               filter: hero?.defeated
                 ? "grayscale(0.6)"
                 : hero?.active && !isEnemyTurn && !combatEnded
-                  ? "drop-shadow(0 0 18px rgba(255,208,120,0.12))"
+                  ? "drop-shadow(0 0 18px rgba(255,208,120,0.14))"
                   : "none",
               transform: getHeroStageTransform(facingMode),
+              transformOrigin: "center bottom",
               transition: "transform 220ms ease",
             }}
           >
@@ -773,7 +794,8 @@ export default function CombatStage({
                 }
                 alt={hero.name}
                 height={heroStageHeight}
-                objectPosition="center top"
+                objectPosition="center 18%"
+                combatMode
               />
             ) : (
               <div />
@@ -786,7 +808,7 @@ export default function CombatStage({
         <div
           style={{
             display: "grid",
-            gap: 12,
+            gap: 10,
             alignSelf: "stretch",
             alignContent: "space-between",
           }}
@@ -812,7 +834,7 @@ export default function CombatStage({
               filter: enemy?.defeated
                 ? "grayscale(0.75)"
                 : enemy?.active && isEnemyTurn && !combatEnded
-                  ? "drop-shadow(0 0 18px rgba(255,132,132,0.12))"
+                  ? "drop-shadow(0 0 18px rgba(255,132,132,0.14))"
                   : "none",
             }}
           >
@@ -835,7 +857,7 @@ export default function CombatStage({
           position: "absolute",
           inset: 0,
           boxShadow:
-            "inset 0 0 0 1px rgba(255,255,255,0.04), inset 0 -100px 120px rgba(0,0,0,0.30), inset 0 60px 80px rgba(255,240,220,0.02)",
+            "inset 0 0 0 1px rgba(255,255,255,0.04), inset 0 -100px 120px rgba(0,0,0,0.28), inset 0 52px 72px rgba(255,240,220,0.02)",
           pointerEvents: "none",
         }}
       />
