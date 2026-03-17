@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import HeroRitualPortrait from "./hero-ritual/HeroRitualPortrait";
 import ModelViewerBootstrap from "./hero-ritual/ModelViewerBootstrap";
 
@@ -33,6 +33,7 @@ type Props = {
   isEnemyTurn: boolean;
   combatEnded: boolean;
   telegraphHint?: TelegraphHint;
+  heroCommandPose?: "idle" | "engage";
   height?: number | string;
 };
 
@@ -173,7 +174,14 @@ function getEnemyCameraOrbit(facingMode: "player" | "duel") {
   return "0deg 78deg 2.46m";
 }
 
-function getHeroStageTransform(facingMode: "player" | "duel") {
+function getHeroStageTransform(
+  facingMode: "player" | "duel",
+  commandPose: "idle" | "engage"
+) {
+  if (commandPose === "engage") {
+    return "translateX(5%) scale(1.01)";
+  }
+
   if (facingMode === "duel") {
     return "translateX(1%) scale(0.97)";
   }
@@ -181,12 +189,17 @@ function getHeroStageTransform(facingMode: "player" | "duel") {
   return "translateX(0) scale(0.98)";
 }
 
-function getEnemyStageTransform(facingMode: "player" | "duel") {
-  if (facingMode === "duel") {
-    return "translateX(-1%) scale(0.98)";
-  }
+function getEnemyStageTransform(
+  facingMode: "player" | "duel",
+  hitPulse: boolean
+) {
+  const base =
+    facingMode === "duel"
+      ? "translateX(-1%) scale(0.98)"
+      : "translateX(0) scale(0.99)";
 
-  return "translateX(0) scale(0.99)";
+  if (!hitPulse) return base;
+  return `${base} translateX(1.5%) scale(0.965)`;
 }
 
 function StageLabel(props: {
@@ -365,8 +378,9 @@ function EnemyModelFallback(props: {
   enemy: StageCombatant;
   height: number | string;
   facingMode: "player" | "duel";
+  hitPulse: boolean;
 }) {
-  const { enemy, height, facingMode } = props;
+  const { enemy, height, facingMode, hitPulse } = props;
   const portraitSrc = resolveEnemyFallbackImage(enemy);
 
   return (
@@ -379,8 +393,12 @@ function EnemyModelFallback(props: {
         overflow: "visible",
         borderRadius: 18,
         background:
-          "radial-gradient(circle at 50% 24%, rgba(214,110,110,0.14), rgba(214,110,110,0.03) 24%, rgba(0,0,0,0) 46%), radial-gradient(circle at 50% 76%, rgba(120,70,48,0.20), rgba(0,0,0,0) 42%), linear-gradient(180deg, rgba(22,18,16,0.96) 0%, rgba(14,11,10,0.98) 58%, rgba(10,8,8,1) 100%)",
+          hitPulse
+            ? "radial-gradient(circle at 50% 24%, rgba(255,120,120,0.22), rgba(214,110,110,0.06) 24%, rgba(0,0,0,0) 46%), radial-gradient(circle at 50% 76%, rgba(140,70,48,0.24), rgba(0,0,0,0) 42%), linear-gradient(180deg, rgba(28,16,16,0.98) 0%, rgba(14,11,10,0.98) 58%, rgba(10,8,8,1) 100%)"
+            : "radial-gradient(circle at 50% 24%, rgba(214,110,110,0.14), rgba(214,110,110,0.03) 24%, rgba(0,0,0,0) 46%), radial-gradient(circle at 50% 76%, rgba(120,70,48,0.20), rgba(0,0,0,0) 42%), linear-gradient(180deg, rgba(22,18,16,0.96) 0%, rgba(14,11,10,0.98) 58%, rgba(10,8,8,1) 100%)",
         border: "1px solid rgba(255,255,255,0.06)",
+        transition: "background 140ms ease, transform 140ms ease, filter 140ms ease",
+        transform: hitPulse ? "translateX(1.5%)" : "translateX(0)",
       }}
     >
       <div
@@ -420,8 +438,12 @@ function EnemyModelFallback(props: {
           placeItems: "end center",
           transform:
             facingMode === "duel"
-              ? "translateX(-1.5%) scale(0.98)"
-              : "translateX(0) scale(0.98)",
+              ? hitPulse
+                ? "translateX(0) scale(0.965)"
+                : "translateX(-1.5%) scale(0.98)"
+              : hitPulse
+                ? "translateX(1%) scale(0.97)"
+                : "translateX(0) scale(0.98)",
           transformOrigin: "center bottom",
           transition: "transform 220ms ease",
         }}
@@ -435,7 +457,12 @@ function EnemyModelFallback(props: {
             objectFit: "contain",
             objectPosition: "center bottom",
             display: "block",
-            filter: enemy.defeated ? "grayscale(0.8) brightness(0.72)" : "none",
+            filter: enemy.defeated
+              ? "grayscale(0.8) brightness(0.72)"
+              : hitPulse
+                ? "brightness(1.16) saturate(1.16)"
+                : "none",
+            transition: "filter 120ms ease",
           }}
           onError={(e) => {
             const el = e.currentTarget;
@@ -463,8 +490,9 @@ function EnemyModelViewer(props: {
   enemy: StageCombatant;
   height: number | string;
   facingMode: "player" | "duel";
+  hitPulse: boolean;
 }) {
-  const { enemy, height, facingMode } = props;
+  const { enemy, height, facingMode, hitPulse } = props;
   const [ready, setReady] = useState(false);
   const [failed, setFailed] = useState(false);
 
@@ -505,7 +533,14 @@ function EnemyModelViewer(props: {
   }, [resolvedModelSrc]);
 
   if (!resolvedModelSrc || !ready || failed) {
-    return <EnemyModelFallback enemy={enemy} height={height} facingMode={facingMode} />;
+    return (
+      <EnemyModelFallback
+        enemy={enemy}
+        height={height}
+        facingMode={facingMode}
+        hitPulse={hitPulse}
+      />
+    );
   }
 
   return (
@@ -518,8 +553,11 @@ function EnemyModelViewer(props: {
         overflow: "visible",
         borderRadius: 18,
         background:
-          "radial-gradient(circle at 50% 24%, rgba(214,110,110,0.14), rgba(214,110,110,0.03) 24%, rgba(0,0,0,0) 46%), radial-gradient(circle at 50% 76%, rgba(120,70,48,0.20), rgba(0,0,0,0) 42%), linear-gradient(180deg, rgba(22,18,16,0.96) 0%, rgba(14,11,10,0.98) 58%, rgba(10,8,8,1) 100%)",
+          hitPulse
+            ? "radial-gradient(circle at 50% 24%, rgba(255,120,120,0.22), rgba(214,110,110,0.06) 24%, rgba(0,0,0,0) 46%), radial-gradient(circle at 50% 76%, rgba(140,70,48,0.24), rgba(0,0,0,0) 42%), linear-gradient(180deg, rgba(28,16,16,0.98) 0%, rgba(14,11,10,0.98) 58%, rgba(10,8,8,1) 100%)"
+            : "radial-gradient(circle at 50% 24%, rgba(214,110,110,0.14), rgba(214,110,110,0.03) 24%, rgba(0,0,0,0) 46%), radial-gradient(circle at 50% 76%, rgba(120,70,48,0.20), rgba(0,0,0,0) 42%), linear-gradient(180deg, rgba(22,18,16,0.96) 0%, rgba(14,11,10,0.98) 58%, rgba(10,8,8,1) 100%)",
         border: "1px solid rgba(255,255,255,0.06)",
+        transition: "background 140ms ease, transform 140ms ease, filter 140ms ease",
       }}
     >
       <ModelViewerBootstrap />
@@ -558,10 +596,14 @@ function EnemyModelViewer(props: {
           inset: 0,
           paddingTop: "2%",
           paddingBottom: "1%",
-          transform: getEnemyStageTransform(facingMode),
+          transform: getEnemyStageTransform(facingMode, hitPulse),
           transformOrigin: "center bottom",
-          filter: enemy.defeated ? "grayscale(0.8) brightness(0.72)" : "none",
-          transition: "transform 220ms ease",
+          filter: enemy.defeated
+            ? "grayscale(0.8) brightness(0.72)"
+            : hitPulse
+              ? "brightness(1.14) saturate(1.12)"
+              : "none",
+          transition: "transform 160ms ease, filter 120ms ease",
         }}
       >
         {React.createElement("model-viewer" as any, {
@@ -614,10 +656,31 @@ export default function CombatStage({
   isEnemyTurn,
   combatEnded,
   telegraphHint,
+  heroCommandPose = "idle",
   height = 520,
 }: Props) {
   const telegraphText = useMemo(() => getTelegraphText(telegraphHint), [telegraphHint]);
   const facingMode = useMemo(() => getStageFacingMode(combatEnded), [combatEnded]);
+  const prevEnemyHpRef = useRef<number | null>(null);
+  const [enemyHitPulse, setEnemyHitPulse] = useState(false);
+
+  useEffect(() => {
+    const currentHp = Number(enemy?.hpCurrent);
+    if (!Number.isFinite(currentHp)) {
+      prevEnemyHpRef.current = null;
+      return;
+    }
+
+    const prevHp = prevEnemyHpRef.current;
+    if (prevHp !== null && currentHp < prevHp) {
+      setEnemyHitPulse(true);
+      const id = window.setTimeout(() => setEnemyHitPulse(false), 260);
+      prevEnemyHpRef.current = currentHp;
+      return () => window.clearTimeout(id);
+    }
+
+    prevEnemyHpRef.current = currentHp;
+  }, [enemy?.hpCurrent]);
 
   const resolvedStageHeight =
     typeof height === "number" ? Math.max(520, height) : height;
@@ -795,7 +858,7 @@ export default function CombatStage({
                 : hero?.active && !isEnemyTurn && !combatEnded
                   ? "drop-shadow(0 0 18px rgba(255,208,120,0.14))"
                   : "none",
-              transform: getHeroStageTransform(facingMode),
+              transform: getHeroStageTransform(facingMode, heroCommandPose),
               transformOrigin: "center bottom",
               transition: "transform 220ms ease",
             }}
@@ -864,6 +927,7 @@ export default function CombatStage({
                 enemy={enemy}
                 height={enemyStageHeight}
                 facingMode={facingMode}
+                hitPulse={enemyHitPulse}
               />
             ) : (
               <div />
