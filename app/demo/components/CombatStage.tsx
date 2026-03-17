@@ -175,7 +175,7 @@ function getEnemyCameraOrbit(facingMode: "player" | "duel") {
 
 function getHeroStageTransform(facingMode: "player" | "duel") {
   if (facingMode === "duel") {
-    return "translateX(2.5%) scale(1.04)";
+    return "translateX(2%) scale(1.01)";
   }
 
   return "translateX(0) scale(1.01)";
@@ -183,7 +183,7 @@ function getHeroStageTransform(facingMode: "player" | "duel") {
 
 function getEnemyStageTransform(facingMode: "player" | "duel") {
   if (facingMode === "duel") {
-    return "translateX(-2.5%) scale(1.08)";
+    return "translateX(-2%) scale(1.02)";
   }
 
   return "translateX(0) scale(1.03)";
@@ -568,7 +568,7 @@ function EnemyModelViewer(props: {
           exposure: "1.08",
           "environment-image": "neutral",
           "camera-orbit": cameraOrbit,
-          "field-of-view": "24deg",
+          "field-of-view": "30deg",
           "min-camera-orbit": cameraOrbit,
           "max-camera-orbit": cameraOrbit,
           "min-field-of-view": "24deg",
@@ -616,10 +616,10 @@ export default function CombatStage({
   const facingMode = useMemo(() => getStageFacingMode(combatEnded), [combatEnded]);
 
   const heroStageHeight =
-    typeof height === "number" ? Math.max(350, Math.round(height * 0.9)) : "90%";
+  typeof height === "number" ? Math.max(420, Math.round(height * 1.02)) : "102%";
 
-  const enemyStageHeight =
-    typeof height === "number" ? Math.max(330, Math.round(height * 0.84)) : "84%";
+const enemyStageHeight =
+  typeof height === "number" ? Math.max(400, Math.round(height * 0.96)) : "96%";
 
   const enemySubtitle = useMemo(() => {
     if (!enemy) return null;
@@ -794,7 +794,7 @@ export default function CombatStage({
                 }
                 alt={hero.name}
                 height={heroStageHeight}
-                objectPosition="center 8%"
+                objectPosition="center 18%"
                 combatMode
               />
             ) : (
