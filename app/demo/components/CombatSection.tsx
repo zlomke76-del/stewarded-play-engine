@@ -8,7 +8,7 @@
 // Combat cockpit goals:
 // - battlefield always renders first and stays visible
 // - command sits immediately below the battlefield
-// - adjudication stays tightly coupled to command
+// - adjudication moves out of the primary combat loop
 // - supporting systems remain collapsed by default
 // ------------------------------------------------------------
 
@@ -755,6 +755,7 @@ export default function CombatSection({
   const prevTelegraphKeyRef = useRef<string>("");
   const [showInspector, setShowInspector] = useState(false);
   const [showSupportingSystems, setShowSupportingSystems] = useState(false);
+  const [showAdjudication, setShowAdjudication] = useState(false);
 
   const playerHpById = useMemo(
     () => derivePlayerHpFromCanon({ events, combatId, partyMembers }),
@@ -1034,6 +1035,21 @@ export default function CombatSection({
     }
   }
 
+  const shellStyle: React.CSSProperties = {
+    display: "grid",
+    gap: 12,
+    padding: 14,
+    borderRadius: 22,
+    border: "1px solid rgba(214,188,120,0.14)",
+    background:
+      "linear-gradient(180deg, rgba(16,18,28,0.94), rgba(10,12,20,0.92))",
+    boxShadow:
+      "0 24px 60px rgba(0,0,0,0.28), inset 0 1px 0 rgba(255,255,255,0.04)",
+    width: "100%",
+    minWidth: 0,
+    alignContent: "start",
+  };
+
   return (
     <div
       style={{
@@ -1045,25 +1061,14 @@ export default function CombatSection({
         justifyItems: "stretch",
       }}
     >
-      <div
-        style={{
-          display: "grid",
-          gap: 10,
-          padding: 0,
-          minHeight: 0,
-          width: "100%",
-          minWidth: 0,
-          alignContent: "start",
-          justifyItems: "stretch",
-        }}
-      >
+      <div style={shellStyle}>
         <div
           style={{
             width: "100%",
             minWidth: 0,
-            minHeight: 280,
-            height: "clamp(280px, 42vh, 390px)",
-            maxHeight: "42vh",
+            minHeight: 320,
+            height: "clamp(320px, 48vh, 460px)",
+            maxHeight: "48vh",
           }}
         >
           <CombatStage
@@ -1080,7 +1085,7 @@ export default function CombatSection({
                   }
                 : null
             }
-            height={340}
+            height={400}
           />
         </div>
 
@@ -1092,6 +1097,11 @@ export default function CombatSection({
             alignItems: "center",
             width: "100%",
             minWidth: 0,
+            padding: "10px 12px",
+            borderRadius: 14,
+            border: "1px solid rgba(255,255,255,0.08)",
+            background:
+              "linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.02))",
           }}
         >
           <span
@@ -1212,7 +1222,7 @@ export default function CombatSection({
               color: "rgba(228,232,240,0.74)",
             }}
           >
-            Turn flow controls stay here. Everything else is tucked below.
+            Turn flow controls stay here. Adjudication and support systems stay below.
           </div>
 
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
@@ -1287,229 +1297,42 @@ export default function CombatSection({
             </button>
           </div>
         </div>
-
-        <div
-          style={{
-            display: "grid",
-            gap: 12,
-            padding: "14px",
-            borderRadius: 18,
-            border: "1px solid rgba(255,255,255,0.08)",
-            background:
-              "linear-gradient(180deg, rgba(255,255,255,0.035), rgba(255,255,255,0.015))",
-            width: "100%",
-            minWidth: 0,
-          }}
-        >
-          <div style={{ display: "grid", gap: 5 }}>
-            <div
-              style={{
-                fontSize: 11,
-                letterSpacing: 0.8,
-                textTransform: "uppercase",
-                opacity: 0.62,
-              }}
-            >
-              Adjudication
-            </div>
-            <div
-              style={{
-                fontSize: 14,
-                lineHeight: 1.6,
-                color: "rgba(228,232,240,0.78)",
-              }}
-            >
-              Resolve the typed command here in combat. Choose the best interpretation, then use
-              the real fate panel below.
-            </div>
-          </div>
-
-          {actionSurface.options && actionSurface.options.length > 0 ? (
-            <div style={{ display: "grid", gap: 10, width: "100%", minWidth: 0 }}>
-              <div
-                style={{
-                  fontSize: 11,
-                  letterSpacing: 0.7,
-                  textTransform: "uppercase",
-                  opacity: 0.62,
-                }}
-              >
-                Resolution Paths
-              </div>
-
-              <div style={{ display: "grid", gap: 10, width: "100%", minWidth: 0 }}>
-                {actionSurface.options.map((opt, idx) => {
-                  const active = actionSurface.selectedOption?.id
-                    ? actionSurface.selectedOption?.id === opt?.id
-                    : actionSurface.selectedOption === opt;
-
-                  return (
-                    <button
-                      key={optionId(opt, idx)}
-                      type="button"
-                      onClick={() => {
-                        playSfx(SFX.uiClick, 0.58);
-                        actionSurface.onSetSelectedOption(opt);
-                      }}
-                      style={{
-                        width: "100%",
-                        textAlign: "left",
-                        padding: "13px 14px",
-                        borderRadius: 14,
-                        border: active
-                          ? "1px solid rgba(214,188,120,0.28)"
-                          : "1px solid rgba(255,255,255,0.08)",
-                        background: active
-                          ? "linear-gradient(180deg, rgba(214,188,120,0.10), rgba(255,255,255,0.03))"
-                          : "rgba(255,255,255,0.03)",
-                        color: "inherit",
-                        cursor: "pointer",
-                        lineHeight: 1.55,
-                        fontWeight: active ? 800 : 600,
-                      }}
-                    >
-                      {optionDescription(opt)}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          ) : (
-            <div
-              style={{
-                padding: "12px",
-                borderRadius: 14,
-                border: "1px solid rgba(255,255,255,0.08)",
-                background: "rgba(255,255,255,0.03)",
-                fontSize: 13,
-                lineHeight: 1.6,
-                color: "rgba(228,232,240,0.72)",
-                width: "100%",
-                minWidth: 0,
-              }}
-            >
-              {actionSurface.playerInput.trim().length > 0
-                ? "Click Resolve Action above and the combat interpretations will appear here."
-                : "Type your command above to begin the combat adjudication loop."}
-            </div>
-          )}
-
-          {actionSurface.selectedOption ? (
-            <div style={{ display: "grid", gap: 10, width: "100%", minWidth: 0 }}>
-              <div
-                style={{
-                  fontSize: 11,
-                  letterSpacing: 0.7,
-                  textTransform: "uppercase",
-                  opacity: 0.62,
-                }}
-              >
-                Roll Fate
-              </div>
-
-              <ResolutionDraftAdvisoryPanel
-                context={{
-                  optionDescription: actionSurface.selectedOption.description,
-                  optionKind: inferOptionKind(
-                    `${actionSurface.playerInput}\n${actionSurface.selectedOption.description}`.trim()
-                  ),
-                }}
-                role={actionSurface.role as any}
-                dmMode={actionSurface.resolutionDmMode as any}
-                setupText={`${actionSurface.playerInput}\n\nCurrent Room: ${actionSurface.currentRoomTitle}\n\n${actionSurface.roomSummary}`}
-                movement={actionSurface.resolutionMovement}
-                combat={
-                  actionSurface.resolutionCombat
-                    ? {
-                        ...actionSurface.resolutionCombat,
-                        attackStyleHint:
-                          actionSurface.resolutionCombat.attackStyleHint ?? undefined,
-                      }
-                    : null
-                }
-                rollModifier={actionSurface.actingRollModifier}
-                rollModifierLabel={
-                  (actionSurface.actingPlayerInjuryStacks ?? 0) > 0
-                    ? `Injury stacks: ${actionSurface.actingPlayerInjuryStacks}`
-                    : null
-                }
-                onRecord={actionSurface.onRecord}
-              />
-
-              <div
-                style={{
-                  display: "flex",
-                  justifyContent: "flex-end",
-                  gap: 8,
-                  flexWrap: "wrap",
-                }}
-              >
-                <button
-                  type="button"
-                  onClick={() => {
-                    playSfx(SFX.uiClick, 0.56);
-                    actionSurface.onSetSelectedOption(null);
-                  }}
-                  style={{
-                    ...actionButtonStyle("secondary"),
-                    padding: "9px 12px",
-                    borderRadius: 12,
-                    fontWeight: 800,
-                  }}
-                >
-                  Clear Selection
-                </button>
-              </div>
-            </div>
-          ) : null}
-        </div>
-
-        {(encounterContext?.objective ||
-          encounterContext?.rewardHint ||
-          encounterContext?.zoneTheme ||
-          encounterContext?.lockState) && (
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", width: "100%", minWidth: 0 }}>
-            {encounterContext?.zoneTheme ? (
-              <InfoPill
-                label={`Theme: ${titleCase(String(encounterContext.zoneTheme))}`}
-                tone="info"
-              />
-            ) : null}
-
-            {encounterContext?.lockState ? (
-              <InfoPill label={`Lock: ${encounterContext.lockState}`} tone="warn" />
-            ) : null}
-
-            {encounterContext?.rewardHint ? (
-              <InfoPill label={`Reward: ${encounterContext.rewardHint}`} tone="accent" />
-            ) : null}
-
-            {encounterContext?.objective ? (
-              <InfoPill label={`Objective: ${encounterContext.objective}`} tone="neutral" />
-            ) : null}
-          </div>
-        )}
       </div>
 
       <div style={{ width: "100%", minWidth: 0 }}>
         <CardSection title="Supporting Systems">
           <div style={{ display: "grid", gap: 10, width: "100%", minWidth: 0 }}>
-            <button
-              type="button"
-              onClick={() => setShowSupportingSystems((prev) => !prev)}
-              style={{
-                justifySelf: "start",
-                ...actionButtonStyle(showSupportingSystems ? "warn" : "secondary"),
-                padding: "8px 12px",
-                borderRadius: 10,
-                fontSize: 12,
-                fontWeight: 800,
-              }}
-            >
-              {showSupportingSystems ? "Hide Supporting Systems" : "Show Supporting Systems"}
-            </button>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <button
+                type="button"
+                onClick={() => setShowSupportingSystems((prev) => !prev)}
+                style={{
+                  ...actionButtonStyle(showSupportingSystems ? "warn" : "secondary"),
+                  padding: "8px 12px",
+                  borderRadius: 10,
+                  fontSize: 12,
+                  fontWeight: 800,
+                }}
+              >
+                {showSupportingSystems ? "Hide Supporting Systems" : "Show Supporting Systems"}
+              </button>
 
-            {!showSupportingSystems ? (
+              <button
+                type="button"
+                onClick={() => setShowAdjudication((prev) => !prev)}
+                style={{
+                  ...actionButtonStyle(showAdjudication ? "primary" : "secondary"),
+                  padding: "8px 12px",
+                  borderRadius: 10,
+                  fontSize: 12,
+                  fontWeight: 800,
+                }}
+              >
+                {showAdjudication ? "Hide Adjudication" : "Show Adjudication"}
+              </button>
+            </div>
+
+            {!showSupportingSystems && !showAdjudication ? (
               <div
                 style={{
                   fontSize: 12,
@@ -1517,11 +1340,217 @@ export default function CombatSection({
                   color: "rgba(228,232,240,0.66)",
                 }}
               >
-                Party panels, enemy roster, resolver details, and inspector tools stay collapsed so
-                the battlefield remains primary.
+                Party panels, enemy roster, encounter details, adjudication, resolver details, and
+                inspector tools stay collapsed so the battlefield remains primary.
               </div>
-            ) : (
+            ) : null}
+
+            {showAdjudication ? (
+              <CardSection title="Adjudication">
+                <div style={{ display: "grid", gap: 12, width: "100%", minWidth: 0 }}>
+                  <div style={{ display: "grid", gap: 5 }}>
+                    <div
+                      style={{
+                        fontSize: 11,
+                        letterSpacing: 0.8,
+                        textTransform: "uppercase",
+                        opacity: 0.62,
+                      }}
+                    >
+                      Resolution Flow
+                    </div>
+                    <div
+                      style={{
+                        fontSize: 14,
+                        lineHeight: 1.6,
+                        color: "rgba(228,232,240,0.78)",
+                      }}
+                    >
+                      Resolve the typed command here in combat. Choose the best interpretation, then
+                      use the real fate panel below.
+                    </div>
+                  </div>
+
+                  {actionSurface.options && actionSurface.options.length > 0 ? (
+                    <div style={{ display: "grid", gap: 10, width: "100%", minWidth: 0 }}>
+                      <div
+                        style={{
+                          fontSize: 11,
+                          letterSpacing: 0.7,
+                          textTransform: "uppercase",
+                          opacity: 0.62,
+                        }}
+                      >
+                        Resolution Paths
+                      </div>
+
+                      <div style={{ display: "grid", gap: 10, width: "100%", minWidth: 0 }}>
+                        {actionSurface.options.map((opt, idx) => {
+                          const active = actionSurface.selectedOption?.id
+                            ? actionSurface.selectedOption?.id === opt?.id
+                            : actionSurface.selectedOption === opt;
+
+                          return (
+                            <button
+                              key={optionId(opt, idx)}
+                              type="button"
+                              onClick={() => {
+                                playSfx(SFX.uiClick, 0.58);
+                                actionSurface.onSetSelectedOption(opt);
+                              }}
+                              style={{
+                                width: "100%",
+                                textAlign: "left",
+                                padding: "13px 14px",
+                                borderRadius: 14,
+                                border: active
+                                  ? "1px solid rgba(214,188,120,0.28)"
+                                  : "1px solid rgba(255,255,255,0.08)",
+                                background: active
+                                  ? "linear-gradient(180deg, rgba(214,188,120,0.10), rgba(255,255,255,0.03))"
+                                  : "rgba(255,255,255,0.03)",
+                                color: "inherit",
+                                cursor: "pointer",
+                                lineHeight: 1.55,
+                                fontWeight: active ? 800 : 600,
+                              }}
+                            >
+                              {optionDescription(opt)}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ) : (
+                    <div
+                      style={{
+                        padding: "12px",
+                        borderRadius: 14,
+                        border: "1px solid rgba(255,255,255,0.08)",
+                        background: "rgba(255,255,255,0.03)",
+                        fontSize: 13,
+                        lineHeight: 1.6,
+                        color: "rgba(228,232,240,0.72)",
+                        width: "100%",
+                        minWidth: 0,
+                      }}
+                    >
+                      {actionSurface.playerInput.trim().length > 0
+                        ? "Click Resolve Action above and the combat interpretations will appear here."
+                        : "Type your command above to begin the combat adjudication loop."}
+                    </div>
+                  )}
+
+                  {actionSurface.selectedOption ? (
+                    <div style={{ display: "grid", gap: 10, width: "100%", minWidth: 0 }}>
+                      <div
+                        style={{
+                          fontSize: 11,
+                          letterSpacing: 0.7,
+                          textTransform: "uppercase",
+                          opacity: 0.62,
+                        }}
+                      >
+                        Roll Fate
+                      </div>
+
+                      <ResolutionDraftAdvisoryPanel
+                        context={{
+                          optionDescription: actionSurface.selectedOption.description,
+                          optionKind: inferOptionKind(
+                            `${actionSurface.playerInput}\n${actionSurface.selectedOption.description}`.trim()
+                          ),
+                        }}
+                        role={actionSurface.role as any}
+                        dmMode={actionSurface.resolutionDmMode as any}
+                        setupText={`${actionSurface.playerInput}\n\nCurrent Room: ${actionSurface.currentRoomTitle}\n\n${actionSurface.roomSummary}`}
+                        movement={actionSurface.resolutionMovement}
+                        combat={
+                          actionSurface.resolutionCombat
+                            ? {
+                                ...actionSurface.resolutionCombat,
+                                attackStyleHint:
+                                  actionSurface.resolutionCombat.attackStyleHint ?? undefined,
+                              }
+                            : null
+                        }
+                        rollModifier={actionSurface.actingRollModifier}
+                        rollModifierLabel={
+                          (actionSurface.actingPlayerInjuryStacks ?? 0) > 0
+                            ? `Injury stacks: ${actionSurface.actingPlayerInjuryStacks}`
+                            : null
+                        }
+                        onRecord={actionSurface.onRecord}
+                      />
+
+                      <div
+                        style={{
+                          display: "flex",
+                          justifyContent: "flex-end",
+                          gap: 8,
+                          flexWrap: "wrap",
+                        }}
+                      >
+                        <button
+                          type="button"
+                          onClick={() => {
+                            playSfx(SFX.uiClick, 0.56);
+                            actionSurface.onSetSelectedOption(null);
+                          }}
+                          style={{
+                            ...actionButtonStyle("secondary"),
+                            padding: "9px 12px",
+                            borderRadius: 12,
+                            fontWeight: 800,
+                          }}
+                        >
+                          Clear Selection
+                        </button>
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
+              </CardSection>
+            ) : null}
+
+            {showSupportingSystems ? (
               <div style={{ display: "grid", gap: 14, width: "100%", minWidth: 0 }}>
+                {(encounterContext?.objective ||
+                  encounterContext?.rewardHint ||
+                  encounterContext?.zoneTheme ||
+                  encounterContext?.lockState) && (
+                  <CardSection title="Encounter Context">
+                    <div
+                      style={{
+                        display: "flex",
+                        gap: 8,
+                        flexWrap: "wrap",
+                        width: "100%",
+                        minWidth: 0,
+                      }}
+                    >
+                      {encounterContext?.zoneTheme ? (
+                        <InfoPill
+                          label={`Theme: ${titleCase(String(encounterContext.zoneTheme))}`}
+                          tone="info"
+                        />
+                      ) : null}
+
+                      {encounterContext?.lockState ? (
+                        <InfoPill label={`Lock: ${encounterContext.lockState}`} tone="warn" />
+                      ) : null}
+
+                      {encounterContext?.rewardHint ? (
+                        <InfoPill label={`Reward: ${encounterContext.rewardHint}`} tone="accent" />
+                      ) : null}
+
+                      {encounterContext?.objective ? (
+                        <InfoPill label={`Objective: ${encounterContext.objective}`} tone="neutral" />
+                      ) : null}
+                    </div>
+                  </CardSection>
+                )}
+
                 {partyMembersForDisplay.length > 0 && (
                   <CardSection title="Your Side">
                     <div
@@ -2179,7 +2208,7 @@ export default function CombatSection({
                   </div>
                 </CardSection>
               </div>
-            )}
+            ) : null}
           </div>
         </CardSection>
       </div>
