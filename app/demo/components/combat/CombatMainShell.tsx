@@ -181,6 +181,8 @@ type Props = {
   activeCombatantSpec: any | null;
   isWrongPlayerForTurn: boolean;
   derivedCombat: any | null;
+  heroCommandPose?: "idle" | "engage";
+  onResolveActionFocus?: () => void;
   onAdvanceTurnBtn: () => void;
   onPassTurnBtn: () => void;
   onEndCombatBtn: () => void;
@@ -208,6 +210,8 @@ export default function CombatMainShell(props: Props) {
     activeCombatantSpec,
     isWrongPlayerForTurn,
     derivedCombat,
+    heroCommandPose = "idle",
+    onResolveActionFocus,
     onAdvanceTurnBtn,
     onPassTurnBtn,
     onEndCombatBtn,
@@ -248,6 +252,7 @@ export default function CombatMainShell(props: Props) {
           isEnemyTurn={isEnemyTurn}
           combatEnded={combatEnded}
           telegraphHint={enemyTelegraphHint}
+          heroCommandPose={heroCommandPose}
           height={400}
         />
       </div>
@@ -337,6 +342,7 @@ export default function CombatMainShell(props: Props) {
           onSetPlayerInput={actionSurface.onSetPlayerInput}
           canSubmit={actionSurface.canSubmit}
           onSubmit={actionSurface.onSubmit}
+          onResolveActionFocus={onResolveActionFocus}
           combatActive={true}
           passDisabled={(dmMode === "solace-neutral" && isEnemyTurn) || isWrongPlayerForTurn}
           onPassTurn={actionSurface.onPassTurn}
