@@ -2,7 +2,7 @@
 
 import RoomTopologyPanel from "../../RoomTopologyPanel";
 import SceneFrame, { SceneAdvanceBar } from "../ViewportSceneFrame";
-import { anchorId } from "../../demoUtils";
+import { anchorId } from "../../../demoUtils";
 
 type Props = {
   demo: any;
