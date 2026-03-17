@@ -95,7 +95,9 @@ function normalizeEnemyText(value?: string | null) {
 function inferEnemyAssetKey(enemy: StageCombatant | null): string | null {
   if (!enemy) return null;
 
-  const haystack = `${normalizeEnemyText(enemy.name)} ${normalizeEnemyText(enemy.className)} ${normalizeEnemyText(enemy.species)}`;
+  const haystack = `${normalizeEnemyText(enemy.name)} ${normalizeEnemyText(
+    enemy.className
+  )} ${normalizeEnemyText(enemy.species)}`;
 
   if (haystack.includes("bandit captain")) return "bandit_captain";
   if (haystack.includes("bandit archer")) return "bandit_archer";
@@ -157,6 +159,34 @@ function getTelegraphText(telegraphHint?: TelegraphHint) {
   if (style === "beam") return `Arcane beam forming${target}`;
   if (style === "charge") return `Charge incoming${target}`;
   return `Enemy action building${target}`;
+}
+
+function getStageFacingMode(combatEnded: boolean) {
+  return combatEnded ? "player" : "duel";
+}
+
+function getEnemyCameraOrbit(facingMode: "player" | "duel") {
+  if (facingMode === "duel") {
+    return "-16deg 78deg 2.22m";
+  }
+
+  return "0deg 78deg 2.22m";
+}
+
+function getHeroStageTransform(facingMode: "player" | "duel") {
+  if (facingMode === "duel") {
+    return "translateX(2%)";
+  }
+
+  return "translateX(0)";
+}
+
+function getEnemyStageTransform(facingMode: "player" | "duel") {
+  if (facingMode === "duel") {
+    return "translateX(-2%)";
+  }
+
+  return "translateX(0)";
 }
 
 function StageLabel(props: {
@@ -334,8 +364,9 @@ function StageLabel(props: {
 function EnemyModelFallback(props: {
   enemy: StageCombatant;
   height: number | string;
+  facingMode: "player" | "duel";
 }) {
-  const { enemy, height } = props;
+  const { enemy, height, facingMode } = props;
   const portraitSrc = resolveEnemyFallbackImage(enemy);
 
   return (
@@ -386,6 +417,8 @@ function EnemyModelFallback(props: {
           padding: "10% 12% 8%",
           display: "grid",
           placeItems: "center",
+          transform: facingMode === "duel" ? "translateX(-2%)" : "translateX(0)",
+          transition: "transform 220ms ease",
         }}
       >
         <img
@@ -423,12 +456,14 @@ function EnemyModelFallback(props: {
 function EnemyModelViewer(props: {
   enemy: StageCombatant;
   height: number | string;
+  facingMode: "player" | "duel";
 }) {
-  const { enemy, height } = props;
+  const { enemy, height, facingMode } = props;
   const [ready, setReady] = useState(false);
   const [failed, setFailed] = useState(false);
 
   const resolvedModelSrc = useMemo(() => resolveEnemyModelSrc(enemy), [enemy]);
+  const cameraOrbit = useMemo(() => getEnemyCameraOrbit(facingMode), [facingMode]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -464,7 +499,7 @@ function EnemyModelViewer(props: {
   }, [resolvedModelSrc]);
 
   if (!resolvedModelSrc || !ready || failed) {
-    return <EnemyModelFallback enemy={enemy} height={height} />;
+    return <EnemyModelFallback enemy={enemy} height={height} facingMode={facingMode} />;
   }
 
   return (
@@ -515,36 +550,34 @@ function EnemyModelViewer(props: {
           position: "absolute",
           inset: 0,
           paddingTop: "2%",
-          transform: "scale(0.93)",
+          transform: `scale(0.93) ${getEnemyStageTransform(facingMode)}`,
           transformOrigin: "center center",
           filter: enemy.defeated ? "grayscale(0.8) brightness(0.72)" : "none",
+          transition: "transform 220ms ease",
         }}
       >
         {React.createElement("model-viewer" as any, {
           src: resolvedModelSrc,
           alt: enemy.name,
-          "camera-controls": true,
-          "touch-action": "pan-y",
           "interaction-prompt": "none",
           "shadow-intensity": "1.15",
           exposure: "1.05",
           "environment-image": "neutral",
-          "camera-orbit": "0deg 78deg 2.22m",
+          "camera-orbit": cameraOrbit,
           "field-of-view": "25deg",
           "min-camera-orbit": "auto 62deg 1.98m",
           "max-camera-orbit": "auto 92deg 2.58m",
-          "min-field-of-view": "19deg",
-          "max-field-of-view": "31deg",
+          "min-field-of-view": "25deg",
+          "max-field-of-view": "25deg",
           "disable-pan": true,
-          "disable-zoom": false,
-          "auto-rotate": true,
-          "auto-rotate-delay": 0,
-          "rotation-per-second": "7deg",
+          "disable-zoom": true,
+          "auto-rotate": false,
           style: {
             width: "100%",
             height: "100%",
             display: "block",
             background: "transparent",
+            pointerEvents: "none",
           },
           onError: () => {
             setFailed(true);
@@ -576,6 +609,7 @@ export default function CombatStage({
   height = 460,
 }: Props) {
   const telegraphText = useMemo(() => getTelegraphText(telegraphHint), [telegraphHint]);
+  const facingMode = useMemo(() => getStageFacingMode(combatEnded), [combatEnded]);
 
   const heroStageHeight =
     typeof height === "number" ? Math.max(320, Math.round(height * 0.82)) : "82%";
@@ -602,10 +636,9 @@ export default function CombatStage({
         overflow: "hidden",
         borderRadius: 24,
         border: "1px solid rgba(255,255,255,0.08)",
-        background:
-          battlefieldImageSrc
-            ? `linear-gradient(180deg, rgba(6,8,14,0.42), rgba(6,8,14,0.68)), url(${battlefieldImageSrc}) center / cover no-repeat`
-            : "radial-gradient(circle at 50% 20%, rgba(214,188,120,0.10), rgba(214,188,120,0.02) 18%, rgba(0,0,0,0) 40%), linear-gradient(180deg, rgba(16,18,28,0.98), rgba(10,12,20,0.96))",
+        background: battlefieldImageSrc
+          ? `linear-gradient(180deg, rgba(6,8,14,0.42), rgba(6,8,14,0.68)), url(${battlefieldImageSrc}) center / cover no-repeat`
+          : "radial-gradient(circle at 50% 20%, rgba(214,188,120,0.10), rgba(214,188,120,0.02) 18%, rgba(0,0,0,0) 40%), linear-gradient(180deg, rgba(16,18,28,0.98), rgba(10,12,20,0.96))",
         boxShadow:
           "0 22px 56px rgba(0,0,0,0.26), inset 0 1px 0 rgba(255,255,255,0.04)",
       }}
@@ -703,9 +736,7 @@ export default function CombatStage({
           <StageLabel
             title={hero?.name ?? "Hero"}
             subtitle={
-              hero
-                ? `${hero.species ?? "Human"} · ${hero.className ?? "Warrior"}`
-                : null
+              hero ? `${hero.species ?? "Human"} · ${hero.className ?? "Warrior"}` : null
             }
             align="left"
             active={Boolean(hero?.active) && !isEnemyTurn && !combatEnded}
@@ -722,12 +753,13 @@ export default function CombatStage({
               display: "grid",
               alignItems: "end",
               opacity: hero?.defeated ? 0.72 : 1,
-              filter:
-                hero?.defeated
-                  ? "grayscale(0.6)"
-                  : hero?.active && !isEnemyTurn && !combatEnded
-                    ? "drop-shadow(0 0 18px rgba(255,208,120,0.12))"
-                    : "none",
+              filter: hero?.defeated
+                ? "grayscale(0.6)"
+                : hero?.active && !isEnemyTurn && !combatEnded
+                  ? "drop-shadow(0 0 18px rgba(255,208,120,0.12))"
+                  : "none",
+              transform: getHeroStageTransform(facingMode),
+              transition: "transform 220ms ease",
             }}
           >
             {hero ? (
@@ -736,7 +768,9 @@ export default function CombatStage({
                 className={hero.className ?? "Warrior"}
                 portrait={hero.portrait ?? "Male"}
                 imageSrc={hero.imageSrc ?? "/Hero_dungeon.png"}
-                fallbackImageSrc={hero.fallbackImageSrc ?? hero.imageSrc ?? "/Hero_dungeon.png"}
+                fallbackImageSrc={
+                  hero.fallbackImageSrc ?? hero.imageSrc ?? "/Hero_dungeon.png"
+                }
                 alt={hero.name}
                 height={heroStageHeight}
                 objectPosition="center top"
@@ -775,16 +809,19 @@ export default function CombatStage({
               display: "grid",
               alignItems: "end",
               opacity: enemy?.defeated ? 0.72 : 1,
-              filter:
-                enemy?.defeated
-                  ? "grayscale(0.75)"
-                  : enemy?.active && isEnemyTurn && !combatEnded
-                    ? "drop-shadow(0 0 18px rgba(255,132,132,0.12))"
-                    : "none",
+              filter: enemy?.defeated
+                ? "grayscale(0.75)"
+                : enemy?.active && isEnemyTurn && !combatEnded
+                  ? "drop-shadow(0 0 18px rgba(255,132,132,0.12))"
+                  : "none",
             }}
           >
             {enemy ? (
-              <EnemyModelViewer enemy={enemy} height={enemyStageHeight} />
+              <EnemyModelViewer
+                enemy={enemy}
+                height={enemyStageHeight}
+                facingMode={facingMode}
+              />
             ) : (
               <div />
             )}
