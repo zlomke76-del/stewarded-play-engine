@@ -4,6 +4,7 @@ import React from "react";
 import CardSection from "@/components/layout/CardSection";
 import CombatSetupPanel from "@/components/combat/CombatSetupPanel";
 import EnemyTurnResolverPanel from "@/components/combat/EnemyTurnResolverPanel";
+import { getPortraitPath } from "@/lib/portraits/getPortraitPath";
 import { formatCombatantLabel } from "@/lib/combat/CombatState";
 import { getSkillDefinition } from "@/lib/skills/skillDefinitions";
 import { getSpeciesTraitDefinition } from "@/lib/skills/speciesTraitMap";
