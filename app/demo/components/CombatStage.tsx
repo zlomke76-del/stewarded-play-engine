@@ -167,26 +167,26 @@ function getStageFacingMode(combatEnded: boolean) {
 
 function getEnemyCameraOrbit(facingMode: "player" | "duel") {
   if (facingMode === "duel") {
-    return "-18deg 78deg 2.16m";
+    return "-16deg 78deg 2.42m";
   }
 
-  return "0deg 78deg 2.2m";
+  return "0deg 78deg 2.46m";
 }
 
 function getHeroStageTransform(facingMode: "player" | "duel") {
   if (facingMode === "duel") {
-    return "translateX(2%) scale(1.01)";
+    return "translateX(1%) scale(0.97)";
   }
 
-  return "translateX(0) scale(1.01)";
+  return "translateX(0) scale(0.98)";
 }
 
 function getEnemyStageTransform(facingMode: "player" | "duel") {
   if (facingMode === "duel") {
-    return "translateX(-2%) scale(1.02)";
+    return "translateX(-1%) scale(0.98)";
   }
 
-  return "translateX(0) scale(1.03)";
+  return "translateX(0) scale(0.99)";
 }
 
 function StageLabel(props: {
@@ -374,8 +374,9 @@ function EnemyModelFallback(props: {
       style={{
         width: "100%",
         height,
+        minHeight: typeof height === "number" ? height : undefined,
         position: "relative",
-        overflow: "hidden",
+        overflow: "visible",
         borderRadius: 18,
         background:
           "radial-gradient(circle at 50% 24%, rgba(214,110,110,0.14), rgba(214,110,110,0.03) 24%, rgba(0,0,0,0) 46%), radial-gradient(circle at 50% 76%, rgba(120,70,48,0.20), rgba(0,0,0,0) 42%), linear-gradient(180deg, rgba(22,18,16,0.96) 0%, rgba(14,11,10,0.98) 58%, rgba(10,8,8,1) 100%)",
@@ -398,7 +399,7 @@ function EnemyModelFallback(props: {
         style={{
           position: "absolute",
           left: "50%",
-          bottom: "-2%",
+          bottom: "-1.5%",
           transform: "translateX(-50%)",
           width: "62%",
           height: "20%",
@@ -414,13 +415,13 @@ function EnemyModelFallback(props: {
         style={{
           position: "absolute",
           inset: 0,
-          padding: "5% 7% 3%",
+          padding: "3% 7% 2%",
           display: "grid",
-          placeItems: "center",
+          placeItems: "end center",
           transform:
             facingMode === "duel"
-              ? "translateX(-2.5%) scale(1.03)"
-              : "translateX(0) scale(1.01)",
+              ? "translateX(-1.5%) scale(0.98)"
+              : "translateX(0) scale(0.98)",
           transformOrigin: "center bottom",
           transition: "transform 220ms ease",
         }}
@@ -432,6 +433,7 @@ function EnemyModelFallback(props: {
             width: "100%",
             height: "100%",
             objectFit: "contain",
+            objectPosition: "center bottom",
             display: "block",
             filter: enemy.defeated ? "grayscale(0.8) brightness(0.72)" : "none",
           }}
@@ -511,8 +513,9 @@ function EnemyModelViewer(props: {
       style={{
         width: "100%",
         height,
+        minHeight: typeof height === "number" ? height : undefined,
         position: "relative",
-        overflow: "hidden",
+        overflow: "visible",
         borderRadius: 18,
         background:
           "radial-gradient(circle at 50% 24%, rgba(214,110,110,0.14), rgba(214,110,110,0.03) 24%, rgba(0,0,0,0) 46%), radial-gradient(circle at 50% 76%, rgba(120,70,48,0.20), rgba(0,0,0,0) 42%), linear-gradient(180deg, rgba(22,18,16,0.96) 0%, rgba(14,11,10,0.98) 58%, rgba(10,8,8,1) 100%)",
@@ -537,7 +540,7 @@ function EnemyModelViewer(props: {
         style={{
           position: "absolute",
           left: "50%",
-          bottom: "-2%",
+          bottom: "-1.5%",
           transform: "translateX(-50%)",
           width: "62%",
           height: "20%",
@@ -553,7 +556,8 @@ function EnemyModelViewer(props: {
         style={{
           position: "absolute",
           inset: 0,
-          paddingTop: "1%",
+          paddingTop: "2%",
+          paddingBottom: "1%",
           transform: getEnemyStageTransform(facingMode),
           transformOrigin: "center bottom",
           filter: enemy.defeated ? "grayscale(0.8) brightness(0.72)" : "none",
@@ -568,11 +572,11 @@ function EnemyModelViewer(props: {
           exposure: "1.08",
           "environment-image": "neutral",
           "camera-orbit": cameraOrbit,
-          "field-of-view": "30deg",
+          "field-of-view": "36deg",
           "min-camera-orbit": cameraOrbit,
           "max-camera-orbit": cameraOrbit,
-          "min-field-of-view": "24deg",
-          "max-field-of-view": "24deg",
+          "min-field-of-view": "36deg",
+          "max-field-of-view": "36deg",
           "disable-pan": true,
           "disable-zoom": true,
           "auto-rotate": false,
@@ -610,16 +614,23 @@ export default function CombatStage({
   isEnemyTurn,
   combatEnded,
   telegraphHint,
-  height = 460,
+  height = 520,
 }: Props) {
   const telegraphText = useMemo(() => getTelegraphText(telegraphHint), [telegraphHint]);
   const facingMode = useMemo(() => getStageFacingMode(combatEnded), [combatEnded]);
 
-  const heroStageHeight =
-  typeof height === "number" ? Math.max(420, Math.round(height * 1.02)) : "102%";
+  const resolvedStageHeight =
+    typeof height === "number" ? Math.max(520, height) : height;
 
-const enemyStageHeight =
-  typeof height === "number" ? Math.max(400, Math.round(height * 0.96)) : "96%";
+  const heroStageHeight =
+    typeof resolvedStageHeight === "number"
+      ? Math.max(500, Math.round(resolvedStageHeight * 0.94))
+      : "94%";
+
+  const enemyStageHeight =
+    typeof resolvedStageHeight === "number"
+      ? Math.max(490, Math.round(resolvedStageHeight * 0.92))
+      : "92%";
 
   const enemySubtitle = useMemo(() => {
     if (!enemy) return null;
@@ -636,8 +647,9 @@ const enemyStageHeight =
       style={{
         position: "relative",
         width: "100%",
-        height,
-        overflow: "hidden",
+        height: resolvedStageHeight,
+        minHeight: typeof resolvedStageHeight === "number" ? resolvedStageHeight : undefined,
+        overflow: "visible",
         borderRadius: 24,
         border: "1px solid rgba(255,255,255,0.08)",
         background: battlefieldImageSrc
@@ -663,7 +675,7 @@ const enemyStageHeight =
         style={{
           position: "absolute",
           left: "50%",
-          bottom: "5%",
+          bottom: "4%",
           transform: "translateX(-50%)",
           width: "58%",
           height: "20%",
@@ -680,8 +692,8 @@ const enemyStageHeight =
         style={{
           position: "absolute",
           left: "50%",
-          top: "16%",
-          bottom: "12%",
+          top: "15%",
+          bottom: "10%",
           width: 2,
           transform: "translateX(-50%)",
           background:
@@ -696,10 +708,10 @@ const enemyStageHeight =
         style={{
           position: "absolute",
           left: "50%",
-          top: "24%",
+          top: "22%",
           transform: "translateX(-50%)",
           width: "26%",
-          height: "34%",
+          height: "38%",
           background:
             "radial-gradient(circle, rgba(255,190,90,0.08) 0%, rgba(255,190,90,0.03) 34%, rgba(0,0,0,0) 76%)",
           filter: "blur(18px)",
@@ -738,19 +750,22 @@ const enemyStageHeight =
         style={{
           position: "absolute",
           inset: 0,
-          padding: "18px 18px 14px",
+          padding: "18px 18px 18px",
           display: "grid",
-          gridTemplateColumns: "minmax(0, 1fr) minmax(88px, 0.16fr) minmax(0, 1fr)",
+          gridTemplateColumns: "minmax(0, 1fr) minmax(72px, 0.12fr) minmax(0, 1fr)",
           alignItems: "end",
           gap: 12,
+          overflow: "visible",
         }}
       >
         <div
           style={{
             display: "grid",
-            gap: 10,
+            gap: 12,
             alignSelf: "stretch",
             alignContent: "space-between",
+            minHeight: 0,
+            overflow: "visible",
           }}
         >
           <StageLabel
@@ -770,8 +785,10 @@ const enemyStageHeight =
             style={{
               position: "relative",
               minHeight: typeof heroStageHeight === "number" ? heroStageHeight : undefined,
+              height: heroStageHeight,
               display: "grid",
               alignItems: "end",
+              overflow: "visible",
               opacity: hero?.defeated ? 0.72 : 1,
               filter: hero?.defeated
                 ? "grayscale(0.6)"
@@ -794,7 +811,7 @@ const enemyStageHeight =
                 }
                 alt={hero.name}
                 height={heroStageHeight}
-                objectPosition="center 18%"
+                objectPosition="center bottom"
                 combatMode
               />
             ) : (
@@ -808,9 +825,11 @@ const enemyStageHeight =
         <div
           style={{
             display: "grid",
-            gap: 10,
+            gap: 12,
             alignSelf: "stretch",
             alignContent: "space-between",
+            minHeight: 0,
+            overflow: "visible",
           }}
         >
           <StageLabel
@@ -828,8 +847,10 @@ const enemyStageHeight =
             style={{
               position: "relative",
               minHeight: typeof enemyStageHeight === "number" ? enemyStageHeight : undefined,
+              height: enemyStageHeight,
               display: "grid",
               alignItems: "end",
+              overflow: "visible",
               opacity: enemy?.defeated ? 0.72 : 1,
               filter: enemy?.defeated
                 ? "grayscale(0.75)"
