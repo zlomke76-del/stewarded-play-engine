@@ -1,5 +1,6 @@
 "use client";
 
+import { useMemo } from "react";
 import CombatSection from "./CombatSection";
 import { anchorId } from "../demoUtils";
 import { displayName } from "../hooks/useDemoRuntime";
@@ -9,14 +10,44 @@ type Props = {
 };
 
 export default function GameplayCombatPanel({ demo }: Props) {
+  const stagePartyMembers = useMemo(
+    () =>
+      demo.partyMembers.map((m: any, idx: number) => ({
+        id: String(m.id),
+        name: displayName(m, idx + 1),
+        species: m.species,
+        className: m.className,
+        portrait: m.portrait ?? "Male",
+        skills: m.skills ?? [],
+        traits: m.traits ?? [],
+        ac: m.ac,
+        hpMax: m.hpMax,
+        hpCurrent: m.hpCurrent,
+        initiativeMod: m.initiativeMod,
+      })),
+    [demo.partyMembers]
+  );
+
+  const actionPartyMembers = useMemo(
+    () =>
+      demo.partyMembers.map((m: any, idx: number) => ({
+        id: String(m.id),
+        label: `${displayName(m, idx + 1)} (${m.id})`,
+        species: m.species ?? "Human",
+        className: m.className || "Warrior",
+        portrait: m.portrait ?? "Male",
+        skills: m.skills ?? [],
+        traits: m.traits ?? [],
+        ac: m.ac,
+        hpMax: m.hpMax,
+        hpCurrent: m.hpCurrent,
+        initiativeMod: m.initiativeMod,
+      })),
+    [demo.partyMembers]
+  );
+
   return (
-    <div
-      id={anchorId("combat")}
-      style={{
-        scrollMarginTop: 90,
-        display: "grid",
-      }}
-    >
+    <div id={anchorId("combat")} style={{ scrollMarginTop: 90 }}>
       <CombatSection
         events={demo.state.events as any[]}
         dmMode={demo.dmMode}
@@ -26,19 +57,7 @@ export default function GameplayCombatPanel({ demo }: Props) {
         openingBattleFinisherAvailable={demo.openingBattleFinisherAvailable}
         openingBattleFinisherSkillLabel={demo.openingBattleFinisherSkillLabel}
         isOpeningThresholdCombat={demo.isOpeningThresholdCombat}
-        partyMembers={demo.partyMembers.map((m: any, idx: number) => ({
-          id: String(m.id),
-          name: displayName(m, idx + 1),
-          species: m.species,
-          className: m.className,
-          portrait: m.portrait ?? "Male",
-          skills: m.skills ?? [],
-          traits: m.traits ?? [],
-          ac: m.ac,
-          hpMax: m.hpMax,
-          hpCurrent: m.hpCurrent,
-          initiativeMod: m.initiativeMod,
-        }))}
+        partyMembers={stagePartyMembers}
         pressureTier={demo.pressureTier}
         allowDevControls={false}
         encounterContext={demo.combatEncounterContext}
@@ -61,19 +80,7 @@ export default function GameplayCombatPanel({ demo }: Props) {
         onPassTurnBtn={() => demo.passTurn()}
         onEndCombatBtn={() => demo.endCombat()}
         actionSurface={{
-          partyMembers: demo.partyMembers.map((m: any, idx: number) => ({
-            id: String(m.id),
-            label: `${displayName(m, idx + 1)} (${m.id})`,
-            species: m.species ?? "Human",
-            className: m.className || "Warrior",
-            portrait: m.portrait ?? "Male",
-            skills: m.skills ?? [],
-            traits: m.traits ?? [],
-            ac: m.ac,
-            hpMax: m.hpMax,
-            hpCurrent: m.hpCurrent,
-            initiativeMod: m.initiativeMod,
-          })),
+          partyMembers: actionPartyMembers,
           actingPlayerId: demo.actingPlayerId,
           onSetActingPlayerId: (id: string) => demo.setActingPlayerId(id),
           playerInput: demo.playerInput,
